@@ -1,0 +1,30 @@
+{
+  "name": "flag-tag",
+  "version": "1.0.0",
+  "description": "Flag Tag",
+  "scripts": {
+    "start": "sdk-commands start",
+    "start:server": "npx @dcl/hammurabi-server@next",
+    "deploy": "sdk-commands deploy",
+    "build": "sdk-commands build",
+    "upgrade-sdk": "npm install --save-dev @dcl/sdk@latest",
+    "upgrade-sdk:next": "npm install --save-dev @dcl/sdk@next",
+    "server-logs": "sdk-commands sdk-server-logs"
+  },
+  "devDependencies": {
+    "@dcl/sdk": "^7.20.4-22581991550.commit-9c72184"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=6.0.0"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 120,
+    "trailingComma": "none"
+  },
+  "dependencies": {
+    "@dcl/js-runtime": "7.20.4-22581991550.commit-9c72184"
+  }
+}

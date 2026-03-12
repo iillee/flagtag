@@ -1,0 +1,48 @@
+# Compiled JavaScript files
+*.js
+bin/
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Decentraland build artifacts
+.dclignore
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Editor directories and files
+.editor/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# CRDT files (runtime state - usually not committed)
+*.crdt
+
+# Optional: Comment out the line above if you want to commit CRDT files
