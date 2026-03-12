@@ -69,8 +69,8 @@ export const CountdownTimer = engine.defineComponent('ctf-countdown-timer', {
 
 CountdownTimer.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** Round length in minutes; aligned to 10-minute UTC boundaries. */
-const ROUND_LENGTH_MINUTES = 10
+/** Round length in minutes; aligned to 5-minute UTC boundaries. */
+const ROUND_LENGTH_MINUTES = 5
 
 export function getNextRoundEndTimeMs(): number {
   const now = Date.now()
@@ -112,7 +112,6 @@ export function getRoundWinners(): { userId: string; name: string }[] {
 // ── Shared constants ──
 
 export const FLAG_BASE_POSITION = { x: 54, y: 12, z: 122 }
-export const FLAG_CARRY_OFFSET = { x: 0, y: 1.9, z: -0.6 }
 
 export enum SyncIds {
   FLAG = 1,

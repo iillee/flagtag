@@ -93,7 +93,7 @@ This document records major architectural choices and design patterns in the Fla
 - Storage API ensures data reliability
 
 **Implementation:**
-- 10-minute rounds aligned to UTC boundaries (00:00, 00:10, 00:20, etc.)
+- 5-minute rounds aligned to UTC boundaries (00:00, 00:05, 00:10, 00:15, etc.)
 - Server persists flag state and leaderboard JSON to storage
 - Round winner snapshots preserved during hold time reset
 - Graceful handling of server restarts mid-round
@@ -141,3 +141,82 @@ This document records major architectural choices and design patterns in the Fla
 - Entity cleanup ensures memory doesn't leak over long sessions
 
 This architecture has proven stable for 24/7 operation and can handle the competitive multiplayer requirements of Flag Tag.
+
+---
+
+## Recent Architectural Changes
+
+### Flag Positioning: AvatarAttach vs Manual Following
+**Date:** 2026-03-11  
+**Decision:** Replace manual flag following system with `AvatarAttach`
+**Previous System:** Smooth interpolation to position behind/above player with manual transform calculations
+**New System:** Direct attachment to player avatar using `AvatarAnchorPointType.AAPT_NAME_TAG`
+
+**Justification:**
+- **User Experience**: Direct attachment feels more natural than trailing behind
+- **Visual Clarity**: Flag above head is more visible in combat situations  
+- **Performance**: Eliminates per-frame interpolation calculations
+- **Consistency**: Same positioning logic works for all players regardless of movement patterns
+- **Simplicity**: AvatarAttach handles complex cases (player disconnection, teleporting, etc.) automatically
+
+**Implementation Details:**
+- Flag attaches at name tag anchor point with `Vector3.create(0, 2.2, 0)` offset
+- Maintains spin and bob animations through direct transform manipulation
+- Particle effects calculate world position from carrier position + offset
+- Client-side attachment creation/removal on flag state changes
+- Server remains authoritative for flag state, clients handle visual presentation
+
+**Trade-offs:**
+- ✅ **Pro**: More responsive visual feedback, cleaner code, better performance
+- ✅ **Pro**: Flag position always consistent relative to player
+- ⚠️ **Neutral**: Different visual appearance (above head vs behind/above shoulder)  
+- ⚠️ **Neutral**: Relies on AvatarAttach API (well-established in SDK7)
+
+**Backward Compatibility:** 
+- No server-side changes required (flag state logic unchanged)
+- Local test flag updated to match online behavior
+- Particle systems adapted to work with both attachment and free-floating states
+
+---
+
+## Visual Clone System for Smooth Multiplayer Attachments
+**Date:** 2026-03-12  
+**Decision:** Implement dual-entity clone system for flag carrying instead of direct positioning
+**Context:** Previous attempts to position server-synced entities caused jitter and CRDT conflicts in multiplayer
+
+**The Clone System Architecture:**
+```typescript
+// Server-synced flag (logical state)
+flagEntity: Entity           // Synced transform, hidden when carried
+VisibilityComponent.create(flagEntity, { visible: false })
+
+// Visual clone (local presentation)  
+attachAnchorEntity: Entity   // AvatarAttach to player's name tag
+carryCloneEntity: Entity     // Child of anchor, animates freely
+```
+
+**Core Principle:** **Separate logical state from visual representation**
+- **Logical State**: Server-synced entities handle game mechanics, persistence, multiplayer sync
+- **Visual Representation**: Local-only clone entities handle smooth UX and animations
+
+**Implementation Benefits:**
+1. **Zero CRDT Conflicts**: Client never modifies server-synced entity positions
+2. **Perfect Smoothness**: AvatarAttach + parent-child hierarchy provides native engine smoothing
+3. **Clean State Management**: Clone creation/destruction tied to explicit state changes
+4. **Animation Freedom**: Clone can animate freely without affecting multiplayer sync
+5. **Robust Recovery**: System handles carrier disconnection, steals, server restarts gracefully
+
+**Pattern Applications:**
+- Any object that needs to attach smoothly to players in multiplayer
+- Weapons, tools, accessories that follow avatars
+- Visual effects that need both multiplayer sync and smooth local animation
+
+**Key Insight:** The engine's built-in AvatarAttach + parent-child systems are designed for this exact use case. Instead of fighting the architecture with manual positioning, embrace the native attachment mechanisms.
+
+**Technical Recipe:**
+1. When attachment needed: Hide synced entity, create anchor + clone
+2. Animate clone freely relative to anchor (not in world space)
+3. When attachment ends: Destroy clone system, show synced entity
+4. Server remains authoritative for all game logic, unaware of visual clones
+
+This pattern can be extended to any multiplayer scenario requiring smooth object attachment to players.

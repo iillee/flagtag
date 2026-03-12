@@ -1,28 +1,40 @@
 /**
  * LOCAL-ONLY test flag — blue banner for previewing without the authoritative server.
- * Handles pickup (E), drop (E), carry-follow, idle bob, and gravity entirely client-side.
- * This file is only loaded when NOT connected to the server (local preview).
+ * Uses the same clone system as the online flag for consistent behavior.
  */
 import {
-  engine, Transform, GltfContainer, MeshCollider,
+  engine, Transform, GltfContainer,
   inputSystem, InputAction, PointerEventType,
   AudioSource, Raycast, RaycastResult, RaycastQueryType,
   Material, MaterialTransparencyMode, MeshRenderer,
-  Tween, EasingFunction,
+  Tween, EasingFunction, AvatarAttach, AvatarAnchorPointType,
+  VisibilityComponent, RealmInfo,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
-import { FLAG_BASE_POSITION, FLAG_CARRY_OFFSET } from '../shared/components'
+import { FLAG_BASE_POSITION } from '../shared/components'
+import { setLocalTestFlagState } from './beaconSystem'
 
 const BLUE_BANNER_SRC = 'assets/asset-packs/small_blue_banner/Banner_Blue_02/Banner_Blue_02.glb'
 const PICKUP_RADIUS = 3.5
 const DROP_BEHIND_DISTANCE = 1.4
-const IDLE_BOB_AMPLITUDE = 0.15
-const IDLE_BOB_SPEED = 2
-const IDLE_ROT_SPEED_DEG_PER_SEC = 25
-const FLAG_FOLLOW_SPEED = 8
-const FLAG_CARRY_ROTATION = Quaternion.fromEulerDegrees(0, 90, 0)
+
+// Visual clone system (same as online flag)
+let carryCloneEntity: Entity | null = null
+let attachAnchorEntity: Entity | null = null
+
+// Animation constants - match idle ground animation exactly
+const CARRY_BOB_AMPLITUDE = 0.15      // Same as idle
+const CARRY_BOB_SPEED = 2              // Same as idle
+const CARRY_ROT_SPEED_DEG_PER_SEC = 25 // Same as idle
+let carryAnimTime = 0
+const FLAG_CARRY_OFFSET = { x: 0, y: 0.4, z: 0 } // Directly above avatar, comfortable height
+
+// Idle animation constants - match server exactly  
+const IDLE_BOB_AMPLITUDE = 0.15      // Matches server
+const IDLE_BOB_SPEED = 2              // Matches server
+const IDLE_ROT_SPEED_DEG_PER_SEC = 25 // Matches server
 
 // Gravity
 const FLAG_GRAVITY = 15
@@ -45,6 +57,20 @@ let pendingRaycastEntity: Entity | null = null
 // Sound
 let pickupSoundEntity: Entity | null = null
 let dropSoundEntity: Entity | null = null
+
+// Cleanup function to prevent clone duplication
+function cleanupClone(): void {
+  if (carryCloneEntity !== null) { 
+    console.log('[LocalTest] Cleaning up existing clone entity')
+    engine.removeEntity(carryCloneEntity)
+    carryCloneEntity = null 
+  }
+  if (attachAnchorEntity !== null) { 
+    console.log('[LocalTest] Cleaning up existing anchor entity')
+    engine.removeEntity(attachAnchorEntity)
+    attachAnchorEntity = null 
+  }
+}
 
 function playPickup(): void {
   if (!pickupSoundEntity) {
@@ -88,15 +114,15 @@ const trailPool: Entity[] = []
 let trailPoolIdx = 0
 let trailPoolReady = false
 let trailSpawnAccum = 0
-let lastFlagPos: Vector3 | null = null
+let lastPlayerPos: Vector3 | null = null
 const activeTrailPuffs: { entity: Entity; expiresAt: number }[] = []
 
-// ── Beacon pool (idle floating bubbles) ──
+// ── Beacon pool (idle floating bubbles) - upgraded from v1 project ──
 const BEACON_SPAWN_INTERVAL = 0.35
-const BEACON_LIFETIME_MS = 2200
-const BEACON_FLOAT_HEIGHT = 7
+const BEACON_LIFETIME_MS = 6600  // Much longer floating (was 2200)
+const BEACON_FLOAT_HEIGHT = 21   // Float much higher (was 7)
 const BEACON_START_SCALE = 0.2
-const BEACON_POOL_SIZE = 12
+const BEACON_POOL_SIZE = 22      // Larger pool for more particles (was 12)
 const BEACON_MATERIAL = {
   albedoColor: Color4.create(1.0, 0.82, 0.2, 0.85),
   emissiveColor: Color4.create(1.0, 0.75, 0.1, 1),
@@ -199,14 +225,11 @@ function hideBeaconPuff(entity: Entity): void {
   t.scale = Vector3.Zero()
 }
 
-/** Fire a one-shot downward raycast from the drop position to find the ground. */
 function fireGroundRaycast(dropPos: Vector3): void {
-  // Clean up any previous raycast
   if (pendingRaycastEntity !== null) {
     engine.removeEntity(pendingRaycastEntity)
     pendingRaycastEntity = null
   }
-
   pendingRaycastEntity = engine.addEntity()
   Transform.create(pendingRaycastEntity, {
     position: Vector3.create(dropPos.x, dropPos.y + 0.3, dropPos.z)
@@ -217,16 +240,13 @@ function fireGroundRaycast(dropPos: Vector3): void {
     queryType: RaycastQueryType.RQT_HIT_FIRST,
     continuous: false
   })
-
-  // Start falling immediately toward absolute minimum; raycast will refine the target
   flagGravityTargetY = FLAG_MIN_Y
   flagFalling = true
   flagFallVelocity = 0
 }
 
-/** Call once from main() to spawn the blue test flag and register the system. */
 export function setupLocalTestFlag(): void {
-  console.log('[LocalTest] Creating blue test flag at base position')
+  console.log('[LocalTest] Creating blue test flag with clone system')
 
   testFlagEntity = engine.addEntity()
   Transform.create(testFlagEntity, {
@@ -235,22 +255,31 @@ export function setupLocalTestFlag(): void {
     scale: Vector3.create(1, 1, 1)
   })
   GltfContainer.create(testFlagEntity, { src: BLUE_BANNER_SRC })
-  MeshCollider.setBox(testFlagEntity)
+
+  // Notify beacon system about initial state
+  setLocalTestFlagState(false, testFlagEntity)
 
   engine.addSystem(localTestFlagSystem)
 }
 
 function localTestFlagSystem(dt: number): void {
+  // Only run when not connected to server
+  const realm = RealmInfo.getOrNull(engine.RootEntity)
+  if (realm?.isConnectedSceneRoom) {
+    return
+  }
+
   const clampedDt = Math.min(dt, 0.1)
   idleTime += clampedDt
+  carryAnimTime += clampedDt
 
   const myPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : null
   const myRot = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).rotation : null
 
-  // ── E key: pickup / drop ──
+  // E key: pickup / drop
   if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) {
     if (state === 'carried') {
-      // Drop
+      // Drop using clone system
       let dropPos: Vector3
       if (myPos && myRot) {
         const behind = Vector3.rotate(Vector3.Backward(), myRot)
@@ -267,16 +296,24 @@ function localTestFlagSystem(dt: number): void {
       anchorY = dropPos.y
       anchorZ = dropPos.z
 
+      // Notify beacon system
+      setLocalTestFlagState(false, testFlagEntity)
+
+      // Clean up clone system
+      cleanupClone()
+      console.log('[LocalTest] Clone cleaned up, showing original flag')
+
+      // Show original flag at drop position
+      VisibilityComponent.createOrReplace(testFlagEntity, { visible: true })
       const t = Transform.getMutable(testFlagEntity)
       t.position = dropPos
-      if (!MeshCollider.has(testFlagEntity)) MeshCollider.setBox(testFlagEntity)
 
       fireGroundRaycast(dropPos)
       playDrop()
-      console.log('[LocalTest] Dropped flag at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1),
-        '— raycasting for ground...')
+      console.log('[LocalTest] Dropped flag using clone system')
+      
     } else {
-      // Try pickup
+      // Try pickup using clone system
       if (myPos) {
         const flagPos = Transform.get(testFlagEntity).position
         const dist = Vector3.distance(myPos, flagPos)
@@ -288,9 +325,47 @@ function localTestFlagSystem(dt: number): void {
             engine.removeEntity(pendingRaycastEntity)
             pendingRaycastEntity = null
           }
-          if (MeshCollider.has(testFlagEntity)) MeshCollider.deleteFrom(testFlagEntity)
+
+          // Notify beacon system
+          setLocalTestFlagState(true, testFlagEntity)
+
+          // ALWAYS clean up existing clone first to prevent duplicates
+          cleanupClone()
+
+          // Create clone system
+          const player = getPlayer()
+          if (player) {
+            // IMMEDIATELY hide original flag before creating clone
+            VisibilityComponent.createOrReplace(testFlagEntity, { visible: false })
+            console.log('[LocalTest] Hidden original flag, creating clone')
+
+            // Create AvatarAttach anchor
+            attachAnchorEntity = engine.addEntity()
+            Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
+            AvatarAttach.create(attachAnchorEntity, {
+              avatarId: player.userId,
+              anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+            })
+
+            // Create visual clone
+            carryCloneEntity = engine.addEntity()
+            Transform.create(carryCloneEntity, {
+              parent: attachAnchorEntity,
+              position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
+              rotation: Quaternion.Identity(),
+              scale: Vector3.One()
+            })
+            GltfContainer.create(carryCloneEntity, { 
+              src: BLUE_BANNER_SRC,
+              visibleMeshesCollisionMask: 0,
+              invisibleMeshesCollisionMask: 0
+            })
+
+            console.log('[LocalTest] Clone system created successfully')
+          }
+
           playPickup()
-          console.log('[LocalTest] Picked up flag! dist:', dist.toFixed(2))
+          console.log('[LocalTest] Picked up flag using clone system')
         } else {
           console.log('[LocalTest] Too far to pick up — dist:', dist.toFixed(2))
         }
@@ -298,22 +373,19 @@ function localTestFlagSystem(dt: number): void {
     }
   }
 
-  // ── Raycast result — update gravity target when ground is found ──
+  // Handle raycast results
   if (pendingRaycastEntity !== null) {
     const result = RaycastResult.getOrNull(pendingRaycastEntity)
     if (result) {
       if (result.hits.length > 0) {
         const groundY = result.hits[0].position!.y
         flagGravityTargetY = Math.max(FLAG_MIN_Y, groundY + 0.5)
-        console.log('[LocalTest] Raycast hit ground at Y:', groundY.toFixed(2), '→ landing target:', flagGravityTargetY.toFixed(2))
-        // If flag already fell past the target, snap it
         if (anchorY < flagGravityTargetY) {
           anchorY = flagGravityTargetY
           flagFalling = false
           flagFallVelocity = 0
         }
       } else {
-        // No collider found — assume default DCL ground plane at y=0
         flagGravityTargetY = Math.max(FLAG_MIN_Y, 0 + 0.5)
       }
       engine.removeEntity(pendingRaycastEntity)
@@ -321,7 +393,7 @@ function localTestFlagSystem(dt: number): void {
     }
   }
 
-  // ── Gravity ──
+  // Gravity for dropped flag
   if (state === 'dropped' && flagFalling) {
     flagFallVelocity += FLAG_GRAVITY * clampedDt
     let newY = anchorY - flagFallVelocity * clampedDt
@@ -329,22 +401,35 @@ function localTestFlagSystem(dt: number): void {
       newY = flagGravityTargetY
       flagFalling = false
       flagFallVelocity = 0
-      console.log('[LocalTest] Flag landed at Y:', newY.toFixed(2))
     }
     anchorY = newY
   }
 
-  // ── Carry follow ──
-  if (state === 'carried' && myPos && myRot) {
-    const smoothFactor = 1 - Math.exp(-FLAG_FOLLOW_SPEED * clampedDt)
-    const offset = Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z)
-    const targetPos = Vector3.add(myPos, offset)
-    const targetRot = Quaternion.multiply(myRot, FLAG_CARRY_ROTATION)
-    const ct = Transform.getMutable(testFlagEntity)
-    ct.position = Vector3.lerp(ct.position, targetPos, smoothFactor)
-    ct.rotation = Quaternion.slerp(ct.rotation, targetRot, smoothFactor)
+  // Animate visual clone (same as online flag)
+  if (state === 'carried' && carryCloneEntity !== null && Transform.has(carryCloneEntity)) {
+    const bobY = CARRY_BOB_AMPLITUDE * Math.sin(carryAnimTime * CARRY_BOB_SPEED)
+    const angleDeg = (carryAnimTime * CARRY_ROT_SPEED_DEG_PER_SEC) % 360
+    const ct = Transform.getMutable(carryCloneEntity)
+    ct.position = Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y + bobY, FLAG_CARRY_OFFSET.z)
+    ct.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+  } 
+
+  // Defensive programming: ensure original flag is visible when not carried
+  if (state !== 'carried') {
+    if (!VisibilityComponent.has(testFlagEntity) || !VisibilityComponent.get(testFlagEntity).visible) {
+      console.log('[LocalTest] Defensive: ensuring original flag is visible when not carried')
+      VisibilityComponent.createOrReplace(testFlagEntity, { visible: true })
+    }
   } else {
-  // ── Idle bob (base or dropped) ──
+    // Defensive programming: ensure original flag is hidden when carried
+    if (!VisibilityComponent.has(testFlagEntity) || VisibilityComponent.get(testFlagEntity).visible) {
+      console.log('[LocalTest] Defensive: ensuring original flag is hidden when carried')
+      VisibilityComponent.createOrReplace(testFlagEntity, { visible: false })
+    }
+  }
+
+  // Animate original flag when not carried (idle at base/dropped)
+  if (state !== 'carried') {
     const restX = state === 'base' ? FLAG_BASE_POSITION.x + 8 : anchorX
     const restY = state === 'base' ? FLAG_BASE_POSITION.y : anchorY
     const restZ = state === 'base' ? FLAG_BASE_POSITION.z : anchorZ
@@ -355,7 +440,54 @@ function localTestFlagSystem(dt: number): void {
     t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
   }
 
-  // ── Cleanup expired effects ──
+  // Particle effects - trail particles only when actually moving
+  if (state === 'carried' && myPos) {
+    // Check if player is actually moving
+    let isPlayerMoving = false
+    if (lastPlayerPos !== null) {
+      const distanceMoved = Vector3.distance(myPos, lastPlayerPos)
+      isPlayerMoving = distanceMoved > TRAIL_MIN_MOVE_DIST
+    }
+    
+    // Update position tracking
+    lastPlayerPos = Vector3.create(myPos.x, myPos.y, myPos.z)
+    
+    // Only spawn trail particles if actually moving
+    if (isPlayerMoving) {
+      const groundParticlePos = Vector3.create(myPos.x, myPos.y + 0.1, myPos.z)
+      trailSpawnAccum += clampedDt
+      while (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL) {
+        trailSpawnAccum -= TRAIL_SPAWN_INTERVAL
+        spawnTrailPuff(groundParticlePos)
+      }
+    } else {
+      // Reset trail accumulator when not moving
+      trailSpawnAccum = 0
+    }
+    
+    beaconSpawnAccum = 0 // No beacon particles when carried
+    
+  } else if (state === 'base' || state === 'dropped') {
+    // Beacon particles floating up from flag when idle
+    const flagPos = Transform.get(testFlagEntity).position
+    beaconSpawnAccum += clampedDt
+    while (beaconSpawnAccum >= BEACON_SPAWN_INTERVAL) {
+      beaconSpawnAccum -= BEACON_SPAWN_INTERVAL
+      spawnBeaconPuff(flagPos)
+    }
+    
+    // Reset player tracking when flag not carried
+    lastPlayerPos = null
+    trailSpawnAccum = 0
+    
+  } else {
+    // Reset all tracking
+    lastPlayerPos = null
+    trailSpawnAccum = 0
+    beaconSpawnAccum = 0
+  }
+
+  // Cleanup expired effects
   const now = Date.now()
   for (let i = activeTrailPuffs.length - 1; i >= 0; i--) {
     if (now >= activeTrailPuffs[i].expiresAt) {
@@ -377,27 +509,5 @@ function localTestFlagSystem(dt: number): void {
     bt.position = Vector3.lerp(bp.startPos, bp.endPos, easedPos)
     const scale = bp.startScale * (1 - progress)
     bt.scale = Vector3.create(scale, scale, scale)
-  }
-
-  // ── Trail (moving) + Beacon (idle) effects ──
-  const flagPos = Transform.get(testFlagEntity).position
-  const isMoving = lastFlagPos != null &&
-    Vector3.distance(flagPos, lastFlagPos) > TRAIL_MIN_MOVE_DIST
-  lastFlagPos = Vector3.create(flagPos.x, flagPos.y, flagPos.z)
-
-  if (isMoving) {
-    trailSpawnAccum += clampedDt
-    while (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL) {
-      trailSpawnAccum -= TRAIL_SPAWN_INTERVAL
-      spawnTrailPuff(flagPos)
-    }
-    beaconSpawnAccum = 0
-  } else {
-    beaconSpawnAccum += clampedDt
-    while (beaconSpawnAccum >= BEACON_SPAWN_INTERVAL) {
-      beaconSpawnAccum -= BEACON_SPAWN_INTERVAL
-      spawnBeaconPuff(flagPos)
-    }
-    trailSpawnAccum = 0
   }
 }

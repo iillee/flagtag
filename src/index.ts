@@ -7,6 +7,7 @@ import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
 import { countdownClientSystem } from './systems/countdownTimerSystem'
 import { setupLocalTestFlag } from './systems/localTestFlag'
+import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { addPlayer, removePlayer } from './gameState/flagHoldTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
 import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
@@ -25,6 +26,7 @@ export async function main() {
   createWinConditionOverlayEntity()
   createLeaderboardOverlayEntity()
   setupUi()
+  setupBeacon()
 
   const local = getPlayer()
   let registeredName = ''
@@ -119,7 +121,8 @@ export async function main() {
   engine.addSystem(flagClientSystem)
   engine.addSystem(combatClientSystem)
   engine.addSystem(countdownClientSystem)
+  engine.addSystem(beaconClientSystem)
 
   // Local-only test flag (blue) — uncomment for local preview testing without server
-  // setupLocalTestFlag()
+  // setupLocalTestFlag() // Hidden for production deployment
 }

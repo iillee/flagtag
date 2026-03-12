@@ -1,4 +1,4 @@
-import { engine, Transform, GltfContainer, MeshCollider, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
+import { engine, Transform, GltfContainer, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
@@ -95,7 +95,6 @@ export async function setupServer(): Promise<void> {
     scale: Vector3.create(1, 1, 1)
   })
   GltfContainer.create(flagEntity, { src: BANNER_SRC })
-  MeshCollider.setBox(flagEntity)
   Flag.create(flagEntity, {
     teamId: 0,
     state: flagStartState,
@@ -267,8 +266,6 @@ function handlePickup(playerId: string): void {
   mutable.state = FlagState.Carried
   mutable.carrierPlayerId = playerId
 
-  if (MeshCollider.has(flagEntity)) MeshCollider.deleteFrom(flagEntity)
-
   resetGravityState()
   room.send('pickupSound', { t: 0 })
   persistFlagState()
@@ -303,13 +300,34 @@ function handleDrop(playerId: string): void {
   const t = Transform.getMutable(flagEntity)
   t.position = dropPos
 
-  if (!MeshCollider.has(flagEntity)) MeshCollider.setBox(flagEntity)
-
   // Start gravity — estimate ground from carrier's recent Y history
   computeGravityTarget(dropPos.y)
 
   room.send('dropSound', { t: 0 })
   persistFlagState()
+}
+
+function handleFlagSteal(victimId: string, attackerId: string): void {
+  const flag = Flag.getOrNull(flagEntity)
+  if (!flag) return
+
+  console.log('[Server] Executing flag steal:', victimId, '->', attackerId)
+
+  // Directly transfer flag to attacker (no drop to ground)
+  const mutable = Flag.getMutable(flagEntity)
+  mutable.state = FlagState.Carried
+  mutable.carrierPlayerId = attackerId
+
+  // Reset gravity state since flag isn't being dropped
+  resetGravityState()
+  
+  // Play pickup sound for new carrier
+  room.send('pickupSound', { t: 0 })
+  
+  // Persist the new flag state
+  persistFlagState()
+  
+  console.log('[Server] Flag steal completed - new carrier:', attackerId)
 }
 
 function handleAttack(attackerId: string): void {
@@ -343,10 +361,11 @@ function handleAttack(attackerId: string): void {
     room.send('hitVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
     room.send('stagger', { victimId: closestId })
 
-    // Drop flag if victim was carrying
+    // STEAL flag if victim was carrying (instead of dropping)
     const flag = Flag.getOrNull(flagEntity)
     if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === closestId) {
-      handleDrop(closestId)
+      console.log('[Server] Flag stolen! Transferring from', closestId, 'to', attackerId)
+      handleFlagSteal(closestId, attackerId)
     }
   } else {
     // Miss — send attacker position, client computes forward offset locally
@@ -425,7 +444,6 @@ function flagServerSystem(dt: number): void {
       // Start gravity on disconnect drop
       computeGravityTarget(flagPos.y)
 
-      if (!MeshCollider.has(flagEntity)) MeshCollider.setBox(flagEntity)
       room.send('dropSound', { t: 0 })
       persistFlagState()
     }
@@ -544,7 +562,6 @@ function handleRoundEnd(): void {
   flagMutable.carrierPlayerId = ''
   const t = Transform.getMutable(flagEntity)
   t.position = Vector3.create(FLAG_BASE_POSITION.x, FLAG_BASE_POSITION.y, FLAG_BASE_POSITION.z)
-  if (!MeshCollider.has(flagEntity)) MeshCollider.setBox(flagEntity)
   persistFlagState()
 
   // ── 6. Reset all hold times (splash reads from snapshot, not live data) ──

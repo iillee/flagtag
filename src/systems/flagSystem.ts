@@ -11,25 +11,41 @@ import {
   Tween,
   EasingFunction,
   RealmInfo,
-  MeshCollider,
   Raycast,
   RaycastResult,
   RaycastQueryType,
+  AvatarAttach,
+  AvatarAnchorPointType,
+  VisibilityComponent,
+  GltfContainer,
+  AudioSource,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
-import { Flag, FlagState, FLAG_CARRY_OFFSET } from '../shared/components'
+import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
 
-const FLAG_FOLLOW_SPEED = 8
-const FLAG_CARRY_ROTATION = Quaternion.fromEulerDegrees(0, 90, 0)
+// Visual clone system for smooth flag carrying
+let carryCloneEntity: Entity | null = null
+let attachAnchorEntity: Entity | null = null
 
-// ── Trail pool (same as before) ──
+// Animation constants - match idle ground animation exactly
+const CARRY_BOB_AMPLITUDE = 0.15      // Same as idle
+const CARRY_BOB_SPEED = 2              // Same as idle  
+const CARRY_ROT_SPEED_DEG_PER_SEC = 25 // Same as idle
+let carryAnimTime = 0
+
+// Flag carry offset - comfortably above avatar head
+const FLAG_CARRY_OFFSET = { x: 0, y: 0.4, z: 0 } // Directly above avatar, comfortable height
+const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
+
+// ── Trail pool (horizontal particles when carried) ──
 const TRAIL_SPAWN_INTERVAL = 0.08
 const TRAIL_LIFETIME_MS = 600
 const TRAIL_START_SCALE = 0.18
 const TRAIL_POOL_SIZE = 15
+const TRAIL_MIN_MOVE_DIST = 0.05
 const TRAIL_MATERIAL = {
   albedoColor: Color4.create(1.0, 0.82, 0.2, 0.55),
   emissiveColor: Color4.create(1.0, 0.75, 0.1, 1),
@@ -39,21 +55,20 @@ const TRAIL_MATERIAL = {
   specularIntensity: 0.0,
   transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
 }
-let trailSpawnAccum = 0
-let lastTrailFlagPos: Vector3 | null = null
-const TRAIL_MIN_MOVE_DIST = 0.05
 const trailPool: Entity[] = []
 let trailPoolIdx = 0
 let trailPoolReady = false
+let trailSpawnAccum = 0
+let lastCarrierPos: Vector3 | null = null
 const activeTrailPuffs: { entity: Entity; expiresAt: number }[] = []
 const TRAIL_HIDDEN_POS = Vector3.create(0, -100, 0)
 
-// ── Beacon pool (idle floating bubbles) ──
+// ── Beacon pool (vertical particles when idle) - upgraded from v1 project ──
 const BEACON_SPAWN_INTERVAL = 0.35
-const BEACON_LIFETIME_MS = 2200
-const BEACON_FLOAT_HEIGHT = 7
+const BEACON_LIFETIME_MS = 6600  // Much longer floating (was 2200)
+const BEACON_FLOAT_HEIGHT = 21   // Float much higher (was 7)
 const BEACON_START_SCALE = 0.2
-const BEACON_POOL_SIZE = 12
+const BEACON_POOL_SIZE = 22      // Larger pool for more particles (was 12)
 const BEACON_MATERIAL = {
   albedoColor: Color4.create(1.0, 0.82, 0.2, 0.85),
   emissiveColor: Color4.create(1.0, 0.75, 0.1, 1),
@@ -156,31 +171,51 @@ function hideBeaconPuff(entity: Entity): void {
   t.scale = Vector3.Zero()
 }
 
-
-
-// ── Helpers ──
+// Helper to find player entity by ID
 function getCarrierEntity(carrierPlayerId: string): Entity | null {
   if (!carrierPlayerId) return null
+  
   const local = getPlayerData()
-  if (local?.userId === carrierPlayerId) return engine.PlayerEntity
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address === carrierPlayerId) return entity as Entity
+  if (local) {
+    const localIdentity = PlayerIdentityData.getOrNull(engine.PlayerEntity)
+    if (localIdentity && localIdentity.address === carrierPlayerId) {
+      return engine.PlayerEntity
+    }
+    if (local.userId === carrierPlayerId) {
+      return engine.PlayerEntity
+    }
   }
+  
+  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+    if (identity.address === carrierPlayerId) {
+      return entity as Entity
+    }
+  }
+  
   return null
 }
 
-function isConnected(): boolean {
-  const realm = RealmInfo.getOrNull(engine.RootEntity)
-  return !!realm?.isConnectedSceneRoom
-}
-
-// ── Track previous flag state for sound triggers ──
+// State tracking
 let prevFlagState: FlagState | null = null
+let prevCarrierId: string = ''
 
-// ── Sound entities (lazy) ──
-import { AudioSource } from '@dcl/sdk/ecs'
+// Sound entities
 let pickupSoundEntity: Entity | null = null
 let dropSoundEntity: Entity | null = null
+
+// Cleanup function to prevent clone duplication
+function cleanupClone(): void {
+  if (carryCloneEntity !== null) { 
+    console.log('[Flag] Cleaning up existing clone entity')
+    engine.removeEntity(carryCloneEntity)
+    carryCloneEntity = null 
+  }
+  if (attachAnchorEntity !== null) { 
+    console.log('[Flag] Cleaning up existing anchor entity')
+    engine.removeEntity(attachAnchorEntity)
+    attachAnchorEntity = null 
+  }
+}
 
 function playPickupSound(): void {
   if (!pickupSoundEntity) {
@@ -204,7 +239,7 @@ function playDropSound(): void {
   a.playing = true
 }
 
-// ── Ground raycast for server gravity ──
+// Ground raycast for server
 let groundRayEntity: Entity | null = null
 
 function fireGroundRaycastForServer(dropPos: Vector3): void {
@@ -224,11 +259,10 @@ function fireGroundRaycastForServer(dropPos: Vector3): void {
   })
 }
 
-// ── Main client system ──
 export function flagClientSystem(dt: number): void {
   const userId = getPlayerData()?.userId
 
-  // E key: unified interact — drop / pickup / attack
+  // E key interaction
   if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && userId) {
     let amCarrying = false
     for (const [, flag] of engine.getEntitiesWith(Flag)) {
@@ -238,10 +272,8 @@ export function flagClientSystem(dt: number): void {
       }
     }
     if (amCarrying) {
-      // Carrying → drop the flag (no attacking while holding)
       room.send('requestDrop', { t: 0 })
     } else {
-      // Not carrying → check if flag is nearby and available
       let flagNearby = false
       const myPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : null
       if (myPos) {
@@ -252,58 +284,101 @@ export function flagClientSystem(dt: number): void {
         }
       }
       if (flagNearby) {
-        console.log('[Client] E pressed → sending requestPickup')
         room.send('requestPickup', { t: 0 })
       } else {
-        console.log('[Client] E pressed → flag not nearby, sending requestAttack')
         room.send('requestAttack', { t: 0 })
       }
     }
   }
 
-  // Detect flag state changes for sounds + collider management
+  // Handle flag state changes with clone system
   for (const [flagEntity, flag] of engine.getEntitiesWith(Flag)) {
-    if (prevFlagState !== null && prevFlagState !== flag.state) {
+    const stateChanged = prevFlagState !== null && prevFlagState !== flag.state
+    const carrierChanged = flag.state === FlagState.Carried && flag.carrierPlayerId !== prevCarrierId && prevCarrierId !== ''
+
+    if (prevFlagState === null || stateChanged || carrierChanged) {
       if (flag.state === FlagState.Carried) {
-        playPickupSound()
-        if (MeshCollider.has(flagEntity)) MeshCollider.deleteFrom(flagEntity)
-      }
-      if (flag.state === FlagState.Dropped || flag.state === FlagState.AtBase) {
-        playDropSound()
-        if (!MeshCollider.has(flagEntity)) MeshCollider.setBox(flagEntity)
-        // Snap position from synced Flag data to override any stale carry-follow
-        const ft = Transform.getMutable(flagEntity)
-        if (flag.state === FlagState.Dropped) {
-          ft.position = Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ)
-          // Fire a downward raycast to find the ground and report to server
+        if (stateChanged) playPickupSound()
+
+        // ALWAYS clean up existing clone first to prevent duplicates
+        cleanupClone()
+
+        // IMMEDIATELY hide the server flag before creating clone
+        VisibilityComponent.createOrReplace(flagEntity, { visible: false })
+        console.log('[Flag] Hidden server flag, creating clone for carrier:', flag.carrierPlayerId)
+
+        // Create AvatarAttach anchor
+        attachAnchorEntity = engine.addEntity()
+        Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
+        AvatarAttach.create(attachAnchorEntity, {
+          avatarId: flag.carrierPlayerId,
+          anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+        })
+
+        // Create visual clone parented to anchor
+        carryCloneEntity = engine.addEntity()
+        Transform.create(carryCloneEntity, {
+          parent: attachAnchorEntity,
+          position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
+          rotation: Quaternion.Identity(),
+          scale: Vector3.One()
+        })
+        GltfContainer.create(carryCloneEntity, { 
+          src: BANNER_SRC, 
+          visibleMeshesCollisionMask: 0, 
+          invisibleMeshesCollisionMask: 0 
+        })
+
+        console.log('[Flag] Clone system created successfully')
+
+      } else if (flag.state === FlagState.Dropped || flag.state === FlagState.AtBase) {
+        if (stateChanged) playDropSound()
+
+        // Clean up clone system
+        cleanupClone()
+        console.log('[Flag] Clone cleaned up, showing server flag')
+
+        // Show server-synced flag again
+        VisibilityComponent.createOrReplace(flagEntity, { visible: true })
+
+        if (flag.state === FlagState.Dropped && stateChanged) {
           fireGroundRaycastForServer(Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ))
-        } else {
-          ft.position = Vector3.create(flag.baseX, flag.baseY, flag.baseZ)
         }
       }
     }
+
+    // Defensive programming: ensure server flag is visible when not carried
+    if (flag.state !== FlagState.Carried) {
+      if (!VisibilityComponent.has(flagEntity) || !VisibilityComponent.get(flagEntity).visible) {
+        console.log('[Flag] Defensive: ensuring server flag is visible when not carried')
+        VisibilityComponent.createOrReplace(flagEntity, { visible: true })
+      }
+    } else {
+      // Defensive programming: ensure server flag is hidden when carried
+      if (!VisibilityComponent.has(flagEntity) || VisibilityComponent.get(flagEntity).visible) {
+        console.log('[Flag] Defensive: ensuring server flag is hidden when carried')
+        VisibilityComponent.createOrReplace(flagEntity, { visible: false })
+      }
+    }
+
     prevFlagState = flag.state
+    prevCarrierId = flag.carrierPlayerId
     break
   }
 
   const clampedDt = Math.min(dt, 0.1)
+  carryAnimTime += clampedDt
 
-  // Carry follow (all clients compute for visual smoothness; snap on drop handles conflicts)
-  const smoothFactor = 1 - Math.exp(-FLAG_FOLLOW_SPEED * clampedDt)
-  for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
-    if (flag.state !== FlagState.Carried || !flag.carrierPlayerId) continue
-    const carrierEntity = getCarrierEntity(flag.carrierPlayerId)
-    if (!carrierEntity || !Transform.has(carrierEntity)) continue
-    const carrierT = Transform.get(carrierEntity)
-    const flagT = Transform.getMutable(flagEntity)
-    const offset = Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z)
-    const targetPos = Vector3.add(carrierT.position, offset)
-    flagT.position = Vector3.lerp(flagT.position, targetPos, smoothFactor)
-    const targetRot = Quaternion.multiply(carrierT.rotation, FLAG_CARRY_ROTATION)
-    flagT.rotation = Quaternion.slerp(flagT.rotation, targetRot, smoothFactor)
+  // Animate the visual clone (smooth bob + spin)
+  if (carryCloneEntity !== null && Transform.has(carryCloneEntity)) {
+    const bobY = CARRY_BOB_AMPLITUDE * Math.sin(carryAnimTime * CARRY_BOB_SPEED)
+    const angleDeg = (carryAnimTime * CARRY_ROT_SPEED_DEG_PER_SEC) % 360
+    const ct = Transform.getMutable(carryCloneEntity)
+    ct.position = Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y + bobY, FLAG_CARRY_OFFSET.z)
+    ct.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
   }
 
-  // ── Check pending ground raycast and report to server ──
+  // Handle ground raycast response
   if (groundRayEntity !== null) {
     const rayResult = RaycastResult.getOrNull(groundRayEntity)
     if (rayResult) {
@@ -311,7 +386,6 @@ export function flagClientSystem(dt: number): void {
         const groundY = rayResult.hits[0].position!.y
         room.send('reportGroundY', { y: groundY })
       } else {
-        // No collider found — assume default DCL ground plane at y=0
         room.send('reportGroundY', { y: 0 })
       }
       engine.removeEntity(groundRayEntity)
@@ -319,7 +393,7 @@ export function flagClientSystem(dt: number): void {
     }
   }
 
-  // ── Cleanup expired effects ──
+  // Cleanup expired effects
   const now = Date.now()
   for (let i = activeTrailPuffs.length - 1; i >= 0; i--) {
     if (now >= activeTrailPuffs[i].expiresAt) {
@@ -336,44 +410,70 @@ export function flagClientSystem(dt: number): void {
       activeBeaconPuffs.splice(i, 1)
       continue
     }
-    // Ease-out position (fast start, slow near top)
     const easedPos = 1 - Math.pow(1 - progress, 2)
     const bt = Transform.getMutable(bp.entity)
     bt.position = Vector3.lerp(bp.startPos, bp.endPos, easedPos)
-    // Shrink: full size at bottom → zero at top
     const scale = bp.startScale * (1 - progress)
     bt.scale = Vector3.create(scale, scale, scale)
   }
 
-  // ── Trail (moving) + Beacon (idle) effects ──
-  let flagPos: Vector3 | null = null
-  for (const [flagEntity] of engine.getEntitiesWith(Flag, Transform)) {
-    flagPos = Transform.get(flagEntity).position
+  // Particle effects based on flag state and movement
+  for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
+    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+      // Trail particles at player's feet ONLY when actually moving
+      const carrierEntity = getCarrierEntity(flag.carrierPlayerId)
+      if (carrierEntity && Transform.has(carrierEntity)) {
+        const carrierPos = Transform.get(carrierEntity).position
+        
+        // Check if carrier is actually moving
+        let isCarrierMoving = false
+        if (lastCarrierPos !== null) {
+          const distanceMoved = Vector3.distance(carrierPos, lastCarrierPos)
+          isCarrierMoving = distanceMoved > TRAIL_MIN_MOVE_DIST
+        }
+        
+        // Update position tracking
+        lastCarrierPos = Vector3.create(carrierPos.x, carrierPos.y, carrierPos.z)
+        
+        // Only spawn trail particles if actually moving
+        if (isCarrierMoving) {
+          const groundParticlePos = Vector3.create(carrierPos.x, carrierPos.y + 0.1, carrierPos.z)
+          trailSpawnAccum += clampedDt
+          while (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL) {
+            trailSpawnAccum -= TRAIL_SPAWN_INTERVAL
+            spawnTrailPuff(groundParticlePos)
+          }
+        } else {
+          // Reset trail accumulator when not moving
+          trailSpawnAccum = 0
+        }
+      } else {
+        // Reset position tracking if carrier not found
+        lastCarrierPos = null
+        trailSpawnAccum = 0
+      }
+      
+      beaconSpawnAccum = 0 // No beacon particles when carried
+      
+    } else if (flag.state === FlagState.AtBase || flag.state === FlagState.Dropped) {
+      // Beacon particles floating up from flag when idle
+      const flagPos = Transform.get(flagEntity).position
+      beaconSpawnAccum += clampedDt
+      while (beaconSpawnAccum >= BEACON_SPAWN_INTERVAL) {
+        beaconSpawnAccum -= BEACON_SPAWN_INTERVAL
+        spawnBeaconPuff(flagPos)
+      }
+      
+      // Reset carrier tracking when flag not carried
+      lastCarrierPos = null
+      trailSpawnAccum = 0
+      
+    } else {
+      // Reset all tracking
+      lastCarrierPos = null
+      trailSpawnAccum = 0
+      beaconSpawnAccum = 0
+    }
     break
-  }
-
-  const isMoving = flagPos != null && lastTrailFlagPos != null &&
-    Vector3.distance(flagPos, lastTrailFlagPos) > TRAIL_MIN_MOVE_DIST
-  if (flagPos) lastTrailFlagPos = Vector3.create(flagPos.x, flagPos.y, flagPos.z)
-
-  if (flagPos && isMoving) {
-    // Moving trail (gold puffs behind the flag)
-    trailSpawnAccum += clampedDt
-    while (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL) {
-      trailSpawnAccum -= TRAIL_SPAWN_INTERVAL
-      spawnTrailPuff(flagPos)
-    }
-    beaconSpawnAccum = 0
-  } else if (flagPos) {
-    // Idle beacon (gold bubbles floating upward)
-    beaconSpawnAccum += clampedDt
-    while (beaconSpawnAccum >= BEACON_SPAWN_INTERVAL) {
-      beaconSpawnAccum -= BEACON_SPAWN_INTERVAL
-      spawnBeaconPuff(flagPos)
-    }
-    trailSpawnAccum = 0
-  } else {
-    trailSpawnAccum = 0
-    beaconSpawnAccum = 0
   }
 }
