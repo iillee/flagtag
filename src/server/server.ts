@@ -74,8 +74,16 @@ async function persistVisitorData(visitorDataJson: string): Promise<void> {
 }
 
 async function loadVisitorData(): Promise<void> {
-  const savedData = await Storage.get<string>('visitorData')
-  const savedResetDay = await Storage.get<string>('lastVisitorResetDay')
+  let savedData: string | null = null
+  let savedResetDay: string | null = null
+  
+  try {
+    savedData = await Storage.get<string>('visitorData')
+    savedResetDay = await Storage.get<string>('lastVisitorResetDay')
+  } catch (err) {
+    console.error('[Server] Failed to load visitor data from storage:', err)
+    return
+  }
   
   if (savedData && savedResetDay) {
     try {
@@ -164,7 +172,7 @@ async function syncVisitorAnalytics(): Promise<void> {
   const currentDay = getTodayDateString()
   const onlineCount = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
   
-  // Build visitor data array
+  // Build visitor data array (limit to top 100 to prevent huge payloads)
   const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
     const isOnline = data.sessionStartMs > 0
     let totalMinutes = data.totalMinutesToday
@@ -182,7 +190,14 @@ async function syncVisitorAnalytics(): Promise<void> {
       isOnline,
       totalMinutes
     }
-  }).filter(v => v.totalMinutes > 0 || v.isOnline) // Only include visitors with time or currently online
+  })
+  .filter(v => v.totalMinutes > 0 || v.isOnline) // Only include visitors with time or currently online
+  .sort((a, b) => {
+    // Online first, then by time
+    if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
+    return b.totalMinutes - a.totalMinutes
+  })
+  .slice(0, 100) // Limit to top 100 to prevent massive sync payload
   
   const visitorDataJson = JSON.stringify(visitorData)
   
@@ -203,8 +218,14 @@ async function syncVisitorAnalytics(): Promise<void> {
 export async function setupServer(): Promise<void> {
   console.log('[Server] Starting Flag Tag server...')
 
-  // Load persisted flag state
-  const savedFlag = await Storage.get<string>('flagState')
+  // Load persisted flag state (with error handling)
+  let savedFlag: string | null = null
+  try {
+    savedFlag = await Storage.get<string>('flagState')
+  } catch (err) {
+    console.error('[Server] Failed to load flag state from storage:', err)
+  }
+  
   let flagStartState = FlagState.AtBase
   let flagStartPos = Vector3.create(FLAG_BASE_POSITION.x, FLAG_BASE_POSITION.y, FLAG_BASE_POSITION.z)
   let dropAnchor = { x: 0, y: 0, z: 0 }
@@ -272,8 +293,13 @@ export async function setupServer(): Promise<void> {
   
   console.log('[Server] Timer initialized, next round ends at:', new Date(nextBoundary).toISOString())
 
-  // Load persisted leaderboard
-  let savedLeaderboard = await Storage.get<string>('leaderboard')
+  // Load persisted leaderboard (with error handling)
+  let savedLeaderboard: string | null = null
+  try {
+    savedLeaderboard = await Storage.get<string>('leaderboard')
+  } catch (err) {
+    console.error('[Server] Failed to load leaderboard from storage:', err)
+  }
   let leaderboardJson = savedLeaderboard || '[]'
   
   leaderboardEntity = engine.addEntity()
@@ -753,8 +779,8 @@ function playerTrackingSystem(): void {
   }
 }
 
-// Prevent duplicate round end triggers
-let lastRoundEndBoundary = 0
+// Prevent duplicate round end triggers - track the actual roundEndTimeMs we processed
+let lastProcessedRoundEndTime = 0
 
 function countdownServerSystem(): void {
   const now = Date.now()
@@ -769,23 +795,22 @@ function countdownServerSystem(): void {
   // Round end: trigger when current time reaches or passes roundEndTimeMs
   // This ensures round ends exactly at 0:00 on the countdown
   if (!timer.roundEndTriggered && now >= timer.roundEndTimeMs) {
-    const currentBoundary = Math.floor(now / intervalMs) * intervalMs
-    
-    // Prevent duplicate triggers for the same boundary
-    if (currentBoundary === lastRoundEndBoundary) {
-      console.log('[Server] Skipping duplicate trigger for boundary:', new Date(currentBoundary).toISOString())
-      return
+    // Prevent duplicate triggers - only process each unique roundEndTimeMs once
+    if (timer.roundEndTimeMs === lastProcessedRoundEndTime) {
+      return // Already processed this round end
     }
-    lastRoundEndBoundary = currentBoundary
+    lastProcessedRoundEndTime = timer.roundEndTimeMs
     
+    const currentBoundary = Math.floor(now / intervalMs) * intervalMs
     const msAfterBoundary = now - currentBoundary
     console.log('[Server] ⏰ Round end triggered! UTC boundary:', new Date(currentBoundary).toISOString(), `(${msAfterBoundary}ms after)`)
     
     // Update the timer's roundEndTimeMs to the next boundary for the new round
     const mutable = CountdownTimer.getMutable(countdownEntity)
-    mutable.roundEndTimeMs = currentBoundary + intervalMs // Next round ends at next boundary
+    const nextBoundary = currentBoundary + intervalMs
+    mutable.roundEndTimeMs = nextBoundary
     
-    console.log('[Server] Updated roundEndTimeMs to:', new Date(mutable.roundEndTimeMs).toISOString())
+    console.log('[Server] Next round ends at:', new Date(nextBoundary).toISOString())
     
     handleRoundEnd().catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
@@ -898,8 +923,8 @@ let visitorSyncTimer = 0
 function visitorTrackingServerSystem(dt: number): void {
   visitorSyncTimer += dt
   
-  // Sync visitor analytics every 5 seconds
-  if (visitorSyncTimer >= 5.0) {
+  // Sync visitor analytics every 30 seconds (reduced from 5s for stability)
+  if (visitorSyncTimer >= 30.0) {
     visitorSyncTimer = 0
     
     // Check for daily reset
