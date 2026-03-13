@@ -61,17 +61,21 @@ export async function main() {
   }
 
   onEnterScene((player) => {
-    addPlayer(player.userId, player.name)
-    addPlayerSession(player.userId, player.name || player.userId.slice(0, 8))
-    // Also register name for other players entering
-    const name = player.name || ''
-    if (name && !name.startsWith('0x') && (!registeredName || registeredName.startsWith('0x'))) {
-      // This is for the local player if onEnterScene fires with better data
-      if (local && player.userId === local.userId) {
+    // Skip local player - already added above
+    if (local && player.userId === local.userId) {
+      // Update local player name if onEnterScene has better data
+      const name = player.name || ''
+      if (name && !name.startsWith('0x') && name !== registeredName) {
         registeredName = name
         room.send('registerName', { name })
+        addPlayer(player.userId, name)
       }
+      return
     }
+    
+    // Add other players
+    addPlayer(player.userId, player.name)
+    addPlayerSession(player.userId, player.name || player.userId.slice(0, 8))
   })
   onLeaveScene((userId) => {
     removePlayer(userId)
