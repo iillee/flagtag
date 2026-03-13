@@ -269,7 +269,7 @@ export function flagClientSystem(dt: number): void {
   if (debugTimer >= 3) {
     debugTimer = 0
     for (const [, flag] of engine.getEntitiesWith(Flag)) {
-      console.log('[Flag Debug] Current state:', flag.state, 'Carrier:', flag.carrierPlayerId.slice(0, 8), 'Clone exists:', carryCloneEntity !== null)
+      console.log('[C.20] Current state:', flag.state, 'Carrier:', flag.carrierPlayerId.slice(0, 8), 'Clone exists:', carryCloneEntity !== null)
       break
     }
   }
@@ -285,7 +285,7 @@ export function flagClientSystem(dt: number): void {
     }
     
     if (amCarrying) {
-      console.log('[Client] E pressed - I am carrying, sending requestDrop')
+      console.log('[C.1] E pressed - I am carrying, sending requestDrop')
       room.send('requestDrop', { t: 0 })
     } else {
       let flagNearby = false
@@ -293,22 +293,22 @@ export function flagClientSystem(dt: number): void {
       if (myPos) {
         for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
           if (flag.state === FlagState.Carried) {
-            console.log('[Client] E pressed - flag is being carried by', flag.carrierPlayerId.slice(0, 8))
+            console.log('[C.2] E pressed - flag is being carried by', flag.carrierPlayerId.slice(0, 8))
             continue
           }
           const dist = Vector3.distance(myPos, Transform.get(flagEntity).position)
           if (dist <= 3) { 
             flagNearby = true
-            console.log('[Client] E pressed - flag on ground nearby, distance:', dist.toFixed(2))
+            console.log('[C.3] E pressed - flag on ground nearby, distance:', dist.toFixed(2))
             break 
           }
         }
       }
       if (flagNearby) {
-        console.log('[Client] E pressed - sending requestPickup')
+        console.log('[C.4] E pressed - sending requestPickup')
         room.send('requestPickup', { t: 0 })
       } else {
-        console.log('[Client] E pressed - sending requestAttack (no flag nearby)')
+        console.log('[C.5] E pressed - sending requestAttack (no flag nearby)')
         room.send('requestAttack', { t: 0 })
       }
     }
@@ -320,12 +320,12 @@ export function flagClientSystem(dt: number): void {
     const carrierChanged = flag.state === FlagState.Carried && flag.carrierPlayerId !== prevCarrierId && prevCarrierId !== ''
 
     if (prevFlagState === null || stateChanged || carrierChanged) {
-      console.log('[Flag] State/Carrier change detected - prevState:', prevFlagState, 'newState:', flag.state, 'prevCarrier:', prevCarrierId.slice(0, 8), 'newCarrier:', flag.carrierPlayerId.slice(0, 8))
+      console.log('[C.10] State/Carrier change - prevState:', prevFlagState, 'newState:', flag.state, 'prevCarrier:', prevCarrierId.slice(0, 8), 'newCarrier:', flag.carrierPlayerId.slice(0, 8))
       
       if (flag.state === FlagState.Carried) {
         if (stateChanged) {
           playPickupSound()
-          console.log('[Flag] STATE CHANGED to Carried - new carrier:', flag.carrierPlayerId.slice(0, 8))
+          console.log('[C.11] STATE CHANGED to Carried - new carrier:', flag.carrierPlayerId.slice(0, 8))
           
           // Clean up any existing clone first
           cleanupClone()
@@ -356,10 +356,10 @@ export function flagClientSystem(dt: number): void {
             invisibleMeshesCollisionMask: 0
           })
           
-          console.log('[Flag] Created animated clone for carrier:', flag.carrierPlayerId.slice(0, 8))
+          console.log('[C.12] Created clone for carrier:', flag.carrierPlayerId.slice(0, 8))
         } else if (carrierChanged) {
           playPickupSound()
-          console.log('[Flag] CARRIER CHANGED (state stayed Carried) - old:', prevCarrierId.slice(0, 8), 'new:', flag.carrierPlayerId.slice(0, 8))
+          console.log('[C.13] CARRIER CHANGED (state stayed Carried) - old:', prevCarrierId.slice(0, 8), 'new:', flag.carrierPlayerId.slice(0, 8))
           
           // Clean up old clone
           cleanupClone()
@@ -389,13 +389,13 @@ export function flagClientSystem(dt: number): void {
             invisibleMeshesCollisionMask: 0
           })
           
-          console.log('[Flag] Created NEW clone for new carrier after steal:', flag.carrierPlayerId.slice(0, 8))
+          console.log('[C.14] Created NEW clone for new carrier after steal:', flag.carrierPlayerId.slice(0, 8))
         }
 
       } else if (flag.state === FlagState.Dropped || flag.state === FlagState.AtBase) {
         if (stateChanged) {
           playDropSound()
-          console.log('[Flag] STATE CHANGED to', flag.state === FlagState.Dropped ? 'Dropped' : 'AtBase', '- cleaning up clone')
+          console.log('[C.15] STATE CHANGED to', flag.state === FlagState.Dropped ? 'Dropped' : 'AtBase', '- cleaning up clone')
           
           // Clean up clone
           cleanupClone()
