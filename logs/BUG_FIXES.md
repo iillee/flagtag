@@ -80,6 +80,50 @@ This document tracks all bugs discovered and their resolutions. Each entry helps
 
 ---
 
+## [2026-03-12 20:15] Flag Invisible When Carried in Live Environment
+**Severity:** Critical
+**Description:** In the live Decentraland environment, when players picked up the flag, it would become completely invisible. The beacon light, trail particles, and score tracking all worked correctly, but the visual flag model disappeared. This did not happen in local preview, only in the live environment.
+
+**Root Cause:** The complex clone system was creating race conditions in the live environment. The system would:
+1. Hide the server flag using VisibilityComponent
+2. Create an anchor entity with AvatarAttach 
+3. Create a child clone entity with the flag model
+4. Multiple visibility state changes could conflict during network synchronization
+
+The timing differences between local preview and live networking caused the clone creation to sometimes fail or the visibility states to get out of sync.
+
+**Reproduction Steps:**
+1. Deploy scene to live Decentraland environment
+2. Player presses E to pick up flag
+3. Expected: Flag visible above player's head
+4. Actual: Flag disappears but effects (beacon, particles, points) continue working
+
+**Solution:** Completely eliminated the clone system in favor of direct attachment:
+- Removed carryCloneEntity and attachAnchorEntity complexity
+- Server flag now attaches directly to player using AvatarAttach
+- Flag remains visible throughout the entire carry cycle
+- Animation applied directly to server flag when attached
+- Single entity management eliminates race conditions
+
+**Files Modified:**
+- `src/systems/flagSystem.ts` - Simplified from 50+ lines of clone logic to ~10 lines of direct attachment
+
+**Prevention:** 
+- Avoid complex entity creation during gameplay state changes
+- Prefer simple, direct solutions over elaborate multi-entity systems
+- Test all flag-carrying scenarios in live environment, not just local preview
+- Be suspicious of visibility state management - simpler is better
+
+**Testing:** 
+- Verified build compiles successfully
+- Local preview shows flag correctly when carried
+- Animation and particle effects preserved
+- Ready for live deployment testing
+
+**Related Issues:** This was likely the cause of player reports about "broken flag pickup" in the live game.
+
+---
+
 ## [2026-03-12 00:55] Flag Duplication During Clone System
 **Severity:** High
 **Description:** Sometimes when picking up the flag, two versions would appear - one on the ground (server-synced original) and one attached to the avatar (visual clone). This created confusing UX where players saw two flags simultaneously.

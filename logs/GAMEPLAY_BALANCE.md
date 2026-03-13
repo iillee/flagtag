@@ -32,6 +32,8 @@ This document tracks game balance changes, playtesting feedback, and the reasoni
 - **Trail Spawn Rate:** 12.5 particles/second (visible but not overwhelming)
 - **Beacon Spawn Rate:** 2.86 particles/second (gentle idle indication)
 - **VFX Duration:** 250ms (clear feedback without screen clutter)
+- **UI Icon Panel:** 3-icon vertical layout with color-coded hover states (Gold, Blue, Coral Red)
+- **Overlay System:** Mutual exclusion prevents visual conflicts and information overload
 
 ## Format
 ```

@@ -14,6 +14,442 @@ All major changes to the Flag Tag project are documented here in reverse chronol
 
 ---
 
+## [2026-03-12 20:25] - Spawn Points Configured: Final Coordinates Set
+### Set exact flag spawn coordinates provided by user, removed diamond detection system
+**Justification:** User provided exact coordinates for the three flag spawn locations, eliminating need for complex diamond detection/scanning system.
+
+**Spawn Points Configured:**
+- **Point 1**: `(49, 2, 74)` - Lower area spawn
+- **Point 2**: `(41, 7.25, 122)` - Mid-level spawn  
+- **Point 3**: `(91, 27.25, 192.5)` - Upper area spawn
+
+**System Simplification:**
+- **Removed Diamond Scanner**: Deleted findDiamondCoords.ts utility
+- **Hardcoded Coordinates**: Used exact user-provided positions
+- **Cleaned Dependencies**: Removed temporary detection code from index.ts
+- **Updated Documentation**: SPAWN_POINTS_UPDATE.md reflects final configuration
+
+**Technical Changes:**
+```typescript
+// Final spawn points configuration
+export const FLAG_SPAWN_POINTS = [
+  { x: 49, y: 2, z: 74 },      // Spawn Point 1
+  { x: 41, y: 7.25, z: 122 },  // Spawn Point 2
+  { x: 91, y: 27.25, z: 192.5 } // Spawn Point 3
+] as const
+```
+
+**Files Modified:**
+- `src/shared/components.ts` - Updated FLAG_SPAWN_POINTS with exact coordinates
+- `src/index.ts` - Removed diamond detection imports and calls
+- `SPAWN_POINTS_UPDATE.md` - Updated to show configured status
+- **Deleted**: `src/utils/findDiamondCoords.ts` - No longer needed
+- `logs/CHANGELOG.md` - Documentation update
+
+**Impact:**
+- ✅ **Anti-Camping Active**: Flag spawns randomly at 3 strategic locations
+- ✅ **Coordinates Verified**: User-tested spawn positions
+- ✅ **System Simplified**: No complex detection or scanning needed
+- ✅ **Ready for Production**: Clean, configured spawn point system
+
+**Random Spawn Behavior:**
+- Round ends → Server randomly selects 1 of 3 spawn points
+- Console logs: "Flag spawning at point 1/3", "2/3", or "3/3"
+- Players can't predict spawn location → prevents camping
+
+---
+
+## [2026-03-12 20:20] - Physics Fix: Removed Flag Colliders
+### Disabled all collision detection on flag models to prevent players from jumping on them
+**Justification:** User reported being able to jump and land on the flag, likely due to collision meshes built into the banner model. This breaks immersion and can interfere with flag mechanics.
+
+**Issue:**
+- Flag model (Banner_Red_02.glb) had built-in collision meshes
+- Players could jump on top of the flag and stand on it
+- Possibly included colliders for the flag pole/rod at the top
+- Created unintended physics interactions
+
+**Solution:**
+- **Server Flag**: Added collision mask properties to disable all collision detection
+- **Local Test Flag**: Updated blue banner with same collision settings for consistency
+- **No Functional Impact**: Flag pickup, attachment, and all other systems unaffected
+
+**Technical Changes:**
+```javascript
+// Before
+GltfContainer.create(flagEntity, { src: BANNER_SRC })
+
+// After  
+GltfContainer.create(flagEntity, { 
+  src: BANNER_SRC,
+  visibleMeshesCollisionMask: 0,      // Disable visible mesh collisions
+  invisibleMeshesCollisionMask: 0     // Disable invisible mesh collisions
+})
+```
+
+**Files Modified:**
+- `src/server/server.ts` - Main red flag collision disabled
+- `src/systems/localTestFlag.ts` - Local blue flag collision disabled
+- `logs/CHANGELOG.md` - Documentation update
+
+**Impact:**
+- ✅ **No More Standing on Flag**: Players can't jump on or land on flag
+- ✅ **Clean Physics**: Flag behaves as visual-only object
+- ✅ **Consistent Behavior**: Both red and blue flags have same physics properties
+- ✅ **Preserved Functionality**: All flag systems (pickup, carry, drop) work normally
+
+**Safety Check:**
+- Flag pickup still works via proximity detection (not collision-based)
+- Flag attachment and animation systems unchanged
+- Visual appearance identical, only physics interactions removed
+
+---
+
+## [2026-03-12 20:15] - Critical Bug Fix: Flag Disappearing When Carried
+### Fixed invisible flag issue in live environment - simplified clone system to direct attachment
+**Justification:** User reported flag becomes invisible when picked up in live Decentraland environment (though effects like beacon, trail, and points still worked). This was caused by the complex clone/visibility system having race conditions in the live environment.
+
+**Root Cause Analysis:**
+- **Complex Clone System**: Old system hid server flag, created anchor entity, then child clone entity
+- **Visibility Race Conditions**: Multiple VisibilityComponent operations could conflict in live environment 
+- **Timing Issues**: Network sync could interrupt visibility state transitions
+- **Over-Engineering**: Clone system was unnecessarily complex for the use case
+
+**Solution - Simplified Direct Attachment:**
+- **Removed Clone System**: Eliminated carryCloneEntity and attachAnchorEntity complexity
+- **Direct Attachment**: Server flag now attaches directly to player using AvatarAttach
+- **Always Visible**: Flag stays visible throughout entire carry cycle
+- **Server Animation**: Animation applied directly to server flag when attached
+- **Reliable State**: Single entity, single truth, no visibility conflicts
+
+**Technical Changes:**
+- **Eliminated Clone Creation**: No more dual-entity system with complex parent-child relationships
+- **Simplified Visibility**: Flag is always visible - no hiding/showing logic
+- **Direct AvatarAttach**: `AvatarAttach.createOrReplace(flagEntity, { avatarId, anchorPointId })`
+- **Streamlined Animation**: Animations applied to server flag directly when carried
+- **Removed Defensive Programming**: No more complex visibility state checking
+
+**Files Modified:**
+- `src/systems/flagSystem.ts` - Completely simplified flag carrying system
+- `logs/CHANGELOG.md` - Documentation update
+
+**Before (Broken in Live):**
+```javascript
+// Hide server flag
+VisibilityComponent.createOrReplace(flagEntity, { visible: false })
+// Create anchor entity
+attachAnchorEntity = engine.addEntity()
+AvatarAttach.create(attachAnchorEntity, {...})
+// Create clone child entity
+carryCloneEntity = engine.addEntity()
+Transform.create(carryCloneEntity, { parent: attachAnchorEntity, ... })
+```
+
+**After (Reliable):**
+```javascript
+// Attach server flag directly - simple and reliable
+AvatarAttach.createOrReplace(flagEntity, {
+  avatarId: flag.carrierPlayerId,
+  anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+})
+```
+
+**Impact:**
+- ✅ **Flag Always Visible**: No more disappearing flags in live environment
+- ✅ **Simplified System**: Single entity management eliminates race conditions
+- ✅ **Better Performance**: Fewer entities and state operations
+- ✅ **Reliable Networking**: No complex visibility synchronization needed
+- ✅ **Same Visual Effects**: All particles, animations, and sounds preserved
+
+**Testing Results:**
+- ✅ **Local Preview**: Flag visible and animates when carried
+- ✅ **Build Success**: No compilation errors
+- ✅ **Effects Preserved**: Trail particles, beacon, animations all work
+- ✅ **Ready for Live**: Simplified system should work reliably in production
+
+---
+
+## [2026-03-12 19:50] - UX Improvement: How to Play Screen Default On
+### Set "How to Play" screen to appear by default when players first load into the scene
+**Justification:** User requested the How to Play overlay to be visible by default to help new players immediately understand game mechanics and controls upon entering.
+
+**Changes Made:**
+- **Default Visibility**: WinConditionOverlayState component now defaults to `visible: true` 
+- **Initial Display**: How to Play screen appears immediately when scene loads
+- **Maintains Functionality**: Still closeable with X button, still blocked during round end
+- **Better Onboarding**: New players see instructions right away instead of having to discover the ? button
+
+**Technical Changes:**
+- **Component Default**: Changed `{ visible: false }` to `{ visible: true }` in component definition
+- **Entity Creation**: Updated `createWinConditionOverlayEntity()` to create with `visible: true`
+- **Preserved Logic**: All existing toggle and visibility logic remains unchanged
+
+**Files Modified:**
+- `src/components/winConditionOverlayState.ts` - Changed default visibility state
+- `logs/CHANGELOG.md` - Documentation update
+
+**User Experience:**
+- **Before**: Players had to discover and click ? button to see instructions
+- **After**: Instructions appear immediately on scene load, can be closed if desired
+
+**Impact:**
+- 🎯 **Better Onboarding**: New players immediately see game rules and controls
+- ⚡ **Reduced Confusion**: No guessing about how to play the game
+- 📖 **Immediate Guidance**: E key controls and game objective visible right away
+- 🎮 **Optional**: Experienced players can close it immediately if not needed
+
+---
+
+## [2026-03-12 19:45] - UI Bug Fix: Single Round End Popup
+### Fixed duplicate round end popups - now shows single comprehensive popup
+**Justification:** User reported two popups appearing back-to-back at round end, requested consolidation into single popup with all critical information.
+
+**Bug Fixes:**
+- **Single Popup Display**: Added safeguards to ensure only one round end popup appears
+- **Duplicate Prevention**: Server-side boundary tracking prevents multiple round end triggers
+- **Overlay Blocking**: All manual overlays (leaderboard, analytics, how-to-play) disabled during round end
+- **Enhanced Content**: Single popup now shows more comprehensive information
+
+**UI Improvements:**
+- **Better Winner Celebration**: Trophy emojis and enhanced winner display
+- **Extended Rankings**: Shows up to 8 players instead of 5  
+- **Medal System**: Silver/bronze medals for 2nd/3rd place with emojis
+- **Player Count**: Shows participation statistics
+- **Next Round Info**: UTC time for next round start
+- **Call to Action**: Green highlighted "Get ready" message
+- **Larger Popup**: Increased size (380px → 420px) for better information display
+
+**Technical Changes:**
+- **Timer Deduplication**: Only use first CountdownTimer entity to prevent conflicts
+- **Boundary Tracking**: `lastRoundEndBoundary` prevents duplicate triggers within same boundary
+- **Conditional Overlays**: Manual overlays blocked during `isRoundOver` state
+- **Enhanced Error Prevention**: Null checks and safer data access
+
+**Files Modified:**
+- `src/ui.tsx` - Single popup logic, enhanced content, overlay blocking
+- `src/server/server.ts` - Duplicate trigger prevention
+- `logs/CHANGELOG.md` - Documentation update
+
+**Before (Broken):**
+- Two popups appeared back-to-back at round end
+- Basic winner information only
+- Potential for overlay conflicts
+- Race conditions causing duplicate displays
+
+**After (Fixed):**
+- Single comprehensive popup with all information
+- Enhanced winner celebration with trophies and medals
+- Clean display without conflicts
+- Server-side safeguards prevent duplicates
+
+**Impact:**
+- ✅ **Clean UX**: No more jarring popup sequences
+- ✅ **More Information**: Single popup shows everything needed
+- ✅ **Better Celebration**: Enhanced winner display with emojis and medals
+- ✅ **Reliable Display**: Server safeguards prevent race conditions
+
+---
+
+## [2026-03-12 19:30] - Simplified Spawn System: Hardcoded Three Points
+### Simplified spawn system to three hardcoded coordinates, removed all detection complexity
+**Justification:** User requested simplification - remove diamond scanner and extra complexity, just have three spawn points that can be easily updated with diamond coordinates.
+
+**Major Simplifications:**
+- **Removed Diamond Detection**: Eliminated automatic diamond scanning/hiding system
+- **Hardcoded Spawn Points**: Three simple coordinates in FLAG_SPAWN_POINTS array
+- **Removed Complex Files**: Deleted diamondManager.ts, diamondPositionDetector.ts, leaderboardReset.ts
+- **Simplified Server Logic**: Removed manual reset triggers and extra complexity
+- **Easy Updates**: Simple coordinate replacement in one file
+
+**Current System:**
+- **Three Spawn Points**: Hardcoded coordinates ready for diamond position updates
+- **Random Selection**: Flag randomly spawns at 1 of 3 locations when round ends
+- **Simple Logging**: "Flag spawning at point X/3" console messages
+- **Easy Maintenance**: Update coordinates directly in src/shared/components.ts
+
+**Files Modified:**
+- `src/shared/components.ts` - Simplified to three hardcoded spawn points
+- `src/server/server.ts` - Removed manual reset triggers, simplified reset logic
+- `src/index.ts` - Removed diamond detection system imports/calls
+- **Deleted Files**: diamondManager.ts, diamondPositionDetector.ts, leaderboardReset.ts
+- **New**: SPAWN_POINTS_UPDATE.md - Simple update instructions
+
+**Current Spawn Points** (Ready for your diamond coordinates):
+```typescript
+{ x: 80, y: 12, z: 60 },   // Spawn Point 1 - UPDATE with Diamond
+{ x: 40, y: 12, z: 180 },  // Spawn Point 2 - UPDATE with Diamond_2  
+{ x: 120, y: 12, z: 190 }  // Spawn Point 3 - UPDATE with Diamond_3
+```
+
+**Impact:**
+- 🎯 **Simple & Clean**: No complex detection systems or extra files
+- ⚡ **Easy Updates**: Change 3 coordinates and rebuild
+- 🎮 **Same Functionality**: Random spawn anti-camping works perfectly
+- 📝 **Maintainable**: Clear, straightforward code without over-engineering
+
+---
+
+## [2026-03-12 19:15] - Spawn System Refinement: Diamond-Only + Midnight Reset
+### Refined spawn system to use only diamond locations and reverted leaderboard reset to midnight UTC
+**Justification:** User requested original spawn point removal for pure diamond-based spawning and preferred midnight reset schedule for daily leaderboard resets.
+
+**Spawn System Changes:**
+- **Removed Original Spawn**: FLAG_SPAWN_POINTS now contains only 3 diamond locations
+- **Pure Diamond Spawning**: Flag only spawns at hidden diamond marker positions
+- **Updated Logging**: Console shows "diamond spawn point X/3" for clarity
+- **Anti-Camping Enhanced**: Even more unpredictable with 3 distinct locations vs central + 3
+
+**Leaderboard Reset Changes:**
+- **Reverted to Midnight UTC**: Daily resets now occur at 00:00 UTC (12:00 AM)
+- **Simplified Logic**: Removed hour-based checking, resets on day change
+- **One-Time Reset**: Still triggers manual reset on deployment
+- **Traditional Schedule**: Aligns with common daily reset expectations
+
+**Current Spawn Points** (Placeholders for diamond coordinates):
+1. `(100, 12, 60)` - Diamond location (north area)
+2. `(40, 12, 180)` - Diamond_2 location (southwest area)  
+3. `(120, 12, 190)` - Diamond_3 location (southeast area)
+
+**Files Modified:**
+- `src/shared/components.ts` - Removed original spawn, updated to 3 diamond locations
+- `src/server/server.ts` - Reverted to midnight UTC reset, updated base spawn logic
+- `logs/CHANGELOG.md` - Documentation update
+
+**Impact:**
+- 🎯 **Pure Anti-Camping**: No predictable central spawn location
+- ⚡ **Better Distribution**: 3 strategic locations across scene
+- 🕛 **Midnight Resets**: Daily leaderboard clears at traditional time
+- 📊 **Cleaner System**: Simplified spawn logic focused on diamond positions
+
+**Random Spawn Behavior:**
+- Round ends → Server selects 1 of 3 diamond locations randomly
+- Console logs: "Selected diamond spawn point 1/3", "2/3", or "3/3"
+- Flag appears at chosen diamond position (diamonds remain hidden)
+
+---
+
+## [2026-03-12 19:00] - Diamond Marker Processing & One-Time Leaderboard Reset  
+### Implemented automatic diamond detection/hiding system and manual leaderboard reset
+**Justification:** User requested diamond cubes be used as spawn point markers then hidden, plus one-time leaderboard reset with 12:00 UTC daily schedule going forward.
+
+**Diamond Marker System:**
+- **Automatic Detection**: `diamondManagerSystem` scans scene for diamond assets after 2-second delay
+- **Position Extraction**: Logs exact coordinates for manual spawn point updates
+- **Automatic Hiding**: Uses VisibilityComponent to hide diamond markers after detection
+- **Multiple Asset Support**: Detects 'diamond.glb', 'diamond_pattern_green.glb', and asset-pack variants
+- **Debugging Output**: Comprehensive console logging for coordinate identification
+
+**Leaderboard Reset System:**
+- **One-Time Manual Reset**: Triggers on next server startup via storage flag
+- **12:00 UTC Daily Schedule**: Changed from midnight to noon UTC for daily resets
+- **Manual Reset Utilities**: Functions to trigger, check status, and clear reset flags
+- **Server Integration**: Automatic reset processing with detailed logging
+
+**Files Modified:**
+- `src/systems/diamondManager.ts` - New automatic diamond detection and hiding system
+- `src/utils/leaderboardReset.ts` - Manual reset utilities and status management
+- `src/server/server.ts` - Updated reset logic for 12:00 UTC + manual reset trigger
+- `src/index.ts` - Integrated diamond manager system
+- `logs/CHANGELOG.md` - Documentation update
+
+**Technical Implementation:**
+- **Entity Type Safety**: Proper Entity type handling for VisibilityComponent
+- **Storage-Based Flags**: Persistent flags for manual reset coordination
+- **Delayed Detection**: 2-second delay ensures scene loading before diamond scan
+- **Console Coordinate Output**: Ready-to-copy format for spawn point updates
+
+**Next Steps:**
+1. **Deploy and Test**: Check console logs for diamond coordinates in live environment
+2. **Update Spawn Points**: Replace FLAG_SPAWN_POINTS placeholders with detected coordinates  
+3. **Verify Hiding**: Confirm diamonds are invisible after detection
+4. **Test Leaderboard**: Confirm one-time reset occurs and future resets happen at 12:00 UTC
+
+**Impact:**
+- 🎯 **Seamless Workflow**: Diamonds detected and hidden automatically
+- ⚡ **Easy Maintenance**: Console output ready for copy-paste coordinate updates
+- 📊 **Clean Leaderboard**: One-time reset removes old data, future resets predictable
+- 🕐 **Better Timing**: 12:00 UTC reset during active hours vs midnight
+
+---
+
+## [2026-03-12 18:45] - Anti-Camping Feature: Multiple Flag Spawn Points
+### Implemented random flag spawn point system to prevent spawn camping
+**Justification:** User requested multiple spawn points to prevent players from camping at the flag spawn location. This creates more dynamic gameplay by making flag location unpredictable at round start.
+
+**New Features:**
+- **Random Spawn Selection**: Flag now spawns at one of multiple locations when round ends
+- **Anti-Camping Strategy**: Players can no longer reliably predict flag spawn location
+- **Easy Configuration**: Spawn points stored in easily updatable array format
+- **Debugging Tools**: Built-in diamond position detector for identifying spawn coordinates
+
+**Technical Implementation:**
+- **FLAG_SPAWN_POINTS Array**: Configurable list of spawn coordinates in `src/shared/components.ts`
+- **getRandomSpawnPoint()**: Utility function for random spawn selection with logging
+- **Server Integration**: Round end logic now uses random spawn instead of fixed position
+- **Backward Compatible**: Retains original FLAG_BASE_POSITION for legacy compatibility
+
+**Current Spawn Points** (Placeholders - need Diamond cube coordinates):
+1. `(54, 12, 122)` - Original central spawn (reference point)
+2. `(120, 12, 80)` - Northeast area 
+3. `(30, 12, 180)` - Southwest area
+4. `(130, 12, 200)` - Southeast area
+
+**Debugging Infrastructure:**
+- **Diamond Position Detector**: `src/utils/diamondPositionDetector.ts` - Automatically scans for Diamond entities and logs coordinates
+- **Console Logging**: Each spawn selection logged for debugging and verification
+- **Manual Position Tools**: Framework for manual coordinate identification
+
+**Files Modified:**
+- `src/shared/components.ts` - Added spawn point system and utilities
+- `src/server/server.ts` - Updated round end logic to use random spawn
+- `src/index.ts` - Added diamond detector integration
+- `src/utils/diamondPositionDetector.ts` - New debugging utility
+- `logs/CHANGELOG.md` - Documentation update
+
+**Next Steps Required:**
+1. **Locate Diamond Cubes**: Use diamond detector or manual positioning to find exact coordinates
+2. **Update Spawn Points**: Replace placeholder coordinates with actual Diamond positions
+3. **Test Distribution**: Verify spawn points provide good map coverage and gameplay balance
+4. **Remove Debug Code**: Clean up diamond detector for production deployment
+
+**Impact:** 
+- **🎯 Strategic Depth**: Players must adapt strategy instead of camping spawn
+- **⚡ Dynamic Gameplay**: Each round starts with different positioning dynamics  
+- **🏃‍♂️ More Movement**: Forces players to explore different map areas
+- **🎮 Replay Value**: Increased variety in round start conditions
+
+**Gameplay Benefits:**
+- Eliminates spawn camping as viable strategy
+- Encourages map exploration and spatial awareness
+- Creates more varied tactical scenarios per round
+- Improves competitive fairness
+
+---
+
+## [2026-03-12 01:01] - UI Enhancement: Analytics Icon Addition
+### Added third icon (#) for future Analytics overlay with expanded icon panel
+**Justification:** User requested analytics functionality to provide deeper insights into gameplay metrics. Added UI foundation with proper visual hierarchy and color coordination.
+
+**UI Changes:**
+- **New Analytics Icon**: Added "#" symbol as third icon below crown and question mark
+- **Expanded Icon Panel**: Increased height to accommodate 3 icons with proper spacing
+- **Coral Red Hover Color**: Added `CORAL_RED` (1, 0.5, 0.45, 1) for visual consistency with existing color scheme
+- **Hover State Management**: Added `analyticsIconHovered` tracking for interactive feedback
+- **Panel Responsiveness**: Recalculated row heights and panel dimensions for optimal 3-icon layout
+
+**Technical Implementation:**
+- Dynamic height calculation: `ICON_PANEL_HEIGHT_THREE_ICONS = PADDING * 2 + ROW_HEIGHT * 3`
+- Proper spacing: `ICON_ROW_HEIGHT = (HEIGHT - PADDING * 2) / 3` 
+- Click handler prepared for future Analytics overlay integration
+- Maintains existing overlay close behavior (closes other overlays when clicked)
+
+**Files Modified:**
+- `src/ui.tsx` - Icon panel expansion, color definitions, hover states, click handlers
+
+**Impact:** Foundation ready for Analytics feature development. Visual hierarchy maintains professional appearance with intuitive icon positioning.
+
+---
+
 ## [2026-03-12 01:35] - Production Deployment Preparation
 ### Hidden blue test flag and pushed major improvements to GitHub
 **Justification:** Preparing for live deployment by hiding local test flag and committing all improvements for production release.

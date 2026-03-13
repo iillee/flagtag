@@ -169,26 +169,32 @@ const hitSoundPool: Entity[] = []
 let hitSoundPoolIndex = 0
 let missSoundEntity: Entity | null = null
 
-function playHitSound(): void {
+function playHitSound(position: Vector3): void {
   while (hitSoundPool.length < HIT_SOUND_POOL_SIZE) {
     const e = engine.addEntity()
     Transform.create(e, { position: Vector3.Zero() })
-    AudioSource.create(e, { audioClipUrl: HIT_SOUND_PATH, playing: false, loop: false, volume: 1, global: true })
+    AudioSource.create(e, { audioClipUrl: HIT_SOUND_PATH, playing: false, loop: false, volume: 1, global: false })
     hitSoundPool.push(e)
   }
   const e = hitSoundPool[hitSoundPoolIndex % HIT_SOUND_POOL_SIZE]
   hitSoundPoolIndex++
+  // Position the sound at the hit location
+  const t = Transform.getMutable(e)
+  t.position = position
   const a = AudioSource.getMutable(e)
   a.currentTime = 0
   a.playing = true
 }
 
-function playMissSound(): void {
+function playMissSound(position: Vector3): void {
   if (!missSoundEntity) {
     missSoundEntity = engine.addEntity()
     Transform.create(missSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: false, loop: false, volume: 1, global: true })
+    AudioSource.create(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: false, loop: false, volume: 1, global: false })
   }
+  // Position the sound at the miss location
+  const t = Transform.getMutable(missSoundEntity)
+  t.position = position
   const a = AudioSource.getMutable(missSoundEntity)
   a.currentTime = 0
   a.playing = true
@@ -197,8 +203,8 @@ function playMissSound(): void {
 // CONTINUED IN STEP 4b-ii — stagger, message listeners, main system loop
 // (placeholder exports so the file compiles)
 const STAGGER_EMOTE = 'getHit' as const
-const STAGGER_FREEZE_MS = 1500
-const STAGGER_DELAY_MS = 100
+const STAGGER_FREEZE_MS = 800   // Reduced from 1500ms - shorter stun duration
+const STAGGER_DELAY_MS = 0      // Reduced from 100ms - instant emote trigger
 let staggerFreezeUntil = 0
 let staggerTriggerAt = 0
 let pendingStagger = false
@@ -235,7 +241,7 @@ export function combatClientSystem(_dt: number): void {
   }
 
   // Show VFX from server messages
-  for (const pos of pendingHitPositions) { showHitEffect(pos); playHitSound() }
+  for (const pos of pendingHitPositions) { showHitEffect(pos); playHitSound(pos) }
   pendingHitPositions.length = 0
   for (const attackerPos of pendingMissPositions) {
     // Find the attacker's rotation to compute "in front" position
@@ -265,7 +271,7 @@ export function combatClientSystem(_dt: number): void {
       }
     }
     showMissEffect(missPos)
-    playMissSound()
+    playMissSound(missPos)
   }
   pendingMissPositions.length = 0
 

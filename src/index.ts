@@ -1,5 +1,5 @@
 import { Vector3 } from '@dcl/sdk/math'
-import { engine, Transform, AudioSource, MeshCollider, CameraModeArea, CameraType } from '@dcl/sdk/ecs'
+import { engine, Transform, AudioSource, MeshCollider, CameraModeArea, CameraType, AvatarModifierArea, AvatarModifierType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
@@ -9,8 +9,10 @@ import { countdownClientSystem } from './systems/countdownTimerSystem'
 import { setupLocalTestFlag } from './systems/localTestFlag'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { addPlayer, removePlayer } from './gameState/flagHoldTime'
+import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
 import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
+import { createAnalyticsOverlayEntity } from './components/analyticsOverlayState'
 // Import shared components so they are registered on both server and client
 import './shared/components'
 import { room } from './shared/messages'
@@ -25,6 +27,7 @@ export async function main() {
   // ── Client setup ──
   createWinConditionOverlayEntity()
   createLeaderboardOverlayEntity()
+  createAnalyticsOverlayEntity()
   setupUi()
   setupBeacon()
 
@@ -32,6 +35,7 @@ export async function main() {
   let registeredName = ''
   if (local) {
     addPlayer(local.userId, local.name)
+    addPlayerSession(local.userId, local.name || local.userId.slice(0, 8))
     registeredName = local.name || ''
     room.send('registerName', { name: registeredName || local.userId.slice(0, 8) })
 
@@ -58,6 +62,7 @@ export async function main() {
 
   onEnterScene((player) => {
     addPlayer(player.userId, player.name)
+    addPlayerSession(player.userId, player.name || player.userId.slice(0, 8))
     // Also register name for other players entering
     const name = player.name || ''
     if (name && !name.startsWith('0x') && (!registeredName || registeredName.startsWith('0x'))) {
@@ -68,7 +73,10 @@ export async function main() {
       }
     }
   })
-  onLeaveScene((userId) => removePlayer(userId))
+  onLeaveScene((userId) => {
+    removePlayer(userId)
+    removePlayerSession(userId)
+  })
 
   // Background music
   const musicEntity = engine.addEntity()
@@ -95,6 +103,18 @@ export async function main() {
       engine.removeEntity(camArea)
       return camRemoveTimer = -999 // stop checking
     }
+  })
+
+  // Disable passport UI (clicking on avatars to view profiles)
+  // NOTE: The SDK does not provide a way to disable smart wearables/portable experiences.
+  // Only AMT_HIDE_AVATARS and AMT_DISABLE_PASSPORTS are available as modifiers.
+  // Smart wearables run in a separate context and cannot be disabled by scene code.
+  const avatarModArea = engine.addEntity()
+  Transform.create(avatarModArea, { position: Vector3.create(80, 10, 120) })
+  AvatarModifierArea.create(avatarModArea, {
+    area: Vector3.create(170, 50, 250), // Cover entire scene
+    modifiers: [AvatarModifierType.AMT_DISABLE_PASSPORTS], // Disables passport UI only
+    excludeIds: []
   })
 
   // Invisible boundary walls

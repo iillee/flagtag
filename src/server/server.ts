@@ -3,16 +3,17 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
-  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState,
+  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, VisitorAnalytics,
   getHoldTimeEntityEnumId, getNextRoundEndTimeMs,
-  FLAG_BASE_POSITION, SyncIds
+  FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString
 } from '../shared/components'
 import { room } from '../shared/messages'
 
 // ── Constants ──
 const PICKUP_RADIUS = 3
 const HIT_RADIUS = 2.5
-const HIT_COOLDOWN_MS = 450
+const HIT_COOLDOWN_MS = 450       // Attacker cooldown (how soon they can attack again)
+const VICTIM_IMMUNITY_MS = 3000   // Victim immunity after being hit/stolen from (prevents tag-backs)
 const DROP_BEHIND_DISTANCE = 1.4
 const HOLD_TIME_SYNC_INTERVAL = 0.2
 const IDLE_BOB_AMPLITUDE = 0.15
@@ -28,12 +29,19 @@ const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red
 let flagEntity: Entity
 let countdownEntity: Entity
 let leaderboardEntity: Entity
+let visitorAnalyticsEntity: Entity
 let idleTime = 0
 let holdTimeAccum = 0
 const lastAttackTime = new Map<string, number>()
+const lastHitTime = new Map<string, number>()  // Track when players were last hit (for immunity)
 const holdTimeEntities = new Map<string, Entity>()
 const knownPlayers = new Set<string>()
 const playerNames = new Map<string, string>()
+let lastLeaderboardResetDay = ''
+
+// ── Visitor tracking ──
+const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesToday: number }>()
+let lastVisitorResetDay = ''
 
 // Gravity state for dropped flag
 let flagFalling = false
@@ -59,6 +67,137 @@ async function persistFlagState(): Promise<void> {
 async function persistLeaderboard(json: string): Promise<void> {
   await Storage.set('leaderboard', json)
 }
+
+async function persistVisitorData(visitorDataJson: string): Promise<void> {
+  await Storage.set('visitorData', visitorDataJson)
+  await Storage.set('lastVisitorResetDay', lastVisitorResetDay)
+}
+
+async function loadVisitorData(): Promise<void> {
+  const savedData = await Storage.get<string>('visitorData')
+  const savedResetDay = await Storage.get<string>('lastVisitorResetDay')
+  
+  if (savedData && savedResetDay) {
+    try {
+      const visitorRecords = JSON.parse(savedData)
+      lastVisitorResetDay = savedResetDay
+      
+      // Restore visitor data if it's from today
+      const currentDay = getTodayDateString()
+      if (lastVisitorResetDay === currentDay) {
+        for (const record of visitorRecords) {
+          visitorSessions.set(record.userId, {
+            name: record.name,
+            sessionStartMs: 0, // Not currently online after server restart
+            totalMinutesToday: record.totalMinutes
+          })
+          playerNames.set(record.userId, record.name)
+        }
+        console.log('[Server] Restored visitor data for', currentDay, '- loaded', visitorRecords.length, 'visitors')
+      } else {
+        console.log('[Server] Visitor data was from', lastVisitorResetDay, 'but today is', currentDay, '- starting fresh')
+        lastVisitorResetDay = currentDay
+      }
+    } catch (e) {
+      console.error('[Server] Failed to load visitor data:', e)
+      lastVisitorResetDay = getTodayDateString()
+    }
+  } else {
+    lastVisitorResetDay = getTodayDateString()
+    console.log('[Server] No visitor data found, starting fresh for', lastVisitorResetDay)
+  }
+}
+
+// Check and perform daily leaderboard reset at 12:00 AM UTC (midnight)
+async function checkLeaderboardDailyReset(): Promise<boolean> {
+  const now = new Date()
+  const currentDay = now.toISOString().slice(0, 10) // YYYY-MM-DD format
+  
+  // Load last reset day from storage if not set
+  if (lastLeaderboardResetDay === '') {
+    const savedResetDay = await Storage.get<string>('lastLeaderboardResetDay')
+    lastLeaderboardResetDay = savedResetDay || currentDay
+  }
+  
+  // Reset at midnight UTC (00:00) - check if new day and we haven't reset today
+  if (lastLeaderboardResetDay !== currentDay) {
+    console.log('[Server] Daily leaderboard reset at midnight UTC for new day:', currentDay)
+    lastLeaderboardResetDay = currentDay
+    
+    // Clear the leaderboard
+    const mutable = LeaderboardState.getMutable(leaderboardEntity)
+    mutable.json = '[]'
+    await persistLeaderboard('[]')
+    
+    // Persist the reset day
+    await Storage.set('lastLeaderboardResetDay', currentDay)
+    
+    console.log('[Server] Leaderboard reset completed')
+    return true
+  }
+  
+  return false
+}
+
+// Check and perform daily visitor reset at 12:00 AM UTC (midnight)
+async function checkVisitorDailyReset(): Promise<boolean> {
+  const currentDay = getTodayDateString()
+  
+  if (lastVisitorResetDay !== currentDay) {
+    console.log('[Server] Daily visitor reset at midnight UTC for new day:', currentDay)
+    lastVisitorResetDay = currentDay
+    
+    // Clear visitor data for new day
+    visitorSessions.clear()
+    
+    // Sync empty visitor data
+    await syncVisitorAnalytics()
+    
+    console.log('[Server] Visitor data reset completed')
+    return true
+  }
+  
+  return false
+}
+
+async function syncVisitorAnalytics(): Promise<void> {
+  const currentDay = getTodayDateString()
+  const onlineCount = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
+  
+  // Build visitor data array
+  const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
+    const isOnline = data.sessionStartMs > 0
+    let totalMinutes = data.totalMinutesToday
+    
+    // Add current session time if online
+    if (isOnline) {
+      const sessionMs = Date.now() - data.sessionStartMs
+      const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
+      totalMinutes += sessionMinutes
+    }
+    
+    return {
+      userId,
+      name: data.name,
+      isOnline,
+      totalMinutes
+    }
+  }).filter(v => v.totalMinutes > 0 || v.isOnline) // Only include visitors with time or currently online
+  
+  const visitorDataJson = JSON.stringify(visitorData)
+  
+  // Update synced component
+  const mutable = VisitorAnalytics.getMutable(visitorAnalyticsEntity)
+  mutable.date = currentDay
+  mutable.visitorDataJson = visitorDataJson
+  mutable.onlineCount = onlineCount
+  mutable.totalUniqueVisitors = visitorSessions.size
+  
+  // Persist to storage
+  await persistVisitorData(visitorDataJson)
+}
+
+
 
 // ── Setup ──
 export async function setupServer(): Promise<void> {
@@ -94,32 +233,67 @@ export async function setupServer(): Promise<void> {
     rotation: Quaternion.fromEulerDegrees(0, 0, 0),
     scale: Vector3.create(1, 1, 1)
   })
-  GltfContainer.create(flagEntity, { src: BANNER_SRC })
+  GltfContainer.create(flagEntity, { 
+    src: BANNER_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
+  
+  // Use the first spawn point as the default base (or restored position if available)
+  const initialBase = flagStartState === FlagState.AtBase ? FLAG_SPAWN_POINTS[0] : { x: flagStartPos.x, y: flagStartPos.y, z: flagStartPos.z }
+  
+  // If starting at base, initialize drop anchor to match base coordinates (prevents 0,0,0 issue)
+  if (flagStartState === FlagState.AtBase) {
+    dropAnchor = { x: initialBase.x, y: initialBase.y, z: initialBase.z }
+  }
+  
   Flag.create(flagEntity, {
     teamId: 0,
     state: flagStartState,
     carrierPlayerId: '',
-    baseX: FLAG_BASE_POSITION.x, baseY: FLAG_BASE_POSITION.y, baseZ: FLAG_BASE_POSITION.z,
+    baseX: initialBase.x, baseY: initialBase.y, baseZ: initialBase.z,
     dropAnchorX: dropAnchor.x, dropAnchorY: dropAnchor.y, dropAnchorZ: dropAnchor.z
   })
   syncEntity(flagEntity, [Transform.componentId, Flag.componentId, GltfContainer.componentId], SyncIds.FLAG)
 
-  // Create countdown timer
-  const roundEndTimeMs = getNextRoundEndTimeMs()
+  // Create countdown timer - use next UTC boundary for proper initialization
+  const now = Date.now()
+  const intervalMs = 5 * 60 * 1000 // 5 minutes
+  const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
+  
   countdownEntity = engine.addEntity()
   CountdownTimer.create(countdownEntity, {
-    roundEndTimeMs,
+    roundEndTimeMs: nextBoundary,
     roundEndTriggered: false,
-    roundEndDisplayUntilMs: 0
+    roundEndDisplayUntilMs: 0,
+    roundWinnerJson: ''
   })
   syncEntity(countdownEntity, [CountdownTimer.componentId], SyncIds.COUNTDOWN)
+  
+  console.log('[Server] Timer initialized, next round ends at:', new Date(nextBoundary).toISOString())
 
-  // Load persisted leaderboard (all-time, survives redeployments)
-  const savedLeaderboard = await Storage.get<string>('leaderboard')
-  const leaderboardJson = savedLeaderboard || '[]'
+  // Load persisted leaderboard
+  let savedLeaderboard = await Storage.get<string>('leaderboard')
+  let leaderboardJson = savedLeaderboard || '[]'
+  
   leaderboardEntity = engine.addEntity()
   LeaderboardState.create(leaderboardEntity, { json: leaderboardJson, date: '' })
   syncEntity(leaderboardEntity, [LeaderboardState.componentId], SyncIds.LEADERBOARD)
+  
+  // Check for daily reset on server startup
+  await checkLeaderboardDailyReset()
+
+  // Initialize visitor analytics
+  await loadVisitorData()
+  visitorAnalyticsEntity = engine.addEntity()
+  VisitorAnalytics.create(visitorAnalyticsEntity, { 
+    date: getTodayDateString(),
+    visitorDataJson: '[]',
+    onlineCount: 0,
+    totalUniqueVisitors: 0
+  })
+  syncEntity(visitorAnalyticsEntity, [VisitorAnalytics.componentId], SyncIds.VISITOR_ANALYTICS)
+  await syncVisitorAnalytics()
 
   // Register message handlers (added in next step)
   registerHandlers()
@@ -129,6 +303,7 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(holdTimeServerSystem)
   engine.addSystem(playerTrackingSystem)
   engine.addSystem(countdownServerSystem)
+  engine.addSystem(visitorTrackingServerSystem)
 
   console.log('[Server] Flag Tag server ready')
 }
@@ -185,6 +360,14 @@ function registerHandlers(): void {
   room.onMessage('registerName', (data, context) => {
     if (!context || !data.name) return
     playerNames.set(context.from, data.name)
+    
+    // Update visitor session name if player is tracked
+    const visitor = visitorSessions.get(context.from)
+    if (visitor) {
+      visitor.name = data.name
+      console.log('[Server] Updated visitor name:', context.from.slice(0, 8), '->', data.name)
+    }
+    
     // Update existing leaderboard entries with the real display name
     const lb = LeaderboardState.getOrNull(leaderboardEntity)
     if (lb && lb.json) {
@@ -280,11 +463,8 @@ function handleDrop(playerId: string): void {
   const playerRot = getPlayerRotation(playerId)
 
   let dropPos: Vector3
-  if (playerPos && playerRot) {
-    const behind = Vector3.rotate(Vector3.Backward(), playerRot)
-    const offsetBehind = Vector3.scale(behind, DROP_BEHIND_DISTANCE)
-    dropPos = Vector3.add(Vector3.add(playerPos, Vector3.create(0, 0.5, 0)), offsetBehind)
-  } else if (playerPos) {
+  if (playerPos) {
+    // Drop at player's feet (not behind them) to prevent wall clipping
     dropPos = Vector3.add(playerPos, Vector3.create(0, 0.5, 0))
   } else {
     dropPos = Transform.get(flagEntity).position
@@ -309,9 +489,18 @@ function handleDrop(playerId: string): void {
 
 function handleFlagSteal(victimId: string, attackerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
+  if (!flag) {
+    console.log('[Server] Flag steal failed: no flag component')
+    return
+  }
+  
+  // Safety check: ensure victim actually has the flag
+  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) {
+    console.log('[Server] Flag steal failed: victim does not have flag. State:', flag.state, 'Carrier:', flag.carrierPlayerId, 'Expected victim:', victimId)
+    return
+  }
 
-  console.log('[Server] Executing flag steal:', victimId, '->', attackerId)
+  console.log('[Server] Executing flag steal:', victimId.slice(0, 8), '->', attackerId.slice(0, 8))
 
   // Directly transfer flag to attacker (no drop to ground)
   const mutable = Flag.getMutable(flagEntity)
@@ -321,31 +510,45 @@ function handleFlagSteal(victimId: string, attackerId: string): void {
   // Reset gravity state since flag isn't being dropped
   resetGravityState()
   
-  // Play pickup sound for new carrier
+  // Play pickup sound for new carrier (global so everyone hears it)
   room.send('pickupSound', { t: 0 })
   
-  // Persist the new flag state
+  // Persist the new flag state immediately
   persistFlagState()
   
-  console.log('[Server] Flag steal completed - new carrier:', attackerId)
+  console.log('[Server] Flag steal completed successfully - new carrier:', attackerId.slice(0, 8))
 }
 
 function handleAttack(attackerId: string): void {
   const now = Date.now()
   const lastAttack = lastAttackTime.get(attackerId) ?? 0
-  if (now - lastAttack < HIT_COOLDOWN_MS) return
+  if (now - lastAttack < HIT_COOLDOWN_MS) {
+    console.log('[Server] Attack on cooldown for', attackerId.slice(0, 8))
+    return
+  }
   lastAttackTime.set(attackerId, now)
 
   const attackerPos = getPlayerPosition(attackerId)
-  if (!attackerPos) return
+  if (!attackerPos) {
+    console.log('[Server] Attack failed: attacker position not found for', attackerId.slice(0, 8))
+    return
+  }
 
-  // Find closest victim
+  // Find closest victim (excluding immune players)
   let closestId: string | null = null
   let closestPos: Vector3 | null = null
   let closestDist = HIT_RADIUS
 
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
     if (identity.address === attackerId) continue
+    
+    // Check victim immunity (prevents tag-backs)
+    const lastHit = lastHitTime.get(identity.address) ?? 0
+    if (now - lastHit < VICTIM_IMMUNITY_MS) {
+      // This player is immune, skip them
+      continue
+    }
+    
     const pos = getPlayerPosition(identity.address)
     if (!pos) continue
     const dist = Vector3.distance(attackerPos, pos)
@@ -357,18 +560,25 @@ function handleAttack(attackerId: string): void {
   }
 
   if (closestId && closestPos) {
-    // Hit confirmed
+    // Hit confirmed - mark victim as recently hit for immunity
+    lastHitTime.set(closestId, now)
+    
+    console.log('[Server] Hit confirmed! Attacker:', attackerId.slice(0, 8), 'Victim:', closestId.slice(0, 8), 'Distance:', closestDist.toFixed(2))
     room.send('hitVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
     room.send('stagger', { victimId: closestId })
 
     // STEAL flag if victim was carrying (instead of dropping)
     const flag = Flag.getOrNull(flagEntity)
     if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === closestId) {
-      console.log('[Server] Flag stolen! Transferring from', closestId, 'to', attackerId)
+      console.log('[Server] Victim has flag! Initiating steal from', closestId.slice(0, 8), 'to', attackerId.slice(0, 8))
       handleFlagSteal(closestId, attackerId)
+      console.log('[Server] Victim', closestId.slice(0, 8), 'now has', VICTIM_IMMUNITY_MS, 'ms immunity (no tag-backs)')
+    } else {
+      console.log('[Server] Victim does NOT have flag. Flag state:', flag?.state, 'Carrier:', flag?.carrierPlayerId?.slice(0, 8))
     }
   } else {
     // Miss — send attacker position, client computes forward offset locally
+    console.log('[Server] Attack missed - no valid targets in range (', HIT_RADIUS, 'm) or all targets immune')
     room.send('missVfx', { x: attackerPos.x, y: attackerPos.y, z: attackerPos.z })
   }
 }
@@ -479,28 +689,102 @@ function playerTrackingSystem(): void {
     PlayerFlagHoldTime.create(entity, { playerId: userId, seconds: 0 })
     syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(userId))
     holdTimeEntities.set(userId, entity)
+
+    // Start visitor session tracking
+    const playerName = playerNames.get(userId) || userId.slice(0, 8)
+    const existingVisitor = visitorSessions.get(userId)
+    
+    if (existingVisitor) {
+      // Returning visitor - update session start
+      existingVisitor.sessionStartMs = Date.now()
+      existingVisitor.name = playerName // Update name in case it changed
+    } else {
+      // New visitor today
+      visitorSessions.set(userId, {
+        name: playerName,
+        sessionStartMs: Date.now(),
+        totalMinutesToday: 0
+      })
+    }
+    
+    console.log('[Server] Player entered:', playerName, '(total visitors today:', visitorSessions.size, ')')
+  }
+
+  // Detect disconnected players
+  const currentPlayerIds = new Set()
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    currentPlayerIds.add(identity.address)
+  }
+
+  for (const [userId, visitor] of visitorSessions) {
+    if (visitor.sessionStartMs > 0 && !currentPlayerIds.has(userId)) {
+      // Player disconnected - accumulate their session time
+      const sessionMs = Date.now() - visitor.sessionStartMs
+      const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
+      visitor.totalMinutesToday += sessionMinutes
+      visitor.sessionStartMs = 0 // Mark as offline
+      
+      const playerName = visitor.name
+      console.log('[Server] Player left:', playerName, 'session:', sessionMinutes, 'min, total today:', visitor.totalMinutesToday, 'min')
+    }
   }
 }
+
+// Prevent duplicate round end triggers
+let lastRoundEndBoundary = 0
 
 function countdownServerSystem(): void {
   const now = Date.now()
   const timer = CountdownTimer.getOrNull(countdownEntity)
   if (!timer) return
-
-  // Round end: trigger immediately when time is up
-  if (!timer.roundEndTriggered && now >= timer.roundEndTimeMs) {
-    handleRoundEnd()
+  
+  const intervalMs = 5 * 60 * 1000 // 5 minutes in milliseconds
+  
+  // Calculate the current 5-minute UTC boundary
+  const currentBoundary = Math.floor(now / intervalMs) * intervalMs
+  const timeSinceBoundary = now - currentBoundary
+  
+  // Round end: trigger when we cross a 5-minute UTC boundary (within 3 seconds tolerance for reliability)
+  // Increased from 1s to 3s to ensure we don't miss the boundary due to server tick timing
+  // Added safeguard: only trigger once per boundary to prevent duplicate popups
+  if (!timer.roundEndTriggered && timeSinceBoundary < 3000 && currentBoundary !== lastRoundEndBoundary) {
+    // We just crossed a boundary - trigger round end
+    lastRoundEndBoundary = currentBoundary
+    console.log('[Server] Round end triggered at UTC boundary:', new Date(currentBoundary).toISOString(), `(${timeSinceBoundary}ms after boundary)`)
+    
+    // Update the timer's roundEndTimeMs to the next boundary for the new round
+    const mutable = CountdownTimer.getMutable(countdownEntity)
+    mutable.roundEndTimeMs = currentBoundary + intervalMs // Next round ends at next boundary
+    
+    handleRoundEnd().catch(console.error)
+  }
+  
+  // Failsafe: If we somehow missed the boundary window entirely, catch it here
+  // This handles edge cases where server was lagging or system didn't run for >3 seconds
+  if (!timer.roundEndTriggered && currentBoundary !== lastRoundEndBoundary && timeSinceBoundary >= 3000 && timeSinceBoundary < intervalMs / 2) {
+    // We're past the trigger window but still in the first half of the round - we missed it!
+    console.log('[Server] FAILSAFE: Missed round boundary, triggering late at', timeSinceBoundary, 'ms after boundary')
+    lastRoundEndBoundary = currentBoundary
+    
+    const mutable = CountdownTimer.getMutable(countdownEntity)
+    mutable.roundEndTimeMs = currentBoundary + intervalMs
+    
+    handleRoundEnd().catch(console.error)
   }
 
-  // Splash finished — just clear the flag (game already restarted)
+  // Splash finished — clear the splash and officially start new round
   if (timer.roundEndTriggered && now >= timer.roundEndDisplayUntilMs) {
     const mutable = CountdownTimer.getMutable(countdownEntity)
     mutable.roundEndTriggered = false
+    console.log('[Server] Round splash finished, new round active')
   }
 }
 
-function handleRoundEnd(): void {
+async function handleRoundEnd(): Promise<void> {
   const now = Date.now()
+
+  // ── 0. Check for daily leaderboard reset ──
+  await checkLeaderboardDailyReset()
 
   // ── 1. Determine winner(s) ──
   let maxSeconds = 0
@@ -521,11 +805,16 @@ function handleRoundEnd(): void {
   }))
 
   // ── 3. Set timer: splash + next round time IMMEDIATELY ──
+  const intervalMs = 5 * 60 * 1000 // 5 minutes
+  const nextRoundEndTime = (Math.floor(now / intervalMs) + 1) * intervalMs
+  
   const timerMutable = CountdownTimer.getMutable(countdownEntity)
   timerMutable.roundEndTriggered = true
   timerMutable.roundEndDisplayUntilMs = now + SPLASH_DURATION_MS
-  timerMutable.roundEndTimeMs = getNextRoundEndTimeMs()
+  timerMutable.roundEndTimeMs = nextRoundEndTime
   timerMutable.roundWinnerJson = JSON.stringify(winnerSnapshot)
+  
+  console.log('[Server] Round ended, next round ends at:', new Date(nextRoundEndTime).toISOString())
 
   // ── 4. Update leaderboard ──
   if (maxSeconds > 0) {
@@ -552,20 +841,46 @@ function handleRoundEnd(): void {
     const json = JSON.stringify(entries)
     const mutable = LeaderboardState.getMutable(leaderboardEntity)
     mutable.json = json
-    persistLeaderboard(json)
+    await persistLeaderboard(json)
   }
 
-  // ── 5. Reset flag to base ──
+  // ── 5. Reset flag to random spawn point ──
   resetGravityState()
+  const spawnPoint = getRandomSpawnPoint()
+  console.log('[Server] Round ended, flag respawning at random location to prevent spawn camping')
+  
   const flagMutable = Flag.getMutable(flagEntity)
   flagMutable.state = FlagState.AtBase
   flagMutable.carrierPlayerId = ''
+  
+  // Update flag's base position to the new spawn point
+  flagMutable.baseX = spawnPoint.x
+  flagMutable.baseY = spawnPoint.y
+  flagMutable.baseZ = spawnPoint.z
+  
   const t = Transform.getMutable(flagEntity)
-  t.position = Vector3.create(FLAG_BASE_POSITION.x, FLAG_BASE_POSITION.y, FLAG_BASE_POSITION.z)
-  persistFlagState()
+  t.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
+  await persistFlagState()
 
   // ── 6. Reset all hold times (splash reads from snapshot, not live data) ──
   for (const [entity] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
     PlayerFlagHoldTime.getMutable(entity).seconds = 0
+  }
+}
+
+let visitorSyncTimer = 0
+
+function visitorTrackingServerSystem(dt: number): void {
+  visitorSyncTimer += dt
+  
+  // Sync visitor analytics every 5 seconds
+  if (visitorSyncTimer >= 5.0) {
+    visitorSyncTimer = 0
+    
+    // Check for daily reset
+    void checkVisitorDailyReset()
+    
+    // Sync current visitor data
+    void syncVisitorAnalytics()
   }
 }

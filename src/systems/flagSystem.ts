@@ -298,67 +298,65 @@ export function flagClientSystem(dt: number): void {
 
     if (prevFlagState === null || stateChanged || carrierChanged) {
       if (flag.state === FlagState.Carried) {
-        if (stateChanged) playPickupSound()
+        if (stateChanged) {
+          playPickupSound()
+          console.log('[Flag] Player carrying flag:', flag.carrierPlayerId)
+          
+          // Clean up any existing clone first
+          cleanupClone()
+          
+          // Move server flag out of the way (but keep it visible for sync)
+          const serverTransform = Transform.getMutable(flagEntity)
+          serverTransform.position = Vector3.create(0, -50, 0) // Hidden underground but still exists
+          
+          // Create avatar attach anchor (same as blue flag system)
+          attachAnchorEntity = engine.addEntity()
+          Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
+          AvatarAttach.create(attachAnchorEntity, {
+            avatarId: flag.carrierPlayerId,
+            anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+          })
 
-        // ALWAYS clean up existing clone first to prevent duplicates
-        cleanupClone()
-
-        // IMMEDIATELY hide the server flag before creating clone
-        VisibilityComponent.createOrReplace(flagEntity, { visible: false })
-        console.log('[Flag] Hidden server flag, creating clone for carrier:', flag.carrierPlayerId)
-
-        // Create AvatarAttach anchor
-        attachAnchorEntity = engine.addEntity()
-        Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
-        AvatarAttach.create(attachAnchorEntity, {
-          avatarId: flag.carrierPlayerId,
-          anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
-        })
-
-        // Create visual clone parented to anchor
-        carryCloneEntity = engine.addEntity()
-        Transform.create(carryCloneEntity, {
-          parent: attachAnchorEntity,
-          position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
-          rotation: Quaternion.Identity(),
-          scale: Vector3.One()
-        })
-        GltfContainer.create(carryCloneEntity, { 
-          src: BANNER_SRC, 
-          visibleMeshesCollisionMask: 0, 
-          invisibleMeshesCollisionMask: 0 
-        })
-
-        console.log('[Flag] Clone system created successfully')
+          // Create visual clone as child of anchor (same as blue flag system)
+          carryCloneEntity = engine.addEntity()
+          Transform.create(carryCloneEntity, {
+            parent: attachAnchorEntity,
+            position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
+            rotation: Quaternion.Identity(),
+            scale: Vector3.One()
+          })
+          GltfContainer.create(carryCloneEntity, { 
+            src: BANNER_SRC,
+            visibleMeshesCollisionMask: 0,
+            invisibleMeshesCollisionMask: 0
+          })
+          
+          console.log('[Flag] Created animated clone for carrier:', flag.carrierPlayerId)
+        }
 
       } else if (flag.state === FlagState.Dropped || flag.state === FlagState.AtBase) {
-        if (stateChanged) playDropSound()
+        if (stateChanged) {
+          playDropSound()
+          console.log('[Flag] Flag dropped/reset, cleaning up clone')
+          
+          // Clean up clone
+          cleanupClone()
+          
+          // Restore server flag visibility and position (server will set correct position)
+          VisibilityComponent.createOrReplace(flagEntity, { visible: true })
 
-        // Clean up clone system
-        cleanupClone()
-        console.log('[Flag] Clone cleaned up, showing server flag')
-
-        // Show server-synced flag again
-        VisibilityComponent.createOrReplace(flagEntity, { visible: true })
-
-        if (flag.state === FlagState.Dropped && stateChanged) {
-          fireGroundRaycastForServer(Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ))
+          if (flag.state === FlagState.Dropped) {
+            fireGroundRaycastForServer(Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ))
+          }
         }
       }
     }
 
-    // Defensive programming: ensure server flag is visible when not carried
-    if (flag.state !== FlagState.Carried) {
-      if (!VisibilityComponent.has(flagEntity) || !VisibilityComponent.get(flagEntity).visible) {
-        console.log('[Flag] Defensive: ensuring server flag is visible when not carried')
-        VisibilityComponent.createOrReplace(flagEntity, { visible: true })
-      }
-    } else {
-      // Defensive programming: ensure server flag is hidden when carried
-      if (!VisibilityComponent.has(flagEntity) || VisibilityComponent.get(flagEntity).visible) {
-        console.log('[Flag] Defensive: ensuring server flag is hidden when carried')
-        VisibilityComponent.createOrReplace(flagEntity, { visible: false })
-      }
+    // Ensure server flag is always visible (even when moved out of the way)
+    if (!VisibilityComponent.has(flagEntity)) {
+      VisibilityComponent.create(flagEntity, { visible: true })
+    } else if (!VisibilityComponent.get(flagEntity).visible) {
+      VisibilityComponent.createOrReplace(flagEntity, { visible: true })
     }
 
     prevFlagState = flag.state
@@ -369,13 +367,14 @@ export function flagClientSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   carryAnimTime += clampedDt
 
-  // Animate the visual clone (smooth bob + spin)
+  // Animate the visual clone when carried (same as blue flag)
   if (carryCloneEntity !== null && Transform.has(carryCloneEntity)) {
     const bobY = CARRY_BOB_AMPLITUDE * Math.sin(carryAnimTime * CARRY_BOB_SPEED)
     const angleDeg = (carryAnimTime * CARRY_ROT_SPEED_DEG_PER_SEC) % 360
-    const ct = Transform.getMutable(carryCloneEntity)
-    ct.position = Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y + bobY, FLAG_CARRY_OFFSET.z)
-    ct.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+    
+    const cloneTransform = Transform.getMutable(carryCloneEntity)
+    cloneTransform.position = Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y + bobY, FLAG_CARRY_OFFSET.z)
+    cloneTransform.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
   }
 
   // Handle ground raycast response

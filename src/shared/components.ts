@@ -80,11 +80,24 @@ export function getNextRoundEndTimeMs(): number {
 }
 
 export function getCountdownSeconds(): number {
+  const now = Date.now()
+  const intervalMs = ROUND_LENGTH_MINUTES * 60 * 1000
+  
+  // Check if we're in the brief "round over" period (server-controlled splash)
   for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
-    if (timer.roundEndTriggered) return 0
-    return Math.max(0, Math.ceil((timer.roundEndTimeMs - Date.now()) / 1000))
+    if (timer.roundEndTriggered && now < timer.roundEndDisplayUntilMs) {
+      return 0 // Round over splash is showing
+    }
+    break // Only check the first timer entity
   }
-  return 0
+  
+  // Pure UTC-based countdown calculation
+  // Find the next 5-minute boundary after current time
+  const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
+  const secondsToNext = Math.max(0, Math.ceil((nextBoundary - now) / 1000))
+  
+  // If we get exactly 0, show 300 (5 minutes) to prevent flickering at boundary
+  return secondsToNext === 0 ? ROUND_LENGTH_MINUTES * 60 : secondsToNext
 }
 
 // ── Leaderboard state (synced from server) ──
@@ -111,12 +124,70 @@ export function getRoundWinners(): { userId: string; name: string }[] {
 
 // ── Shared constants ──
 
-export const FLAG_BASE_POSITION = { x: 54, y: 12, z: 122 }
+export const FLAG_BASE_POSITION = { x: 54, y: 12, z: 122 } // Legacy - kept for compatibility
+
+// ── Red Flag Spawn Points ──
+export const FLAG_SPAWN_POINTS = [
+  { x: 49, y: 2, z: 74 },      // Spawn Point 1
+  { x: 41, y: 7.25, z: 122 },  // Spawn Point 2
+  { x: 91, y: 27.25, z: 192.5 } // Spawn Point 3
+] as const
+
+/**
+ * Three spawn locations for the red flag.
+ * Flag will randomly spawn at one of these three locations when a round ends.
+ */
+
+/**
+ * Get a random spawn point for flag respawn.
+ * Used at round end to prevent spawn camping.
+ */
+export function getRandomSpawnPoint(): { x: number; y: number; z: number } {
+  const index = Math.floor(Math.random() * FLAG_SPAWN_POINTS.length)
+  const spawnPoint = { ...FLAG_SPAWN_POINTS[index] }
+  console.log(`[SpawnSystem] Flag spawning at point ${index + 1}/3: (${spawnPoint.x}, ${spawnPoint.y}, ${spawnPoint.z})`)
+  return spawnPoint
+}
+
+/**
+ * Get spawn point by index (for testing or specific selection)
+ */
+export function getSpawnPointByIndex(index: number): { x: number; y: number; z: number } {
+  if (index < 0 || index >= FLAG_SPAWN_POINTS.length) {
+    console.log(`[SpawnSystem] Invalid spawn index ${index}, using 0`)
+    index = 0
+  }
+  return { ...FLAG_SPAWN_POINTS[index] }
+}
+
+/**
+ * Get all spawn points for debugging/visualization
+ */
+export function getAllSpawnPoints(): ReadonlyArray<{ x: number; y: number; z: number }> {
+  return FLAG_SPAWN_POINTS
+}
+
+// ── Visitor Analytics (server-synced) ──
+
+export const VisitorAnalytics = engine.defineComponent('ctf-visitor-analytics', {
+  date: Schemas.String,
+  visitorDataJson: Schemas.String, // JSON array of visitor records
+  onlineCount: Schemas.Int,
+  totalUniqueVisitors: Schemas.Int
+}, { 
+  date: '', 
+  visitorDataJson: '[]', 
+  onlineCount: 0, 
+  totalUniqueVisitors: 0 
+})
+
+VisitorAnalytics.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
 export enum SyncIds {
   FLAG = 1,
   COUNTDOWN = 200,
-  LEADERBOARD = 201
+  LEADERBOARD = 201,
+  VISITOR_ANALYTICS = 202
 }
 
 export function getTodayDateString(): string {

@@ -254,7 +254,11 @@ export function setupLocalTestFlag(): void {
     rotation: Quaternion.fromEulerDegrees(0, 0, 0),
     scale: Vector3.create(1, 1, 1)
   })
-  GltfContainer.create(testFlagEntity, { src: BLUE_BANNER_SRC })
+  GltfContainer.create(testFlagEntity, { 
+    src: BLUE_BANNER_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
 
   // Notify beacon system about initial state
   setLocalTestFlagState(false, testFlagEntity)
@@ -279,13 +283,9 @@ function localTestFlagSystem(dt: number): void {
   // E key: pickup / drop
   if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) {
     if (state === 'carried') {
-      // Drop using clone system
+      // Drop using clone system - at player's feet to prevent wall clipping
       let dropPos: Vector3
-      if (myPos && myRot) {
-        const behind = Vector3.rotate(Vector3.Backward(), myRot)
-        const offsetBehind = Vector3.scale(behind, DROP_BEHIND_DISTANCE)
-        dropPos = Vector3.add(Vector3.add(myPos, Vector3.create(0, 0.5, 0)), offsetBehind)
-      } else if (myPos) {
+      if (myPos) {
         dropPos = Vector3.add(myPos, Vector3.create(0, 0.5, 0))
       } else {
         dropPos = Transform.get(testFlagEntity).position

@@ -45,6 +45,32 @@ This document records major architectural choices and design patterns in the Fla
 - Server applies gravity with realistic acceleration (15 m/s²)
 - Smooth client-side interpolation for visual following
 
+### Simple Three-Point Anti-Camping Spawn System
+**Decision:** Random flag spawn location selection from 3 hardcoded coordinates at round end
+**Justification:**
+- Prevents spawn camping strategies that reduce gameplay quality
+- Simple, maintainable system without over-engineering
+- Easy to update coordinates based on diamond marker positions
+- Maintains server authority over spawn decisions to prevent cheating
+
+**Implementation:**
+- 3 hardcoded spawn points in FLAG_SPAWN_POINTS array
+- Server-side random selection from 3 locations ensures unpredictability
+- Flag component's baseX/Y/Z updated to reflect new spawn location
+- Simple console logging for spawn selection debugging
+- Coordinates easily updated by editing one file and rebuilding
+
+**Design Evolution:**
+- **v1**: Single central spawn point (predictable, campable)
+- **v2**: Central + 3 diamond locations (still had predictable option)
+- **v3**: Pure diamond system with auto-detection (over-engineered)
+- **v4**: Simple hardcoded 3-point system (current, optimal balance)
+
+**Trade-offs:**
+- Manual coordinate updates required (simple process)
+- Need to verify spawn points are accessible and balanced
+- No automatic detection, but eliminates system complexity
+
 ### Event-Driven Communication
 **Decision:** Message-based client-server communication with typed schemas
 **Justification:**
@@ -83,6 +109,31 @@ This document records major architectural choices and design patterns in the Fla
 - Core State: Server-synchronized components (Flag, PlayerFlagHoldTime, etc.)
 - Derived State: Client functions compute UI data from core state
 - Local State: UI overlay visibility, client-only preferences
+
+### UI Overlay Management Pattern
+**Decision:** Icon-based overlay system with mutual exclusion
+**Justification:** 
+- Clean visual hierarchy with dedicated icon panel
+- Prevents overlay stacking/conflict issues
+- Consistent interaction patterns across all overlays
+- Scalable for future menu additions
+
+**Implementation Pattern:**
+- **Icon Panel**: Fixed-position vertical icon stack with hover states
+- **Mutual Exclusion**: Opening any overlay closes others to prevent visual conflicts
+- **Color Coding**: Each overlay type has distinct hover color (Gold=Leaderboard, Blue=Help, Red=Analytics)
+- **State Management**: Dedicated state components per overlay (`getWinConditionOverlayVisible()`, etc.)
+- **Responsive Design**: Icon panel height scales dynamically with icon count
+
+**Icon Pattern:**
+```typescript
+onMouseDown={() => { 
+  setOtherOverlaysVisible(false); // Close competing overlays
+  toggleThisOverlay(); // Toggle this one
+}}
+```
+
+This pattern ensures only one overlay is visible at a time while providing clear visual feedback and consistent interaction behavior.
 
 ### Round and Persistence System
 **Decision:** UTC-aligned rounds with server-side persistence
