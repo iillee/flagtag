@@ -391,14 +391,17 @@ function registerHandlers(): void {
   })
   room.onMessage('requestPickup', (_data, context) => {
     if (!context) return
+    console.log('[Server] 📨 Received requestPickup from', context.from.slice(0, 8))
     handlePickup(context.from)
   })
   room.onMessage('requestDrop', (_data, context) => {
     if (!context) return
+    console.log('[Server] 📨 Received requestDrop from', context.from.slice(0, 8))
     handleDrop(context.from)
   })
   room.onMessage('requestAttack', (_data, context) => {
     if (!context) return
+    console.log('[Server] 📨 Received requestAttack from', context.from.slice(0, 8))
     handleAttack(context.from)
   })
   room.onMessage('reportGroundY', (data, context) => {
@@ -490,22 +493,25 @@ function handleDrop(playerId: string): void {
 function handleFlagSteal(victimId: string, attackerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) {
-    console.log('[Server] Flag steal failed: no flag component')
+    console.log('[Server] ❌ Flag steal failed: no flag component')
     return
   }
   
   // Safety check: ensure victim actually has the flag
   if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) {
-    console.log('[Server] Flag steal failed: victim does not have flag. State:', flag.state, 'Carrier:', flag.carrierPlayerId, 'Expected victim:', victimId)
+    console.log('[Server] ❌ Flag steal failed: victim does not have flag. State:', flag.state, 'Carrier:', flag.carrierPlayerId.slice(0, 8), 'Expected victim:', victimId.slice(0, 8))
     return
   }
 
-  console.log('[Server] Executing flag steal:', victimId.slice(0, 8), '->', attackerId.slice(0, 8))
+  console.log('[Server] 🚩 EXECUTING FLAG STEAL:', victimId.slice(0, 8), '->', attackerId.slice(0, 8))
+  console.log('[Server]    Before: state =', flag.state, ', carrier =', flag.carrierPlayerId.slice(0, 8))
 
   // Directly transfer flag to attacker (no drop to ground)
   const mutable = Flag.getMutable(flagEntity)
   mutable.state = FlagState.Carried
   mutable.carrierPlayerId = attackerId
+
+  console.log('[Server]    After:  state =', mutable.state, ', carrier =', mutable.carrierPlayerId.slice(0, 8))
 
   // Reset gravity state since flag isn't being dropped
   resetGravityState()
@@ -516,69 +522,86 @@ function handleFlagSteal(victimId: string, attackerId: string): void {
   // Persist the new flag state immediately
   persistFlagState()
   
-  console.log('[Server] Flag steal completed successfully - new carrier:', attackerId.slice(0, 8))
+  console.log('[Server] ✅ Flag steal completed successfully - new carrier:', attackerId.slice(0, 8))
 }
 
 function handleAttack(attackerId: string): void {
   const now = Date.now()
+  
+  console.log('[Server] 🎯 handleAttack called by:', attackerId.slice(0, 8))
+  
   const lastAttack = lastAttackTime.get(attackerId) ?? 0
   if (now - lastAttack < HIT_COOLDOWN_MS) {
-    console.log('[Server] Attack on cooldown for', attackerId.slice(0, 8))
+    console.log('[Server]    ⏳ Attack on cooldown for', attackerId.slice(0, 8), '- time since last:', (now - lastAttack), 'ms')
     return
   }
   lastAttackTime.set(attackerId, now)
 
   const attackerPos = getPlayerPosition(attackerId)
   if (!attackerPos) {
-    console.log('[Server] Attack failed: attacker position not found for', attackerId.slice(0, 8))
+    console.log('[Server]    ❌ Attack failed: attacker position not found for', attackerId.slice(0, 8))
     return
   }
+
+  console.log('[Server]    📍 Attacker position:', attackerPos.x.toFixed(1), attackerPos.y.toFixed(1), attackerPos.z.toFixed(1))
 
   // Find closest victim (excluding immune players)
   let closestId: string | null = null
   let closestPos: Vector3 | null = null
   let closestDist = HIT_RADIUS
+  
+  let playersChecked = 0
+  let immunePlayers = 0
 
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
     if (identity.address === attackerId) continue
+    playersChecked++
     
     // Check victim immunity (prevents tag-backs)
     const lastHit = lastHitTime.get(identity.address) ?? 0
     if (now - lastHit < VICTIM_IMMUNITY_MS) {
-      // This player is immune, skip them
+      immunePlayers++
+      console.log('[Server]       🛡️ Player', identity.address.slice(0, 8), 'is IMMUNE (', (now - lastHit), 'ms since hit)')
       continue
     }
     
     const pos = getPlayerPosition(identity.address)
     if (!pos) continue
     const dist = Vector3.distance(attackerPos, pos)
+    
+    console.log('[Server]       👤 Player', identity.address.slice(0, 8), 'at distance:', dist.toFixed(2), 'm')
+    
     if (dist < closestDist) {
       closestDist = dist
       closestId = identity.address
       closestPos = pos
     }
   }
+  
+  console.log('[Server]    Players checked:', playersChecked, 'Immune:', immunePlayers, 'Closest dist:', closestDist.toFixed(2))
 
   if (closestId && closestPos) {
     // Hit confirmed - mark victim as recently hit for immunity
     lastHitTime.set(closestId, now)
     
-    console.log('[Server] Hit confirmed! Attacker:', attackerId.slice(0, 8), 'Victim:', closestId.slice(0, 8), 'Distance:', closestDist.toFixed(2))
+    console.log('[Server]    💥 HIT CONFIRMED! Attacker:', attackerId.slice(0, 8), 'Victim:', closestId.slice(0, 8), 'Distance:', closestDist.toFixed(2))
     room.send('hitVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
     room.send('stagger', { victimId: closestId })
 
     // STEAL flag if victim was carrying (instead of dropping)
     const flag = Flag.getOrNull(flagEntity)
+    console.log('[Server]    🚩 Flag check - State:', flag?.state, 'Carrier:', flag?.carrierPlayerId?.slice(0, 8), 'Victim:', closestId.slice(0, 8))
+    
     if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === closestId) {
-      console.log('[Server] Victim has flag! Initiating steal from', closestId.slice(0, 8), 'to', attackerId.slice(0, 8))
+      console.log('[Server]    ✅ VICTIM HAS FLAG! Initiating steal...')
       handleFlagSteal(closestId, attackerId)
-      console.log('[Server] Victim', closestId.slice(0, 8), 'now has', VICTIM_IMMUNITY_MS, 'ms immunity (no tag-backs)')
+      console.log('[Server]    🛡️ Victim', closestId.slice(0, 8), 'now has', VICTIM_IMMUNITY_MS, 'ms immunity (no tag-backs)')
     } else {
-      console.log('[Server] Victim does NOT have flag. Flag state:', flag?.state, 'Carrier:', flag?.carrierPlayerId?.slice(0, 8))
+      console.log('[Server]    ℹ️  Regular hit (victim does not have flag)')
     }
   } else {
     // Miss — send attacker position, client computes forward offset locally
-    console.log('[Server] Attack missed - no valid targets in range (', HIT_RADIUS, 'm) or all targets immune')
+    console.log('[Server]    ❌ ATTACK MISSED - no valid targets in range')
     room.send('missVfx', { x: attackerPos.x, y: attackerPos.y, z: attackerPos.z })
   }
 }

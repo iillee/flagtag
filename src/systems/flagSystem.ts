@@ -259,8 +259,20 @@ function fireGroundRaycastForServer(dropPos: Vector3): void {
   })
 }
 
+let debugTimer = 0
+
 export function flagClientSystem(dt: number): void {
   const userId = getPlayerData()?.userId
+
+  // Debug: Log flag state every 3 seconds
+  debugTimer += dt
+  if (debugTimer >= 3) {
+    debugTimer = 0
+    for (const [, flag] of engine.getEntitiesWith(Flag)) {
+      console.log('[Flag Debug] Current state:', flag.state, 'Carrier:', flag.carrierPlayerId.slice(0, 8), 'Clone exists:', carryCloneEntity !== null)
+      break
+    }
+  }
 
   // E key interaction
   if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && userId) {
@@ -271,21 +283,32 @@ export function flagClientSystem(dt: number): void {
         break
       }
     }
+    
     if (amCarrying) {
+      console.log('[Client] E pressed - I am carrying, sending requestDrop')
       room.send('requestDrop', { t: 0 })
     } else {
       let flagNearby = false
       const myPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : null
       if (myPos) {
         for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
-          if (flag.state === FlagState.Carried) continue
+          if (flag.state === FlagState.Carried) {
+            console.log('[Client] E pressed - flag is being carried by', flag.carrierPlayerId.slice(0, 8))
+            continue
+          }
           const dist = Vector3.distance(myPos, Transform.get(flagEntity).position)
-          if (dist <= 3) { flagNearby = true; break }
+          if (dist <= 3) { 
+            flagNearby = true
+            console.log('[Client] E pressed - flag on ground nearby, distance:', dist.toFixed(2))
+            break 
+          }
         }
       }
       if (flagNearby) {
+        console.log('[Client] E pressed - sending requestPickup')
         room.send('requestPickup', { t: 0 })
       } else {
+        console.log('[Client] E pressed - sending requestAttack (no flag nearby)')
         room.send('requestAttack', { t: 0 })
       }
     }
@@ -297,10 +320,12 @@ export function flagClientSystem(dt: number): void {
     const carrierChanged = flag.state === FlagState.Carried && flag.carrierPlayerId !== prevCarrierId && prevCarrierId !== ''
 
     if (prevFlagState === null || stateChanged || carrierChanged) {
+      console.log('[Flag] State/Carrier change detected - prevState:', prevFlagState, 'newState:', flag.state, 'prevCarrier:', prevCarrierId.slice(0, 8), 'newCarrier:', flag.carrierPlayerId.slice(0, 8))
+      
       if (flag.state === FlagState.Carried) {
         if (stateChanged) {
           playPickupSound()
-          console.log('[Flag] Player carrying flag:', flag.carrierPlayerId)
+          console.log('[Flag] STATE CHANGED to Carried - new carrier:', flag.carrierPlayerId.slice(0, 8))
           
           // Clean up any existing clone first
           cleanupClone()
@@ -331,13 +356,46 @@ export function flagClientSystem(dt: number): void {
             invisibleMeshesCollisionMask: 0
           })
           
-          console.log('[Flag] Created animated clone for carrier:', flag.carrierPlayerId)
+          console.log('[Flag] Created animated clone for carrier:', flag.carrierPlayerId.slice(0, 8))
+        } else if (carrierChanged) {
+          playPickupSound()
+          console.log('[Flag] CARRIER CHANGED (state stayed Carried) - old:', prevCarrierId.slice(0, 8), 'new:', flag.carrierPlayerId.slice(0, 8))
+          
+          // Clean up old clone
+          cleanupClone()
+          
+          // Move server flag out of the way
+          const serverTransform = Transform.getMutable(flagEntity)
+          serverTransform.position = Vector3.create(0, -50, 0)
+          
+          // Create new clone for new carrier
+          attachAnchorEntity = engine.addEntity()
+          Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
+          AvatarAttach.create(attachAnchorEntity, {
+            avatarId: flag.carrierPlayerId,
+            anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+          })
+
+          carryCloneEntity = engine.addEntity()
+          Transform.create(carryCloneEntity, {
+            parent: attachAnchorEntity,
+            position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
+            rotation: Quaternion.Identity(),
+            scale: Vector3.One()
+          })
+          GltfContainer.create(carryCloneEntity, { 
+            src: BANNER_SRC,
+            visibleMeshesCollisionMask: 0,
+            invisibleMeshesCollisionMask: 0
+          })
+          
+          console.log('[Flag] Created NEW clone for new carrier after steal:', flag.carrierPlayerId.slice(0, 8))
         }
 
       } else if (flag.state === FlagState.Dropped || flag.state === FlagState.AtBase) {
         if (stateChanged) {
           playDropSound()
-          console.log('[Flag] Flag dropped/reset, cleaning up clone')
+          console.log('[Flag] STATE CHANGED to', flag.state === FlagState.Dropped ? 'Dropped' : 'AtBase', '- cleaning up clone')
           
           // Clean up clone
           cleanupClone()
