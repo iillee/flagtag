@@ -31,6 +31,9 @@ let hasPlayedTrumpetSound = false
 let trumpetSoundEntity: Entity | null = null
 let lastProcessedRoundEnd = 0 // Track which round end we've already processed
 
+// Debug timer for periodic status
+let debugStatusTimer = 0
+
 // Daily visitor tracking now handled in ./gameState/sceneTime.ts
 
 // Tie-breaking tracking for stable sorting
@@ -224,6 +227,22 @@ async function triggerCelebrationEmotes(players: any[], localUserId: string | nu
 
 
 function PlayerListUi() {
+  // Debug: Log timer status every 10 seconds
+  debugStatusTimer += 0.016 // Approximate frame time
+  if (debugStatusTimer >= 10) {
+    debugStatusTimer = 0
+    const timers = [...engine.getEntitiesWith(CountdownTimer)]
+    console.log('[UI.DEBUG] CountdownTimer entities found:', timers.length)
+    if (timers.length > 0) {
+      const [, t] = timers[0]
+      const now = Date.now()
+      const timeToEnd = Math.max(0, Math.floor((t.roundEndTimeMs - now) / 1000))
+      console.log('[UI.DEBUG] Timer status - roundEndTriggered:', t.roundEndTriggered, 'timeToRoundEnd:', timeToEnd, 's', 'roundEndTimeMs:', t.roundEndTimeMs, 'displayUntil:', t.roundEndDisplayUntilMs)
+    } else {
+      console.log('[UI.DEBUG] NO TIMER ENTITY FOUND - Component not syncing from server!')
+    }
+  }
+  
   const rawPlayers = getPlayersWithHoldTimes()
   // getPlayersWithHoldTimes already sorts by seconds (desc), just use it directly
   const players = rawPlayers
@@ -245,16 +264,23 @@ function PlayerListUi() {
     const [, timer] = countdownTimers[0]
     const now = Date.now()
     
+    // Debug logging for round end detection
+    if (timer.roundEndTriggered) {
+      const timeRemaining = timer.roundEndDisplayUntilMs - now
+      console.log('[UI.1] Round end triggered! Time remaining:', timeRemaining, 'ms')
+    }
+    
     if (timer.roundEndTriggered && now < timer.roundEndDisplayUntilMs) {
       isRoundOver = true
       roundEndData = timer
+      console.log('[UI.2] Round end ACTIVE - showing splash')
       
       // Play trumpet sound once per unique round end (prevent duplicates)
       const roundEndId = timer.roundEndTimeMs
       if (roundEndId !== lastProcessedRoundEnd) {
         lastProcessedRoundEnd = roundEndId
         
-        console.log('[UI] Round end detected! Playing trumpet sound and showing results')
+        console.log('[UI.3] NEW round end detected! ID:', roundEndId, 'Playing trumpet...')
         
         // Clean up previous trumpet sound
         if (trumpetSoundEntity) {
@@ -271,14 +297,22 @@ function PlayerListUi() {
         })
         hasPlayedTrumpetSound = true
         
-        console.log('[UI] Trumpet sound started, displaying winners:', timer.roundWinnerJson)
+        console.log('[UI.4] Trumpet sound created, winners:', timer.roundWinnerJson)
+      } else {
+        console.log('[UI.5] Already processed this round end ID:', roundEndId)
         
         // Trigger celebration emotes for all players (temporarily disabled for deployment testing)
         // void triggerCelebrationEmotes(players, localUserId)
       }
     } else {
+      // Round is NOT over
+      if (timer.roundEndTriggered) {
+        console.log('[UI.6] Round end triggered but expired - now:', now, 'displayUntil:', timer.roundEndDisplayUntilMs)
+      }
+      
       // Reset flags when round is no longer over  
       if (hasPlayedTrumpetSound) {
+        console.log('[UI.7] Cleaning up trumpet sound')
         hasPlayedTrumpetSound = false
         if (trumpetSoundEntity) {
           engine.removeEntity(trumpetSoundEntity)
@@ -286,6 +320,8 @@ function PlayerListUi() {
         }
       }
     }
+  } else {
+    console.log('[UI.8] No countdown timer found!')
   }
 
   // Only show overlays when round is not over
