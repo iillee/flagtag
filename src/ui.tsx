@@ -179,50 +179,6 @@ function formatUTCDate(): string {
   return `${month}/${day}/${year}`
 }
 
-// Trigger celebration emotes based on player ranking
-async function triggerCelebrationEmotes(players: any[], localUserId: string | null): Promise<void> {
-  if (!localUserId || players.length === 0) return
-  
-  // Find local player's rank
-  let localPlayerRank = -1
-  let localPlayerScore = 0
-  
-  for (let i = 0; i < players.length; i++) {
-    if (players[i].userId === localUserId) {
-      localPlayerRank = i + 1 // 1-based rank
-      localPlayerScore = players[i].seconds
-      break
-    }
-  }
-  
-  // Only trigger emotes for players who participated (have > 0 seconds)
-  if (localPlayerScore === 0) {
-    console.log('[Emotes] Local player did not participate, no emote triggered')
-    return
-  }
-  
-  try {
-    // Dynamic import to avoid deployment issues
-    const { triggerEmote } = await import('~system/RestrictedActions')
-    
-    if (localPlayerRank <= 3 && localPlayerRank > 0) {
-      // Top 3 players: celebration emote
-      console.log('[Emotes] Top 3 player (rank', localPlayerRank, ') - triggering celebration emote')
-      await triggerEmote({ predefinedEmote: 'cheer' })
-    } else {
-      // All other players: clap emote  
-      console.log('[Emotes] Player ranked', localPlayerRank, '- triggering clap emote')
-      await triggerEmote({ predefinedEmote: 'clap' })
-    }
-  } catch (error) {
-    console.log('[Emotes] Failed to trigger emote:', error)
-  }
-}
-
-
-
-
-
 function PlayerListUi() {
   const rawPlayers = getPlayersWithHoldTimes()
   // getPlayersWithHoldTimes already sorts by seconds (desc), just use it directly
@@ -292,9 +248,6 @@ function PlayerListUi() {
         console.log('[UI.4] Trumpet sound created, winners:', timer.roundWinnerJson)
       } else {
         console.log('[UI.5] Already processed this round end ID:', roundEndId)
-        
-        // Trigger celebration emotes for all players (temporarily disabled for deployment testing)
-        // void triggerCelebrationEmotes(players, localUserId)
       }
     } else {
       // Round is NOT over
