@@ -759,7 +759,10 @@ let lastRoundEndBoundary = 0
 function countdownServerSystem(): void {
   const now = Date.now()
   const timer = CountdownTimer.getOrNull(countdownEntity)
-  if (!timer) return
+  if (!timer) {
+    console.log('[Server.ERROR] countdownServerSystem: No timer entity!')
+    return
+  }
   
   const intervalMs = 5 * 60 * 1000 // 5 minutes in milliseconds
   
@@ -769,17 +772,24 @@ function countdownServerSystem(): void {
     const currentBoundary = Math.floor(now / intervalMs) * intervalMs
     
     // Prevent duplicate triggers for the same boundary
-    if (currentBoundary === lastRoundEndBoundary) return
+    if (currentBoundary === lastRoundEndBoundary) {
+      console.log('[Server] Skipping duplicate trigger for boundary:', new Date(currentBoundary).toISOString())
+      return
+    }
     lastRoundEndBoundary = currentBoundary
     
     const msAfterBoundary = now - currentBoundary
-    console.log('[Server] Round end triggered at UTC boundary:', new Date(currentBoundary).toISOString(), `(${msAfterBoundary}ms after boundary)`)
+    console.log('[Server] ⏰ Round end triggered! UTC boundary:', new Date(currentBoundary).toISOString(), `(${msAfterBoundary}ms after)`)
     
     // Update the timer's roundEndTimeMs to the next boundary for the new round
     const mutable = CountdownTimer.getMutable(countdownEntity)
     mutable.roundEndTimeMs = currentBoundary + intervalMs // Next round ends at next boundary
     
-    handleRoundEnd().catch(console.error)
+    console.log('[Server] Updated roundEndTimeMs to:', new Date(mutable.roundEndTimeMs).toISOString())
+    
+    handleRoundEnd().catch((err) => {
+      console.error('[Server.ERROR] handleRoundEnd failed:', err)
+    })
   }
   
   // Splash finished — clear the splash and officially start new round

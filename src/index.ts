@@ -20,10 +20,19 @@ import { room } from './shared/messages'
 
 export async function main() {
   if (isServer()) {
-    const { setupServer } = await import('./server/server')
-    await setupServer()
+    console.log('[Main] ⚙️  SERVER MODE - Starting authoritative server...')
+    try {
+      const { setupServer } = await import('./server/server')
+      await setupServer()
+      console.log('[Main] ✅ Server setup complete')
+    } catch (err) {
+      console.error('[Main] ❌ SERVER STARTUP FAILED:', err)
+      throw err
+    }
     return
   }
+  
+  console.log('[Main] 🎮 CLIENT MODE - Starting client...')
 
   // ── Client setup ──
   createWinConditionOverlayEntity()
