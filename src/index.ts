@@ -144,5 +144,5 @@ export async function main() {
   engine.addSystem(beaconClientSystem)
 
   // Local-only test flag (blue) — uncomment for local preview testing without server
-  // setupLocalTestFlag() // Hidden for production deployment
+  // setupLocalTestFlag() // Disabled for production deployment
 }
