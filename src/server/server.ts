@@ -822,10 +822,15 @@ async function handleRoundEnd(): Promise<void> {
 
   // ── 2. Save winner snapshot for splash display ──
   const winners = maxSeconds > 0 ? players.filter(p => p.seconds >= maxSeconds) : []
-  const winnerSnapshot = winners.map(p => ({
-    userId: p.userId,
-    name: playerNames.get(p.userId) || p.userId.slice(0, 8)
-  }))
+  const winnerSnapshot = winners.map(p => {
+    const storedName = playerNames.get(p.userId)
+    const displayName = storedName || p.userId.slice(0, 8)
+    console.log('[Server] Winner:', p.userId.slice(0, 8), 'storedName:', storedName, 'displayName:', displayName)
+    return {
+      userId: p.userId,
+      name: displayName
+    }
+  })
 
   // ── 3. Set timer: splash + next round time IMMEDIATELY ──
   const intervalMs = 5 * 60 * 1000 // 5 minutes

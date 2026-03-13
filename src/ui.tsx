@@ -247,7 +247,18 @@ function PlayerListUi() {
   // getPlayersWithHoldTimes already sorts by seconds (desc), just use it directly
   const players = rawPlayers
   const localUserId = getPlayer()?.userId ?? null
-  const allVisitors = getAllVisitors()
+  const rawVisitors = getAllVisitors()
+  
+  // Sort visitors: Online first (alphabetical), then offline (alphabetical)
+  const allVisitors = [...rawVisitors].sort((a, b) => {
+    // Primary sort: Online status (online first)
+    if (a.isOnline !== b.isOnline) {
+      return a.isOnline ? -1 : 1
+    }
+    // Secondary sort: Alphabetical by name
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  })
+  
   const visitorCount = getTodayVisitorCount()
   const onlineCount = getCurrentOnlineCount()
   const leaderUserId =
