@@ -31,9 +31,6 @@ let hasPlayedTrumpetSound = false
 let trumpetSoundEntity: Entity | null = null
 let lastProcessedRoundEnd = 0 // Track which round end we've already processed
 
-// Debug timer for periodic status
-let debugStatusTimer = 0
-
 // Daily visitor tracking now handled in ./gameState/sceneTime.ts
 
 // Tie-breaking tracking for stable sorting
@@ -227,22 +224,6 @@ async function triggerCelebrationEmotes(players: any[], localUserId: string | nu
 
 
 function PlayerListUi() {
-  // Debug: Log timer status every 10 seconds
-  debugStatusTimer += 0.016 // Approximate frame time
-  if (debugStatusTimer >= 10) {
-    debugStatusTimer = 0
-    const timers = [...engine.getEntitiesWith(CountdownTimer)]
-    console.log('[UI.DEBUG] CountdownTimer entities found:', timers.length)
-    if (timers.length > 0) {
-      const [, t] = timers[0]
-      const now = Date.now()
-      const timeToEnd = Math.max(0, Math.floor((t.roundEndTimeMs - now) / 1000))
-      console.log('[UI.DEBUG] Timer status - roundEndTriggered:', t.roundEndTriggered, 'timeToRoundEnd:', timeToEnd, 's', 'roundEndTimeMs:', t.roundEndTimeMs, 'displayUntil:', t.roundEndDisplayUntilMs)
-    } else {
-      console.log('[UI.DEBUG] NO TIMER ENTITY FOUND - Component not syncing from server!')
-    }
-  }
-  
   const rawPlayers = getPlayersWithHoldTimes()
   // getPlayersWithHoldTimes already sorts by seconds (desc), just use it directly
   const players = rawPlayers
