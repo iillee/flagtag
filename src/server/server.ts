@@ -763,17 +763,17 @@ function countdownServerSystem(): void {
   
   const intervalMs = 5 * 60 * 1000 // 5 minutes in milliseconds
   
-  // Calculate the current 5-minute UTC boundary
-  const currentBoundary = Math.floor(now / intervalMs) * intervalMs
-  const timeSinceBoundary = now - currentBoundary
-  
-  // Round end: trigger when we cross a 5-minute UTC boundary (within 3 seconds tolerance for reliability)
-  // Increased from 1s to 3s to ensure we don't miss the boundary due to server tick timing
-  // Added safeguard: only trigger once per boundary to prevent duplicate popups
-  if (!timer.roundEndTriggered && timeSinceBoundary < 3000 && currentBoundary !== lastRoundEndBoundary) {
-    // We just crossed a boundary - trigger round end
+  // Round end: trigger when current time reaches or passes roundEndTimeMs
+  // This ensures round ends exactly at 0:00 on the countdown
+  if (!timer.roundEndTriggered && now >= timer.roundEndTimeMs) {
+    const currentBoundary = Math.floor(now / intervalMs) * intervalMs
+    
+    // Prevent duplicate triggers for the same boundary
+    if (currentBoundary === lastRoundEndBoundary) return
     lastRoundEndBoundary = currentBoundary
-    console.log('[Server] Round end triggered at UTC boundary:', new Date(currentBoundary).toISOString(), `(${timeSinceBoundary}ms after boundary)`)
+    
+    const msAfterBoundary = now - currentBoundary
+    console.log('[Server] Round end triggered at UTC boundary:', new Date(currentBoundary).toISOString(), `(${msAfterBoundary}ms after boundary)`)
     
     // Update the timer's roundEndTimeMs to the next boundary for the new round
     const mutable = CountdownTimer.getMutable(countdownEntity)
@@ -782,19 +782,6 @@ function countdownServerSystem(): void {
     handleRoundEnd().catch(console.error)
   }
   
-  // Failsafe: If we somehow missed the boundary window entirely, catch it here
-  // This handles edge cases where server was lagging or system didn't run for >3 seconds
-  if (!timer.roundEndTriggered && currentBoundary !== lastRoundEndBoundary && timeSinceBoundary >= 3000 && timeSinceBoundary < intervalMs / 2) {
-    // We're past the trigger window but still in the first half of the round - we missed it!
-    console.log('[Server] FAILSAFE: Missed round boundary, triggering late at', timeSinceBoundary, 'ms after boundary')
-    lastRoundEndBoundary = currentBoundary
-    
-    const mutable = CountdownTimer.getMutable(countdownEntity)
-    mutable.roundEndTimeMs = currentBoundary + intervalMs
-    
-    handleRoundEnd().catch(console.error)
-  }
-
   // Splash finished — clear the splash and officially start new round
   if (timer.roundEndTriggered && now >= timer.roundEndDisplayUntilMs) {
     const mutable = CountdownTimer.getMutable(countdownEntity)
