@@ -5,10 +5,9 @@ import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
-import { countdownClientSystem } from './systems/countdownTimerSystem'
-import { setupLocalTestFlag } from './systems/localTestFlag'
+
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
-import { roundEndDebugSystem } from './systems/roundEndDebugSystem'
+
 import { addPlayer, removePlayer } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
@@ -138,10 +137,5 @@ export async function main() {
   // Client systems
   engine.addSystem(flagClientSystem)
   engine.addSystem(combatClientSystem)
-  engine.addSystem(countdownClientSystem)
   engine.addSystem(beaconClientSystem)
-  engine.addSystem(roundEndDebugSystem)
-
-  // Local-only test flag (blue) — uncomment for local preview testing without server
-  // setupLocalTestFlag() // Disabled for production deployment
 }

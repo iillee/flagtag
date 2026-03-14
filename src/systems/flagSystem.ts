@@ -10,7 +10,6 @@ import {
   MaterialTransparencyMode,
   Tween,
   EasingFunction,
-  RealmInfo,
   Raycast,
   RaycastResult,
   RaycastQueryType,

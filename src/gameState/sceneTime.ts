@@ -1,5 +1,3 @@
-import { getPlayer } from '@dcl/sdk/players'
-import { isServer } from '@dcl/sdk/network'
 import { engine } from '@dcl/sdk/ecs'
 import { VisitorAnalytics } from '../shared/components'
 
@@ -7,31 +5,16 @@ import { VisitorAnalytics } from '../shared/components'
 
 /** Add player when they enter the scene - server handles tracking automatically */
 export function addPlayerSession(userId: string, name: string): void {
-  // Server now handles visitor tracking automatically
-  // This function kept for compatibility but does nothing on client
-  if (!isServer()) {
-    console.log('[Client] Player session start (tracked server-side):', name)
-  }
+  console.log('[Client] Player session start (tracked server-side):', name)
 }
 
 /** Remove player when they leave the scene - server handles tracking automatically */
 export function removePlayerSession(userId: string): void {
-  // Server now handles visitor tracking automatically
-  // This function kept for compatibility but does nothing on client
-  if (!isServer()) {
-    console.log('[Client] Player session end (tracked server-side):', userId.slice(0, 8))
-  }
-}
-
-/** Get total minutes for a player from server data */
-export function getPlayerTotalMinutes(userId: string): number {
-  const visitors = getAllVisitors()
-  const visitor = visitors.find(v => v.userId === userId)
-  return visitor ? visitor.totalMinutes : 0
+  console.log('[Client] Player session end (tracked server-side):', userId.slice(0, 8))
 }
 
 /** Get all visitors from server-synced data */
-export function getAllVisitors(): Array<{userId: string, name: string, isOnline: boolean, totalMinutes: number}> {
+export function getAllVisitors(): Array<{userId: string, name: string, isOnline: boolean, totalSeconds: number}> {
   // Read from server-synced VisitorAnalytics component
   for (const [, analytics] of engine.getEntitiesWith(VisitorAnalytics)) {
     try {
@@ -40,7 +23,7 @@ export function getAllVisitors(): Array<{userId: string, name: string, isOnline:
         userId: v.userId,
         name: v.name,
         isOnline: v.isOnline,
-        totalMinutes: v.totalMinutes
+        totalSeconds: v.totalSeconds ?? (v.totalMinutes ? v.totalMinutes * 60 : 0)
       }))
     } catch (e) {
       console.error('[Client] Failed to parse visitor data:', e)

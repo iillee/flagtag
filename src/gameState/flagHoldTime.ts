@@ -16,30 +16,33 @@ function isRealName(name: string): boolean {
 }
 
 export function addPlayer(userId: string, name: string): void {
-  playersInScene.set(userId, name)
+  const key = userId.toLowerCase()
+  playersInScene.set(key, name)
   // Cache the name permanently if it's a real display name
   if (isRealName(name)) {
-    knownPlayerNames.set(userId, name)
+    knownPlayerNames.set(key, name)
   }
 }
 
 export function removePlayer(userId: string): void {
-  playersInScene.delete(userId)
+  playersInScene.delete(userId.toLowerCase())
   // knownPlayerNames is NOT cleared — names persist for leaderboard
 }
 
 /** Get the best-known display name for a userId (scene > cache > null). */
 export function getKnownPlayerName(userId: string): string | null {
-  const sceneName = playersInScene.get(userId)
+  const key = userId.toLowerCase()
+  const sceneName = playersInScene.get(key)
   if (sceneName && isRealName(sceneName)) return sceneName
-  return knownPlayerNames.get(userId) ?? null
+  return knownPlayerNames.get(key) ?? null
 }
 
 /** For UI: list of players with hold times from synced component. */
 export function getPlayersWithHoldTimes(): { userId: string; name: string; seconds: number }[] {
+  // Build lookup from synced hold-time entities, keyed by lowercase playerId
   const synced = new Map<string, number>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
-    synced.set(data.playerId, data.seconds)
+    synced.set(data.playerId.toLowerCase(), data.seconds)
   }
   const result: { userId: string; name: string; seconds: number }[] = []
   for (const [userId, name] of playersInScene) {
@@ -49,8 +52,14 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
       seconds: Math.floor(synced.get(userId) ?? 0)
     })
   }
+  // Sort: players with points first (desc), then 0-score players at the bottom
   result.sort((a, b) => {
-    if (b.seconds !== a.seconds) return b.seconds - a.seconds
+    // Players with score always above players without
+    if (a.seconds > 0 && b.seconds === 0) return -1
+    if (a.seconds === 0 && b.seconds > 0) return 1
+    // Both have score: highest first
+    if (a.seconds !== b.seconds) return b.seconds - a.seconds
+    // Tie-breaker: alphabetical by userId
     return a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0
   })
   return result

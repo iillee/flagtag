@@ -18,7 +18,6 @@ import { setLocalTestFlagState } from './beaconSystem'
 
 const BLUE_BANNER_SRC = 'assets/asset-packs/small_blue_banner/Banner_Blue_02/Banner_Blue_02.glb'
 const PICKUP_RADIUS = 3.5
-const DROP_BEHIND_DISTANCE = 1.4
 
 // Visual clone system (same as online flag)
 let carryCloneEntity: Entity | null = null

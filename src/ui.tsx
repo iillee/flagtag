@@ -1,19 +1,18 @@
-import { Color4, Vector3 } from '@dcl/sdk/math'
+import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import {
   getPlayersWithHoldTimes,
-  getCurrentFlagCarrierUserId,
-  getKnownPlayerName
+  getCurrentFlagCarrierUserId
 } from './gameState/flagHoldTime'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
-import { getCountdownSeconds, CountdownTimer, getRoundWinners, Flag } from './shared/components'
-import { engine, Transform, AudioSource, type Entity } from '@dcl/sdk/ecs'
+import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
+import { engine, AudioSource, Transform, type Entity } from '@dcl/sdk/ecs'
+import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
-// Dynamic import for emotes to avoid deployment issues
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
@@ -22,24 +21,93 @@ export function setupUi() {
 let squareIconHovered = false
 let questionIconHovered = false
 let analyticsIconHovered = false
-let visitorScrollOffset = 0
-let leaderboardScrollOffset = 0
-let scoreboardScrollOffset = 0
 
-// Round end sound tracking - moved outside render function to prevent duplicates
-let hasPlayedTrumpetSound = false
-let trumpetSoundEntity: Entity | null = null
-let lastProcessedRoundEnd = 0 // Track which round end we've already processed
+// ── Round-end splash state ──
+let splashVisible = false
+let splashHideTime = 0
+let prevCountdown = -1
+let trumpetEntity: Entity | null = null
+const SPLASH_DURATION_MS = 5000
 
-// Daily visitor tracking now handled in ./gameState/sceneTime.ts
+interface SplashPlayer {
+  name: string
+  seconds: number
+}
+
+let splashPlayers: SplashPlayer[] = []
+let splashFromServer = false
+
+function roundEndSplashSystem(dt: number): void {
+  const countdown = getCountdownSeconds()
+  const now = Date.now()
+
+  // Detect the moment countdown hits 0 (was positive last frame)
+  if (prevCountdown > 0 && countdown === 0) {
+    splashVisible = true
+    splashHideTime = now + SPLASH_DURATION_MS
+    splashFromServer = false
+
+    // Snapshot client-side scoreboard immediately (before CRDT resets arrive)
+    const currentPlayers = getPlayersWithHoldTimes()
+    splashPlayers = currentPlayers
+      .filter(p => p.seconds > 0)
+      .slice(0, 3)
+      .map(p => ({ name: p.name, seconds: p.seconds }))
+
+    // Play trumpet sound once
+    if (trumpetEntity) {
+      engine.removeEntity(trumpetEntity)
+    }
+    trumpetEntity = engine.addEntity()
+    Transform.create(trumpetEntity, { position: Vector3.Zero() })
+    AudioSource.create(trumpetEntity, {
+      audioClipUrl: 'assets/sounds/trumpets.mp3',
+      playing: true,
+      volume: 0.8,
+      loop: false,
+      global: true
+    })
+  }
+
+  // While splash is showing, try to upgrade to server data
+  if (splashVisible && !splashFromServer) {
+    for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
+      if (timer.roundWinnerJson) {
+        try {
+          const serverData = JSON.parse(timer.roundWinnerJson) as Array<{ name: string; seconds: number }>
+          if (serverData.length > 0) {
+            splashPlayers = serverData.slice(0, 3).map(p => ({
+              name: p.name,
+              seconds: p.seconds
+            }))
+            splashFromServer = true
+          }
+        } catch { /* ignore parse errors */ }
+      }
+      break
+    }
+  }
+
+  // Hide splash after duration
+  if (splashVisible && now >= splashHideTime) {
+    splashVisible = false
+    splashPlayers = []
+    if (trumpetEntity) {
+      engine.removeEntity(trumpetEntity)
+      trumpetEntity = null
+    }
+  }
+
+  prevCountdown = countdown
+}
+
+engine.addSystem(roundEndSplashSystem)
 
 // Tie-breaking tracking for stable sorting
 const roundWinAchievementTime = new Map<string, number>() // userId -> timestamp when they first achieved current win count
 const scoreAchievementTime = new Map<string, number>() // userId -> timestamp when they first achieved current score
 let lastKnownScores = new Map<string, number>() // userId -> last known seconds
 let lastKnownWins = new Map<string, number>() // userId -> last known round wins
-
-// Daily visitor tracking now handled in ./gameState/sceneTime.ts
 
 // Stable sorting for leaderboard with tie-breaking
 function getSortedLeaderboardEntries(entries: any[]): any[] {
@@ -126,7 +194,6 @@ const BRIGHT_WHITE = Color4.create(1, 1, 1, 1)
 const MUTED = Color4.create(0.82, 0.82, 0.85, 1)
 const LIGHT_GREY = Color4.create(0.72, 0.72, 0.75, 1)
 const GREY = Color4.create(0.62, 0.62, 0.68, 1)
-const DARK_GREY = Color4.create(0.45, 0.45, 0.5, 1)
 const CLOSE_GREY = Color4.create(0.4, 0.4, 0.45, 1)
 
 // Theme Colors
@@ -135,19 +202,14 @@ const BRIGHT_GOLD = Color4.create(1, 0.9, 0.1, 1)
 const SILVER = Color4.create(0.75, 0.78, 0.82, 1)
 const BRONZE = Color4.create(0.8, 0.5, 0.2, 1)
 
+
 // Accent Colors
 const LIGHT_BLUE = Color4.create(0.45, 0.75, 1, 1)
-const SOFT_BLUE = Color4.create(0.55, 0.8, 0.95, 1)
 const CORAL_RED = Color4.create(1, 0.5, 0.45, 1)
-const SOFT_RED = Color4.create(1, 0.45, 0.45, 1)
-const SUCCESS_GREEN = Color4.create(0.3, 0.85, 0.4, 1)
-const WARNING_ORANGE = Color4.create(1, 0.65, 0.2, 1)
 
 // Background Colors
 const PANEL_BG = Color4.create(0.1, 0.1, 0.1, 0.92)
 const PANEL_BG_SEMI = Color4.create(0.08, 0.08, 0.1, 0.87)
-const PANEL_BG_DARKER = Color4.create(0.06, 0.06, 0.08, 0.95)
-
 // Layout Constants
 const OVERLAY_PANEL_WIDTH = 680
 const OVERLAY_PANEL_MIN_HEIGHT = 360
@@ -179,6 +241,15 @@ function formatUTCDate(): string {
   return `${month}/${day}/${year}`
 }
 
+function formatVisitorTime(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return `${hours}h ${remainingMinutes}m`
+}
+
 function PlayerListUi() {
   const rawPlayers = getPlayersWithHoldTimes()
   // getPlayersWithHoldTimes already sorts by seconds (desc), just use it directly
@@ -202,79 +273,10 @@ function PlayerListUi() {
     players.length > 0 && players[0].seconds > 0 ? players[0].userId : null
   const carrierUserId = getCurrentFlagCarrierUserId()
   const countdownSeconds = getCountdownSeconds()
-  
-  // Check for actual round end from server
-  const countdownTimers = [...engine.getEntitiesWith(CountdownTimer)]
-  let isRoundOver = false
-  let roundEndData: any = null
-  
-  if (countdownTimers.length > 0) {
-    const [, timer] = countdownTimers[0]
-    const now = Date.now()
-    
-    // Debug logging for round end detection
-    if (timer.roundEndTriggered) {
-      const timeRemaining = timer.roundEndDisplayUntilMs - now
-      console.log('[UI.1] Round end triggered! Time remaining:', timeRemaining, 'ms')
-    }
-    
-    if (timer.roundEndTriggered && now < timer.roundEndDisplayUntilMs) {
-      isRoundOver = true
-      roundEndData = timer
-      console.log('[UI.2] Round end ACTIVE - showing splash')
-      
-      // Play trumpet sound once per unique round end (prevent duplicates)
-      const roundEndId = timer.roundEndTimeMs
-      if (roundEndId !== lastProcessedRoundEnd) {
-        lastProcessedRoundEnd = roundEndId
-        
-        console.log('[UI.3] NEW round end detected! ID:', roundEndId, 'Playing trumpet...')
-        
-        // Clean up previous trumpet sound
-        if (trumpetSoundEntity) {
-          engine.removeEntity(trumpetSoundEntity)
-        }
-        
-        // Play trumpet sound immediately  
-        trumpetSoundEntity = engine.addEntity()
-        AudioSource.create(trumpetSoundEntity, {
-          audioClipUrl: 'assets/sounds/trumpets.mp3',
-          playing: true,
-          volume: 0.8,
-          loop: false,
-          global: true
-        })
-        hasPlayedTrumpetSound = true
-        console.log('[UI.Trumpet] Trumpet entity created and playing')
-        
-        console.log('[UI.4] Trumpet sound created, winners:', timer.roundWinnerJson)
-      } else {
-        console.log('[UI.5] Already processed this round end ID:', roundEndId)
-      }
-    } else {
-      // Round is NOT over
-      if (timer.roundEndTriggered) {
-        console.log('[UI.6] Round end triggered but expired - now:', now, 'displayUntil:', timer.roundEndDisplayUntilMs)
-      }
-      
-      // Reset flags when round is no longer over  
-      if (hasPlayedTrumpetSound) {
-        console.log('[UI.7] Cleaning up trumpet sound')
-        hasPlayedTrumpetSound = false
-        if (trumpetSoundEntity) {
-          engine.removeEntity(trumpetSoundEntity)
-          trumpetSoundEntity = null
-        }
-      }
-    }
-  } else {
-    console.log('[UI.8] No countdown timer found!')
-  }
 
-  // Only show overlays when round is not over
-  const winConditionOverlayVisible = !isRoundOver && getWinConditionOverlayVisible()
-  const leaderboardOverlayVisible = !isRoundOver && getLeaderboardOverlayVisible()
-  const analyticsOverlayVisible = !isRoundOver && getAnalyticsOverlayVisible()
+  const winConditionOverlayVisible = getWinConditionOverlayVisible()
+  const leaderboardOverlayVisible = getLeaderboardOverlayVisible()
+  const analyticsOverlayVisible = getAnalyticsOverlayVisible()
   const rawLeaderboardEntries = getLeaderboardEntries()
   const leaderboardEntries = getSortedLeaderboardEntries(rawLeaderboardEntries)
   const leaderboardPanelHeight = Math.max(
@@ -291,7 +293,23 @@ function PlayerListUi() {
         positionType: 'relative',
       }}
     >
-      {isRoundOver && roundEndData && (
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { top: 24, left: 0 },
+          width: '100%',
+          flexDirection: 'row',
+          justifyContent: 'center',
+        }}
+      >
+        <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
+          <Label value="Time until round ends" fontSize={16} color={WHITE} font="sans-serif" />
+          <Label value={formatCountdown(countdownSeconds)} fontSize={40} color={WHITE} font="sans-serif" />
+        </UiEntity>
+      </UiEntity>
+
+      {/* Round-end splash */}
+      {splashVisible && (
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
@@ -302,10 +320,11 @@ function PlayerListUi() {
             justifyContent: 'center',
             alignItems: 'center',
           }}
-          uiBackground={{ color: Color4.create(0, 0, 0, 0.65) }}
+          uiBackground={{ color: Color4.create(0, 0, 0, 0.45) }}
         >
           <UiEntity
             uiTransform={{
+              positionType: 'relative',
               width: 420,
               flexDirection: 'column',
               alignItems: 'center',
@@ -314,85 +333,63 @@ function PlayerListUi() {
             }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <Label value="--  ROUND  OVER  --" fontSize={30} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: 24 }} />
-            {(() => {
-              // Display previous round winners from server snapshot
-              let displayResults: any[] = []
-              
-              // Always use the server snapshot for round end display
-              if (roundEndData && roundEndData.roundWinnerJson) {
-                try {
-                  const winnerSnapshot = JSON.parse(roundEndData.roundWinnerJson)
-                  console.log('[UI] Displaying round winners from server snapshot:', winnerSnapshot)
-                  displayResults = winnerSnapshot.map((w: any) => ({
-                    userId: w.userId,
-                    name: w.name,
-                    isWinner: true
-                  }))
-                } catch (e) {
-                  console.error('[UI] Failed to parse round winner data:', e)
-                  displayResults = []
-                }
-              }
-              
-              // If no server snapshot available, fall back to current player data (edge case)
-              if (displayResults.length === 0) {
-                const currentResults = players.filter(p => p.seconds > 0).slice(0, 8)
-                if (currentResults.length > 0) {
-                  const maxSeconds = Math.max(...currentResults.map(p => p.seconds))
-                  displayResults = currentResults
-                    .filter(p => p.seconds >= maxSeconds)
-                    .map((p, i) => ({
-                      userId: p.userId,
-                      name: p.name,
-                      seconds: p.seconds,
-                      isWinner: true
-                    }))
-                }
-              }
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 12, right: 12 },
+                width: 28,
+                height: 28,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseDown={() => { splashVisible = false }}
+            >
+              <Label value="×" fontSize={22} color={CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
 
-              return displayResults.length === 0 ? (
-                <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                  <Label value="Round complete! No winners this round." fontSize={16} color={MUTED} font="sans-serif" />
-                </UiEntity>
-              ) : (
-                <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                  {/* Winners Section */}
-                  {displayResults.map((winner, i) => (
-                    <UiEntity key={`winner-${winner.userId}-${i}`} uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
-                      <Label value={`🏆 ${winner.name} WINS! 🏆`} fontSize={22} color={GOLD} font="sans-serif" />
-                      {winner.seconds && (
-                        <Label value={`${winner.seconds} seconds held`} fontSize={16} color={WHITE} font="sans-serif" />
-                      )}
-                      {i < displayResults.length - 1 && <UiEntity uiTransform={{ height: 8 }} />}
+            {splashPlayers.length === 0 ? (
+              <Label value="Round Over!" fontSize={36} color={GOLD} font="sans-serif" />
+            ) : (
+              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                <Label
+                  value={splashPlayers.length === 1 || splashPlayers[0].seconds > splashPlayers[1]?.seconds
+                    ? `${splashPlayers[0].name} wins!`
+                    : 'Round Over!'}
+                  fontSize={36}
+                  color={GOLD}
+                  font="sans-serif"
+                />
+                <UiEntity uiTransform={{ height: 20 }} />
+                {splashPlayers.map((p, i) => {
+                  const nameColor = i === 0 ? BRIGHT_GOLD : i === 1 ? SILVER : BRONZE
+                  return (
+                    <UiEntity
+                      key={`splash-${i}`}
+                      uiTransform={{
+                        height: 28,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Label
+                        value={p.name}
+                        fontSize={18}
+                        color={nameColor}
+                        font="sans-serif"
+                      />
+                      <Label
+                        value={`  ${p.seconds}s`}
+                        fontSize={18}
+                        color={MUTED}
+                        font="sans-serif"
+                      />
                     </UiEntity>
-                  ))}
-                </UiEntity>
-              )
-            })()}
-            
-            <UiEntity uiTransform={{ height: 20 }} />
-            
-            {/* Next round call to action */}
-            <UiEntity uiTransform={{ height: 16 }} />
-            <Label value="next round starting..." fontSize={14} color={MUTED} font="sans-serif" />
-          </UiEntity>
-        </UiEntity>
-      )}
-      {!isRoundOver && (
-        <UiEntity
-          uiTransform={{
-            positionType: 'absolute',
-            position: { top: 24, left: 0 },
-            width: '100%',
-            flexDirection: 'row',
-            justifyContent: 'center',
-          }}
-        >
-          <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
-            <Label value="Time until round ends" fontSize={16} color={WHITE} font="sans-serif" />
-            <Label value={formatCountdown(countdownSeconds)} fontSize={40} color={WHITE} font="sans-serif" />
+                  )
+                })}
+              </UiEntity>
+            )}
           </UiEntity>
         </UiEntity>
       )}
@@ -632,7 +629,7 @@ Whoever has the most points at the end of the round wins!"
                     </UiEntity>
                     <UiEntity uiTransform={{ width: '15%', flexDirection: 'row', justifyContent: 'flex-end' }}>
                       <Label 
-                        value={`${visitor.totalMinutes} min`} 
+                        value={formatVisitorTime(visitor.totalSeconds)} 
                         fontSize={ROW_FONT} 
                         color={WHITE} 
                         font="sans-serif" 

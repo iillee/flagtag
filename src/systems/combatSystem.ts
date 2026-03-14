@@ -11,7 +11,6 @@ import {
   Tween,
   EasingFunction,
   MaterialTransparencyMode,
-  RealmInfo,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
@@ -222,11 +221,6 @@ room.onMessage('stagger', (data) => {
   const me = getPlayerData()?.userId
   if (me && data.victimId === me) pendingStagger = true
 })
-
-function isConnected(): boolean {
-  const realm = RealmInfo.getOrNull(engine.RootEntity)
-  return !!realm?.isConnectedSceneRoom
-}
 
 export function combatClientSystem(_dt: number): void {
   const now = Date.now()

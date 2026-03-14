@@ -83,21 +83,9 @@ export function getCountdownSeconds(): number {
   const now = Date.now()
   const intervalMs = ROUND_LENGTH_MINUTES * 60 * 1000
   
-  // Check if we're in the brief "round over" period (server-controlled splash)
-  for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
-    if (timer.roundEndTriggered && now < timer.roundEndDisplayUntilMs) {
-      return 0 // Round over splash is showing
-    }
-    break // Only check the first timer entity
-  }
-  
-  // Pure UTC-based countdown calculation
-  // Find the next 5-minute boundary after current time
+  // Pure UTC-based countdown — never pauses, never overridden
   const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
-  const secondsToNext = Math.max(0, Math.ceil((nextBoundary - now) / 1000))
-  
-  // If we get exactly 0, show 300 (5 minutes) to prevent flickering at boundary
-  return secondsToNext === 0 ? ROUND_LENGTH_MINUTES * 60 : secondsToNext
+  return Math.max(0, Math.floor((nextBoundary - now) / 1000))
 }
 
 // ── Leaderboard state (synced from server) ──
@@ -147,24 +135,6 @@ export function getRandomSpawnPoint(): { x: number; y: number; z: number } {
   const spawnPoint = { ...FLAG_SPAWN_POINTS[index] }
   console.log(`[SpawnSystem] Flag spawning at point ${index + 1}/3: (${spawnPoint.x}, ${spawnPoint.y}, ${spawnPoint.z})`)
   return spawnPoint
-}
-
-/**
- * Get spawn point by index (for testing or specific selection)
- */
-export function getSpawnPointByIndex(index: number): { x: number; y: number; z: number } {
-  if (index < 0 || index >= FLAG_SPAWN_POINTS.length) {
-    console.log(`[SpawnSystem] Invalid spawn index ${index}, using 0`)
-    index = 0
-  }
-  return { ...FLAG_SPAWN_POINTS[index] }
-}
-
-/**
- * Get all spawn points for debugging/visualization
- */
-export function getAllSpawnPoints(): ReadonlyArray<{ x: number; y: number; z: number }> {
-  return FLAG_SPAWN_POINTS
 }
 
 // ── Visitor Analytics (server-synced) ──

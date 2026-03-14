@@ -14,7 +14,6 @@ const PICKUP_RADIUS = 3
 const HIT_RADIUS = 2.5
 const HIT_COOLDOWN_MS = 450       // Attacker cooldown (how soon they can attack again)
 const VICTIM_IMMUNITY_MS = 3000   // Victim immunity after being hit/stolen from (prevents tag-backs)
-const DROP_BEHIND_DISTANCE = 1.4
 const HOLD_TIME_SYNC_INTERVAL = 0.2
 const IDLE_BOB_AMPLITUDE = 0.15
 const IDLE_BOB_SPEED = 2
@@ -94,10 +93,14 @@ async function loadVisitorData(): Promise<void> {
       const currentDay = getTodayDateString()
       if (lastVisitorResetDay === currentDay) {
         for (const record of visitorRecords) {
+          // Support both old format (totalMinutes) and new format (totalSeconds)
+          const minutes = record.totalSeconds != null
+            ? Math.floor(record.totalSeconds / 60)
+            : (record.totalMinutes || 0)
           visitorSessions.set(record.userId, {
             name: record.name,
             sessionStartMs: 0, // Not currently online after server restart
-            totalMinutesToday: record.totalMinutes
+            totalMinutesToday: minutes
           })
           playerNames.set(record.userId, record.name)
         }
@@ -170,34 +173,33 @@ async function checkVisitorDailyReset(): Promise<boolean> {
 
 async function syncVisitorAnalytics(): Promise<void> {
   const currentDay = getTodayDateString()
+  const now = Date.now()
   const onlineCount = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
   
-  // Build visitor data array (limit to top 100 to prevent huge payloads)
+  // Build visitor data array — include ALL visitors (no filtering)
   const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
     const isOnline = data.sessionStartMs > 0
-    let totalMinutes = data.totalMinutesToday
+    // Calculate total seconds (stored minutes + current session)
+    let totalSeconds = data.totalMinutesToday * 60
     
-    // Add current session time if online
     if (isOnline) {
-      const sessionMs = Date.now() - data.sessionStartMs
-      const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
-      totalMinutes += sessionMinutes
+      const sessionMs = now - data.sessionStartMs
+      totalSeconds += Math.floor(sessionMs / 1000)
     }
     
     return {
       userId,
       name: data.name,
       isOnline,
-      totalMinutes
+      totalSeconds
     }
   })
-  .filter(v => v.totalMinutes > 0 || v.isOnline) // Only include visitors with time or currently online
   .sort((a, b) => {
     // Online first, then by time
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
-    return b.totalMinutes - a.totalMinutes
+    return b.totalSeconds - a.totalSeconds
   })
-  .slice(0, 100) // Limit to top 100 to prevent massive sync payload
+  .slice(0, 100) // Limit to top 100
   
   const visitorDataJson = JSON.stringify(visitorData)
   
@@ -727,55 +729,74 @@ function holdTimeServerSystem(dt: number): void {
   holdTimeAccum = 0
 }
 
+// Track which players are currently connected (detected this frame)
+const currentlyConnected = new Set<string>()
+
 function playerTrackingSystem(): void {
+  // Build set of currently connected players
+  const nowConnected = new Set<string>()
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-    const userId = identity.address
-    if (knownPlayers.has(userId)) continue
-    knownPlayers.add(userId)
-
-    // Create synced hold time entity for this player
-    const entity = engine.addEntity()
-    PlayerFlagHoldTime.create(entity, { playerId: userId, seconds: 0 })
-    syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(userId))
-    holdTimeEntities.set(userId, entity)
-
-    // Start visitor session tracking
-    const playerName = playerNames.get(userId) || userId.slice(0, 8)
-    const existingVisitor = visitorSessions.get(userId)
-    
-    if (existingVisitor) {
-      // Returning visitor - update session start
-      existingVisitor.sessionStartMs = Date.now()
-      existingVisitor.name = playerName // Update name in case it changed
-    } else {
-      // New visitor today
-      visitorSessions.set(userId, {
-        name: playerName,
-        sessionStartMs: Date.now(),
-        totalMinutesToday: 0
-      })
-    }
-    
-    console.log('[Server] Player entered:', playerName, '(total visitors today:', visitorSessions.size, ')')
+    nowConnected.add(identity.address)
   }
 
-  // Detect disconnected players
-  const currentPlayerIds = new Set()
-  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-    currentPlayerIds.add(identity.address)
+  let changed = false
+
+  // Detect new joins (including reconnections)
+  for (const userId of nowConnected) {
+    if (!currentlyConnected.has(userId)) {
+      // Player just connected (or reconnected)
+      currentlyConnected.add(userId)
+
+      // Create synced hold time entity only on first ever join
+      if (!knownPlayers.has(userId)) {
+        knownPlayers.add(userId)
+        const entity = engine.addEntity()
+        PlayerFlagHoldTime.create(entity, { playerId: userId, seconds: 0 })
+        syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(userId))
+        holdTimeEntities.set(userId, entity)
+      }
+
+      // Start/restart visitor session
+      const playerName = playerNames.get(userId) || userId.slice(0, 8)
+      const existingVisitor = visitorSessions.get(userId)
+
+      if (existingVisitor) {
+        existingVisitor.sessionStartMs = Date.now()
+        existingVisitor.name = playerName
+      } else {
+        visitorSessions.set(userId, {
+          name: playerName,
+          sessionStartMs: Date.now(),
+          totalMinutesToday: 0
+        })
+      }
+
+      console.log('[Server] Player joined:', playerName, '(total visitors today:', visitorSessions.size, ')')
+      changed = true
+    }
   }
 
-  for (const [userId, visitor] of visitorSessions) {
-    if (visitor.sessionStartMs > 0 && !currentPlayerIds.has(userId)) {
-      // Player disconnected - accumulate their session time
-      const sessionMs = Date.now() - visitor.sessionStartMs
-      const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
-      visitor.totalMinutesToday += sessionMinutes
-      visitor.sessionStartMs = 0 // Mark as offline
-      
-      const playerName = visitor.name
-      console.log('[Server] Player left:', playerName, 'session:', sessionMinutes, 'min, total today:', visitor.totalMinutesToday, 'min')
+  // Detect disconnects
+  for (const userId of currentlyConnected) {
+    if (!nowConnected.has(userId)) {
+      currentlyConnected.delete(userId)
+
+      const visitor = visitorSessions.get(userId)
+      if (visitor && visitor.sessionStartMs > 0) {
+        const sessionMs = Date.now() - visitor.sessionStartMs
+        const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
+        visitor.totalMinutesToday += sessionMinutes
+        visitor.sessionStartMs = 0 // Mark as offline
+
+        console.log('[Server] Player left:', visitor.name, 'session:', sessionMinutes, 'min, total today:', visitor.totalMinutesToday, 'min')
+      }
+      changed = true
     }
+  }
+
+  // Immediate sync when players join or leave
+  if (changed) {
+    void syncVisitorAnalytics()
   }
 }
 
@@ -856,23 +877,29 @@ async function handleRoundEnd(): Promise<void> {
     }
   }
 
-  // ── 2. Save winner snapshot for splash display ──
-  const winners = maxSeconds > 0 ? players.filter(p => p.seconds >= maxSeconds) : []
-  const winnerSnapshot = winners.map(p => {
-    const storedName = playerNames.get(p.userId)
-    const displayName = storedName || p.userId.slice(0, 8)
-    console.log('[Server] Winner:', p.userId.slice(0, 8), 'storedName:', storedName, 'displayName:', displayName)
-    return {
-      userId: p.userId,
-      name: displayName
-    }
-  })
+  // ── 2. Save top 3 snapshot for splash display ──
+  const topPlayers = [...players]
+    .sort((a, b) => b.seconds - a.seconds)
+    .slice(0, 3)
+    .map(p => {
+      const storedName = playerNames.get(p.userId)
+      const displayName = storedName || p.userId.slice(0, 8)
+      return {
+        userId: p.userId,
+        name: displayName,
+        seconds: Math.floor(p.seconds)
+      }
+    })
+  
+  for (const p of topPlayers) {
+    console.log('[Server] Top player:', p.name, '-', p.seconds, 'seconds')
+  }
 
   // ── 3. Set timer: splash + winner data (roundEndTimeMs already set by countdownServerSystem) ──
   const timerMutable = CountdownTimer.getMutable(countdownEntity)
   timerMutable.roundEndTriggered = true
   timerMutable.roundEndDisplayUntilMs = now + SPLASH_DURATION_MS
-  timerMutable.roundWinnerJson = JSON.stringify(winnerSnapshot)
+  timerMutable.roundWinnerJson = JSON.stringify(topPlayers)
   
   console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
 
@@ -933,8 +960,8 @@ let visitorSyncTimer = 0
 function visitorTrackingServerSystem(dt: number): void {
   visitorSyncTimer += dt
   
-  // Sync visitor analytics every 30 seconds (reduced from 5s for stability)
-  if (visitorSyncTimer >= 30.0) {
+  // Sync visitor analytics every 10 seconds
+  if (visitorSyncTimer >= 10.0) {
     visitorSyncTimer = 0
     
     // Check for daily reset
