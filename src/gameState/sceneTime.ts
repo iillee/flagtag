@@ -16,6 +16,7 @@ export function removePlayerSession(userId: string): void {
 /** Get all visitors from server-synced data */
 export function getAllVisitors(): Array<{userId: string, name: string, isOnline: boolean, totalSeconds: number}> {
   // Read from server-synced VisitorAnalytics component
+  // Names are resolved server-side via AvatarBase scanning and persisted name directory
   for (const [, analytics] of engine.getEntitiesWith(VisitorAnalytics)) {
     try {
       const visitorData = JSON.parse(analytics.visitorDataJson)

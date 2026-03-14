@@ -1,4 +1,4 @@
-import { engine, Transform, GltfContainer, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
+import { engine, Transform, GltfContainer, PlayerIdentityData, AvatarBase, type Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
@@ -13,7 +13,7 @@ import { room } from '../shared/messages'
 const PICKUP_RADIUS = 3
 const HIT_RADIUS = 2.5
 const HIT_COOLDOWN_MS = 450       // Attacker cooldown (how soon they can attack again)
-const VICTIM_IMMUNITY_MS = 3000   // Victim immunity after being hit/stolen from (prevents tag-backs)
+const STEAL_IMMUNITY_MS = 3000    // Immunity for the player who STEALS the flag (time to escape the crowd)
 const HOLD_TIME_SYNC_INTERVAL = 0.2
 const IDLE_BOB_AMPLITUDE = 0.15
 const IDLE_BOB_SPEED = 2
@@ -32,7 +32,7 @@ let visitorAnalyticsEntity: Entity
 let idleTime = 0
 let holdTimeAccum = 0
 const lastAttackTime = new Map<string, number>()
-const lastHitTime = new Map<string, number>()  // Track when players were last hit (for immunity)
+const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
 const holdTimeEntities = new Map<string, Entity>()
 const knownPlayers = new Set<string>()
 const playerNames = new Map<string, string>()
@@ -47,6 +47,10 @@ let flagFalling = false
 let flagFallVelocity = 0
 let flagGravityTargetY = FLAG_MIN_Y
 const carrierYSamples: { y: number; time: number }[] = []
+
+function isRealName(name: string): boolean {
+  return name.length > 0 && !name.startsWith('0x')
+}
 
 // ── Persistence helpers ──
 async function persistFlagState(): Promise<void> {
@@ -65,6 +69,31 @@ async function persistFlagState(): Promise<void> {
 
 async function persistLeaderboard(json: string): Promise<void> {
   await Storage.set('leaderboard', json)
+}
+
+async function persistPlayerNames(): Promise<void> {
+  const obj: Record<string, string> = {}
+  for (const [userId, name] of playerNames) {
+    if (isRealName(name)) obj[userId] = name
+  }
+  await Storage.set('playerNames', JSON.stringify(obj))
+}
+
+async function loadPlayerNames(): Promise<void> {
+  try {
+    const saved = await Storage.get<string>('playerNames')
+    if (saved) {
+      const obj: Record<string, string> = JSON.parse(saved)
+      for (const [userId, name] of Object.entries(obj)) {
+        if (isRealName(name)) {
+          playerNames.set(userId, name)
+        }
+      }
+      console.log('[Server] Loaded', playerNames.size, 'persisted player names')
+    }
+  } catch (err) {
+    console.error('[Server] Failed to load player names:', err)
+  }
 }
 
 async function persistVisitorData(visitorDataJson: string): Promise<void> {
@@ -97,12 +126,18 @@ async function loadVisitorData(): Promise<void> {
           const minutes = record.totalSeconds != null
             ? Math.floor(record.totalSeconds / 60)
             : (record.totalMinutes || 0)
+          // Use persisted name directory if available, fall back to stored visitor name
+          const bestName = (playerNames.has(record.userId) && isRealName(playerNames.get(record.userId)!))
+            ? playerNames.get(record.userId)!
+            : record.name
           visitorSessions.set(record.userId, {
-            name: record.name,
+            name: bestName,
             sessionStartMs: 0, // Not currently online after server restart
             totalMinutesToday: minutes
           })
-          playerNames.set(record.userId, record.name)
+          if (isRealName(bestName)) {
+            playerNames.set(record.userId, bestName)
+          }
         }
         console.log('[Server] Restored visitor data for', currentDay, '- loaded', visitorRecords.length, 'visitors')
       } else {
@@ -295,6 +330,9 @@ export async function setupServer(): Promise<void> {
   
   console.log('[Server] Timer initialized, next round ends at:', new Date(nextBoundary).toISOString())
 
+  // Load persisted player names FIRST so leaderboard and visitor restores can use them
+  await loadPlayerNames()
+
   // Load persisted leaderboard (with error handling)
   let savedLeaderboard: string | null = null
   try {
@@ -304,6 +342,23 @@ export async function setupServer(): Promise<void> {
   }
   let leaderboardJson = savedLeaderboard || '[]'
   
+  // Patch leaderboard entries with persisted real names (fix stale 0x... from prior sessions)
+  try {
+    const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(leaderboardJson)
+    let patched = false
+    for (const entry of entries) {
+      const knownName = playerNames.get(entry.userId)
+      if (knownName && isRealName(knownName) && entry.name !== knownName) {
+        entry.name = knownName
+        patched = true
+      }
+    }
+    if (patched) {
+      leaderboardJson = JSON.stringify(entries)
+      console.log('[Server] Patched leaderboard names from persisted name directory')
+    }
+  } catch { /* ignore */ }
+
   leaderboardEntity = engine.addEntity()
   LeaderboardState.create(leaderboardEntity, { json: leaderboardJson, date: '' })
   syncEntity(leaderboardEntity, [LeaderboardState.componentId], SyncIds.LEADERBOARD)
@@ -332,6 +387,7 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(playerTrackingSystem)
   engine.addSystem(countdownServerSystem)
   engine.addSystem(visitorTrackingServerSystem)
+  engine.addSystem(nameResolverServerSystem)
 
   console.log('[Server] Flag Tag server ready')
 }
@@ -383,38 +439,56 @@ function resetGravityState(): void {
   carrierYSamples.length = 0
 }
 
+/**
+ * Update a player's display name across all server data stores.
+ * Called when a real name is resolved (via registerName message or AvatarBase scan).
+ * Returns true if the name was actually updated (was different from what we had).
+ */
+function updatePlayerName(userId: string, name: string): boolean {
+  if (!isRealName(name)) return false
+  
+  const existing = playerNames.get(userId)
+  if (existing === name) return false
+  
+  playerNames.set(userId, name)
+  
+  // Update visitor session
+  const visitor = visitorSessions.get(userId)
+  if (visitor) {
+    visitor.name = name
+  }
+  
+  // Update leaderboard entries
+  const lb = LeaderboardState.getOrNull(leaderboardEntity)
+  if (lb && lb.json) {
+    try {
+      const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(lb.json)
+      let changed = false
+      for (const entry of entries) {
+        if (entry.userId === userId && entry.name !== name) {
+          entry.name = name
+          changed = true
+        }
+      }
+      if (changed) {
+        const json = JSON.stringify(entries)
+        const mutable = LeaderboardState.getMutable(leaderboardEntity)
+        mutable.json = json
+        persistLeaderboard(json)
+      }
+    } catch { /* ignore parse errors */ }
+  }
+  
+  return true
+}
+
 // ── Message handlers ──
 function registerHandlers(): void {
   room.onMessage('registerName', (data, context) => {
     if (!context || !data.name) return
-    playerNames.set(context.from, data.name)
-    
-    // Update visitor session name if player is tracked
-    const visitor = visitorSessions.get(context.from)
-    if (visitor) {
-      visitor.name = data.name
-      console.log('[Server] Updated visitor name:', context.from.slice(0, 8), '->', data.name)
-    }
-    
-    // Update existing leaderboard entries with the real display name
-    const lb = LeaderboardState.getOrNull(leaderboardEntity)
-    if (lb && lb.json) {
-      try {
-        const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(lb.json)
-        let changed = false
-        for (const entry of entries) {
-          if (entry.userId === context.from && entry.name !== data.name) {
-            entry.name = data.name
-            changed = true
-          }
-        }
-        if (changed) {
-          const json = JSON.stringify(entries)
-          const mutable = LeaderboardState.getMutable(leaderboardEntity)
-          mutable.json = json
-          persistLeaderboard(json)
-        }
-      } catch { /* ignore parse errors */ }
+    if (updatePlayerName(context.from, data.name)) {
+      console.log('[Server] registerName: updated', context.from.slice(0, 8), '->', data.name)
+      persistPlayerNames()
     }
   })
   room.onMessage('requestPickup', (_data, context) => {
@@ -541,6 +615,10 @@ function handleFlagSteal(victimId: string, attackerId: string): void {
 
   console.log('[S.34] After:  state =', mutable.state, ', carrier =', mutable.carrierPlayerId.slice(0, 8))
 
+  // Grant steal immunity to the new carrier (3s protection to escape the crowd)
+  lastStealTime.set(attackerId, Date.now())
+  console.log('[S.34b] Granted', STEAL_IMMUNITY_MS, 'ms steal immunity to', attackerId.slice(0, 8))
+
   // Reset gravity state since flag isn't being dropped
   resetGravityState()
   
@@ -585,11 +663,11 @@ function handleAttack(attackerId: string): void {
     if (identity.address === attackerId) continue
     playersChecked++
     
-    // Check victim immunity (prevents tag-backs)
-    const lastHit = lastHitTime.get(identity.address) ?? 0
-    if (now - lastHit < VICTIM_IMMUNITY_MS) {
+    // Check steal immunity (player who just stole the flag gets 3s protection to escape)
+    const stealTime = lastStealTime.get(identity.address) ?? 0
+    if (now - stealTime < STEAL_IMMUNITY_MS) {
       immunePlayers++
-      console.log('[S.14] Player', identity.address.slice(0, 8), 'is IMMUNE -', (now - lastHit), 'ms since hit')
+      console.log('[S.14] Player', identity.address.slice(0, 8), 'is IMMUNE (just stole flag) -', (now - stealTime), 'ms since steal')
       continue
     }
     
@@ -609,9 +687,6 @@ function handleAttack(attackerId: string): void {
   console.log('[S.16] Players checked:', playersChecked, 'Immune:', immunePlayers, 'Closest dist:', closestDist.toFixed(2))
 
   if (closestId && closestPos) {
-    // Hit confirmed - mark victim as recently hit for immunity
-    lastHitTime.set(closestId, now)
-    
     console.log('[S.20] HIT CONFIRMED! Attacker:', attackerId.slice(0, 8), 'Victim:', closestId.slice(0, 8), 'Distance:', closestDist.toFixed(2))
     room.send('hitVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
     room.send('stagger', { victimId: closestId })
@@ -623,7 +698,7 @@ function handleAttack(attackerId: string): void {
     if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === closestId) {
       console.log('[S.22] VICTIM HAS FLAG! Initiating steal...')
       handleFlagSteal(closestId, attackerId)
-      console.log('[S.23] Victim', closestId.slice(0, 8), 'now has', VICTIM_IMMUNITY_MS, 'ms immunity')
+      console.log('[S.23] Attacker', attackerId.slice(0, 8), 'now has', STEAL_IMMUNITY_MS, 'ms steal immunity')
     } else {
       console.log('[S.24] Regular hit (victim does not have flag)')
     }
@@ -756,13 +831,16 @@ function playerTrackingSystem(): void {
         holdTimeEntities.set(userId, entity)
       }
 
-      // Start/restart visitor session
+      // Start/restart visitor session — use persisted name if available
       const playerName = playerNames.get(userId) || userId.slice(0, 8)
       const existingVisitor = visitorSessions.get(userId)
 
       if (existingVisitor) {
         existingVisitor.sessionStartMs = Date.now()
-        existingVisitor.name = playerName
+        // Only upgrade the name, never downgrade a real name to 0x...
+        if (isRealName(playerName) || !isRealName(existingVisitor.name)) {
+          existingVisitor.name = playerName
+        }
       } else {
         visitorSessions.set(userId, {
           name: playerName,
@@ -968,6 +1046,46 @@ function visitorTrackingServerSystem(dt: number): void {
     void checkVisitorDailyReset()
     
     // Sync current visitor data
+    void syncVisitorAnalytics()
+  }
+}
+
+/**
+ * Server-side name resolver — scans AvatarBase.name for all connected players
+ * every few seconds. When a real display name appears (not empty, not 0x...),
+ * it updates playerNames, visitorSessions, and leaderboard entries, then persists.
+ * This catches names that weren't ready when the player first connected.
+ */
+let nameResolveTimer = 0
+const NAME_RESOLVE_INTERVAL = 3.0
+
+function nameResolverServerSystem(dt: number): void {
+  nameResolveTimer += dt
+  if (nameResolveTimer < NAME_RESOLVE_INTERVAL) return
+  nameResolveTimer = 0
+
+  let anyUpdated = false
+
+  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    const userId = identity.address
+    if (!userId) continue
+
+    // Already have a real name — skip
+    const existing = playerNames.get(userId)
+    if (existing && isRealName(existing)) continue
+
+    // Try reading AvatarBase.name
+    const avatar = AvatarBase.getOrNull(entity)
+    if (avatar && isRealName(avatar.name)) {
+      if (updatePlayerName(userId, avatar.name)) {
+        console.log('[Server] Name resolved via AvatarBase:', userId.slice(0, 8), '->', avatar.name)
+        anyUpdated = true
+      }
+    }
+  }
+
+  if (anyUpdated) {
+    persistPlayerNames()
     void syncVisitorAnalytics()
   }
 }

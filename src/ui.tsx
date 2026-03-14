@@ -3,7 +3,8 @@ import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import {
   getPlayersWithHoldTimes,
-  getCurrentFlagCarrierUserId
+  getCurrentFlagCarrierUserId,
+  getKnownPlayerName
 } from './gameState/flagHoldTime'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
@@ -52,7 +53,7 @@ function roundEndSplashSystem(dt: number): void {
     splashPlayers = currentPlayers
       .filter(p => p.seconds > 0)
       .slice(0, 3)
-      .map(p => ({ name: p.name, seconds: p.seconds }))
+      .map(p => ({ name: getKnownPlayerName(p.userId) || p.name, seconds: p.seconds }))
 
     // Play trumpet sound once
     if (trumpetEntity) {
@@ -74,10 +75,10 @@ function roundEndSplashSystem(dt: number): void {
     for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
       if (timer.roundWinnerJson) {
         try {
-          const serverData = JSON.parse(timer.roundWinnerJson) as Array<{ name: string; seconds: number }>
+          const serverData = JSON.parse(timer.roundWinnerJson) as Array<{ userId?: string; name: string; seconds: number }>
           if (serverData.length > 0) {
             splashPlayers = serverData.slice(0, 3).map(p => ({
-              name: p.name,
+              name: (p.userId ? getKnownPlayerName(p.userId) : null) || p.name,
               seconds: p.seconds
             }))
             splashFromServer = true
@@ -325,13 +326,13 @@ function PlayerListUi() {
           <UiEntity
             uiTransform={{
               positionType: 'relative',
-              width: 420,
+              width: 440,
               flexDirection: 'column',
               alignItems: 'center',
-              borderRadius: 20,
-              padding: 32,
+              borderRadius: 16,
+              padding: { top: 36, bottom: 28, left: 40, right: 40 },
             }}
-            uiBackground={{ color: PANEL_BG }}
+            uiBackground={{ color: Color4.create(0.16, 0.16, 0.18, 0.95) }}
           >
             <UiEntity
               uiTransform={{
@@ -349,45 +350,75 @@ function PlayerListUi() {
             </UiEntity>
 
             {splashPlayers.length === 0 ? (
-              <Label value="Round Over!" fontSize={36} color={GOLD} font="sans-serif" />
+              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                <Label value="Round Over!" fontSize={34} color={GOLD} font="sans-serif" />
+                <UiEntity uiTransform={{ height: 24 }} />
+                <Label value="Next round starting..." fontSize={15} color={LIGHT_GREY} font="sans-serif" />
+              </UiEntity>
             ) : (
               <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                {/* Winner title */}
                 <Label
-                  value={splashPlayers.length === 1 || splashPlayers[0].seconds > splashPlayers[1]?.seconds
-                    ? `${splashPlayers[0].name} wins!`
+                  value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
+                    ? `${splashPlayers[0].name} Wins!`
                     : 'Round Over!'}
-                  fontSize={36}
+                  fontSize={34}
                   color={GOLD}
                   font="sans-serif"
                 />
-                <UiEntity uiTransform={{ height: 20 }} />
+
+                {/* Spacer between title and rankings */}
+                <UiEntity uiTransform={{ height: 28 }} />
+
+                {/* Rankings list */}
                 {splashPlayers.map((p, i) => {
-                  const nameColor = i === 0 ? BRIGHT_GOLD : i === 1 ? SILVER : BRONZE
+                  const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
+                  const nameColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
+                  const scoreColor = LIGHT_GREY
                   return (
                     <UiEntity
                       key={`splash-${i}`}
                       uiTransform={{
-                        height: 28,
+                        width: '100%',
+                        height: 34,
                         flexDirection: 'row',
                         alignItems: 'center',
-                        justifyContent: 'center',
+                        justifyContent: 'space-between',
+                        padding: { left: 4, right: 4 },
                       }}
                     >
+                      {/* Left side: rank + name */}
+                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Label
+                          value={`#${i + 1}`}
+                          fontSize={18}
+                          color={rankColor}
+                          font="sans-serif"
+                        />
+                        <UiEntity uiTransform={{ width: 10 }} />
+                        <Label
+                          value={p.name}
+                          fontSize={18}
+                          color={nameColor}
+                          font="sans-serif"
+                        />
+                      </UiEntity>
+                      {/* Right side: score */}
                       <Label
-                        value={p.name}
+                        value={`${p.seconds}`}
                         fontSize={18}
-                        color={nameColor}
-                        font="sans-serif"
-                      />
-                      <Label
-                        value={`  ${p.seconds}s`}
-                        fontSize={18}
-                        color={MUTED}
+                        color={scoreColor}
                         font="sans-serif"
                       />
                     </UiEntity>
                   )
                 })}
+
+                {/* Spacer before footer */}
+                <UiEntity uiTransform={{ height: 24 }} />
+
+                {/* Footer message */}
+                <Label value="Next round starting..." fontSize={15} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
             )}
           </UiEntity>

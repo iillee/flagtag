@@ -17,6 +17,7 @@ import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { PlayerIdentityData } from '@dcl/sdk/ecs'
 import { room } from '../shared/messages'
+import { Flag, FlagState } from '../shared/components'
 import { triggerEmote } from '~system/RestrictedActions'
 
 // ── VFX Constants ──
@@ -210,11 +211,34 @@ let pendingStagger = false
 const pendingHitPositions: Vector3[] = []
 const pendingMissPositions: Vector3[] = []
 
+// Optimistic attack prediction — skip the next server VFX if we already played it locally
+let skipNextServerVfx = false
+let skipNextServerVfxExpiry = 0
+const HIT_RADIUS_CLIENT = 2.5 // Must match server HIT_RADIUS
+
+// Client-side steal immunity tracking (mirrors server STEAL_IMMUNITY_MS)
+const STEAL_IMMUNITY_MS_CLIENT = 3000
+const clientStealImmunity = new Map<string, number>() // playerId → timestamp when they stole the flag
+
 // Register message listeners
 room.onMessage('hitVfx', (data) => {
+  const now = Date.now()
+  if (skipNextServerVfx && now < skipNextServerVfxExpiry) {
+    // We already played this optimistically — skip the server echo
+    skipNextServerVfx = false
+    return
+  }
+  skipNextServerVfx = false
   pendingHitPositions.push(Vector3.create(data.x, data.y, data.z))
 })
 room.onMessage('missVfx', (data) => {
+  const now = Date.now()
+  if (skipNextServerVfx && now < skipNextServerVfxExpiry) {
+    // We already played this optimistically — skip the server echo
+    skipNextServerVfx = false
+    return
+  }
+  skipNextServerVfx = false
   pendingMissPositions.push(Vector3.create(data.x, data.y, data.z))
 })
 room.onMessage('stagger', (data) => {
@@ -222,9 +246,73 @@ room.onMessage('stagger', (data) => {
   if (me && data.victimId === me) pendingStagger = true
 })
 
+/**
+ * Optimistic attack prediction — called immediately on E press (before server round-trip).
+ * Runs the same hit/miss check the server does and plays VFX/sound instantly.
+ * Sets a flag so the server's echo message is skipped to prevent duplicates.
+ */
+export function predictAttackLocally(): void {
+  if (!Transform.has(engine.PlayerEntity)) return
+
+  const myPos = Transform.get(engine.PlayerEntity).position
+  const myRot = Transform.get(engine.PlayerEntity).rotation
+  const myUserId = getPlayerData()?.userId
+  if (!myUserId) return
+
+  // Find closest other player (mirror server logic, including steal immunity check)
+  let closestPos: Vector3 | null = null
+  let closestDist = HIT_RADIUS_CLIENT
+  const now = Date.now()
+
+  for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+    if (identity.address === myUserId) continue
+    // Skip players with steal immunity (just stole the flag)
+    const stealTime = clientStealImmunity.get(identity.address) ?? 0
+    if (now - stealTime < STEAL_IMMUNITY_MS_CLIENT) continue
+    const dist = Vector3.distance(myPos, transform.position)
+    if (dist < closestDist) {
+      closestDist = dist
+      closestPos = Vector3.create(transform.position.x, transform.position.y, transform.position.z)
+    }
+  }
+
+  // Mark to skip the next server echo (within a generous time window)
+  skipNextServerVfx = true
+  skipNextServerVfxExpiry = Date.now() + 2000
+
+  if (closestPos) {
+    // Predicted hit
+    showHitEffect(closestPos)
+    playHitSound(closestPos)
+  } else {
+    // Predicted miss — show in front of player
+    const forward = Vector3.rotate(Vector3.Forward(), myRot)
+    const missPos = Vector3.add(myPos, Vector3.scale(forward, 1.2))
+    showMissEffect(missPos)
+    playMissSound(missPos)
+  }
+}
+
+// Track previous flag carrier to detect steals on the client
+let prevCombatCarrierId = ''
+let prevCombatFlagState: FlagState | null = null
+
 export function combatClientSystem(_dt: number): void {
   const now = Date.now()
   initPools()
+
+  // Detect flag steals (carrier changed while flag stayed in Carried state) to track client-side immunity
+  for (const [, flag] of engine.getEntitiesWith(Flag)) {
+    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+      if (prevCombatFlagState === FlagState.Carried && prevCombatCarrierId && prevCombatCarrierId !== flag.carrierPlayerId) {
+        // Carrier changed while flag was carried = steal. New carrier gets immunity.
+        clientStealImmunity.set(flag.carrierPlayerId, now)
+      }
+    }
+    prevCombatFlagState = flag.state
+    prevCombatCarrierId = flag.carrierPlayerId
+    break
+  }
 
   // Cleanup expired VFX
   for (let i = activeVfx.length - 1; i >= 0; i--) {

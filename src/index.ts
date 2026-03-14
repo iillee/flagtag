@@ -8,7 +8,7 @@ import { combatClientSystem } from './systems/combatSystem'
 
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 
-import { addPlayer, removePlayer } from './gameState/flagHoldTime'
+import { addPlayer, removePlayer, nameResolverSystem } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
 import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
@@ -138,4 +138,5 @@ export async function main() {
   engine.addSystem(flagClientSystem)
   engine.addSystem(combatClientSystem)
   engine.addSystem(beaconClientSystem)
+  engine.addSystem(nameResolverSystem)
 }

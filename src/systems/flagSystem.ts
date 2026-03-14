@@ -24,6 +24,7 @@ import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
+import { predictAttackLocally } from './combatSystem'
 
 // Visual clone system for smooth flag carrying
 let carryCloneEntity: Entity | null = null
@@ -202,6 +203,10 @@ let prevCarrierId: string = ''
 let pickupSoundEntity: Entity | null = null
 let dropSoundEntity: Entity | null = null
 
+// Optimistic sound tracking — prevent duplicate plays when CRDT state catches up
+let skipNextPickupSound = false
+let skipNextDropSound = false
+
 // Cleanup function to prevent clone duplication
 function cleanupClone(): void {
   if (carryCloneEntity !== null) { 
@@ -285,6 +290,8 @@ export function flagClientSystem(dt: number): void {
     
     if (amCarrying) {
       console.log('[C.1] E pressed - I am carrying, sending requestDrop')
+      playDropSound() // Immediate local feedback
+      skipNextDropSound = true
       room.send('requestDrop', { t: 0 })
     } else {
       let flagNearby = false
@@ -305,9 +312,12 @@ export function flagClientSystem(dt: number): void {
       }
       if (flagNearby) {
         console.log('[C.4] E pressed - sending requestPickup')
+        playPickupSound() // Immediate local feedback
+        skipNextPickupSound = true
         room.send('requestPickup', { t: 0 })
       } else {
         console.log('[C.5] E pressed - sending requestAttack (no flag nearby)')
+        predictAttackLocally() // Immediate local VFX + sound
         room.send('requestAttack', { t: 0 })
       }
     }
@@ -323,7 +333,11 @@ export function flagClientSystem(dt: number): void {
       
       if (flag.state === FlagState.Carried) {
         if (stateChanged) {
-          playPickupSound()
+          if (skipNextPickupSound) {
+            skipNextPickupSound = false
+          } else {
+            playPickupSound()
+          }
           console.log('[C.11] STATE CHANGED to Carried - new carrier:', flag.carrierPlayerId.slice(0, 8))
           
           // Clean up any existing clone first
@@ -357,7 +371,11 @@ export function flagClientSystem(dt: number): void {
           
           console.log('[C.12] Created clone for carrier:', flag.carrierPlayerId.slice(0, 8))
         } else if (carrierChanged) {
-          playPickupSound()
+          if (skipNextPickupSound) {
+            skipNextPickupSound = false
+          } else {
+            playPickupSound()
+          }
           console.log('[C.13] CARRIER CHANGED (state stayed Carried) - old:', prevCarrierId.slice(0, 8), 'new:', flag.carrierPlayerId.slice(0, 8))
           
           // Clean up old clone
@@ -393,7 +411,11 @@ export function flagClientSystem(dt: number): void {
 
       } else if (flag.state === FlagState.Dropped || flag.state === FlagState.AtBase) {
         if (stateChanged) {
-          playDropSound()
+          if (skipNextDropSound) {
+            skipNextDropSound = false
+          } else {
+            playDropSound()
+          }
           console.log('[C.15] STATE CHANGED to', flag.state === FlagState.Dropped ? 'Dropped' : 'AtBase', '- cleaning up clone')
           
           // Clean up clone

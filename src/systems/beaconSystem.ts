@@ -8,7 +8,7 @@ import { Flag, FlagState } from '../shared/components'
 
 // ── Configuration ──
 const BEACON_HEIGHT = 110
-const BEACON_Y_OFFSET = 3.5   // raise base above the flag model top
+const BEACON_Y_OFFSET = 5.0   // raise base above the flag model top (high enough to clear carried flag)
 const INNER_WIDTH = 0.5
 const OUTER_WIDTH = 2.0
 const INNER_ALPHA = 0.35

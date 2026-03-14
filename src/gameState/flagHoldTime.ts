@@ -1,5 +1,7 @@
-import { engine } from '@dcl/sdk/ecs'
+import { engine, PlayerIdentityData } from '@dcl/sdk/ecs'
+import { getPlayer } from '@dcl/sdk/players'
 import { PlayerFlagHoldTime, Flag, FlagState } from '../shared/components'
+import { room } from '../shared/messages'
 
 /** Players in the scene (userId -> display name). Updated via onEnterScene / onLeaveScene. */
 const playersInScene = new Map<string, string>()
@@ -35,6 +37,54 @@ export function getKnownPlayerName(userId: string): string | null {
   const sceneName = playersInScene.get(key)
   if (sceneName && isRealName(sceneName)) return sceneName
   return knownPlayerNames.get(key) ?? null
+}
+
+/**
+ * Client-side name resolution system.
+ * Periodically scans all players in the scene via getPlayer() and updates
+ * the local name cache when a real display name is resolved. This catches
+ * names that weren't ready when onEnterScene first fired.
+ *
+ * For the LOCAL player, it also sends registerName to the server so that
+ * leaderboard/visitor data gets updated. For OTHER players, the client-side
+ * cache is sufficient since UI applies overrides at render time.
+ */
+let nameResolvTimer = 0
+const NAME_RESOLVE_INTERVAL = 2.0 // seconds between scans
+
+export function nameResolverSystem(dt: number): void {
+  nameResolvTimer += dt
+  if (nameResolvTimer < NAME_RESOLVE_INTERVAL) return
+  nameResolvTimer = 0
+
+  const localPlayer = getPlayer()
+  const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
+
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    const userId = identity.address
+    if (!userId) continue
+    const key = userId.toLowerCase()
+
+    // Already have a real name cached — skip
+    if (knownPlayerNames.has(key)) continue
+
+    // Try to resolve via getPlayer (reads AvatarBase.name)
+    const data = getPlayer({ userId })
+    if (data && isRealName(data.name)) {
+      knownPlayerNames.set(key, data.name)
+
+      // Update playersInScene if they're still here
+      if (playersInScene.has(key)) {
+        playersInScene.set(key, data.name)
+      }
+
+      // Only send registerName to the server for the LOCAL player's own name
+      // (context.from on the server is always the sender's userId)
+      if (key === localUserId) {
+        room.send('registerName', { name: data.name })
+      }
+    }
+  }
 }
 
 /** For UI: list of players with hold times from synced component. */
