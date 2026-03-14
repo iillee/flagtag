@@ -240,10 +240,12 @@ function PlayerListUi() {
         AudioSource.create(trumpetSoundEntity, {
           audioClipUrl: 'assets/sounds/trumpets.mp3',
           playing: true,
-          volume: 0.7,
+          volume: 0.8,
+          loop: false,
           global: true
         })
         hasPlayedTrumpetSound = true
+        console.log('[UI.Trumpet] Trumpet entity created and playing')
         
         console.log('[UI.4] Trumpet sound created, winners:', timer.roundWinnerJson)
       } else {

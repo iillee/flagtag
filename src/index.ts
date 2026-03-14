@@ -1,5 +1,5 @@
 import { Vector3 } from '@dcl/sdk/math'
-import { engine, Transform, AudioSource, MeshCollider, CameraModeArea, CameraType, AvatarModifierArea, AvatarModifierType } from '@dcl/sdk/ecs'
+import { engine, Transform, AudioSource, MeshCollider, AvatarModifierArea, AvatarModifierType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
@@ -101,22 +101,6 @@ export async function main() {
     loop: true,
     volume: 0.175,
     global: true
-  })
-
-  // Default to third-person camera, then remove the area so player can change freely
-  const camArea = engine.addEntity()
-  Transform.create(camArea, { position: Vector3.create(80, 120, 120) })
-  CameraModeArea.create(camArea, {
-    area: Vector3.create(200, 300, 280),
-    mode: CameraType.CT_THIRD_PERSON
-  })
-  let camRemoveTimer = 2.0
-  engine.addSystem((dt: number) => {
-    camRemoveTimer -= dt
-    if (camRemoveTimer <= 0) {
-      engine.removeEntity(camArea)
-      return camRemoveTimer = -999 // stop checking
-    }
   })
 
   // Disable passport UI (clicking on avatars to view profiles)

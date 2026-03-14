@@ -782,6 +782,9 @@ function playerTrackingSystem(): void {
 // Prevent duplicate round end triggers - track the actual roundEndTimeMs we processed
 let lastProcessedRoundEndTime = 0
 
+// Track last debug log time
+let lastTimerDebugLog = 0
+
 function countdownServerSystem(): void {
   const now = Date.now()
   const timer = CountdownTimer.getOrNull(countdownEntity)
@@ -792,25 +795,36 @@ function countdownServerSystem(): void {
   
   const intervalMs = 5 * 60 * 1000 // 5 minutes in milliseconds
   
-  // Round end: trigger when current time reaches or passes roundEndTimeMs
-  // This ensures round ends exactly at 0:00 on the countdown
+  // Debug: Log timer state every 30 seconds
+  if (now - lastTimerDebugLog > 30000) {
+    lastTimerDebugLog = now
+    const secondsUntilEnd = Math.floor((timer.roundEndTimeMs - now) / 1000)
+    console.log('[Server.Timer] secondsUntilEnd:', secondsUntilEnd, 'roundEndTimeMs:', new Date(timer.roundEndTimeMs).toISOString(), 'triggered:', timer.roundEndTriggered)
+  }
+  
+  // Round end: trigger exactly when we reach roundEndTimeMs (the UTC boundary)
+  // The splash will show the winner from the previous round and display during the first 3 seconds of the new round
   if (!timer.roundEndTriggered && now >= timer.roundEndTimeMs) {
-    // Prevent duplicate triggers - only process each unique roundEndTimeMs once
+    // Prevent duplicate triggers - only process each roundEndTimeMs once
     if (timer.roundEndTimeMs === lastProcessedRoundEndTime) {
-      return // Already processed this round end
+      return
     }
     lastProcessedRoundEndTime = timer.roundEndTimeMs
     
     const currentBoundary = Math.floor(now / intervalMs) * intervalMs
-    const msAfterBoundary = now - currentBoundary
-    console.log('[Server] ⏰ Round end triggered! UTC boundary:', new Date(currentBoundary).toISOString(), `(${msAfterBoundary}ms after)`)
+    const msAfter = now - timer.roundEndTimeMs
     
-    // Update the timer's roundEndTimeMs to the next boundary for the new round
+    console.log('[Server] ⏰ Round end! Triggered at roundEndTimeMs:', new Date(timer.roundEndTimeMs).toISOString(), `(${msAfter}ms after)`)
+    console.log('[Server] Current boundary:', new Date(currentBoundary).toISOString())
+    
+    // Calculate next boundary
+    const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
+    
+    // Update the timer's roundEndTimeMs to the next boundary for the next round
     const mutable = CountdownTimer.getMutable(countdownEntity)
-    const nextBoundary = currentBoundary + intervalMs
     mutable.roundEndTimeMs = nextBoundary
     
-    console.log('[Server] Next round ends at:', new Date(nextBoundary).toISOString())
+    console.log('[Server] Next round will end at:', new Date(nextBoundary).toISOString())
     
     handleRoundEnd().catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
@@ -854,17 +868,13 @@ async function handleRoundEnd(): Promise<void> {
     }
   })
 
-  // ── 3. Set timer: splash + next round time IMMEDIATELY ──
-  const intervalMs = 5 * 60 * 1000 // 5 minutes
-  const nextRoundEndTime = (Math.floor(now / intervalMs) + 1) * intervalMs
-  
+  // ── 3. Set timer: splash + winner data (roundEndTimeMs already set by countdownServerSystem) ──
   const timerMutable = CountdownTimer.getMutable(countdownEntity)
   timerMutable.roundEndTriggered = true
   timerMutable.roundEndDisplayUntilMs = now + SPLASH_DURATION_MS
-  timerMutable.roundEndTimeMs = nextRoundEndTime
   timerMutable.roundWinnerJson = JSON.stringify(winnerSnapshot)
   
-  console.log('[Server] Round ended, next round ends at:', new Date(nextRoundEndTime).toISOString())
+  console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
 
   // ── 4. Update leaderboard ──
   if (maxSeconds > 0) {
