@@ -4,7 +4,9 @@ import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, VisitorAnalytics,
-  getHoldTimeEntityEnumId, getNextRoundEndTimeMs,
+  Banana, BANANA_LIFETIME_SEC, BANANA_COOLDOWN_SEC, BANANA_MAX_ACTIVE, BANANA_TRIGGER_RADIUS,
+  Shell, SHELL_LIFETIME_SEC, SHELL_COOLDOWN_SEC, SHELL_MAX_ACTIVE, SHELL_TRIGGER_RADIUS,
+  getHoldTimeEntityEnumId, getNextRoundEndTimeMs, getNextBananaSyncId, getNextShellSyncId,
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString
 } from '../shared/components'
 import { room } from '../shared/messages'
@@ -41,6 +43,36 @@ let lastLeaderboardResetDay = ''
 // ── Visitor tracking ──
 const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesToday: number }>()
 let lastVisitorResetDay = ''
+
+// ── Banana state ──
+const BANANA_MODEL_SRC = 'assets/scene/Models/banana.glb'
+/** Track last banana drop time per player for cooldown. */
+const lastBananaDropTime = new Map<string, number>()
+/** Track active banana entities for cleanup, with per-banana gravity state. */
+interface ActiveBanana {
+  entity: Entity
+  droppedBy: string
+  droppedAtMs: number
+  falling: boolean
+  fallVelocity: number
+  targetY: number          // ground Y estimated by client raycast
+  groundResolved: boolean  // true once client raycast has reported ground
+}
+const activeBananas: ActiveBanana[] = []
+
+// ── Shell state ──
+const SHELL_MODEL_SRC = 'assets/scene/Models/shell.glb'
+const lastShellDropTime = new Map<string, number>()
+interface ActiveShell {
+  entity: Entity
+  droppedBy: string
+  droppedAtMs: number
+  falling: boolean
+  fallVelocity: number
+  targetY: number
+  groundResolved: boolean
+}
+const activeShells: ActiveShell[] = []
 
 // Gravity state for dropped flag
 let flagFalling = false
@@ -388,6 +420,8 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(countdownServerSystem)
   engine.addSystem(visitorTrackingServerSystem)
   engine.addSystem(nameResolverServerSystem)
+  engine.addSystem(bananaServerSystem)
+  engine.addSystem(shellServerSystem)
 
   console.log('[Server] Flag Tag server ready')
 }
@@ -505,6 +539,70 @@ function registerHandlers(): void {
     if (!context) return
     console.log('[S.3] Received requestAttack from', context.from.slice(0, 8))
     handleAttack(context.from)
+  })
+  room.onMessage('requestBanana', (_data, context) => {
+    if (!context) return
+    console.log('[Server] Received requestBanana from', context.from.slice(0, 8))
+    handleBananaDrop(context.from)
+  })
+  room.onMessage('requestShell', (_data, context) => {
+    if (!context) return
+    console.log('[Server] Received requestShell from', context.from.slice(0, 8))
+    handleShellDrop(context.from)
+  })
+  room.onMessage('reportShellGroundY', (data, context) => {
+    if (!context) return
+    let closest: ActiveShell | null = null
+    let closestDist = 3
+    for (const shell of activeShells) {
+      const pos = Transform.get(shell.entity).position
+      const dx = pos.x - data.shellX
+      const dz = pos.z - data.shellZ
+      const dist = Math.sqrt(dx * dx + dz * dz)
+      if (dist < closestDist) {
+        closestDist = dist
+        closest = shell
+      }
+    }
+    if (closest && !closest.groundResolved) {
+      closest.targetY = Math.max(FLAG_MIN_Y, data.groundY)
+      closest.groundResolved = true
+      const currentY = Transform.get(closest.entity).position.y
+      if (currentY <= closest.targetY) {
+        const t = Transform.getMutable(closest.entity)
+        t.position = Vector3.create(t.position.x, closest.targetY, t.position.z)
+        closest.falling = false
+        closest.fallVelocity = 0
+      }
+    }
+  })
+  room.onMessage('reportBananaGroundY', (data, context) => {
+    if (!context) return
+    // Find the banana closest to the reported X/Z and update its ground target
+    let closest: ActiveBanana | null = null
+    let closestDist = 3 // must be within 3m horizontally
+    for (const banana of activeBananas) {
+      const pos = Transform.get(banana.entity).position
+      const dx = pos.x - data.bananaX
+      const dz = pos.z - data.bananaZ
+      const dist = Math.sqrt(dx * dx + dz * dz)
+      if (dist < closestDist) {
+        closestDist = dist
+        closest = banana
+      }
+    }
+    if (closest && !closest.groundResolved) {
+      closest.targetY = Math.max(FLAG_MIN_Y, data.groundY)
+      closest.groundResolved = true
+      // If already at or below target, snap
+      const currentY = Transform.get(closest.entity).position.y
+      if (currentY <= closest.targetY) {
+        const t = Transform.getMutable(closest.entity)
+        t.position = Vector3.create(t.position.x, closest.targetY, t.position.z)
+        closest.falling = false
+        closest.fallVelocity = 0
+      }
+    }
   })
   room.onMessage('reportGroundY', (data, context) => {
     if (!context) return
@@ -709,6 +807,230 @@ function handleAttack(attackerId: string): void {
   }
 }
 
+function handleBananaDrop(playerId: string): void {
+  const now = Date.now()
+
+  // Cooldown check
+  const lastDrop = lastBananaDropTime.get(playerId) ?? 0
+  if (now - lastDrop < BANANA_COOLDOWN_SEC * 1000) {
+    console.log('[Server] Banana denied: cooldown active, wait', ((BANANA_COOLDOWN_SEC * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
+    return
+  }
+
+  // Max active banana check
+  const playerBananas = activeBananas.filter(b => b.droppedBy === playerId)
+  if (playerBananas.length >= BANANA_MAX_ACTIVE) {
+    console.log('[Server] Banana denied: max active bananas reached (', BANANA_MAX_ACTIVE, ')')
+    return
+  }
+
+  // Get player position
+  const playerPos = getPlayerPosition(playerId)
+  if (!playerPos) {
+    console.log('[Server] Banana denied: player position not found')
+    return
+  }
+
+  // Drop banana slightly behind the player (at their feet)
+  const dropPos = Vector3.create(playerPos.x, playerPos.y, playerPos.z)
+
+  // Create synced banana entity
+  const bananaEntity = engine.addEntity()
+  Transform.create(bananaEntity, {
+    position: dropPos,
+    scale: Vector3.create(0.01, 0.01, 0.01)
+  })
+  GltfContainer.create(bananaEntity, {
+    src: BANANA_MODEL_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
+  Banana.create(bananaEntity, {
+    droppedByPlayerId: playerId,
+    droppedAtMs: now,
+  })
+  syncEntity(bananaEntity, [Transform.componentId, GltfContainer.componentId, Banana.componentId], getNextBananaSyncId())
+
+  activeBananas.push({
+    entity: bananaEntity,
+    droppedBy: playerId,
+    droppedAtMs: now,
+    falling: true,
+    fallVelocity: 0,
+    targetY: FLAG_MIN_Y,       // default floor until client reports ground
+    groundResolved: false,
+  })
+  lastBananaDropTime.set(playerId, now)
+
+  // Notify clients for sound/VFX + ground raycast
+  room.send('bananaDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z })
+
+  console.log('[Server] 🍌 Banana dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1), '— active bananas:', activeBananas.length)
+}
+
+/** Server system: check banana gravity, triggers (player proximity), and expiry. */
+function bananaServerSystem(dt: number): void {
+  const now = Date.now()
+  const clampedDt = Math.min(dt, 0.1)
+
+  for (let i = activeBananas.length - 1; i >= 0; i--) {
+    const banana = activeBananas[i]
+
+    // Gravity — pull banana down to ground
+    if (banana.falling) {
+      banana.fallVelocity += FLAG_GRAVITY * clampedDt
+      const pos = Transform.get(banana.entity).position
+      let newY = pos.y - banana.fallVelocity * clampedDt
+      if (newY <= banana.targetY) {
+        newY = banana.targetY
+        banana.falling = false
+        banana.fallVelocity = 0
+      }
+      const t = Transform.getMutable(banana.entity)
+      t.position = Vector3.create(pos.x, newY, pos.z)
+    }
+
+    // Expiry check
+    const ageMs = now - banana.droppedAtMs
+    if (ageMs > BANANA_LIFETIME_SEC * 1000) {
+      console.log('[Server] 🍌 Banana expired, removing')
+      engine.removeEntity(banana.entity)
+      activeBananas.splice(i, 1)
+      continue
+    }
+
+    // Trigger check — any player (except the dropper) walks over it
+    const bananaPos = Transform.get(banana.entity).position
+    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      if (identity.address === banana.droppedBy) continue // Can't trigger your own banana
+
+      const playerPos = getPlayerPosition(identity.address)
+      if (!playerPos) continue
+
+      const dist = Vector3.distance(playerPos, bananaPos)
+      if (dist < BANANA_TRIGGER_RADIUS) {
+        console.log('[Server] 🍌 Banana triggered by', identity.address.slice(0, 8), '! Staggering...')
+
+        // Single message — client handles all effects (VFX, sound, stagger) in one frame
+        room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: identity.address })
+
+        // Remove the banana
+        engine.removeEntity(banana.entity)
+        activeBananas.splice(i, 1)
+        break // This banana is consumed
+      }
+    }
+  }
+}
+
+function handleShellDrop(playerId: string): void {
+  const now = Date.now()
+
+  // Cooldown check
+  const lastDrop = lastShellDropTime.get(playerId) ?? 0
+  if (now - lastDrop < SHELL_COOLDOWN_SEC * 1000) {
+    console.log('[Server] Shell denied: cooldown active')
+    return
+  }
+
+  // Max active check
+  const playerShells = activeShells.filter(s => s.droppedBy === playerId)
+  if (playerShells.length >= SHELL_MAX_ACTIVE) {
+    console.log('[Server] Shell denied: max active shells reached')
+    return
+  }
+
+  // Get player position
+  const playerPos = getPlayerPosition(playerId)
+  if (!playerPos) {
+    console.log('[Server] Shell denied: player position not found')
+    return
+  }
+
+  const dropPos = Vector3.create(playerPos.x, playerPos.y, playerPos.z)
+
+  // Create synced shell entity
+  const shellEntity = engine.addEntity()
+  Transform.create(shellEntity, {
+    position: dropPos,
+    scale: Vector3.create(0.01, 0.01, 0.01)
+  })
+  GltfContainer.create(shellEntity, {
+    src: SHELL_MODEL_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
+  Shell.create(shellEntity, {
+    droppedByPlayerId: playerId,
+    droppedAtMs: now,
+  })
+  syncEntity(shellEntity, [Transform.componentId, GltfContainer.componentId, Shell.componentId], getNextShellSyncId())
+
+  activeShells.push({
+    entity: shellEntity,
+    droppedBy: playerId,
+    droppedAtMs: now,
+    falling: true,
+    fallVelocity: 0,
+    targetY: FLAG_MIN_Y,
+    groundResolved: false,
+  })
+  lastShellDropTime.set(playerId, now)
+
+  room.send('shellDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z })
+  console.log('[Server] 🐚 Shell dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1))
+}
+
+/** Server system: check shell gravity, triggers, and expiry. */
+function shellServerSystem(dt: number): void {
+  const now = Date.now()
+  const clampedDt = Math.min(dt, 0.1)
+
+  for (let i = activeShells.length - 1; i >= 0; i--) {
+    const shell = activeShells[i]
+
+    // Gravity
+    if (shell.falling) {
+      shell.fallVelocity += FLAG_GRAVITY * clampedDt
+      const pos = Transform.get(shell.entity).position
+      let newY = pos.y - shell.fallVelocity * clampedDt
+      if (newY <= shell.targetY) {
+        newY = shell.targetY
+        shell.falling = false
+        shell.fallVelocity = 0
+      }
+      const t = Transform.getMutable(shell.entity)
+      t.position = Vector3.create(pos.x, newY, pos.z)
+    }
+
+    // Expiry
+    if (now - shell.droppedAtMs > SHELL_LIFETIME_SEC * 1000) {
+      console.log('[Server] 🐚 Shell expired, removing')
+      engine.removeEntity(shell.entity)
+      activeShells.splice(i, 1)
+      continue
+    }
+
+    // Trigger check — any player (except the dropper) walks over it
+    const shellPos = Transform.get(shell.entity).position
+    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      if (identity.address === shell.droppedBy) continue
+
+      const playerPos = getPlayerPosition(identity.address)
+      if (!playerPos) continue
+
+      const dist = Vector3.distance(playerPos, shellPos)
+      if (dist < SHELL_TRIGGER_RADIUS) {
+        console.log('[Server] 🐚 Shell triggered by', identity.address.slice(0, 8))
+        room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: identity.address })
+        engine.removeEntity(shell.entity)
+        activeShells.splice(i, 1)
+        break
+      }
+    }
+  }
+}
+
 // ── Server Systems ──
 
 function flagServerSystem(dt: number): void {
@@ -796,7 +1118,7 @@ function holdTimeServerSystem(dt: number): void {
   holdTimeAccum += Math.min(dt, 0.1)
   if (holdTimeAccum < HOLD_TIME_SYNC_INTERVAL) return
 
-  const entity = holdTimeEntities.get(flag.carrierPlayerId)
+  const entity = holdTimeEntities.get(flag.carrierPlayerId.toLowerCase())
   if (entity) {
     const mutable = PlayerFlagHoldTime.getMutable(entity)
     mutable.seconds += holdTimeAccum
@@ -822,13 +1144,14 @@ function playerTrackingSystem(): void {
       // Player just connected (or reconnected)
       currentlyConnected.add(userId)
 
-      // Create synced hold time entity only on first ever join
-      if (!knownPlayers.has(userId)) {
-        knownPlayers.add(userId)
+      // Create synced hold time entity only on first ever join (case-insensitive)
+      const userKey = userId.toLowerCase()
+      if (!knownPlayers.has(userKey)) {
+        knownPlayers.add(userKey)
         const entity = engine.addEntity()
         PlayerFlagHoldTime.create(entity, { playerId: userId, seconds: 0 })
-        syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(userId))
-        holdTimeEntities.set(userId, entity)
+        syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(userKey))
+        holdTimeEntities.set(userKey, entity)
       }
 
       // Start/restart visitor session — use persisted name if available
@@ -1009,7 +1332,23 @@ async function handleRoundEnd(): Promise<void> {
     await persistLeaderboard(json)
   }
 
-  // ── 5. Reset flag to random spawn point ──
+  // ── 5. Remove all active bananas ──
+  for (const banana of activeBananas) {
+    engine.removeEntity(banana.entity)
+  }
+  activeBananas.length = 0
+  lastBananaDropTime.clear()
+  console.log('[Server] 🍌 All bananas cleared for new round')
+
+  // ── 5b. Remove all active shells ──
+  for (const shell of activeShells) {
+    engine.removeEntity(shell.entity)
+  }
+  activeShells.length = 0
+  lastShellDropTime.clear()
+  console.log('[Server] 🐚 All shells cleared for new round')
+
+  // ── 6. Reset flag to random spawn point ──
   resetGravityState()
   const spawnPoint = getRandomSpawnPoint()
   console.log('[Server] Round ended, flag respawning at random location to prevent spawn camping')

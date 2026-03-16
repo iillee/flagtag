@@ -97,7 +97,7 @@ function hideVfxEntity(entity: Entity): void {
   if (Tween.has(entity)) Tween.deleteFrom(entity)
 }
 
-function showHitEffect(targetPos: Vector3): void {
+export function showHitEffect(targetPos: Vector3): void {
   initPools()
   const centerPos = Vector3.add(targetPos, Vector3.create(0, 1.2, 0))
   const hitRotY = Math.random() * 360
@@ -169,7 +169,7 @@ const hitSoundPool: Entity[] = []
 let hitSoundPoolIndex = 0
 let missSoundEntity: Entity | null = null
 
-function playHitSound(position: Vector3): void {
+export function playHitSound(position: Vector3): void {
   while (hitSoundPool.length < HIT_SOUND_POOL_SIZE) {
     const e = engine.addEntity()
     Transform.create(e, { position: Vector3.Zero() })

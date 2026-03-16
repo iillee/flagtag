@@ -5,6 +5,8 @@ import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
+import { bananaClientSystem } from './systems/bananaSystem'
+import { shellClientSystem } from './systems/shellSystem'
 
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 
@@ -71,8 +73,8 @@ export async function main() {
   }
 
   onEnterScene((player) => {
-    // Skip local player - already added above
-    if (local && player.userId === local.userId) {
+    // Skip local player - already added above (case-insensitive comparison)
+    if (local && player.userId.toLowerCase() === local.userId.toLowerCase()) {
       // Update local player name if onEnterScene has better data
       const name = player.name || ''
       if (name && !name.startsWith('0x') && name !== registeredName) {
@@ -359,4 +361,6 @@ export async function main() {
   engine.addSystem(combatClientSystem)
   engine.addSystem(beaconClientSystem)
   engine.addSystem(nameResolverSystem)
+  engine.addSystem(bananaClientSystem)
+  engine.addSystem(shellClientSystem)
 }

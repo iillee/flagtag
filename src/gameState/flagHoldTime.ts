@@ -89,28 +89,37 @@ export function nameResolverSystem(dt: number): void {
 
 /** For UI: list of players with hold times from synced component. */
 export function getPlayersWithHoldTimes(): { userId: string; name: string; seconds: number }[] {
-  // Build lookup from synced hold-time entities, keyed by lowercase playerId
+  // Build lookup from synced hold-time entities, keyed by lowercase playerId.
+  // Multiple entities may exist for the same player (e.g. after server restart),
+  // so take the MAX seconds to avoid showing stale zero-score duplicates.
   const synced = new Map<string, number>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
-    synced.set(data.playerId.toLowerCase(), data.seconds)
+    const key = data.playerId.toLowerCase()
+    const existing = synced.get(key) ?? 0
+    synced.set(key, Math.max(existing, data.seconds))
   }
+
+  // Build result from players currently in the scene
+  const seen = new Set<string>()
   const result: { userId: string; name: string; seconds: number }[] = []
   for (const [userId, name] of playersInScene) {
+    const key = userId.toLowerCase()
+    if (seen.has(key)) continue  // Defensive dedup
+    seen.add(key)
+
+    // Use best known display name
+    const displayName = getKnownPlayerName(userId) || name || userId.slice(0, 8)
     result.push({
       userId,
-      name: name || userId.slice(0, 8),
-      seconds: Math.floor(synced.get(userId) ?? 0)
+      name: displayName,
+      seconds: Math.floor(synced.get(key) ?? 0)
     })
   }
-  // Sort: players with points first (desc), then 0-score players at the bottom
+
+  // Sort: highest score first, 0-score players at the bottom alphabetically
   result.sort((a, b) => {
-    // Players with score always above players without
-    if (a.seconds > 0 && b.seconds === 0) return -1
-    if (a.seconds === 0 && b.seconds > 0) return 1
-    // Both have score: highest first
     if (a.seconds !== b.seconds) return b.seconds - a.seconds
-    // Tie-breaker: alphabetical by userId
-    return a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   })
   return result
 }

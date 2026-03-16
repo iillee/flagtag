@@ -50,7 +50,7 @@ function hashString(s: string): number {
 }
 
 export function getHoldTimeEntityEnumId(userId: string): number {
-  return HOLD_TIME_ENTITY_BASE + (hashString(userId) % 100000)
+  return HOLD_TIME_ENTITY_BASE + (hashString(userId.toLowerCase()) % 100000)
 }
 
 // ── Countdown timer ──
@@ -152,6 +152,62 @@ export const VisitorAnalytics = engine.defineComponent('ctf-visitor-analytics', 
 })
 
 VisitorAnalytics.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
+// ── Banana (powerup) ──
+
+export const Banana = engine.defineComponent('ctf-banana', {
+  droppedByPlayerId: Schemas.String,
+  droppedAtMs: Schemas.Number,       // Date.now() when dropped — used for expiry
+}, {
+  droppedByPlayerId: '',
+  droppedAtMs: 0,
+})
+
+Banana.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
+/** How long a banana stays on the ground before despawning (seconds). */
+export const BANANA_LIFETIME_SEC = 15
+/** Cooldown between banana drops (seconds). */
+export const BANANA_COOLDOWN_SEC = 10
+/** Max bananas one player can have on the ground at once. */
+export const BANANA_MAX_ACTIVE = 3
+/** Radius for banana trigger (meters). */
+export const BANANA_TRIGGER_RADIUS = 2.0
+
+/** Sync ID range for bananas — supports up to 100 concurrent bananas. */
+const BANANA_SYNC_ID_BASE = 5000
+let bananaIdCounter = 0
+export function getNextBananaSyncId(): number {
+  return BANANA_SYNC_ID_BASE + (bananaIdCounter++ % 100)
+}
+
+// ── Shell (powerup) ──
+
+export const Shell = engine.defineComponent('ctf-shell', {
+  droppedByPlayerId: Schemas.String,
+  droppedAtMs: Schemas.Number,
+}, {
+  droppedByPlayerId: '',
+  droppedAtMs: 0,
+})
+
+Shell.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
+/** How long a shell stays on the ground before despawning (seconds). */
+export const SHELL_LIFETIME_SEC = 15
+/** Cooldown between shell drops (seconds). */
+export const SHELL_COOLDOWN_SEC = 10
+/** Max shells one player can have on the ground at once. */
+export const SHELL_MAX_ACTIVE = 3
+/** Radius for shell trigger (meters). */
+export const SHELL_TRIGGER_RADIUS = 2.0
+
+/** Sync ID range for shells — supports up to 100 concurrent shells. */
+const SHELL_SYNC_ID_BASE = 6000
+let shellIdCounter = 0
+export function getNextShellSyncId(): number {
+  return SHELL_SYNC_ID_BASE + (shellIdCounter++ % 100)
+}
 
 export enum SyncIds {
   FLAG = 1,

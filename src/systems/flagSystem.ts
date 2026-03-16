@@ -219,6 +219,7 @@ function cleanupClone(): void {
     engine.removeEntity(attachAnchorEntity)
     attachAnchorEntity = null 
   }
+
 }
 
 function playPickupSound(): void {
@@ -343,11 +344,10 @@ export function flagClientSystem(dt: number): void {
           // Clean up any existing clone first
           cleanupClone()
           
-          // Move server flag out of the way (but keep it visible for sync)
-          const serverTransform = Transform.getMutable(flagEntity)
-          serverTransform.position = Vector3.create(0, -50, 0) // Hidden underground but still exists
+          // Hide server flag with visibility (don't move it — avoids CRDT conflicts)
+          VisibilityComponent.createOrReplace(flagEntity, { visible: false })
           
-          // Create avatar attach anchor (same as blue flag system)
+          // Create avatar attach anchor + visual clone for carrier
           attachAnchorEntity = engine.addEntity()
           Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
           AvatarAttach.create(attachAnchorEntity, {
@@ -355,7 +355,6 @@ export function flagClientSystem(dt: number): void {
             anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
           })
 
-          // Create visual clone as child of anchor (same as blue flag system)
           carryCloneEntity = engine.addEntity()
           Transform.create(carryCloneEntity, {
             parent: attachAnchorEntity,
@@ -381,9 +380,8 @@ export function flagClientSystem(dt: number): void {
           // Clean up old clone
           cleanupClone()
           
-          // Move server flag out of the way
-          const serverTransform = Transform.getMutable(flagEntity)
-          serverTransform.position = Vector3.create(0, -50, 0)
+          // Hide server flag with visibility
+          VisibilityComponent.createOrReplace(flagEntity, { visible: false })
           
           // Create new clone for new carrier
           attachAnchorEntity = engine.addEntity()
@@ -406,7 +404,7 @@ export function flagClientSystem(dt: number): void {
             invisibleMeshesCollisionMask: 0
           })
           
-          console.log('[C.14] Created NEW clone for new carrier after steal:', flag.carrierPlayerId.slice(0, 8))
+          console.log('[C.14] Created clone for new carrier after steal:', flag.carrierPlayerId.slice(0, 8))
         }
 
       } else if (flag.state === FlagState.Dropped || flag.state === FlagState.AtBase) {
@@ -418,10 +416,10 @@ export function flagClientSystem(dt: number): void {
           }
           console.log('[C.15] STATE CHANGED to', flag.state === FlagState.Dropped ? 'Dropped' : 'AtBase', '- cleaning up clone')
           
-          // Clean up clone
+          // Clean up all clones (AvatarAttach + local fallback)
           cleanupClone()
           
-          // Restore server flag visibility and position (server will set correct position)
+          // Restore server flag visibility (server controls position via CRDT)
           VisibilityComponent.createOrReplace(flagEntity, { visible: true })
 
           if (flag.state === FlagState.Dropped) {
@@ -431,11 +429,13 @@ export function flagClientSystem(dt: number): void {
       }
     }
 
-    // Ensure server flag is always visible (even when moved out of the way)
-    if (!VisibilityComponent.has(flagEntity)) {
-      VisibilityComponent.create(flagEntity, { visible: true })
-    } else if (!VisibilityComponent.get(flagEntity).visible) {
-      VisibilityComponent.createOrReplace(flagEntity, { visible: true })
+    // Ensure server flag is visible when NOT carried (safety net for missed transitions)
+    if (flag.state !== FlagState.Carried) {
+      if (!VisibilityComponent.has(flagEntity)) {
+        VisibilityComponent.create(flagEntity, { visible: true })
+      } else if (!VisibilityComponent.get(flagEntity).visible) {
+        VisibilityComponent.createOrReplace(flagEntity, { visible: true })
+      }
     }
 
     prevFlagState = flag.state
@@ -446,15 +446,17 @@ export function flagClientSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   carryAnimTime += clampedDt
 
-  // Animate the visual clone when carried (same as blue flag)
+  // Animate the AvatarAttach clone when carried (visible to other players)
+  const bobY = CARRY_BOB_AMPLITUDE * Math.sin(carryAnimTime * CARRY_BOB_SPEED)
+  const angleDeg = (carryAnimTime * CARRY_ROT_SPEED_DEG_PER_SEC) % 360
+
   if (carryCloneEntity !== null && Transform.has(carryCloneEntity)) {
-    const bobY = CARRY_BOB_AMPLITUDE * Math.sin(carryAnimTime * CARRY_BOB_SPEED)
-    const angleDeg = (carryAnimTime * CARRY_ROT_SPEED_DEG_PER_SEC) % 360
-    
     const cloneTransform = Transform.getMutable(carryCloneEntity)
     cloneTransform.position = Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y + bobY, FLAG_CARRY_OFFSET.z)
     cloneTransform.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
   }
+
+
 
   // Handle ground raycast response
   if (groundRayEntity !== null) {

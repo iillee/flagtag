@@ -6,6 +6,8 @@ import {
   getCurrentFlagCarrierUserId,
   getKnownPlayerName
 } from './gameState/flagHoldTime'
+import { isBananaOnCooldown, getBananaCooldownRemaining } from './systems/bananaSystem'
+import { isShellOnCooldown, getShellCooldownRemaining } from './systems/shellSystem'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
@@ -672,6 +674,88 @@ Whoever has the most points at the end of the round wins!"
           </UiEntity>
         </UiEntity>
       )}
+
+      {/* Shell cooldown indicator — just left of the banana icon */}
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { right: 16 + 48 + PANEL_WIDTH + GAP_LEFT_OF_SCOREBOARD + ICON_PANEL_WIDTH + 8 + 80 + 8, top: 14 },
+          width: 80,
+          height: 80,
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 40,
+        }}
+        uiBackground={{ color: PANEL_BG_SEMI }}
+      >
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            width: 56,
+            height: 56,
+          }}
+          uiBackground={{
+            textureMode: 'stretch',
+            texture: {
+              src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png'
+            },
+            color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+          }}
+        />
+        {isShellOnCooldown() && (
+          <Label
+            value={`${getShellCooldownRemaining()}`}
+            fontSize={32}
+            color={WHITE}
+            font="sans-serif"
+            uiTransform={{
+              positionType: 'absolute',
+            }}
+          />
+        )}
+      </UiEntity>
+
+      {/* Banana cooldown indicator — just left of the icon panel */}
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { right: 16 + 48 + PANEL_WIDTH + GAP_LEFT_OF_SCOREBOARD + ICON_PANEL_WIDTH + 8, top: 14 },
+          width: 80,
+          height: 80,
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 40,
+        }}
+        uiBackground={{ color: PANEL_BG_SEMI }}
+      >
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            width: 56,
+            height: 56,
+          }}
+          uiBackground={{
+            textureMode: 'stretch',
+            texture: {
+              src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png'
+            },
+            color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+          }}
+        />
+        {isBananaOnCooldown() && (
+          <Label
+            value={`${getBananaCooldownRemaining()}`}
+            fontSize={32}
+            color={WHITE}
+            font="sans-serif"
+            uiTransform={{
+              positionType: 'absolute',
+            }}
+          />
+        )}
+      </UiEntity>
 
       <UiEntity
         uiTransform={{
