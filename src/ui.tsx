@@ -337,16 +337,16 @@ function PlayerListUi() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 12, right: 12 },
-                width: 28,
-                height: 28,
+                position: { top: 8, right: 8 },
+                width: 56,
+                height: 56,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
               onMouseDown={() => { splashVisible = false }}
             >
-              <Label value="×" fontSize={22} color={CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={44} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
 
             {splashPlayers.length === 0 ? (
@@ -453,15 +453,15 @@ function PlayerListUi() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 12, right: 12 },
-                width: 28,
-                height: 28,
+                width: 56,
+                height: 56,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
               onMouseDown={() => setWinConditionOverlayVisible(false)}
             >
-              <Label value="×" fontSize={22} color={CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={44} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
             <Label value="How to Play" fontSize={28} color={LIGHT_BLUE} font="sans-serif" textAlign="top-left" />
             <UiEntity uiTransform={{ height: 8 }} />
@@ -512,15 +512,15 @@ Whoever has the most points at the end of the round wins!"
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 12, right: 12 },
-                width: 28,
-                height: 28,
+                width: 56,
+                height: 56,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
               onMouseDown={() => setLeaderboardOverlayVisible(false)}
             >
-              <Label value="×" fontSize={22} color={CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={44} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
             <Label value="Today's Leaderboard" fontSize={28} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: 12 }} />
@@ -582,15 +582,15 @@ Whoever has the most points at the end of the round wins!"
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 12, right: 12 },
-                width: 28,
-                height: 28,
+                width: 56,
+                height: 56,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
               onMouseDown={() => setAnalyticsOverlayVisible(false)}
             >
-              <Label value="×" fontSize={22} color={CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={44} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
             <Label value="Daily Visitors" fontSize={28} color={CORAL_RED} font="sans-serif" textAlign="top-left" />
             <UiEntity uiTransform={{ height: 16 }} />

@@ -1,5 +1,5 @@
-import { Vector3 } from '@dcl/sdk/math'
-import { engine, Transform, AudioSource, MeshCollider, AvatarModifierArea, AvatarModifierType } from '@dcl/sdk/ecs'
+import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
+import { engine, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
@@ -13,6 +13,7 @@ import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
 import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
 import { createAnalyticsOverlayEntity } from './components/analyticsOverlayState'
+import { movePlayerTo } from '~system/RestrictedActions'
 // Import shared components so they are registered on both server and client
 import './shared/components'
 import { room } from './shared/messages'
@@ -133,6 +134,225 @@ export async function main() {
     })
     MeshCollider.setBox(e)
   }
+
+  // Glowing orbs at green diamond block locations
+  const greenDiamondPositions = [
+    { x: 37, y: 0, z: 218.5 },       // Diamond - Green
+    { x: 100.56, y: 51.25, z: 165.5 } // Diamond - Green_2
+  ]
+  const ORB_COLOR = Color3.create(1.0, 0.45, 0.05) // Orange
+  const ORB_BASE_SCALE = 1.2
+
+  const orbEntities: ReturnType<typeof engine.addEntity>[] = []
+
+  for (const pos of greenDiamondPositions) {
+    const baseY = pos.y + 1
+
+    // Orb sphere with emissive glow material
+    const orb = engine.addEntity()
+    Transform.create(orb, {
+      position: Vector3.create(pos.x, baseY, pos.z),
+      scale: Vector3.create(ORB_BASE_SCALE, ORB_BASE_SCALE, ORB_BASE_SCALE)
+    })
+    MeshRenderer.setSphere(orb)
+    Material.setPbrMaterial(orb, {
+      albedoColor: Color4.create(1.0, 0.4, 0.0, 0.85),
+      emissiveColor: ORB_COLOR,
+      emissiveIntensity: 4.0,
+      roughness: 0.2,
+      metallic: 0.0,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
+    })
+
+    // Point light for glow bounce on surroundings
+    const light = engine.addEntity()
+    Transform.create(light, {
+      parent: orb,
+      position: Vector3.Zero()
+    })
+    LightSource.create(light, {
+      type: LightSource.Type.Point({}),
+      color: ORB_COLOR,
+      intensity: 150,
+      range: 12
+    })
+
+    orbEntities.push(orb)
+  }
+
+  // Pulsate orb scale over time
+  let orbPulseTime = 0
+  const ORB_PULSE_SPEED = 3.0
+  const ORB_PULSE_RANGE = 0.15 // ±15% scale oscillation
+  engine.addSystem((dt: number) => {
+    orbPulseTime += dt
+    const pulse = 1 + ORB_PULSE_RANGE * Math.sin(orbPulseTime * ORB_PULSE_SPEED)
+    const s = ORB_BASE_SCALE * pulse
+    for (const orb of orbEntities) {
+      if (Transform.has(orb)) {
+        const t = Transform.getMutable(orb)
+        t.scale = Vector3.create(s, s, s)
+      }
+    }
+  })
+
+  // Teleport sounds — one per orb, both fire on teleport
+  const orbSoundEntities: ReturnType<typeof engine.addEntity>[] = []
+  for (const pos of greenDiamondPositions) {
+    const snd = engine.addEntity()
+    Transform.create(snd, { position: Vector3.create(pos.x, pos.y + 1, pos.z) })
+    AudioSource.create(snd, {
+      audioClipUrl: 'assets/sounds/rs-teleport.mp3',
+      playing: false,
+      loop: false,
+      volume: 1,
+      global: false
+    })
+    orbSoundEntities.push(snd)
+  }
+
+  // Orb teleportation system — teleport player to the other orb on contact
+  const ORB_TRIGGER_RADIUS = 1.5
+  const ORB_LAND_OFFSET = 3 // meters away from destination orb
+  const TELEPORT_COOLDOWN = 1.0 // seconds
+  const wasInsideOrb = [false, false]
+  let orangeOrbCooldown = 0
+
+  engine.addSystem((dt: number) => {
+    if (orangeOrbCooldown > 0) orangeOrbCooldown -= dt
+    if (!Transform.has(engine.PlayerEntity)) return
+    const playerPos = Transform.get(engine.PlayerEntity).position
+
+    for (let i = 0; i < greenDiamondPositions.length; i++) {
+      const orbPos = greenDiamondPositions[i]
+      const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
+      const isInside = dist < ORB_TRIGGER_RADIUS
+
+      if (isInside && !wasInsideOrb[i] && orangeOrbCooldown <= 0) {
+        const destIndex = i === 0 ? 1 : 0
+        const dest = greenDiamondPositions[destIndex]
+
+        for (const snd of orbSoundEntities) {
+          const a = AudioSource.getMutable(snd)
+          a.currentTime = 0
+          a.playing = true
+        }
+
+        orangeOrbCooldown = TELEPORT_COOLDOWN
+
+        void movePlayerTo({
+          newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z)
+        })
+      }
+
+      wasInsideOrb[i] = isInside
+    }
+  })
+
+  // ── Blue Orb Pair ──
+  const blueOrbPositions = [
+    { x: 54, y: 0.3, z: 152 },
+    { x: 88.75, y: 17, z: 84.5 }
+  ]
+  const BLUE_ORB_COLOR = Color3.create(0.05, 0.3, 1.0) // Blue
+  const BLUE_ORB_BASE_SCALE = 1.2
+
+  const blueOrbEntities: ReturnType<typeof engine.addEntity>[] = []
+
+  for (const pos of blueOrbPositions) {
+    const baseY = pos.y + 1
+
+    const orb = engine.addEntity()
+    Transform.create(orb, {
+      position: Vector3.create(pos.x, baseY, pos.z),
+      scale: Vector3.create(BLUE_ORB_BASE_SCALE, BLUE_ORB_BASE_SCALE, BLUE_ORB_BASE_SCALE)
+    })
+    MeshRenderer.setSphere(orb)
+    Material.setPbrMaterial(orb, {
+      albedoColor: Color4.create(0.0, 0.2, 1.0, 0.85),
+      emissiveColor: BLUE_ORB_COLOR,
+      emissiveIntensity: 4.0,
+      roughness: 0.2,
+      metallic: 0.0,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
+    })
+
+    const light = engine.addEntity()
+    Transform.create(light, {
+      parent: orb,
+      position: Vector3.Zero()
+    })
+    LightSource.create(light, {
+      type: LightSource.Type.Point({}),
+      color: BLUE_ORB_COLOR,
+      intensity: 150,
+      range: 12
+    })
+
+    blueOrbEntities.push(orb)
+  }
+
+  // Pulsate blue orbs (reads shared orbPulseTime — already incremented by orange pulse system)
+  engine.addSystem(() => {
+    const pulse = 1 + ORB_PULSE_RANGE * Math.sin(orbPulseTime * ORB_PULSE_SPEED)
+    const s = BLUE_ORB_BASE_SCALE * pulse
+    for (const orb of blueOrbEntities) {
+      if (Transform.has(orb)) {
+        const t = Transform.getMutable(orb)
+        t.scale = Vector3.create(s, s, s)
+      }
+    }
+  })
+
+  // Blue orb teleport sounds
+  const blueOrbSoundEntities: ReturnType<typeof engine.addEntity>[] = []
+  for (const pos of blueOrbPositions) {
+    const snd = engine.addEntity()
+    Transform.create(snd, { position: Vector3.create(pos.x, pos.y + 1, pos.z) })
+    AudioSource.create(snd, {
+      audioClipUrl: 'assets/sounds/rs-teleport.mp3',
+      playing: false,
+      loop: false,
+      volume: 1,
+      global: false
+    })
+    blueOrbSoundEntities.push(snd)
+  }
+
+  // Blue orb teleportation system — linked only to each other
+  const wasInsideBlueOrb = [false, false]
+  let blueOrbCooldown = 0
+
+  engine.addSystem((dt: number) => {
+    if (blueOrbCooldown > 0) blueOrbCooldown -= dt
+    if (!Transform.has(engine.PlayerEntity)) return
+    const playerPos = Transform.get(engine.PlayerEntity).position
+
+    for (let i = 0; i < blueOrbPositions.length; i++) {
+      const orbPos = blueOrbPositions[i]
+      const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
+      const isInside = dist < ORB_TRIGGER_RADIUS
+
+      if (isInside && !wasInsideBlueOrb[i] && blueOrbCooldown <= 0) {
+        const destIndex = i === 0 ? 1 : 0
+        const dest = blueOrbPositions[destIndex]
+
+        for (const snd of blueOrbSoundEntities) {
+          const a = AudioSource.getMutable(snd)
+          a.currentTime = 0
+          a.playing = true
+        }
+
+        blueOrbCooldown = TELEPORT_COOLDOWN
+
+        void movePlayerTo({
+          newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z)
+        })
+      }
+
+      wasInsideBlueOrb[i] = isInside
+    }
+  })
 
   // Client systems
   engine.addSystem(flagClientSystem)

@@ -7,6 +7,8 @@
 export enum EntityNames {
   Caribbean_Water = "Caribbean Water",
   Castle_06_glb = "Castle_06.glb",
+  Diamond___Green = "Diamond - Green",
+  Diamond___Green_2 = "Diamond - Green_2",
   Lilypad = "Lilypad",
   Lilypad_10 = "Lilypad_10",
   Lilypad_11 = "Lilypad_11",
