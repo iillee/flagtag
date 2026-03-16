@@ -703,6 +703,16 @@ Whoever has the most points at the end of the round wins!"
             color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
           }}
         />
+        <Label
+          value="3"
+          fontSize={14}
+          color={LIGHT_GREY}
+          font="sans-serif"
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: 4, left: 12 },
+          }}
+        />
         {isShellOnCooldown() && (
           <Label
             value={`${getShellCooldownRemaining()}`}
@@ -742,6 +752,16 @@ Whoever has the most points at the end of the round wins!"
               src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png'
             },
             color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+          }}
+        />
+        <Label
+          value="4"
+          fontSize={14}
+          color={LIGHT_GREY}
+          font="sans-serif"
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: 4, left: 12 },
           }}
         />
         {isBananaOnCooldown() && (

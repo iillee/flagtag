@@ -184,23 +184,37 @@ export function getNextBananaSyncId(): number {
 // ── Shell (powerup) ──
 
 export const Shell = engine.defineComponent('ctf-shell', {
-  droppedByPlayerId: Schemas.String,
-  droppedAtMs: Schemas.Number,
+  firedByPlayerId: Schemas.String,
+  firedAtMs: Schemas.Number,
+  dirX: Schemas.Float,           // normalized forward direction (XZ plane)
+  dirZ: Schemas.Float,
+  distanceTraveled: Schemas.Float,
+  maxDistance: Schemas.Float,     // wall distance reported by client, or default cap
+  active: Schemas.Boolean,       // false once it hits something or expires
 }, {
-  droppedByPlayerId: '',
-  droppedAtMs: 0,
+  firedByPlayerId: '',
+  firedAtMs: 0,
+  dirX: 0,
+  dirZ: 0,
+  distanceTraveled: 0,
+  maxDistance: 50,
+  active: true,
 })
 
 Shell.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** How long a shell stays on the ground before despawning (seconds). */
-export const SHELL_LIFETIME_SEC = 15
-/** Cooldown between shell drops (seconds). */
+/** Cooldown between shell fires (seconds). */
 export const SHELL_COOLDOWN_SEC = 10
-/** Max shells one player can have on the ground at once. */
+/** Max shells one player can have in flight at once. */
 export const SHELL_MAX_ACTIVE = 3
-/** Radius for shell trigger (meters). */
-export const SHELL_TRIGGER_RADIUS = 2.0
+/** Speed of shell projectile (meters per second). */
+export const SHELL_SPEED = 30
+/** Max range if no wall is detected (meters). */
+export const SHELL_MAX_RANGE = 50
+/** Radius for shell hitting a player (meters). */
+export const SHELL_HIT_RADIUS = 2.0
+/** Max time a shell can exist (seconds) — safety net. */
+export const SHELL_LIFETIME_SEC = 5
 
 /** Sync ID range for shells — supports up to 100 concurrent shells. */
 const SHELL_SYNC_ID_BASE = 6000

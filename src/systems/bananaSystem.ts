@@ -224,11 +224,9 @@ function registerBananaMessages(): void {
     const me = getPlayerData()?.userId
     if (me && data.victimId === me) {
       triggerEmote({ predefinedEmote: 'getHit' })
-      if (!InputModifier.has(engine.PlayerEntity)) {
-        InputModifier.create(engine.PlayerEntity, {
-          mode: InputModifier.Mode.Standard({ disableAll: true })
-        })
-      }
+      InputModifier.createOrReplace(engine.PlayerEntity, {
+        mode: InputModifier.Mode.Standard({ disableAll: true })
+      })
       bananaStaggerUntil = Date.now() + BANANA_STAGGER_MS
     }
   })
@@ -240,7 +238,7 @@ function isServerConnected(): boolean {
 }
 
 const LOCAL_GRAVITY = 15 // m/s² — matches server FLAG_GRAVITY
-const LOCAL_MIN_Y = 0.5
+const LOCAL_MIN_Y = 0  // Bananas sit on the actual ground surface
 
 interface LocalBanana {
   entity: Entity
@@ -255,7 +253,7 @@ const localBananas: LocalBanana[] = []
 function dropBananaLocally(): void {
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
-  const dropPos = Vector3.create(playerPos.x, playerPos.y, playerPos.z)
+  const dropPos = Vector3.create(playerPos.x, playerPos.y - 0.2, playerPos.z)
 
   const bananaEntity = engine.addEntity()
   Transform.create(bananaEntity, {
@@ -400,8 +398,8 @@ export function bananaClientSystem(dt: number): void {
   }
 
   // F key — drop banana
-  // Key 2 — drop banana
-  if (inputSystem.isTriggered(InputAction.IA_ACTION_4, PointerEventType.PET_DOWN)) {
+  // Key 4 — drop banana
+  if (inputSystem.isTriggered(InputAction.IA_ACTION_6, PointerEventType.PET_DOWN)) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

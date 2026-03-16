@@ -5,7 +5,7 @@ import { Storage } from '@dcl/sdk/server'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, VisitorAnalytics,
   Banana, BANANA_LIFETIME_SEC, BANANA_COOLDOWN_SEC, BANANA_MAX_ACTIVE, BANANA_TRIGGER_RADIUS,
-  Shell, SHELL_LIFETIME_SEC, SHELL_COOLDOWN_SEC, SHELL_MAX_ACTIVE, SHELL_TRIGGER_RADIUS,
+  Shell, SHELL_LIFETIME_SEC, SHELL_COOLDOWN_SEC, SHELL_MAX_ACTIVE, SHELL_SPEED, SHELL_MAX_RANGE, SHELL_HIT_RADIUS,
   getHoldTimeEntityEnumId, getNextRoundEndTimeMs, getNextBananaSyncId, getNextShellSyncId,
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString
 } from '../shared/components'
@@ -62,15 +62,24 @@ const activeBananas: ActiveBanana[] = []
 
 // ── Shell state ──
 const SHELL_MODEL_SRC = 'assets/scene/Models/shell.glb'
-const lastShellDropTime = new Map<string, number>()
+const lastShellFireTime = new Map<string, number>()
 interface ActiveShell {
   entity: Entity
-  droppedBy: string
-  droppedAtMs: number
-  falling: boolean
+  firedBy: string
+  firedAtMs: number
+  startX: number
+  startY: number
+  startZ: number
+  dirX: number
+  dirZ: number
+  distanceTraveled: number
+  maxDistance: number
+  wallDistReported: boolean
+  // Gravity
+  currentY: number
   fallVelocity: number
-  targetY: number
-  groundResolved: boolean
+  groundY: number        // latest ground height reported by client
+  onGround: boolean      // true once shell has landed on a surface
 }
 const activeShells: ActiveShell[] = []
 
@@ -545,15 +554,28 @@ function registerHandlers(): void {
     console.log('[Server] Received requestBanana from', context.from.slice(0, 8))
     handleBananaDrop(context.from)
   })
-  room.onMessage('requestShell', (_data, context) => {
+  room.onMessage('requestShell', (data, context) => {
     if (!context) return
     console.log('[Server] Received requestShell from', context.from.slice(0, 8))
-    handleShellDrop(context.from)
+    handleShellFire(context.from, data.dirX, data.dirZ)
+  })
+  room.onMessage('reportShellWallDist', (data, context) => {
+    if (!context) return
+    // Find the shell by sync id approximation — use the most recent shell from this player
+    for (const shell of activeShells) {
+      if (shell.firedBy === context.from && !shell.wallDistReported) {
+        shell.maxDistance = Math.min(shell.maxDistance, data.maxDist)
+        shell.wallDistReported = true
+        console.log('[Server] 🐚 Shell wall distance updated:', data.maxDist.toFixed(1), 'm')
+        break
+      }
+    }
   })
   room.onMessage('reportShellGroundY', (data, context) => {
     if (!context) return
+    // Find the shell closest to the reported X/Z and update its ground Y
     let closest: ActiveShell | null = null
-    let closestDist = 3
+    let closestDist = 5
     for (const shell of activeShells) {
       const pos = Transform.get(shell.entity).position
       const dx = pos.x - data.shellX
@@ -564,16 +586,8 @@ function registerHandlers(): void {
         closest = shell
       }
     }
-    if (closest && !closest.groundResolved) {
-      closest.targetY = Math.max(FLAG_MIN_Y, data.groundY)
-      closest.groundResolved = true
-      const currentY = Transform.get(closest.entity).position.y
-      if (currentY <= closest.targetY) {
-        const t = Transform.getMutable(closest.entity)
-        t.position = Vector3.create(t.position.x, closest.targetY, t.position.z)
-        closest.falling = false
-        closest.fallVelocity = 0
-      }
+    if (closest) {
+      closest.groundY = Math.max(0, data.groundY)
     }
   })
   room.onMessage('reportBananaGroundY', (data, context) => {
@@ -592,7 +606,7 @@ function registerHandlers(): void {
       }
     }
     if (closest && !closest.groundResolved) {
-      closest.targetY = Math.max(FLAG_MIN_Y, data.groundY)
+      closest.targetY = Math.max(0, data.groundY)
       closest.groundResolved = true
       // If already at or below target, snap
       const currentY = Transform.get(closest.entity).position.y
@@ -832,7 +846,7 @@ function handleBananaDrop(playerId: string): void {
   }
 
   // Drop banana slightly behind the player (at their feet)
-  const dropPos = Vector3.create(playerPos.x, playerPos.y, playerPos.z)
+  const dropPos = Vector3.create(playerPos.x, playerPos.y - 0.2, playerPos.z)
 
   // Create synced banana entity
   const bananaEntity = engine.addEntity()
@@ -857,7 +871,7 @@ function handleBananaDrop(playerId: string): void {
     droppedAtMs: now,
     falling: true,
     fallVelocity: 0,
-    targetY: FLAG_MIN_Y,       // default floor until client reports ground
+    targetY: 0,                 // default floor until client reports ground (bananas sit on actual surface)
     groundResolved: false,
   })
   lastBananaDropTime.set(playerId, now)
@@ -911,6 +925,13 @@ function bananaServerSystem(dt: number): void {
       if (dist < BANANA_TRIGGER_RADIUS) {
         console.log('[Server] 🍌 Banana triggered by', identity.address.slice(0, 8), '! Staggering...')
 
+        // Drop the flag if the victim is carrying it
+        const flag = Flag.getOrNull(flagEntity)
+        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === identity.address) {
+          console.log('[Server] 🍌 Victim was carrying flag — forcing drop!')
+          handleDrop(identity.address)
+        }
+
         // Single message — client handles all effects (VFX, sound, stagger) in one frame
         room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: identity.address })
 
@@ -923,18 +944,18 @@ function bananaServerSystem(dt: number): void {
   }
 }
 
-function handleShellDrop(playerId: string): void {
+function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   const now = Date.now()
 
   // Cooldown check
-  const lastDrop = lastShellDropTime.get(playerId) ?? 0
-  if (now - lastDrop < SHELL_COOLDOWN_SEC * 1000) {
+  const lastFire = lastShellFireTime.get(playerId) ?? 0
+  if (now - lastFire < SHELL_COOLDOWN_SEC * 1000) {
     console.log('[Server] Shell denied: cooldown active')
     return
   }
 
   // Max active check
-  const playerShells = activeShells.filter(s => s.droppedBy === playerId)
+  const playerShells = activeShells.filter(s => s.firedBy === playerId)
   if (playerShells.length >= SHELL_MAX_ACTIVE) {
     console.log('[Server] Shell denied: max active shells reached')
     return
@@ -947,13 +968,28 @@ function handleShellDrop(playerId: string): void {
     return
   }
 
-  const dropPos = Vector3.create(playerPos.x, playerPos.y, playerPos.z)
+  // Normalize direction on XZ plane
+  const len = Math.sqrt(dirX * dirX + dirZ * dirZ)
+  if (len < 0.01) {
+    console.log('[Server] Shell denied: invalid direction')
+    return
+  }
+  const nDirX = dirX / len
+  const nDirZ = dirZ / len
+
+  // Spawn slightly in front of the player near ground level
+  const spawnPos = Vector3.create(
+    playerPos.x + nDirX * 1.0,
+    playerPos.y + 0.2,
+    playerPos.z + nDirZ * 1.0
+  )
 
   // Create synced shell entity
   const shellEntity = engine.addEntity()
   Transform.create(shellEntity, {
-    position: dropPos,
-    scale: Vector3.create(0.01, 0.01, 0.01)
+    position: spawnPos,
+    scale: Vector3.create(0.01, 0.01, 0.01),
+    rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
   })
   GltfContainer.create(shellEntity, {
     src: SHELL_MODEL_SRC,
@@ -961,27 +997,40 @@ function handleShellDrop(playerId: string): void {
     invisibleMeshesCollisionMask: 0
   })
   Shell.create(shellEntity, {
-    droppedByPlayerId: playerId,
-    droppedAtMs: now,
+    firedByPlayerId: playerId,
+    firedAtMs: now,
+    dirX: nDirX,
+    dirZ: nDirZ,
+    distanceTraveled: 0,
+    maxDistance: SHELL_MAX_RANGE,
+    active: true,
   })
   syncEntity(shellEntity, [Transform.componentId, GltfContainer.componentId, Shell.componentId], getNextShellSyncId())
 
   activeShells.push({
     entity: shellEntity,
-    droppedBy: playerId,
-    droppedAtMs: now,
-    falling: true,
+    firedBy: playerId,
+    firedAtMs: now,
+    startX: spawnPos.x,
+    startY: spawnPos.y,
+    startZ: spawnPos.z,
+    dirX: nDirX,
+    dirZ: nDirZ,
+    distanceTraveled: 0,
+    maxDistance: SHELL_MAX_RANGE,
+    wallDistReported: false,
+    currentY: spawnPos.y,
     fallVelocity: 0,
-    targetY: FLAG_MIN_Y,
-    groundResolved: false,
+    groundY: 0,
+    onGround: false,
   })
-  lastShellDropTime.set(playerId, now)
+  lastShellFireTime.set(playerId, now)
 
-  room.send('shellDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z })
-  console.log('[Server] 🐚 Shell dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1))
+  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z })
+  console.log('[Server] 🐚 Shell fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 
-/** Server system: check shell gravity, triggers, and expiry. */
+/** Server system: move shells forward with gravity, check player hits, and handle expiry. */
 function shellServerSystem(dt: number): void {
   const now = Date.now()
   const clampedDt = Math.min(dt, 0.1)
@@ -989,39 +1038,82 @@ function shellServerSystem(dt: number): void {
   for (let i = activeShells.length - 1; i >= 0; i--) {
     const shell = activeShells[i]
 
-    // Gravity
-    if (shell.falling) {
-      shell.fallVelocity += FLAG_GRAVITY * clampedDt
-      const pos = Transform.get(shell.entity).position
-      let newY = pos.y - shell.fallVelocity * clampedDt
-      if (newY <= shell.targetY) {
-        newY = shell.targetY
-        shell.falling = false
-        shell.fallVelocity = 0
-      }
-      const t = Transform.getMutable(shell.entity)
-      t.position = Vector3.create(pos.x, newY, pos.z)
-    }
-
-    // Expiry
-    if (now - shell.droppedAtMs > SHELL_LIFETIME_SEC * 1000) {
-      console.log('[Server] 🐚 Shell expired, removing')
+    // Safety expiry (time-based)
+    if (now - shell.firedAtMs > SHELL_LIFETIME_SEC * 1000) {
+      console.log('[Server] 🐚 Shell expired (timeout)')
       engine.removeEntity(shell.entity)
       activeShells.splice(i, 1)
       continue
     }
 
-    // Trigger check — any player (except the dropper) walks over it
+    // Move shell forward on XZ
+    const moveDistance = SHELL_SPEED * clampedDt
+    shell.distanceTraveled += moveDistance
+
+    // Check if shell exceeded max range (wall hit)
+    if (shell.distanceTraveled >= shell.maxDistance) {
+      console.log('[Server] 🐚 Shell hit wall at', shell.distanceTraveled.toFixed(1), 'm')
+      const shellPos = Transform.get(shell.entity).position
+      room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
+      engine.removeEntity(shell.entity)
+      activeShells.splice(i, 1)
+      continue
+    }
+
+    // Apply gravity — shell falls until it reaches groundY, then rides along the surface
+    if (!shell.onGround) {
+      shell.fallVelocity += FLAG_GRAVITY * clampedDt
+      shell.currentY -= shell.fallVelocity * clampedDt
+      if (shell.currentY <= shell.groundY) {
+        shell.currentY = shell.groundY
+        shell.fallVelocity = 0
+        shell.onGround = true
+      }
+    } else {
+      // On ground — follow terrain height as reported by client
+      // Smoothly adjust to new groundY (terrain may go up or down)
+      const diff = shell.groundY - shell.currentY
+      if (Math.abs(diff) < 0.05) {
+        shell.currentY = shell.groundY
+      } else if (diff > 0) {
+        // Ground is rising — snap up to stay on surface
+        shell.currentY = shell.groundY
+      } else {
+        // Ground is dropping — fall with gravity again
+        shell.onGround = false
+        shell.fallVelocity = 0
+      }
+    }
+
+    // Update position (XZ from trajectory, Y from gravity)
+    const newX = shell.startX + shell.dirX * shell.distanceTraveled
+    const newZ = shell.startZ + shell.dirZ * shell.distanceTraveled
+    const t = Transform.getMutable(shell.entity)
+    t.position = Vector3.create(newX, shell.currentY, newZ)
+
+    // Update synced component
+    const shellComp = Shell.getMutable(shell.entity)
+    shellComp.distanceTraveled = shell.distanceTraveled
+
+    // Check player hits — any player (except the shooter)
     const shellPos = Transform.get(shell.entity).position
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      if (identity.address === shell.droppedBy) continue
+      if (identity.address === shell.firedBy) continue
 
       const playerPos = getPlayerPosition(identity.address)
       if (!playerPos) continue
 
       const dist = Vector3.distance(playerPos, shellPos)
-      if (dist < SHELL_TRIGGER_RADIUS) {
-        console.log('[Server] 🐚 Shell triggered by', identity.address.slice(0, 8))
+      if (dist < SHELL_HIT_RADIUS) {
+        console.log('[Server] 🐚 Shell hit player', identity.address.slice(0, 8), 'at distance', shell.distanceTraveled.toFixed(1), 'm')
+
+        // Drop the flag if the victim is carrying it
+        const flag = Flag.getOrNull(flagEntity)
+        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === identity.address) {
+          console.log('[Server] 🐚 Victim was carrying flag — forcing drop!')
+          handleDrop(identity.address)
+        }
+
         room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: identity.address })
         engine.removeEntity(shell.entity)
         activeShells.splice(i, 1)
@@ -1345,7 +1437,7 @@ async function handleRoundEnd(): Promise<void> {
     engine.removeEntity(shell.entity)
   }
   activeShells.length = 0
-  lastShellDropTime.clear()
+  lastShellFireTime.clear()
   console.log('[Server] 🐚 All shells cleared for new round')
 
   // ── 6. Reset flag to random spawn point ──
