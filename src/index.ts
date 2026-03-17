@@ -7,16 +7,13 @@ import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
 import { bananaClientSystem } from './systems/bananaSystem'
 import { shellClientSystem } from './systems/shellSystem'
-
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
-
 import { addPlayer, removePlayer, nameResolverSystem } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
 import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
 import { createAnalyticsOverlayEntity } from './components/analyticsOverlayState'
 import { movePlayerTo } from '~system/RestrictedActions'
-// Import shared components so they are registered on both server and client
 import './shared/components'
 import { room } from './shared/messages'
 
@@ -182,21 +179,10 @@ export async function main() {
     orbEntities.push(orb)
   }
 
-  // Pulsate orb scale over time
+  // Pulsate all orb scales over time (orange + blue share the same timer)
   let orbPulseTime = 0
   const ORB_PULSE_SPEED = 3.0
   const ORB_PULSE_RANGE = 0.15 // ±15% scale oscillation
-  engine.addSystem((dt: number) => {
-    orbPulseTime += dt
-    const pulse = 1 + ORB_PULSE_RANGE * Math.sin(orbPulseTime * ORB_PULSE_SPEED)
-    const s = ORB_BASE_SCALE * pulse
-    for (const orb of orbEntities) {
-      if (Transform.has(orb)) {
-        const t = Transform.getMutable(orb)
-        t.scale = Vector3.create(s, s, s)
-      }
-    }
-  })
 
   // Teleport sounds — one per orb, both fire on teleport
   const orbSoundEntities: ReturnType<typeof engine.addEntity>[] = []
@@ -213,18 +199,25 @@ export async function main() {
     orbSoundEntities.push(snd)
   }
 
-  // Orb teleportation system — teleport player to the other orb on contact
+  // Orb teleportation constants
   const ORB_TRIGGER_RADIUS = 1.5
   const ORB_LAND_OFFSET = 3 // meters away from destination orb
   const TELEPORT_COOLDOWN = 1.0 // seconds
+
+  // Teleport state for each orb pair
   const wasInsideOrb = [false, false]
   let orangeOrbCooldown = 0
+  const wasInsideBlueOrb = [false, false]
+  let blueOrbCooldown = 0
 
+  // Combined teleportation system for all orb pairs
   engine.addSystem((dt: number) => {
     if (orangeOrbCooldown > 0) orangeOrbCooldown -= dt
+    if (blueOrbCooldown > 0) blueOrbCooldown -= dt
     if (!Transform.has(engine.PlayerEntity)) return
     const playerPos = Transform.get(engine.PlayerEntity).position
 
+    // Orange orbs
     for (let i = 0; i < greenDiamondPositions.length; i++) {
       const orbPos = greenDiamondPositions[i]
       const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
@@ -241,13 +234,37 @@ export async function main() {
         }
 
         orangeOrbCooldown = TELEPORT_COOLDOWN
-
         void movePlayerTo({
           newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z)
         })
       }
 
       wasInsideOrb[i] = isInside
+    }
+
+    // Blue orbs
+    for (let i = 0; i < blueOrbPositions.length; i++) {
+      const orbPos = blueOrbPositions[i]
+      const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
+      const isInside = dist < ORB_TRIGGER_RADIUS
+
+      if (isInside && !wasInsideBlueOrb[i] && blueOrbCooldown <= 0) {
+        const destIndex = i === 0 ? 1 : 0
+        const dest = blueOrbPositions[destIndex]
+
+        for (const snd of blueOrbSoundEntities) {
+          const a = AudioSource.getMutable(snd)
+          a.currentTime = 0
+          a.playing = true
+        }
+
+        blueOrbCooldown = TELEPORT_COOLDOWN
+        void movePlayerTo({
+          newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z)
+        })
+      }
+
+      wasInsideBlueOrb[i] = isInside
     }
   })
 
@@ -294,14 +311,22 @@ export async function main() {
     blueOrbEntities.push(orb)
   }
 
-  // Pulsate blue orbs (reads shared orbPulseTime — already incremented by orange pulse system)
-  engine.addSystem(() => {
+  // Combined pulse system for all orbs
+  engine.addSystem((dt: number) => {
+    orbPulseTime += dt
     const pulse = 1 + ORB_PULSE_RANGE * Math.sin(orbPulseTime * ORB_PULSE_SPEED)
-    const s = BLUE_ORB_BASE_SCALE * pulse
+    const sOrange = ORB_BASE_SCALE * pulse
+    for (const orb of orbEntities) {
+      if (Transform.has(orb)) {
+        const t = Transform.getMutable(orb)
+        t.scale = Vector3.create(sOrange, sOrange, sOrange)
+      }
+    }
+    const sBlue = BLUE_ORB_BASE_SCALE * pulse
     for (const orb of blueOrbEntities) {
       if (Transform.has(orb)) {
         const t = Transform.getMutable(orb)
-        t.scale = Vector3.create(s, s, s)
+        t.scale = Vector3.create(sBlue, sBlue, sBlue)
       }
     }
   })
@@ -320,41 +345,6 @@ export async function main() {
     })
     blueOrbSoundEntities.push(snd)
   }
-
-  // Blue orb teleportation system — linked only to each other
-  const wasInsideBlueOrb = [false, false]
-  let blueOrbCooldown = 0
-
-  engine.addSystem((dt: number) => {
-    if (blueOrbCooldown > 0) blueOrbCooldown -= dt
-    if (!Transform.has(engine.PlayerEntity)) return
-    const playerPos = Transform.get(engine.PlayerEntity).position
-
-    for (let i = 0; i < blueOrbPositions.length; i++) {
-      const orbPos = blueOrbPositions[i]
-      const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
-      const isInside = dist < ORB_TRIGGER_RADIUS
-
-      if (isInside && !wasInsideBlueOrb[i] && blueOrbCooldown <= 0) {
-        const destIndex = i === 0 ? 1 : 0
-        const dest = blueOrbPositions[destIndex]
-
-        for (const snd of blueOrbSoundEntities) {
-          const a = AudioSource.getMutable(snd)
-          a.currentTime = 0
-          a.playing = true
-        }
-
-        blueOrbCooldown = TELEPORT_COOLDOWN
-
-        void movePlayerTo({
-          newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z)
-        })
-      }
-
-      wasInsideBlueOrb[i] = isInside
-    }
-  })
 
   // Client systems
   engine.addSystem(flagClientSystem)

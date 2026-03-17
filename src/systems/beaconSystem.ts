@@ -130,7 +130,6 @@ export function beaconClientSystem(dt: number): void {
       // Dropped or at base - use flag's world position
       worldPos = Transform.get(flagEntity).position
     }
-    console.log('[Beacon] Using server flag position:', worldPos)
     break // only one flag
   }
 
@@ -145,7 +144,7 @@ export function beaconClientSystem(dt: number): void {
           playerPos.y + FLAG_CARRY_OFFSET.y,
           playerPos.z + FLAG_CARRY_OFFSET.z
         )
-        console.log('[Beacon] Local test flag carried - using player position:', worldPos)
+
       }
     } else {
       // Local test flag not carried - find the visible blue banner
@@ -153,7 +152,6 @@ export function beaconClientSystem(dt: number): void {
         if (gltf.src && gltf.src.includes('Banner_Blue_02')) {
           if (transform.position.y > -50) { // Make sure it's not hidden
             worldPos = transform.position
-            console.log('[Beacon] Using local test flag ground position:', worldPos)
             break
           }
         }
@@ -173,12 +171,10 @@ export function beaconClientSystem(dt: number): void {
     outerT.position = Vector3.create(worldPos.x, beaconY, worldPos.z)
     outerT.scale = Vector3.create(OUTER_WIDTH * (2 - pulse), BEACON_HEIGHT, 1)
 
-    console.log('[Beacon] Beacons positioned at Y:', beaconY, 'pulse:', pulse.toFixed(2))
   } else {
     // Hide beacons if no flag found
     const HIDDEN = Vector3.create(0, -200, 0)
     Transform.getMutable(innerBeacon).position = HIDDEN
     Transform.getMutable(outerBeacon).position = HIDDEN
-    console.log('[Beacon] No flags found, hiding beacons')
   }
 }

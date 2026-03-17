@@ -62,6 +62,7 @@ const activeBananas: ActiveBanana[] = []
 
 // ── Shell state ──
 const SHELL_MODEL_SRC = 'assets/scene/Models/shell.glb'
+const SHELL_GROUND_OFFSET = 0.35  // Raise shell above ground so it doesn't clip terrain
 const lastShellFireTime = new Map<string, number>()
 interface ActiveShell {
   entity: Entity
@@ -852,7 +853,7 @@ function handleBananaDrop(playerId: string): void {
   const bananaEntity = engine.addEntity()
   Transform.create(bananaEntity, {
     position: dropPos,
-    scale: Vector3.create(0.01, 0.01, 0.01)
+    scale: Vector3.create(0.02, 0.02, 0.02)
   })
   GltfContainer.create(bananaEntity, {
     src: BANANA_MODEL_SRC,
@@ -988,7 +989,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   const shellEntity = engine.addEntity()
   Transform.create(shellEntity, {
     position: spawnPos,
-    scale: Vector3.create(0.01, 0.01, 0.01),
+    scale: Vector3.create(0.02, 0.02, 0.02),
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
   })
   GltfContainer.create(shellEntity, {
@@ -1060,24 +1061,25 @@ function shellServerSystem(dt: number): void {
       continue
     }
 
-    // Apply gravity — shell falls until it reaches groundY, then rides along the surface
+    // Apply gravity — shell falls until it reaches groundY + offset, then rides along the surface
+    const groundTarget = shell.groundY + SHELL_GROUND_OFFSET
     if (!shell.onGround) {
       shell.fallVelocity += FLAG_GRAVITY * clampedDt
       shell.currentY -= shell.fallVelocity * clampedDt
-      if (shell.currentY <= shell.groundY) {
-        shell.currentY = shell.groundY
+      if (shell.currentY <= groundTarget) {
+        shell.currentY = groundTarget
         shell.fallVelocity = 0
         shell.onGround = true
       }
     } else {
       // On ground — follow terrain height as reported by client
       // Smoothly adjust to new groundY (terrain may go up or down)
-      const diff = shell.groundY - shell.currentY
+      const diff = groundTarget - shell.currentY
       if (Math.abs(diff) < 0.05) {
-        shell.currentY = shell.groundY
+        shell.currentY = groundTarget
       } else if (diff > 0) {
         // Ground is rising — snap up to stay on surface
-        shell.currentY = shell.groundY
+        shell.currentY = groundTarget
       } else {
         // Ground is dropping — fall with gravity again
         shell.onGround = false
@@ -1097,6 +1099,8 @@ function shellServerSystem(dt: number): void {
 
     // Check player hits — any player (except the shooter)
     const shellPos = Transform.get(shell.entity).position
+    let shellConsumed = false
+
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       if (identity.address === shell.firedBy) continue
 
@@ -1117,6 +1121,26 @@ function shellServerSystem(dt: number): void {
         room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: identity.address })
         engine.removeEntity(shell.entity)
         activeShells.splice(i, 1)
+        shellConsumed = true
+        break
+      }
+    }
+    if (shellConsumed) continue
+
+    // Check banana collision — shell destroys both itself and the banana
+    for (let j = activeBananas.length - 1; j >= 0; j--) {
+      const banana = activeBananas[j]
+      const bananaPos = Transform.get(banana.entity).position
+      const dist = Vector3.distance(shellPos, bananaPos)
+      if (dist < SHELL_HIT_RADIUS) {
+        console.log('[Server] 🐚🍌 Shell hit banana! Both destroyed.')
+        room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
+        room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: '' })
+        engine.removeEntity(shell.entity)
+        activeShells.splice(i, 1)
+        engine.removeEntity(banana.entity)
+        activeBananas.splice(j, 1)
+        shellConsumed = true
         break
       }
     }
@@ -1210,11 +1234,22 @@ function holdTimeServerSystem(dt: number): void {
   holdTimeAccum += Math.min(dt, 0.1)
   if (holdTimeAccum < HOLD_TIME_SYNC_INTERVAL) return
 
-  const entity = holdTimeEntities.get(flag.carrierPlayerId.toLowerCase())
-  if (entity) {
-    const mutable = PlayerFlagHoldTime.getMutable(entity)
-    mutable.seconds += holdTimeAccum
+  const carrierKey = flag.carrierPlayerId.toLowerCase()
+  let entity = holdTimeEntities.get(carrierKey)
+  
+  // Safety net: create hold time entity if it doesn't exist yet
+  // This handles edge cases where playerTrackingSystem hasn't detected the player yet
+  if (!entity) {
+    console.log('[Server] holdTimeServerSystem: creating missing hold time entity for', carrierKey.slice(0, 8))
+    entity = engine.addEntity()
+    PlayerFlagHoldTime.create(entity, { playerId: flag.carrierPlayerId, seconds: 0 })
+    syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(carrierKey))
+    holdTimeEntities.set(carrierKey, entity)
+    knownPlayers.add(carrierKey)
   }
+
+  const mutable = PlayerFlagHoldTime.getMutable(entity)
+  mutable.seconds += holdTimeAccum
   holdTimeAccum = 0
 }
 

@@ -7,143 +7,73 @@ import {
   InputAction,
   PointerEventType,
   InputModifier,
-  MeshRenderer,
-  Material,
-  MaterialTransparencyMode,
-  Tween,
-  EasingFunction,
   Raycast,
   RaycastResult,
   RaycastQueryType,
   type Entity
 } from '@dcl/sdk/ecs'
-import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
+import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, Shell, SHELL_COOLDOWN_SEC, SHELL_LIFETIME_SEC, SHELL_SPEED, SHELL_MAX_RANGE, SHELL_HIT_RADIUS } from '../shared/components'
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
+import { showHitEffect, playHitSound } from './combatSystem'
 
 const SHELL_MODEL_SRC = 'assets/scene/Models/shell.glb'
-const SHELL_SCALE = Vector3.create(0.01, 0.01, 0.01)
+const SHELL_SCALE = Vector3.create(0.02, 0.02, 0.02)
 const SHELL_STAGGER_MS = 800
 const SHELL_GRAVITY = 15  // m/s² — matches server FLAG_GRAVITY
+const SHELL_GROUND_OFFSET = 0.35 // Raise shell above ground so it doesn't clip terrain — matches server
 const GROUND_RAY_INTERVAL = 0.05 // seconds between ground raycasts for moving shells
 
 // Stagger state for shell hits
 let shellStaggerUntil = 0
 
 // ── Sound ──
-let shellFireSoundEntity: Entity | null = null
-let shellHitSoundEntity: Entity | null = null
+const SHELL_SOUND_SRC = 'assets/sounds/mk_shell.mp3'
 
-function playShellFireSound(position: Vector3): void {
-  if (!shellFireSoundEntity) {
-    shellFireSoundEntity = engine.addEntity()
-    Transform.create(shellFireSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(shellFireSoundEntity, {
-      audioClipUrl: 'assets/sounds/rs-miss.mp3',  // TODO: replace with shell fire sound
-      playing: false,
-      loop: false,
-      volume: 0.8,
-      global: false
-    })
+// Pre-create the instant fire sound entity at module load so the audio file
+// is loaded into memory before the player ever presses fire (eliminates first-shot lag).
+const instantFireSoundEntity = engine.addEntity()
+Transform.create(instantFireSoundEntity, { position: Vector3.create(0, -100, 0) })
+AudioSource.create(instantFireSoundEntity, {
+  audioClipUrl: SHELL_SOUND_SRC,
+  playing: true,   // play once silently underground to force the engine to cache the clip
+  loop: false,
+  volume: 0.0,
+  global: false
+})
+
+/** Attach a looping spatial shell sound directly to a shell entity. */
+function attachShellSound(entity: Entity): void {
+  AudioSource.create(entity, {
+    audioClipUrl: SHELL_SOUND_SRC,
+    playing: true,
+    loop: true,
+    volume: 1.0,
+    global: false
+  })
+}
+
+/** Stop the shell sound on an entity (before removal). */
+function stopShellSound(entity: Entity): void {
+  if (AudioSource.has(entity)) {
+    const a = AudioSource.getMutable(entity)
+    a.playing = false
   }
-  const t = Transform.getMutable(shellFireSoundEntity)
+}
+
+// For server-mode: track which synced shell entities we've already attached sound to
+const serverShellsWithSound = new Set<number>()
+
+/** Play the fire sound immediately at the player's position (instant feedback). */
+function playInstantFireSound(position: Vector3): void {
+  const t = Transform.getMutable(instantFireSoundEntity)
   t.position = position
-  const a = AudioSource.getMutable(shellFireSoundEntity)
+  const a = AudioSource.getMutable(instantFireSoundEntity)
+  a.volume = 1.0
   a.currentTime = 0
   a.playing = true
-}
-
-function playShellHitSound(position: Vector3): void {
-  if (!shellHitSoundEntity) {
-    shellHitSoundEntity = engine.addEntity()
-    Transform.create(shellHitSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(shellHitSoundEntity, {
-      audioClipUrl: 'assets/sounds/rs-hit.mp3',  // TODO: replace with shell hit sound
-      playing: false,
-      loop: false,
-      volume: 1.0,
-      global: false
-    })
-  }
-  const t = Transform.getMutable(shellHitSoundEntity)
-  t.position = position
-  const a = AudioSource.getMutable(shellHitSoundEntity)
-  a.currentTime = 0
-  a.playing = true
-}
-
-// ── Hit VFX pool ──
-const SHELL_VFX_POOL_SIZE = 6
-const SHELL_VFX_DURATION_MS = 500
-const shellVfxPool: Entity[] = []
-let shellVfxPoolIdx = 0
-let shellVfxPoolReady = false
-const HIDDEN_POS = Vector3.create(0, -100, 0)
-const activeShellVfx: { entity: Entity; expiresAt: number }[] = []
-
-const SHELL_VFX_MATERIAL = {
-  albedoColor: Color4.create(1.0, 0.3, 0.2, 0.7),
-  emissiveColor: Color4.create(1.0, 0.2, 0.1, 1),
-  emissiveIntensity: 2.0,
-  roughness: 1.0,
-  metallic: 0.0,
-  specularIntensity: 0.0,
-  transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-}
-
-function initShellVfxPool(): void {
-  if (shellVfxPoolReady) return
-  shellVfxPoolReady = true
-  for (let i = 0; i < SHELL_VFX_POOL_SIZE; i++) {
-    const e = engine.addEntity()
-    Transform.create(e, { position: HIDDEN_POS, scale: Vector3.Zero() })
-    MeshRenderer.setSphere(e)
-    Material.setPbrMaterial(e, SHELL_VFX_MATERIAL)
-    shellVfxPool.push(e)
-  }
-}
-
-function showShellHitEffect(position: Vector3): void {
-  initShellVfxPool()
-  const expiresAt = Date.now() + SHELL_VFX_DURATION_MS + 50
-
-  for (let i = 0; i < 3; i++) {
-    const sphere = shellVfxPool[shellVfxPoolIdx % SHELL_VFX_POOL_SIZE]
-    shellVfxPoolIdx++
-
-    const jitter = Vector3.create(
-      (Math.random() - 0.5) * 0.8,
-      Math.random() * 0.3,
-      (Math.random() - 0.5) * 0.8
-    )
-    const pos = Vector3.add(position, jitter)
-    const startScale = 0.1 + Math.random() * 0.1
-    const endScale = 0.4 + Math.random() * 0.3
-
-    const t = Transform.getMutable(sphere)
-    t.position = pos
-    t.scale = Vector3.create(startScale, startScale, startScale)
-
-    Tween.createOrReplace(sphere, {
-      mode: Tween.Mode.Scale({
-        start: Vector3.create(startScale, startScale, startScale),
-        end: Vector3.create(endScale, endScale * 0.3, endScale)
-      }),
-      duration: SHELL_VFX_DURATION_MS,
-      easingFunction: EasingFunction.EF_EASEOUTQUAD,
-    })
-
-    activeShellVfx.push({ entity: sphere, expiresAt })
-  }
-}
-
-function hideShellVfx(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = HIDDEN_POS
-  t.scale = Vector3.Zero()
-  if (Tween.has(entity)) Tween.deleteFrom(entity)
 }
 
 // ── Client cooldown tracking ──
@@ -271,25 +201,29 @@ function registerShellMessages(): void {
   if (messagesRegistered) return
   messagesRegistered = true
 
-  room.onMessage('shellDropped', (data) => {
-    playShellFireSound(Vector3.create(data.x, data.y, data.z))
+  room.onMessage('shellDropped', (_data) => {
+    // Sound is now attached to the shell entity itself via synced Shell components.
+    // The local player gets instant feedback from playInstantFireSound().
+    // Other players' shells get sound attached in the system loop when we detect new Shell entities.
   })
 
   room.onMessage('shellTriggered', (data) => {
     const pos = Vector3.create(data.x, data.y, data.z)
 
-    // All effects in one frame
-    showShellHitEffect(pos)
-    playShellHitSound(pos)
+    // Only show hit particles + sound when shell hits a player (not walls/bananas)
+    if (data.victimId && data.victimId !== '') {
+      showHitEffect(pos)
+      playHitSound(pos)
 
-    // Stagger the victim if it's the local player
-    const me = getPlayerData()?.userId
-    if (me && data.victimId === me) {
-      triggerEmote({ predefinedEmote: 'getHit' })
-      InputModifier.createOrReplace(engine.PlayerEntity, {
-        mode: InputModifier.Mode.Standard({ disableAll: true })
-      })
-      shellStaggerUntil = Date.now() + SHELL_STAGGER_MS
+      // Stagger the victim if it's the local player
+      const me = getPlayerData()?.userId
+      if (me && data.victimId === me) {
+        triggerEmote({ predefinedEmote: 'getHit' })
+        InputModifier.createOrReplace(engine.PlayerEntity, {
+          mode: InputModifier.Mode.Standard({ disableAll: true })
+        })
+        shellStaggerUntil = Date.now() + SHELL_STAGGER_MS
+      }
     }
   })
 }
@@ -363,6 +297,9 @@ function fireShellLocally(): void {
     continuous: false
   })
 
+  // Attach looping spatial sound to the shell entity
+  attachShellSound(shellEntity)
+
   localShells.push({
     entity: shellEntity,
     firedAtMs: Date.now(),
@@ -381,12 +318,12 @@ function fireShellLocally(): void {
     groundRayEntity: null,
     lastGroundRayTime: 0,
   })
-  playShellFireSound(spawnPos)
   console.log('[Shell] 🐚 LOCAL shell fired dir:', dirX.toFixed(2), dirZ.toFixed(2))
 }
 
 function removeLocalShell(index: number): void {
   const shell = localShells[index]
+  stopShellSound(shell.entity)
   if (shell.wallRayEntity !== null) engine.removeEntity(shell.wallRayEntity)
   if (shell.groundRayEntity !== null) engine.removeEntity(shell.groundRayEntity)
   engine.removeEntity(shell.entity)
@@ -453,31 +390,29 @@ function updateLocalShells(dt: number): void {
 
     // Hit wall
     if (shell.distanceTraveled >= shell.maxDistance) {
-      const shellPos = Transform.get(shell.entity).position
       console.log('[Shell] 🐚 LOCAL shell hit wall at', shell.distanceTraveled.toFixed(1), 'm')
-      showShellHitEffect(shellPos)
-      playShellHitSound(shellPos)
       removeLocalShell(i)
       continue
     }
 
-    // Apply gravity
+    // Apply gravity — shell hovers SHELL_GROUND_OFFSET above ground (matches server)
+    const groundTarget = shell.groundY + SHELL_GROUND_OFFSET
     if (!shell.onGround) {
       shell.fallVelocity += SHELL_GRAVITY * clampedDt
       shell.currentY -= shell.fallVelocity * clampedDt
-      if (shell.currentY <= shell.groundY) {
-        shell.currentY = shell.groundY
+      if (shell.currentY <= groundTarget) {
+        shell.currentY = groundTarget
         shell.fallVelocity = 0
         shell.onGround = true
       }
     } else {
       // Follow terrain
-      const diff = shell.groundY - shell.currentY
+      const diff = groundTarget - shell.currentY
       if (Math.abs(diff) < 0.05) {
-        shell.currentY = shell.groundY
+        shell.currentY = groundTarget
       } else if (diff > 0) {
         // Ground rising — snap up
-        shell.currentY = shell.groundY
+        shell.currentY = groundTarget
       } else {
         // Ground dropping — fall again
         shell.onGround = false
@@ -508,19 +443,28 @@ export function shellClientSystem(dt: number): void {
     }
   }
 
-  // Clean up expired VFX
-  for (let i = activeShellVfx.length - 1; i >= 0; i--) {
-    if (now >= activeShellVfx[i].expiresAt) {
-      hideShellVfx(activeShellVfx[i].entity)
-      activeShellVfx.splice(i, 1)
-    }
-  }
-
   if (serverUp) {
     // Process wall raycasts
     processWallRaycasts()
     // Continuously report ground Y for moving shells
     updateServerShellGroundRaycasts(dt)
+
+    // Attach looping sound to any new synced Shell entities
+    for (const [entity, shell] of engine.getEntitiesWith(Shell, Transform)) {
+      const eid = entity as number
+      if (shell.active && !serverShellsWithSound.has(eid)) {
+        if (!AudioSource.has(entity)) {
+          attachShellSound(entity)
+        }
+        serverShellsWithSound.add(eid)
+      }
+    }
+    // Clean up tracking for shells that no longer exist
+    for (const eid of serverShellsWithSound) {
+      if (!Shell.has(eid as Entity)) {
+        serverShellsWithSound.delete(eid)
+      }
+    }
   } else {
     // Local test mode
     updateLocalShells(dt)
@@ -546,10 +490,11 @@ export function shellClientSystem(dt: number): void {
       console.log('[Shell] 🐚 1 pressed — requesting shell fire (server)')
       room.send('requestShell', { dirX, dirZ })
 
-      // Fire a wall raycast and report it to the server
+      // Play instant fire sound so there's no lag waiting for server
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position
         const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.2, playerPos.z + dirZ * 1.0)
+        playInstantFireSound(spawnPos)
         fireWallRaycast(spawnPos, dirX, dirZ)
       }
     } else {

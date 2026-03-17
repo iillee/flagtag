@@ -25,7 +25,7 @@ import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
 
 const BANANA_MODEL_SRC = 'assets/scene/Models/banana.glb'
-const BANANA_SCALE = Vector3.create(0.01, 0.01, 0.01)
+const BANANA_SCALE = Vector3.create(0.02, 0.02, 0.02)
 const BANANA_STAGGER_MS = 800 // Same duration as combat stagger
 
 // Stagger state for banana hits
@@ -40,7 +40,7 @@ function playBananaDropSound(position: Vector3): void {
     bananaDropSoundEntity = engine.addEntity()
     Transform.create(bananaDropSoundEntity, { position: Vector3.Zero() })
     AudioSource.create(bananaDropSoundEntity, {
-      audioClipUrl: 'assets/sounds/rs-drop.mp3',  // TODO: replace with banana-specific sound
+      audioClipUrl: 'assets/sounds/rs-banana.ogg',
       playing: false,
       loop: false,
       volume: 0.8,

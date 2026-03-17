@@ -37,7 +37,7 @@ const CARRY_ROT_SPEED_DEG_PER_SEC = 25 // Same as idle
 let carryAnimTime = 0
 
 // Flag carry offset - comfortably above avatar head
-const FLAG_CARRY_OFFSET = { x: 0, y: 0.4, z: 0 } // Directly above avatar, comfortable height
+const FLAG_CARRY_OFFSET = { x: 0, y: 0.7, z: 0 } // Above avatar, raised to clear nametag
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
 // ── Trail pool (horizontal particles when carried) ──
@@ -199,6 +199,13 @@ function getCarrierEntity(carrierPlayerId: string): Entity | null {
 let prevFlagState: FlagState | null = null
 let prevCarrierId: string = ''
 
+// Auto-pickup proximity
+const AUTO_PICKUP_RADIUS = 3
+const AUTO_PICKUP_COOLDOWN_MS = 500 // don't spam server
+let lastAutoPickupRequestMs = 0
+const DROP_PICKUP_COOLDOWN_MS = 3000 // after dropping, can't auto-pickup for 3s
+let lastDropTimeMs = 0
+
 // Sound entities
 let pickupSoundEntity: Entity | null = null
 let dropSoundEntity: Entity | null = null
@@ -264,23 +271,23 @@ function fireGroundRaycastForServer(dropPos: Vector3): void {
   })
 }
 
-let debugTimer = 0
-
 export function flagClientSystem(dt: number): void {
   const userId = getPlayerData()?.userId
 
-  // Debug: Log flag state every 3 seconds
-  debugTimer += dt
-  if (debugTimer >= 3) {
-    debugTimer = 0
+  // Apply drop cooldown as soon as we see we're no longer carrying (before auto-pickup check).
+  // This fixes same-frame re-pickup when shell/banana forces a drop.
+  if (userId) {
     for (const [, flag] of engine.getEntitiesWith(Flag)) {
-      console.log('[C.20] Current state:', flag.state, 'Carrier:', flag.carrierPlayerId.slice(0, 8), 'Clone exists:', carryCloneEntity !== null)
+      if (flag.state !== FlagState.Carried && prevFlagState === FlagState.Carried && prevCarrierId === userId) {
+        lastDropTimeMs = Date.now()
+      }
       break
     }
   }
 
-  // E key interaction
-  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && userId) {
+  // Auto-pickup: if the flag is on the ground and we're close enough, pick it up automatically
+  if (userId && Transform.has(engine.PlayerEntity)) {
+    const now = Date.now()
     let amCarrying = false
     for (const [, flag] of engine.getEntitiesWith(Flag)) {
       if (flag.state === FlagState.Carried && flag.carrierPlayerId === userId) {
@@ -288,148 +295,162 @@ export function flagClientSystem(dt: number): void {
         break
       }
     }
-    
-    if (amCarrying) {
-      console.log('[C.1] E pressed - I am carrying, sending requestDrop')
-      playDropSound() // Immediate local feedback
-      skipNextDropSound = true
-      room.send('requestDrop', { t: 0 })
-    } else {
-      let flagNearby = false
-      const myPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : null
-      if (myPos) {
-        for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
-          if (flag.state === FlagState.Carried) {
-            console.log('[C.2] E pressed - flag is being carried by', flag.carrierPlayerId.slice(0, 8))
-            continue
-          }
-          const dist = Vector3.distance(myPos, Transform.get(flagEntity).position)
-          if (dist <= 3) { 
-            flagNearby = true
-            console.log('[C.3] E pressed - flag on ground nearby, distance:', dist.toFixed(2))
-            break 
-          }
+
+    if (!amCarrying && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS) {
+      const myPos = Transform.get(engine.PlayerEntity).position
+      for (const [flagEnt, flag] of engine.getEntitiesWith(Flag, Transform)) {
+        if (flag.state === FlagState.Carried) continue
+        const dist = Vector3.distance(myPos, Transform.get(flagEnt).position)
+        if (dist <= AUTO_PICKUP_RADIUS) {
+          console.log('[C.4] Auto-pickup — flag nearby, distance:', dist.toFixed(2))
+          playPickupSound()
+          skipNextPickupSound = true
+          room.send('requestPickup', { t: 0 })
+          lastAutoPickupRequestMs = now
+          break
         }
-      }
-      if (flagNearby) {
-        console.log('[C.4] E pressed - sending requestPickup')
-        playPickupSound() // Immediate local feedback
-        skipNextPickupSound = true
-        room.send('requestPickup', { t: 0 })
-      } else {
-        console.log('[C.5] E pressed - sending requestAttack (no flag nearby)')
-        predictAttackLocally() // Immediate local VFX + sound
-        room.send('requestAttack', { t: 0 })
       }
     }
   }
+
+  // E key — attack only
+  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && userId) {
+    console.log('[C.5] E pressed - sending requestAttack')
+    predictAttackLocally()
+    room.send('requestAttack', { t: 0 })
+  }
+
+  // ── Manual drop (currently unassigned — uncomment and bind to a key to re-enable) ──
+  // if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN) && userId) {
+  //   let amCarrying = false
+  //   for (const [, flag] of engine.getEntitiesWith(Flag)) {
+  //     if (flag.state === FlagState.Carried && flag.carrierPlayerId === userId) {
+  //       amCarrying = true
+  //       break
+  //     }
+  //   }
+  //   if (amCarrying) {
+  //     console.log('[C.1] Drop key pressed - sending requestDrop')
+  //     playDropSound()
+  //     skipNextDropSound = true
+  //     lastDropTimeMs = Date.now()
+  //     room.send('requestDrop', { t: 0 })
+  //   }
+  // }
 
   // Handle flag state changes with clone system
   for (const [flagEntity, flag] of engine.getEntitiesWith(Flag)) {
     const stateChanged = prevFlagState !== null && prevFlagState !== flag.state
     const carrierChanged = flag.state === FlagState.Carried && flag.carrierPlayerId !== prevCarrierId && prevCarrierId !== ''
 
-    if (prevFlagState === null || stateChanged || carrierChanged) {
-      console.log('[C.10] State/Carrier change - prevState:', prevFlagState, 'newState:', flag.state, 'prevCarrier:', prevCarrierId.slice(0, 8), 'newCarrier:', flag.carrierPlayerId.slice(0, 8))
+    // Determine what changed
+    const isFirstFrame = prevFlagState === null
+    const needsCloneCreate = flag.state === FlagState.Carried && (
+      isFirstFrame ||                          // Just loaded the scene
+      stateChanged ||                          // State changed to Carried
+      carrierChanged ||                        // Carrier swapped (steal)
+      (carryCloneEntity === null && !stateChanged)  // Clone missing (safety net)
+    )
+    const needsCloneRemove = flag.state !== FlagState.Carried && (
+      isFirstFrame ||
+      stateChanged
+    )
+
+    if (needsCloneCreate) {
+      // Play pickup sound (skip if we already played it optimistically)
+      if (!isFirstFrame) {
+        if (skipNextPickupSound) {
+          skipNextPickupSound = false
+        } else {
+          playPickupSound()
+        }
+      }
       
-      if (flag.state === FlagState.Carried) {
-        if (stateChanged) {
-          if (skipNextPickupSound) {
-            skipNextPickupSound = false
-          } else {
-            playPickupSound()
-          }
-          console.log('[C.11] STATE CHANGED to Carried - new carrier:', flag.carrierPlayerId.slice(0, 8))
-          
-          // Clean up any existing clone first
-          cleanupClone()
-          
-          // Hide server flag with visibility (don't move it — avoids CRDT conflicts)
-          VisibilityComponent.createOrReplace(flagEntity, { visible: false })
-          
-          // Create avatar attach anchor + visual clone for carrier
-          attachAnchorEntity = engine.addEntity()
-          Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
-          AvatarAttach.create(attachAnchorEntity, {
-            avatarId: flag.carrierPlayerId,
-            anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
-          })
+      console.log('[C.11] Creating clone for carrier:', flag.carrierPlayerId.slice(0, 8), 
+        '(reason:', isFirstFrame ? 'firstFrame' : stateChanged ? 'stateChanged' : carrierChanged ? 'carrierChanged' : 'missingClone', ')')
+      
+      // Clean up any existing clone first
+      cleanupClone()
+      
+      // Hide server flag with visibility (don't move it — avoids CRDT conflicts)
+      VisibilityComponent.createOrReplace(flagEntity, { visible: false })
+      
+      // Create avatar attach anchor + visual clone for carrier
+      attachAnchorEntity = engine.addEntity()
+      Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
+      AvatarAttach.create(attachAnchorEntity, {
+        avatarId: flag.carrierPlayerId,
+        anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+      })
 
-          carryCloneEntity = engine.addEntity()
-          Transform.create(carryCloneEntity, {
-            parent: attachAnchorEntity,
-            position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
-            rotation: Quaternion.Identity(),
-            scale: Vector3.One()
-          })
-          GltfContainer.create(carryCloneEntity, { 
-            src: BANNER_SRC,
-            visibleMeshesCollisionMask: 0,
-            invisibleMeshesCollisionMask: 0
-          })
-          
-          console.log('[C.12] Created clone for carrier:', flag.carrierPlayerId.slice(0, 8))
-        } else if (carrierChanged) {
-          if (skipNextPickupSound) {
-            skipNextPickupSound = false
-          } else {
-            playPickupSound()
-          }
-          console.log('[C.13] CARRIER CHANGED (state stayed Carried) - old:', prevCarrierId.slice(0, 8), 'new:', flag.carrierPlayerId.slice(0, 8))
-          
-          // Clean up old clone
-          cleanupClone()
-          
-          // Hide server flag with visibility
-          VisibilityComponent.createOrReplace(flagEntity, { visible: false })
-          
-          // Create new clone for new carrier
-          attachAnchorEntity = engine.addEntity()
-          Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
-          AvatarAttach.create(attachAnchorEntity, {
-            avatarId: flag.carrierPlayerId,
-            anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
-          })
+      carryCloneEntity = engine.addEntity()
+      Transform.create(carryCloneEntity, {
+        parent: attachAnchorEntity,
+        position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
+        rotation: Quaternion.Identity(),
+        scale: Vector3.One()
+      })
+      GltfContainer.create(carryCloneEntity, { 
+        src: BANNER_SRC,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
+      
+      console.log('[C.12] Clone created successfully')
 
-          carryCloneEntity = engine.addEntity()
-          Transform.create(carryCloneEntity, {
-            parent: attachAnchorEntity,
-            position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
-            rotation: Quaternion.Identity(),
-            scale: Vector3.One()
-          })
-          GltfContainer.create(carryCloneEntity, { 
-            src: BANNER_SRC,
-            visibleMeshesCollisionMask: 0,
-            invisibleMeshesCollisionMask: 0
-          })
-          
-          console.log('[C.14] Created clone for new carrier after steal:', flag.carrierPlayerId.slice(0, 8))
+    } else if (needsCloneRemove) {
+      if (!isFirstFrame) {
+        if (skipNextDropSound) {
+          skipNextDropSound = false
+        } else {
+          playDropSound()
         }
+      }
+      console.log('[C.15] STATE CHANGED to', flag.state === FlagState.Dropped ? 'Dropped' : 'AtBase', '- cleaning up clone')
+      
+      // If we were the carrier, apply drop pickup cooldown (covers forced drops from banana/shell hits)
+      if (userId && prevCarrierId === userId) {
+        lastDropTimeMs = Date.now()
+      }
 
-      } else if (flag.state === FlagState.Dropped || flag.state === FlagState.AtBase) {
-        if (stateChanged) {
-          if (skipNextDropSound) {
-            skipNextDropSound = false
-          } else {
-            playDropSound()
-          }
-          console.log('[C.15] STATE CHANGED to', flag.state === FlagState.Dropped ? 'Dropped' : 'AtBase', '- cleaning up clone')
-          
-          // Clean up all clones (AvatarAttach + local fallback)
-          cleanupClone()
-          
-          // Restore server flag visibility (server controls position via CRDT)
-          VisibilityComponent.createOrReplace(flagEntity, { visible: true })
+      // Clean up all clones
+      cleanupClone()
+      
+      // Restore server flag visibility (server controls position via CRDT)
+      VisibilityComponent.createOrReplace(flagEntity, { visible: true })
 
-          if (flag.state === FlagState.Dropped) {
-            fireGroundRaycastForServer(Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ))
-          }
-        }
+      if (flag.state === FlagState.Dropped) {
+        fireGroundRaycastForServer(Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ))
       }
     }
 
-    // Ensure server flag is visible when NOT carried (safety net for missed transitions)
+    // Safety nets
+    // 1. Flag is carried but clone is missing — recreate it
+    if (flag.state === FlagState.Carried && carryCloneEntity === null && !needsCloneCreate) {
+      console.log('[C.16] SAFETY NET: Flag is carried but clone is missing! Recreating...')
+      VisibilityComponent.createOrReplace(flagEntity, { visible: false })
+      
+      attachAnchorEntity = engine.addEntity()
+      Transform.create(attachAnchorEntity, { position: Vector3.Zero() })
+      AvatarAttach.create(attachAnchorEntity, {
+        avatarId: flag.carrierPlayerId,
+        anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+      })
+      carryCloneEntity = engine.addEntity()
+      Transform.create(carryCloneEntity, {
+        parent: attachAnchorEntity,
+        position: Vector3.create(FLAG_CARRY_OFFSET.x, FLAG_CARRY_OFFSET.y, FLAG_CARRY_OFFSET.z),
+        rotation: Quaternion.Identity(),
+        scale: Vector3.One()
+      })
+      GltfContainer.create(carryCloneEntity, { 
+        src: BANNER_SRC,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
+    }
+    
+    // 2. Flag is NOT carried — ensure server flag is visible
     if (flag.state !== FlagState.Carried) {
       if (!VisibilityComponent.has(flagEntity)) {
         VisibilityComponent.create(flagEntity, { visible: true })

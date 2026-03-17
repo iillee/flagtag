@@ -116,6 +116,20 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     })
   }
 
+  // Safety net: include any synced players with scores who aren't in playersInScene
+  // This handles race conditions where PlayerFlagHoldTime arrives before onEnterScene
+  for (const [key, seconds] of synced) {
+    if (seen.has(key)) continue
+    if (seconds <= 0) continue
+    seen.add(key)
+    const displayName = getKnownPlayerName(key) || key.slice(0, 8)
+    result.push({
+      userId: key,
+      name: displayName,
+      seconds: Math.floor(seconds)
+    })
+  }
+
   // Sort: highest score first, 0-score players at the bottom alphabetically
   result.sort((a, b) => {
     if (a.seconds !== b.seconds) return b.seconds - a.seconds
