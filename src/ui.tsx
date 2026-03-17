@@ -150,10 +150,8 @@ function roundEndSplashSystem(dt: number): void {
 engine.addSystem(roundEndSplashSystem)
 engine.addSystem(attackFlickerSystem)
 
-// Tie-breaking tracking for stable sorting
+// Tie-breaking tracking for stable leaderboard sorting
 const roundWinAchievementTime = new Map<string, number>() // userId -> timestamp when they first achieved current win count
-const scoreAchievementTime = new Map<string, number>() // userId -> timestamp when they first achieved current score
-let lastKnownScores = new Map<string, number>() // userId -> last known seconds
 let lastKnownWins = new Map<string, number>() // userId -> last known round wins
 
 // Stable sorting for leaderboard with tie-breaking
@@ -186,38 +184,6 @@ function getSortedLeaderboardEntries(entries: any[]): any[] {
     const timeA = roundWinAchievementTime.get(a.userId) || now
     const timeB = roundWinAchievementTime.get(b.userId) || now
     return timeA - timeB
-  })
-}
-
-// Stable sorting for scoreboard with tie-breaking  
-function getSortedScoreboardPlayers(players: any[]): any[] {
-  const now = Date.now()
-  
-  // Track achievement times for scores (only when score actually increases)
-  players.forEach(player => {
-    const key = player.userId
-    const currentSeconds = player.seconds
-    
-    // Only update achievement time when score INCREASES (not on every render)
-    const lastKnown = lastKnownScores.get(key) || 0
-    if (currentSeconds > lastKnown) {
-      scoreAchievementTime.set(key, now)
-      lastKnownScores.set(key, currentSeconds)
-    } else if (!scoreAchievementTime.has(key)) {
-      // First time seeing this player
-      scoreAchievementTime.set(key, now)
-      lastKnownScores.set(key, currentSeconds)
-    }
-  })
-  
-  // Sort: Primary by seconds (desc), secondary by userId (consistent tie-breaker)
-  return [...players].sort((a, b) => {
-    // Primary sort: higher score first
-    if (a.seconds !== b.seconds) {
-      return b.seconds - a.seconds
-    }
-    // Tie-breaker: consistent alphabetical by userId
-    return a.userId.localeCompare(b.userId)
   })
 }
 

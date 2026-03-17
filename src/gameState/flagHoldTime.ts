@@ -92,6 +92,7 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
   // Build lookup from synced hold-time entities, keyed by lowercase playerId.
   // Multiple entities may exist for the same player (e.g. after server restart),
   // so take the MAX seconds to avoid showing stale zero-score duplicates.
+  // Store raw float for accurate sorting; floor only for display.
   const synced = new Map<string, number>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
     const key = data.playerId.toLowerCase()
@@ -101,18 +102,19 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
 
   // Build result from players currently in the scene
   const seen = new Set<string>()
-  const result: { userId: string; name: string; seconds: number }[] = []
+  const result: { userId: string; name: string; seconds: number; rawSeconds: number }[] = []
   for (const [userId, name] of playersInScene) {
     const key = userId.toLowerCase()
     if (seen.has(key)) continue  // Defensive dedup
     seen.add(key)
 
-    // Use best known display name
+    const raw = synced.get(key) ?? 0
     const displayName = getKnownPlayerName(userId) || name || userId.slice(0, 8)
     result.push({
       userId,
       name: displayName,
-      seconds: Math.floor(synced.get(key) ?? 0)
+      seconds: Math.floor(raw),
+      rawSeconds: raw
     })
   }
 
@@ -126,13 +128,14 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     result.push({
       userId: key,
       name: displayName,
-      seconds: Math.floor(seconds)
+      seconds: Math.floor(seconds),
+      rawSeconds: seconds
     })
   }
 
-  // Sort: highest score first, 0-score players at the bottom alphabetically
+  // Sort by raw float seconds (desc) for accurate ordering, then alphabetically for ties
   result.sort((a, b) => {
-    if (a.seconds !== b.seconds) return b.seconds - a.seconds
+    if (a.rawSeconds !== b.rawSeconds) return b.rawSeconds - a.rawSeconds
     return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   })
   return result
