@@ -16,6 +16,7 @@ import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
+import { isMobile } from '@dcl/sdk/platform'
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
@@ -187,20 +188,10 @@ function getSortedLeaderboardEntries(entries: any[]): any[] {
   })
 }
 
-const PANEL_WIDTH = 240
-const ROW_HEIGHT = 32
-const VISITORS_PER_PAGE = 10
-const VISITOR_ROW_H = ROW_HEIGHT + 4  // 36px per row
-const LEADERBOARD_PER_PAGE = 12
-const TITLE_FONT = 20
-const ROW_FONT = 15
-const PADDING = 14
-const BORDER_RADIUS = 18
-const ICON_FONT_SQUARE = 20
-const ICON_FONT_QUESTION = 22
-const ICON_FONT_ANALYTICS = 20
-const ABILITY_BTN_SIZE = 74
-const ABILITY_ICON_SIZE = 54
+// ═══════════════════════════════════════════════════════════
+// SHARED CONSTANTS & HELPERS
+// ═══════════════════════════════════════════════════════════
+
 // Enhanced Color Palette
 const WHITE = Color4.create(1, 1, 1, 1)
 const BRIGHT_WHITE = Color4.create(1, 1, 1, 1)
@@ -215,7 +206,6 @@ const BRIGHT_GOLD = Color4.create(1, 0.9, 0.1, 1)
 const SILVER = Color4.create(0.75, 0.78, 0.82, 1)
 const BRONZE = Color4.create(0.8, 0.5, 0.2, 1)
 
-
 // Accent Colors
 const LIGHT_BLUE = Color4.create(0.45, 0.75, 1, 1)
 const CORAL_RED = Color4.create(1, 0.5, 0.45, 1)
@@ -223,12 +213,8 @@ const CORAL_RED = Color4.create(1, 0.5, 0.45, 1)
 // Background Colors
 const PANEL_BG = Color4.create(0.1, 0.1, 0.1, 0.92)
 const PANEL_BG_SEMI = Color4.create(0.08, 0.08, 0.1, 0.87)
-// Layout Constants
-const OVERLAY_PANEL_WIDTH = 680
-const OVERLAY_PANEL_HEIGHT = 520
 
 function getServerConnectionStatus(): 'Y' | 'N' {
-  // Check if Flag entities exist (they're only created by the authoritative server)
   const flagCount = [...engine.getEntitiesWith(Flag)].length
   return flagCount > 0 ? 'Y' : 'N'
 }
@@ -243,7 +229,7 @@ function formatCountdown(seconds: number): string {
 
 function formatUTCTime(): string {
   const now = new Date()
-  return now.toUTCString().slice(17, 25) // Extract just the time part HH:MM:SS
+  return now.toUTCString().slice(17, 25)
 }
 
 function formatUTCDate(): string {
@@ -263,14 +249,42 @@ function formatVisitorTime(totalSeconds: number): string {
   return `${hours}h ${remainingMinutes}m`
 }
 
+// ═══════════════════════════════════════════════════════════
+// ROOT UI — switches between desktop and mobile
+// ═══════════════════════════════════════════════════════════
+
 function PlayerListUi() {
+  const mobile = isMobile()
+  return mobile ? <MobileLayout /> : <DesktopLayout />
+}
+
+// ═══════════════════════════════════════════════════════════
+// DESKTOP LAYOUT (unchanged from original)
+// ═══════════════════════════════════════════════════════════
+
+const PANEL_WIDTH = 240
+const ROW_HEIGHT = 32
+const VISITORS_PER_PAGE = 10
+const VISITOR_ROW_H = ROW_HEIGHT + 4
+const LEADERBOARD_PER_PAGE = 12
+const TITLE_FONT = 20
+const ROW_FONT = 15
+const PADDING = 14
+const BORDER_RADIUS = 18
+const ICON_FONT_SQUARE = 20
+const ICON_FONT_QUESTION = 22
+const ICON_FONT_ANALYTICS = 20
+const ABILITY_BTN_SIZE = 74
+const ABILITY_ICON_SIZE = 54
+const OVERLAY_PANEL_WIDTH = 680
+const OVERLAY_PANEL_HEIGHT = 520
+
+function DesktopLayout() {
   const rawPlayers = getPlayersWithHoldTimes()
-  // getPlayersWithHoldTimes already sorts by seconds (desc), just use it directly
   const players = rawPlayers
   const localUserId = getPlayer()?.userId ?? null
   const rawVisitors = getAllVisitors()
   
-  // Sort visitors: Online first, then alphabetical within each group
   const allVisitors = [...rawVisitors].sort((a, b) => {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
     return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
@@ -299,6 +313,7 @@ function PlayerListUi() {
         positionType: 'relative',
       }}
     >
+      {/* Timer — top center */}
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
@@ -367,7 +382,6 @@ function PlayerListUi() {
               </UiEntity>
             ) : (
               <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                {/* Winner title */}
                 <Label
                   value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
                     ? `${splashPlayers[0].name} Wins!`
@@ -376,14 +390,9 @@ function PlayerListUi() {
                   color={GOLD}
                   font="sans-serif"
                 />
-
-                {/* Spacer between title and rankings */}
                 <UiEntity uiTransform={{ height: 28 }} />
-
-                {/* Rankings list */}
                 {splashPlayers.map((p, i) => {
                   const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
-                  const nameColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
                   const scoreColor = LIGHT_GREY
                   return (
                     <UiEntity
@@ -397,37 +406,16 @@ function PlayerListUi() {
                         padding: { left: 4, right: 4 },
                       }}
                     >
-                      {/* Left side: rank + name */}
                       <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Label
-                          value={`#${i + 1}`}
-                          fontSize={18}
-                          color={rankColor}
-                          font="sans-serif"
-                        />
+                        <Label value={`#${i + 1}`} fontSize={18} color={rankColor} font="sans-serif" />
                         <UiEntity uiTransform={{ width: 10 }} />
-                        <Label
-                          value={p.name}
-                          fontSize={18}
-                          color={nameColor}
-                          font="sans-serif"
-                        />
+                        <Label value={p.name} fontSize={18} color={rankColor} font="sans-serif" />
                       </UiEntity>
-                      {/* Right side: score */}
-                      <Label
-                        value={`${p.seconds}`}
-                        fontSize={18}
-                        color={scoreColor}
-                        font="sans-serif"
-                      />
+                      <Label value={`${p.seconds}`} fontSize={18} color={scoreColor} font="sans-serif" />
                     </UiEntity>
                   )
                 })}
-
-                {/* Spacer before footer */}
                 <UiEntity uiTransform={{ height: 24 }} />
-
-                {/* Footer message */}
                 <Label value="Next round starting..." fontSize={15} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
             )}
@@ -435,6 +423,7 @@ function PlayerListUi() {
         </UiEntity>
       )}
 
+      {/* How to Play overlay */}
       {winConditionOverlayVisible && (
         <UiEntity
           uiTransform={{
@@ -492,6 +481,7 @@ Whoever has the most points at the end of the round wins!"
             <Label value="Controls" fontSize={28} color={LIGHT_BLUE} font="sans-serif" textAlign="top-left" />
             <UiEntity uiTransform={{ height: 8 }} />
             <Label value="E     attack / steal flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="F     drop flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
             <Label value="3     fire shell" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
             <Label value="4     drop banana" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
             <Label value="" fontSize={8} color={MUTED} font="sans-serif" textAlign="top-left" />
@@ -500,6 +490,7 @@ Whoever has the most points at the end of the round wins!"
         </UiEntity>
       )}
 
+      {/* Leaderboard overlay */}
       {leaderboardOverlayVisible && (() => {
         const totalEntries = leaderboardEntries.length
         const lbMaxOffset = Math.max(0, totalEntries - LEADERBOARD_PER_PAGE)
@@ -555,7 +546,6 @@ Whoever has the most points at the end of the round wins!"
             <Label value="Today's Leaderboard" fontSize={28} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: 12 }} />
 
-            {/* Leaderboard rows + scrollbar */}
             <UiEntity
               uiTransform={{
                 width: '100%',
@@ -563,7 +553,6 @@ Whoever has the most points at the end of the round wins!"
                 flexDirection: 'row',
               }}
             >
-              {/* Rows */}
               <UiEntity
                 uiTransform={{
                   flexGrow: 1,
@@ -598,7 +587,6 @@ Whoever has the most points at the end of the round wins!"
                 )}
               </UiEntity>
 
-              {/* Custom scrollbar */}
               {lbNeedsScroll && (
                 <UiEntity
                   uiTransform={{
@@ -608,14 +596,10 @@ Whoever has the most points at the end of the round wins!"
                     margin: { left: 4 },
                   }}
                 >
-                  {/* Up arrow */}
                   <UiEntity
                     uiTransform={{
-                      width: 24,
-                      height: 28,
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      alignItems: 'center',
+                      width: 24, height: 28,
+                      flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
                       borderRadius: 4,
                     }}
                     uiBackground={{ color: lbCanScrollUp ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
@@ -624,14 +608,10 @@ Whoever has the most points at the end of the round wins!"
                     <Label value="▲" fontSize={14} color={lbCanScrollUp ? WHITE : CLOSE_GREY} font="sans-serif" />
                   </UiEntity>
 
-                  {/* Track — split into clickable segments */}
                   <UiEntity
                     uiTransform={{
-                      width: 10,
-                      flexGrow: 1,
-                      flexDirection: 'column',
-                      borderRadius: 0,
-                      margin: { top: 2, bottom: 2 },
+                      width: 10, flexGrow: 1, flexDirection: 'column',
+                      borderRadius: 0, margin: { top: 2, bottom: 2 },
                     }}
                     uiBackground={{ color: Color4.create(0.18, 0.18, 0.2, 1) }}
                   >
@@ -649,11 +629,7 @@ Whoever has the most points at the end of the round wins!"
                         segments.push(
                           <UiEntity
                             key={`lb-track-seg-${s}`}
-                            uiTransform={{
-                              width: 10,
-                              flexGrow: 1,
-                              borderRadius: 0,
-                            }}
+                            uiTransform={{ width: 10, flexGrow: 1, borderRadius: 0 }}
                             uiBackground={{ color: isThumb ? Color4.create(0.45, 0.45, 0.5, 1) : Color4.create(0, 0, 0, 0) }}
                             onMouseDown={() => { leaderboardScrollOffset = segTarget }}
                           />
@@ -663,14 +639,10 @@ Whoever has the most points at the end of the round wins!"
                     })()}
                   </UiEntity>
 
-                  {/* Down arrow */}
                   <UiEntity
                     uiTransform={{
-                      width: 24,
-                      height: 28,
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      alignItems: 'center',
+                      width: 24, height: 28,
+                      flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
                       borderRadius: 4,
                     }}
                     uiBackground={{ color: lbCanScrollDown ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
@@ -686,8 +658,8 @@ Whoever has the most points at the end of the round wins!"
         )
       })()}
 
+      {/* Analytics overlay */}
       {analyticsOverlayVisible && (() => {
-        // Pagination math
         const totalVisitors = allVisitors.length
         const maxOffset = Math.max(0, totalVisitors - VISITORS_PER_PAGE)
         if (visitorScrollOffset > maxOffset) visitorScrollOffset = maxOffset
@@ -697,13 +669,7 @@ Whoever has the most points at the end of the round wins!"
         const canScrollDown = visitorScrollOffset < maxOffset
         const needsScroll = totalVisitors > VISITORS_PER_PAGE
 
-        // Scroll track dimensions
-        const TRACK_HEIGHT = VISITORS_PER_PAGE * VISITOR_ROW_H
         const thumbRatio = totalVisitors > 0 ? Math.max(0.15, VISITORS_PER_PAGE / totalVisitors) : 1
-        const thumbHeight = Math.floor(TRACK_HEIGHT * thumbRatio)
-        const thumbOffset = maxOffset > 0
-          ? Math.floor((TRACK_HEIGHT - thumbHeight) * (visitorScrollOffset / maxOffset))
-          : 0
 
         return (
         <UiEntity
@@ -775,14 +741,12 @@ Whoever has the most points at the end of the round wins!"
             
             <UiEntity uiTransform={{ height: 20 }} />
             
-            {/* Visitor List + Scrollbar */}
             <UiEntity
               uiTransform={{
                 width: '100%',
                 flexDirection: 'row',
               }}
             >
-              {/* Visitor rows */}
               <UiEntity
                 uiTransform={{
                   flexGrow: 1,
@@ -817,27 +781,16 @@ Whoever has the most points at the end of the round wins!"
                           <Label value={visitor.name} fontSize={ROW_FONT} color={WHITE} font="sans-serif" />
                         </UiEntity>
                         <UiEntity uiTransform={{ width: '60%' }}>
-                          <Label 
-                            value={visitor.userId} 
-                            fontSize={13} 
-                            color={WHITE} 
-                            font="sans-serif" 
-                          />
+                          <Label value={visitor.userId} fontSize={13} color={WHITE} font="sans-serif" />
                         </UiEntity>
                         <UiEntity uiTransform={{ width: '14%', flexDirection: 'row', justifyContent: 'flex-end' }}>
-                          <Label 
-                            value={formatVisitorTime(visitor.totalSeconds)} 
-                            fontSize={ROW_FONT} 
-                            color={WHITE} 
-                            font="sans-serif" 
-                          />
+                          <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={ROW_FONT} color={WHITE} font="sans-serif" />
                         </UiEntity>
                       </UiEntity>
                     ))
                 )}
               </UiEntity>
 
-              {/* Custom scrollbar */}
               {needsScroll && (
                 <UiEntity
                   uiTransform={{
@@ -847,14 +800,10 @@ Whoever has the most points at the end of the round wins!"
                     margin: { left: 4 },
                   }}
                 >
-                  {/* Up arrow */}
                   <UiEntity
                     uiTransform={{
-                      width: 24,
-                      height: 28,
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      alignItems: 'center',
+                      width: 24, height: 28,
+                      flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
                       borderRadius: 4,
                     }}
                     uiBackground={{ color: canScrollUp ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
@@ -863,25 +812,19 @@ Whoever has the most points at the end of the round wins!"
                     <Label value="▲" fontSize={14} color={canScrollUp ? WHITE : CLOSE_GREY} font="sans-serif" />
                   </UiEntity>
 
-                  {/* Track — split into clickable segments */}
                   <UiEntity
                     uiTransform={{
-                      width: 10,
-                      flexGrow: 1,
-                      flexDirection: 'column',
-                      borderRadius: 0,
-                      margin: { top: 2, bottom: 2 },
+                      width: 10, flexGrow: 1, flexDirection: 'column',
+                      borderRadius: 0, margin: { top: 2, bottom: 2 },
                     }}
                     uiBackground={{ color: Color4.create(0.18, 0.18, 0.2, 1) }}
                   >
                     {(() => {
-                      // Split the track into clickable segments
                       const TRACK_SEGMENTS = 8
                       const segments: any[] = []
                       for (let s = 0; s < TRACK_SEGMENTS; s++) {
                         const segFraction = s / TRACK_SEGMENTS
                         const segTarget = Math.round(segFraction * maxOffset)
-                        // Check if the thumb overlaps this segment
                         const segTopFrac = s / TRACK_SEGMENTS
                         const segBotFrac = (s + 1) / TRACK_SEGMENTS
                         const thumbTopFrac = maxOffset > 0 ? visitorScrollOffset / maxOffset * (1 - thumbRatio) : 0
@@ -890,11 +833,7 @@ Whoever has the most points at the end of the round wins!"
                         segments.push(
                           <UiEntity
                             key={`track-seg-${s}`}
-                            uiTransform={{
-                              width: 10,
-                              flexGrow: 1,
-                              borderRadius: 0,
-                            }}
+                            uiTransform={{ width: 10, flexGrow: 1, borderRadius: 0 }}
                             uiBackground={{ color: isThumb ? Color4.create(0.45, 0.45, 0.5, 1) : Color4.create(0, 0, 0, 0) }}
                             onMouseDown={() => { visitorScrollOffset = segTarget }}
                           />
@@ -904,14 +843,10 @@ Whoever has the most points at the end of the round wins!"
                     })()}
                   </UiEntity>
 
-                  {/* Down arrow */}
                   <UiEntity
                     uiTransform={{
-                      width: 24,
-                      height: 28,
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      alignItems: 'center',
+                      width: 24, height: 28,
+                      flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
                       borderRadius: 4,
                     }}
                     uiBackground={{ color: canScrollDown ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
@@ -922,8 +857,6 @@ Whoever has the most points at the end of the round wins!"
                 </UiEntity>
               )}
             </UiEntity>
-
-
           </UiEntity>
         </UiEntity>
         )
@@ -939,7 +872,7 @@ Whoever has the most points at the end of the round wins!"
           alignItems: 'stretch',
         }}
       >
-        {/* Ability icons row — 3 buttons side by side, matching scoreboard width */}
+        {/* Ability icons row */}
         <UiEntity
           uiTransform={{
             width: PANEL_WIDTH,
@@ -948,34 +881,20 @@ Whoever has the most points at the end of the round wins!"
             margin: { bottom: 6 },
           }}
         >
-          {/* Attack (E) indicator */}
+          {/* Attack (E) */}
           <UiEntity
             uiTransform={{
-              width: ABILITY_BTN_SIZE,
-              height: ABILITY_BTN_SIZE,
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
+              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               borderRadius: { topLeft: 0, topRight: 38, bottomLeft: 38, bottomRight: 38 },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
-            <Label
-              value="E"
-              fontSize={16}
-              color={LIGHT_GREY}
-              font="sans-serif"
-              uiTransform={{
-                positionType: 'absolute',
-                position: { top: -2, left: 4 },
-              }}
+            <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 4 } }}
             />
             <UiEntity
-              uiTransform={{
-                width: ABILITY_ICON_SIZE,
-                height: ABILITY_ICON_SIZE,
-                margin: { top: 6 },
-              }}
+              uiTransform={{ width: ABILITY_ICON_SIZE, height: ABILITY_ICON_SIZE, margin: { top: 6 } }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: 'assets/images/hit-color.png' },
@@ -984,100 +903,56 @@ Whoever has the most points at the end of the round wins!"
             />
           </UiEntity>
 
-          {/* Shell (3) indicator */}
+          {/* Shell (3) */}
           <UiEntity
             uiTransform={{
-              width: ABILITY_BTN_SIZE,
-              height: ABILITY_BTN_SIZE,
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
+              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               borderRadius: { topLeft: 0, topRight: 38, bottomLeft: 38, bottomRight: 38 },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
-            <Label
-              value="3"
-              fontSize={16}
-              color={LIGHT_GREY}
-              font="sans-serif"
-              uiTransform={{
-                positionType: 'absolute',
-                position: { top: -2, left: 4 },
-              }}
+            <Label value="3" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 4 } }}
             />
             <UiEntity
-              uiTransform={{
-                width: ABILITY_ICON_SIZE - 6,
-                height: ABILITY_ICON_SIZE - 6,
-                margin: { top: 6 },
-              }}
+              uiTransform={{ width: ABILITY_ICON_SIZE - 6, height: ABILITY_ICON_SIZE - 6, margin: { top: 6 } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: {
-                  src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png'
-                },
+                texture: { src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png' },
                 color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
               }}
             />
             {isShellOnCooldown() && (
-              <Label
-                value={`${getShellCooldownRemaining()}`}
-                fontSize={26}
-                color={WHITE}
-                font="sans-serif"
-                uiTransform={{
-                  positionType: 'absolute',
-                }}
+              <Label value={`${getShellCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
               />
             )}
           </UiEntity>
 
-          {/* Banana (4) indicator */}
+          {/* Banana (4) */}
           <UiEntity
             uiTransform={{
-              width: ABILITY_BTN_SIZE,
-              height: ABILITY_BTN_SIZE,
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
+              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               borderRadius: { topLeft: 0, topRight: 38, bottomLeft: 38, bottomRight: 38 },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
-            <Label
-              value="4"
-              fontSize={16}
-              color={LIGHT_GREY}
-              font="sans-serif"
-              uiTransform={{
-                positionType: 'absolute',
-                position: { top: -2, left: 4 },
-              }}
+            <Label value="4" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 4 } }}
             />
             <UiEntity
-              uiTransform={{
-                width: ABILITY_ICON_SIZE,
-                height: ABILITY_ICON_SIZE,
-                margin: { top: 6 },
-              }}
+              uiTransform={{ width: ABILITY_ICON_SIZE, height: ABILITY_ICON_SIZE, margin: { top: 6 } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: {
-                  src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png'
-                },
+                texture: { src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
                 color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
               }}
             />
             {isBananaOnCooldown() && (
-              <Label
-                value={`${getBananaCooldownRemaining()}`}
-                fontSize={26}
-                color={WHITE}
-                font="sans-serif"
-                uiTransform={{
-                  positionType: 'absolute',
-                }}
+              <Label value={`${getBananaCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
               />
             )}
           </UiEntity>
@@ -1145,13 +1020,9 @@ Whoever has the most points at the end of the round wins!"
             const isLeader = leaderUserId !== null && p.userId === leaderUserId
             const isSelf = localUserId !== null && p.userId === localUserId
             const isCarrier = carrierUserId !== null && p.userId === carrierUserId
-            const nameColor = isLeader ? BRIGHT_GOLD : 
-                            isSelf ? BRIGHT_WHITE : 
-                            LIGHT_GREY
-            const timeColor = isLeader ? GOLD : 
-                            p.seconds > 0 ? WHITE : MUTED
-            const rowBg = isLeader ? Color4.create(0.3, 0.25, 0.1, 0.3) :
-                        Color4.create(0, 0, 0, 0)
+            const nameColor = isLeader ? BRIGHT_GOLD : isSelf ? BRIGHT_WHITE : LIGHT_GREY
+            const timeColor = isLeader ? GOLD : p.seconds > 0 ? WHITE : MUTED
+            const rowBg = isLeader ? Color4.create(0.3, 0.25, 0.1, 0.3) : Color4.create(0, 0, 0, 0)
             
             return (
               <UiEntity
@@ -1183,6 +1054,557 @@ Whoever has the most points at the end of the round wins!"
         )}
         </UiEntity>
       </UiEntity>
+    </UiEntity>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// MOBILE LAYOUT
+// ═══════════════════════════════════════════════════════════
+// Safe area: center 50% width (25%-75%), full height in center.
+// Top-right 25% x 23% blocked (profile/camera).
+// Bottom-right 25% x 45% blocked (action buttons 1-4, E, F).
+// Left 25% x 100% blocked (chat, joystick, emotes).
+// No border-radius on mobile. Fonts scaled ~2-3× for readability.
+
+// (Mobile constants cleaned up — using inline values now)
+
+// Mobile scoreboard overlay (full scoreboard popup)
+let mobileScoreboardOverlayVisible = false
+
+function MobileLayout() {
+  const rawPlayers = getPlayersWithHoldTimes()
+  const players = rawPlayers
+  const localUserId = getPlayer()?.userId ?? null
+  const leaderUserId =
+    players.length > 0 && players[0].seconds > 0 ? players[0].userId : null
+  const carrierUserId = getCurrentFlagCarrierUserId()
+  const countdownSeconds = getCountdownSeconds()
+
+  const winConditionOverlayVisible = getWinConditionOverlayVisible()
+  const leaderboardOverlayVisible = getLeaderboardOverlayVisible()
+  const rawLeaderboardEntries = getLeaderboardEntries()
+  const leaderboardEntries = getSortedLeaderboardEntries(rawLeaderboardEntries)
+
+  return (
+    <UiEntity
+      uiTransform={{
+        width: '100%',
+        height: '100%',
+        positionType: 'relative',
+      }}
+    >
+      {/* ── Top bar: [★ ?] [timer] [E 3 4] — aligned with mobile system icons ── */}
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { top: 28, left: '25%' },
+          width: '50%',
+          height: 68,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        {/* Menu icons (★ ?) — left side */}
+        <UiEntity
+          uiTransform={{
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+        >
+          <UiEntity
+            uiTransform={{ width: 68, height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { right: 6 } }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
+            onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
+          >
+            <Label value="★" fontSize={36} color={leaderboardOverlayVisible ? GOLD : WHITE} font="sans-serif" />
+          </UiEntity>
+          <UiEntity
+            uiTransform={{ width: 68, height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
+            onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
+          >
+            <Label value="?" fontSize={38} color={winConditionOverlayVisible ? LIGHT_BLUE : WHITE} font="sans-serif" />
+          </UiEntity>
+        </UiEntity>
+
+        {/* Timer — center */}
+        <UiEntity
+          uiTransform={{
+            height: 68,
+            flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            padding: { left: 24, right: 24 },
+          }}
+          uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
+        >
+          <Label value={formatCountdown(countdownSeconds)} fontSize={46} color={WHITE} font="sans-serif" />
+        </UiEntity>
+
+        {/* Ability cooldown indicators — right side */}
+        <UiEntity
+          uiTransform={{
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+        >
+          {/* Attack (E) */}
+          <UiEntity
+            uiTransform={{
+              width: 68, height: 68,
+              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              margin: { right: 6 },
+            }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
+          >
+            <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+              uiTransform={{ positionType: 'absolute', position: { top: 0, left: 3 } }}
+            />
+            <UiEntity
+              uiTransform={{ width: 44, height: 44, margin: { top: 6 } }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: 'assets/images/hit-color.png' },
+                color: isAttackFlickering() ? Color4.create(1, 1, 1, 0.25) : Color4.White()
+              }}
+            />
+          </UiEntity>
+
+          {/* Shell (3) */}
+          <UiEntity
+            uiTransform={{
+              width: 68, height: 68,
+              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              margin: { right: 6 },
+            }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
+          >
+            <Label value="3" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+              uiTransform={{ positionType: 'absolute', position: { top: 0, left: 3 } }}
+            />
+            <UiEntity
+              uiTransform={{ width: 40, height: 40, margin: { top: 6 } }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png' },
+                color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+              }}
+            />
+            {isShellOnCooldown() && (
+              <Label value={`${getShellCooldownRemaining()}`} fontSize={28} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
+              />
+            )}
+          </UiEntity>
+
+          {/* Banana (4) */}
+          <UiEntity
+            uiTransform={{
+              width: 68, height: 68,
+              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
+          >
+            <Label value="4" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+              uiTransform={{ positionType: 'absolute', position: { top: 0, left: 3 } }}
+            />
+            <UiEntity
+              uiTransform={{ width: 44, height: 44, margin: { top: 6 } }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
+                color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+              }}
+            />
+            {isBananaOnCooldown() && (
+              <Label value={`${getBananaCooldownRemaining()}`} fontSize={28} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
+              />
+            )}
+          </UiEntity>
+        </UiEntity>
+      </UiEntity>
+
+      {/* ── Bottom-center: Score display with expand button ── */}
+      {(() => {
+        // Find the local player's score
+        const localPlayer = players.find(p => localUserId !== null && p.userId === localUserId)
+        const myScore = localPlayer ? localPlayer.seconds : 0
+        const isLeader = localPlayer && leaderUserId !== null && localPlayer.userId === leaderUserId
+        const hasFlag = localPlayer && carrierUserId !== null && localPlayer.userId === carrierUserId
+        const scoreColor = isLeader ? GOLD : WHITE
+
+        return (
+          <UiEntity
+            uiTransform={{
+              positionType: 'absolute',
+              position: { bottom: 30, left: '25%' },
+              width: '50%',
+              flexDirection: 'row',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <UiEntity
+              uiTransform={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: { left: 16, right: 16, top: 10, bottom: 10 },
+              }}
+              uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
+            >
+              {/* Expand button */}
+              <UiEntity
+                uiTransform={{
+                  width: 36,
+                  height: 36,
+                  margin: { right: 10 },
+                }}
+                uiBackground={{
+                  textureMode: 'stretch',
+                  texture: { src: 'assets/images/expand.png' },
+                  color: Color4.White()
+                }}
+                onMouseDown={() => {
+                  playClickSound()
+                  setWinConditionOverlayVisible(false)
+                  setAnalyticsOverlayVisible(false)
+                  setLeaderboardOverlayVisible(false)
+                  // Toggle mobile scoreboard overlay
+                  mobileScoreboardOverlayVisible = !mobileScoreboardOverlayVisible
+                }}
+              />
+              {/* Score text */}
+              <Label value="Score:" fontSize={30} color={scoreColor} font="sans-serif" />
+              <UiEntity uiTransform={{ width: 8 }} />
+              <Label value={`${myScore}`} fontSize={30} color={scoreColor} font="sans-serif" />
+              {/* Gold star if player has the flag */}
+              {hasFlag && (
+                <Label value=" ★" fontSize={30} color={GOLD} font="sans-serif" />
+              )}
+            </UiEntity>
+          </UiEntity>
+        )
+      })()}
+
+      {/* ── Mobile Scoreboard Overlay — full scoreboard in center ── */}
+      {mobileScoreboardOverlayVisible && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { left: 0, top: 0 },
+            width: '100%', height: '100%',
+            flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              positionType: 'relative',
+              width: '42%',
+              height: '62%',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              padding: 28,
+              overflow: 'hidden',
+            }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.92) }}
+          >
+            {/* Close button */}
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 6, right: 6 },
+                width: 64, height: 64,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              }}
+              onMouseDown={() => { playClickSound(); mobileScoreboardOverlayVisible = false }}
+            >
+              <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+            <Label value="Scoreboard" fontSize={36} color={MUTED} font="sans-serif" />
+            <UiEntity uiTransform={{ height: 12 }} />
+
+            <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
+              {players.length === 0 ? (
+                <UiEntity uiTransform={{ height: 44 * 2, justifyContent: 'center', alignItems: 'center' }}>
+                  <Label value="Waiting for players..." fontSize={22} color={MUTED} font="sans-serif" />
+                </UiEntity>
+              ) : (
+                players.map((p, i) => {
+                  const isPlayerLeader = leaderUserId !== null && p.userId === leaderUserId
+                  const isSelf = localUserId !== null && p.userId === localUserId
+                  const isCarrier = carrierUserId !== null && p.userId === carrierUserId
+                  const nameColor = isPlayerLeader ? BRIGHT_GOLD : isSelf ? BRIGHT_WHITE : LIGHT_GREY
+                  const timeColor = isPlayerLeader ? GOLD : p.seconds > 0 ? WHITE : MUTED
+                  const rowBg = isPlayerLeader ? Color4.create(0.3, 0.25, 0.1, 0.3) : Color4.create(0, 0, 0, 0)
+                  
+                  return (
+                    <UiEntity
+                      key={`m-sb-${p.userId}-${i}`}
+                      uiTransform={{
+                        height: 44,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: { left: 8, right: 8, top: 2, bottom: 2 },
+                      }}
+                      uiBackground={{ color: rowBg }}
+                    >
+                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+                        {isCarrier && (
+                          <Label value="★ " fontSize={22} color={GOLD} font="sans-serif" />
+                        )}
+                        <Label value={p.name} fontSize={22} color={nameColor} font="sans-serif" />
+                      </UiEntity>
+                      <Label value={`${p.seconds}`} fontSize={22} color={timeColor} font="sans-serif" />
+                    </UiEntity>
+                  )
+                })
+              )}
+            </UiEntity>
+          </UiEntity>
+        </UiEntity>
+      )}
+
+      {/* ── Round-end splash — centered (safe area) ── */}
+      {splashVisible && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: 0, left: 0 },
+            width: '100%',
+            height: '100%',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          uiBackground={{ color: Color4.create(0, 0, 0, 0.45) }}
+        >
+          <UiEntity
+            uiTransform={{
+              positionType: 'relative',
+              width: '40%',
+              minHeight: 300,
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: { top: 36, bottom: 28, left: 32, right: 32 },
+              overflow: 'hidden',
+            }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.92) }}
+          >
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 6, right: 6 },
+                width: 64, height: 64,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              }}
+              onMouseDown={() => { playClickSound(); splashVisible = false }}
+            >
+              <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+
+            {splashPlayers.length === 0 ? (
+              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                <Label value="Round Over!" fontSize={42} color={GOLD} font="sans-serif" />
+                <UiEntity uiTransform={{ height: 20 }} />
+                <Label value="Next round starting..." fontSize={22} color={LIGHT_GREY} font="sans-serif" />
+              </UiEntity>
+            ) : (
+              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                <Label
+                  value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
+                    ? `${splashPlayers[0].name} Wins!`
+                    : 'Round Over!'}
+                  fontSize={42}
+                  color={GOLD}
+                  font="sans-serif"
+                />
+                <UiEntity uiTransform={{ height: 24 }} />
+                {splashPlayers.map((p, i) => {
+                  const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
+                  return (
+                    <UiEntity
+                      key={`m-splash-${i}`}
+                      uiTransform={{
+                        width: '100%', height: 42,
+                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                        padding: { left: 8, right: 8 },
+                      }}
+                    >
+                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Label value={`#${i + 1}`} fontSize={26} color={rankColor} font="sans-serif" />
+                        <UiEntity uiTransform={{ width: 10 }} />
+                        <Label value={p.name} fontSize={26} color={rankColor} font="sans-serif" />
+                      </UiEntity>
+                      <Label value={`${p.seconds}`} fontSize={26} color={LIGHT_GREY} font="sans-serif" />
+                    </UiEntity>
+                  )
+                })}
+                <UiEntity uiTransform={{ height: 20 }} />
+                <Label value="Next round starting..." fontSize={22} color={LIGHT_GREY} font="sans-serif" />
+              </UiEntity>
+            )}
+          </UiEntity>
+        </UiEntity>
+      )}
+
+      {/* ── How to Play overlay — centered (safe area) ── */}
+      {winConditionOverlayVisible && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { left: 0, top: 0 },
+            width: '100%', height: '100%',
+            flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              positionType: 'relative',
+              width: '42%',
+              height: '62%',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              padding: 28,
+            }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.92) }}
+          >
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 6, right: 6 },
+                width: 64, height: 64,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              }}
+              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false) }}
+            >
+              <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+            <Label value="How to Play" fontSize={36} color={LIGHT_BLUE} font="sans-serif" textAlign="top-left" />
+            <UiEntity uiTransform={{ height: 10 }} />
+            <Label
+              value="Grab the flag and earn 1 point for every second held.
+
+Hit the flag holder with E to steal it.
+
+Most points at round end wins!"
+              fontSize={22}
+              color={MUTED}
+              font="sans-serif"
+              textAlign="top-left"
+            />
+            <UiEntity uiTransform={{ height: 18 }} />
+            <Label value="Controls" fontSize={36} color={LIGHT_BLUE} font="sans-serif" textAlign="top-left" />
+            <UiEntity uiTransform={{ height: 8 }} />
+            <Label value="E     attack / steal flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="F     drop flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="3     fire shell" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="4     drop banana" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <UiEntity uiTransform={{ height: 8 }} />
+            <Label value="Walk into the flag to pick it up!" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+          </UiEntity>
+        </UiEntity>
+      )}
+
+      {/* ── Leaderboard overlay — centered (safe area) ── */}
+      {leaderboardOverlayVisible && (() => {
+        const M_LB_PER_PAGE = 8
+        const totalEntries = leaderboardEntries.length
+        const lbMaxOffset = Math.max(0, totalEntries - M_LB_PER_PAGE)
+        if (leaderboardScrollOffset > lbMaxOffset) leaderboardScrollOffset = lbMaxOffset
+        if (leaderboardScrollOffset < 0) leaderboardScrollOffset = 0
+        const visibleEntries = leaderboardEntries.slice(leaderboardScrollOffset, leaderboardScrollOffset + M_LB_PER_PAGE)
+        const lbCanScrollUp = leaderboardScrollOffset > 0
+        const lbCanScrollDown = leaderboardScrollOffset < lbMaxOffset
+
+        return (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { left: 0, top: 0 },
+            width: '100%', height: '100%',
+            flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              positionType: 'relative',
+              width: '42%',
+              height: '62%',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              padding: 28,
+              overflow: 'hidden',
+            }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.92) }}
+          >
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 6, right: 6 },
+                width: 64, height: 64,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              }}
+              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false) }}
+            >
+              <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+            <Label value="Today's Leaderboard" fontSize={36} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ height: 12 }} />
+
+            {/* Scroll up */}
+            {lbCanScrollUp && (
+              <UiEntity
+                uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }}
+                onMouseDown={() => { leaderboardScrollOffset -= 1 }}
+              >
+                <Label value="▲ More" fontSize={22} color={WHITE} font="sans-serif" />
+              </UiEntity>
+            )}
+
+            <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
+              {totalEntries === 0 ? (
+                <UiEntity uiTransform={{ height: 44 * 2, justifyContent: 'center', alignItems: 'center' }}>
+                  <Label value="No champions yet..." fontSize={22} color={MUTED} font="sans-serif" />
+                </UiEntity>
+              ) : (
+                visibleEntries.map((entry, i) => {
+                  const isSelf = localUserId !== null && entry.userId === localUserId
+                  const nameColor = isSelf ? WHITE : GREY
+                  const crowns = '★'.repeat(entry.roundsWon)
+                  return (
+                    <UiEntity
+                      key={`m-lb-${entry.userId}-${leaderboardScrollOffset}-${i}`}
+                      uiTransform={{
+                        height: 44,
+                        flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start',
+                      }}
+                    >
+                      <Label value={crowns ? crowns + ' ' : ''} fontSize={22} color={GOLD} font="sans-serif" />
+                      <Label value={entry.name} fontSize={22} color={nameColor} font="sans-serif" />
+                    </UiEntity>
+                  )
+                })
+              )}
+            </UiEntity>
+
+            {/* Scroll down */}
+            {lbCanScrollDown && (
+              <UiEntity
+                uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }}
+                onMouseDown={() => { leaderboardScrollOffset += 1 }}
+              >
+                <Label value="▼ More" fontSize={22} color={WHITE} font="sans-serif" />
+              </UiEntity>
+            )}
+          </UiEntity>
+        </UiEntity>
+        )
+      })()}
     </UiEntity>
   )
 }

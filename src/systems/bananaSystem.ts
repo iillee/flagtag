@@ -364,12 +364,45 @@ function updateLocalBananas(dt: number): void {
   }
 }
 
+// ── Client-side GltfContainer attachment for synced banana entities ──
+// The server no longer syncs GltfContainer — clients attach the visual mesh locally
+// to avoid a Bevy renderer issue where server-synced GltfContainer sometimes fails to load.
+const bananasWithModel = new Set<number>()
+
+function ensureBananaModels(): void {
+  for (const [entity] of engine.getEntitiesWith(Banana, Transform)) {
+    const eid = entity as number
+    if (!bananasWithModel.has(eid)) {
+      if (!GltfContainer.has(entity)) {
+        GltfContainer.create(entity, {
+          src: BANANA_MODEL_SRC,
+          visibleMeshesCollisionMask: 0,
+          invisibleMeshesCollisionMask: 0
+        })
+        console.log('[Banana] 🍌 Attached local GltfContainer to synced banana entity', eid)
+      }
+      bananasWithModel.add(eid)
+    }
+  }
+  // Clean up tracking for removed entities
+  for (const eid of bananasWithModel) {
+    if (!Banana.has(eid as Entity)) {
+      bananasWithModel.delete(eid)
+    }
+  }
+}
+
 // ── Main client system ──
 export function bananaClientSystem(dt: number): void {
   registerBananaMessages()
 
   const now = Date.now()
   const serverUp = isServerConnected()
+
+  // Attach GltfContainer to any synced banana entities that don't have one yet
+  if (serverUp) {
+    ensureBananaModels()
+  }
 
   // Release banana stagger freeze
   if (bananaStaggerUntil > 0 && now >= bananaStaggerUntil) {

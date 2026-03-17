@@ -271,7 +271,31 @@ function fireGroundRaycastForServer(dropPos: Vector3): void {
   })
 }
 
+// ── Client-side GltfContainer attachment for the synced flag entity ──
+// The server no longer syncs GltfContainer — the client attaches the visual mesh locally
+// to avoid a Bevy renderer issue where server-synced GltfContainer sometimes fails to load.
+let flagModelAttached = false
+
+function ensureFlagModel(): void {
+  if (flagModelAttached) return
+  for (const [entity] of engine.getEntitiesWith(Flag, Transform)) {
+    if (!GltfContainer.has(entity)) {
+      GltfContainer.create(entity, {
+        src: BANNER_SRC,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
+      console.log('[Flag] 🚩 Attached local GltfContainer to synced flag entity')
+    }
+    flagModelAttached = true
+    break
+  }
+}
+
 export function flagClientSystem(dt: number): void {
+  // Ensure the synced flag entity has a GltfContainer (attached locally, not synced from server)
+  ensureFlagModel()
+
   const userId = getPlayerData()?.userId
 
   // Apply drop cooldown as soon as we see we're no longer carrying (before auto-pickup check).
@@ -320,23 +344,23 @@ export function flagClientSystem(dt: number): void {
     room.send('requestAttack', { t: 0 })
   }
 
-  // ── Manual drop (currently unassigned — uncomment and bind to a key to re-enable) ──
-  // if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN) && userId) {
-  //   let amCarrying = false
-  //   for (const [, flag] of engine.getEntitiesWith(Flag)) {
-  //     if (flag.state === FlagState.Carried && flag.carrierPlayerId === userId) {
-  //       amCarrying = true
-  //       break
-  //     }
-  //   }
-  //   if (amCarrying) {
-  //     console.log('[C.1] Drop key pressed - sending requestDrop')
-  //     playDropSound()
-  //     skipNextDropSound = true
-  //     lastDropTimeMs = Date.now()
-  //     room.send('requestDrop', { t: 0 })
-  //   }
-  // }
+  // ── Manual drop (F key) ──
+  if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN) && userId) {
+    let amCarrying = false
+    for (const [, flag] of engine.getEntitiesWith(Flag)) {
+      if (flag.state === FlagState.Carried && flag.carrierPlayerId === userId) {
+        amCarrying = true
+        break
+      }
+    }
+    if (amCarrying) {
+      console.log('[C.1] F pressed - sending requestDrop')
+      playDropSound()
+      skipNextDropSound = true
+      lastDropTimeMs = Date.now()
+      room.send('requestDrop', { t: 0 })
+    }
+  }
 
   // Handle flag state changes with clone system
   for (const [flagEntity, flag] of engine.getEntitiesWith(Flag)) {

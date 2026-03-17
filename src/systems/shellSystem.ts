@@ -428,6 +428,35 @@ function updateLocalShells(dt: number): void {
   }
 }
 
+// ── Client-side GltfContainer attachment for synced shell entities ──
+// The server no longer syncs GltfContainer — clients attach the visual mesh locally
+// to avoid a Bevy renderer issue where server-synced GltfContainer sometimes fails to load.
+const shellsWithModel = new Set<number>()
+
+function ensureShellModels(): void {
+  for (const [entity, shell] of engine.getEntitiesWith(Shell, Transform)) {
+    if (!shell.active) continue
+    const eid = entity as number
+    if (!shellsWithModel.has(eid)) {
+      if (!GltfContainer.has(entity)) {
+        GltfContainer.create(entity, {
+          src: SHELL_MODEL_SRC,
+          visibleMeshesCollisionMask: 0,
+          invisibleMeshesCollisionMask: 0
+        })
+        console.log('[Shell] 🐚 Attached local GltfContainer to synced shell entity', eid)
+      }
+      shellsWithModel.add(eid)
+    }
+  }
+  // Clean up tracking for removed entities
+  for (const eid of shellsWithModel) {
+    if (!Shell.has(eid as Entity)) {
+      shellsWithModel.delete(eid)
+    }
+  }
+}
+
 // ── Main client system ──
 export function shellClientSystem(dt: number): void {
   registerShellMessages()
@@ -449,7 +478,8 @@ export function shellClientSystem(dt: number): void {
     // Continuously report ground Y for moving shells
     updateServerShellGroundRaycasts(dt)
 
-    // Attach looping sound to any new synced Shell entities
+    // Attach GltfContainer + looping sound to any new synced Shell entities
+    ensureShellModels()
     for (const [entity, shell] of engine.getEntitiesWith(Shell, Transform)) {
       const eid = entity as number
       if (shell.active && !serverShellsWithSound.has(eid)) {

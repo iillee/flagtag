@@ -1,4 +1,4 @@
-import { engine, Transform, GltfContainer, PlayerIdentityData, AvatarBase, type Entity } from '@dcl/sdk/ecs'
+import { engine, Transform, PlayerIdentityData, AvatarBase, type Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
@@ -333,11 +333,8 @@ export async function setupServer(): Promise<void> {
     rotation: Quaternion.fromEulerDegrees(0, 0, 0),
     scale: Vector3.create(1, 1, 1)
   })
-  GltfContainer.create(flagEntity, { 
-    src: BANNER_SRC,
-    visibleMeshesCollisionMask: 0,
-    invisibleMeshesCollisionMask: 0
-  })
+  // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
+  // This avoids a Bevy renderer issue where server-synced GltfContainer sometimes fails to trigger GLB loading.
   
   // Use the first spawn point as the default base (or restored position if available)
   const initialBase = flagStartState === FlagState.AtBase ? FLAG_SPAWN_POINTS[0] : { x: flagStartPos.x, y: flagStartPos.y, z: flagStartPos.z }
@@ -354,7 +351,7 @@ export async function setupServer(): Promise<void> {
     baseX: initialBase.x, baseY: initialBase.y, baseZ: initialBase.z,
     dropAnchorX: dropAnchor.x, dropAnchorY: dropAnchor.y, dropAnchorZ: dropAnchor.z
   })
-  syncEntity(flagEntity, [Transform.componentId, Flag.componentId, GltfContainer.componentId], SyncIds.FLAG)
+  syncEntity(flagEntity, [Transform.componentId, Flag.componentId], SyncIds.FLAG)
 
   // Create countdown timer - use next UTC boundary for proper initialization
   const now = Date.now()
@@ -855,16 +852,12 @@ function handleBananaDrop(playerId: string): void {
     position: dropPos,
     scale: Vector3.create(0.02, 0.02, 0.02)
   })
-  GltfContainer.create(bananaEntity, {
-    src: BANANA_MODEL_SRC,
-    visibleMeshesCollisionMask: 0,
-    invisibleMeshesCollisionMask: 0
-  })
+  // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
   Banana.create(bananaEntity, {
     droppedByPlayerId: playerId,
     droppedAtMs: now,
   })
-  syncEntity(bananaEntity, [Transform.componentId, GltfContainer.componentId, Banana.componentId], getNextBananaSyncId())
+  syncEntity(bananaEntity, [Transform.componentId, Banana.componentId], getNextBananaSyncId())
 
   activeBananas.push({
     entity: bananaEntity,
@@ -992,11 +985,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     scale: Vector3.create(0.02, 0.02, 0.02),
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
   })
-  GltfContainer.create(shellEntity, {
-    src: SHELL_MODEL_SRC,
-    visibleMeshesCollisionMask: 0,
-    invisibleMeshesCollisionMask: 0
-  })
+  // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
   Shell.create(shellEntity, {
     firedByPlayerId: playerId,
     firedAtMs: now,
@@ -1006,7 +995,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     maxDistance: SHELL_MAX_RANGE,
     active: true,
   })
-  syncEntity(shellEntity, [Transform.componentId, GltfContainer.componentId, Shell.componentId], getNextShellSyncId())
+  syncEntity(shellEntity, [Transform.componentId, Shell.componentId], getNextShellSyncId())
 
   activeShells.push({
     entity: shellEntity,
