@@ -373,13 +373,21 @@ function ensureBananaModels(): void {
   for (const [entity] of engine.getEntitiesWith(Banana, Transform)) {
     const eid = entity as number
     if (!bananasWithModel.has(eid)) {
+      // Wait until the server's Transform has actually synced (scale should be 0.02, not default 1.0).
+      // This prevents the banana from briefly appearing huge at 0,0,0 before CRDT data arrives.
+      const t = Transform.get(entity)
+      if (t.scale.x > 0.5 || (t.position.x === 0 && t.position.y === 0 && t.position.z === 0)) {
+        continue // Transform hasn't synced yet — skip this frame
+      }
       if (!GltfContainer.has(entity)) {
         GltfContainer.create(entity, {
           src: BANANA_MODEL_SRC,
           visibleMeshesCollisionMask: 0,
           invisibleMeshesCollisionMask: 0
         })
-        console.log('[Banana] 🍌 Attached local GltfContainer to synced banana entity', eid)
+        console.log('[Banana] 🍌 Attached local GltfContainer to synced banana entity', eid,
+          'pos:', t.position.x.toFixed(1), t.position.y.toFixed(1), t.position.z.toFixed(1),
+          'scale:', t.scale.x.toFixed(3))
       }
       bananasWithModel.add(eid)
     }
