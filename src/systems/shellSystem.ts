@@ -488,10 +488,21 @@ export function shellClientSystem(dt: number): void {
         }
         serverShellsWithSound.add(eid)
       }
+      // Stop sound immediately when shell becomes inactive (hit something / expired)
+      if (!shell.active && serverShellsWithSound.has(eid)) {
+        if (AudioSource.has(entity)) {
+          stopShellSound(entity)
+        }
+        serverShellsWithSound.delete(eid)
+      }
     }
-    // Clean up tracking for shells that no longer exist
+    // Clean up tracking for shells that no longer exist — stop sound before removal
     for (const eid of serverShellsWithSound) {
       if (!Shell.has(eid as Entity)) {
+        // Stop the looping sound so it doesn't linger after the entity is removed
+        if (AudioSource.has(eid as Entity)) {
+          stopShellSound(eid as Entity)
+        }
         serverShellsWithSound.delete(eid)
       }
     }

@@ -346,6 +346,30 @@ export async function main() {
     blueOrbSoundEntities.push(snd)
   }
 
+  // ── Reload drop: if we were carrying the flag when /reload happened, drop it ──
+  // Flag CRDT data arrives after a few frames, so we poll briefly on startup.
+  if (local) {
+    const { Flag, FlagState } = await import('./shared/components')
+    let reloadCheckFrames = 0
+    const RELOAD_CHECK_MAX_FRAMES = 60 // ~1 second at 60fps
+    engine.addSystem(function reloadDropSystem() {
+      reloadCheckFrames++
+      for (const [, flag] of engine.getEntitiesWith(Flag)) {
+        if (flag.state === FlagState.Carried && flag.carrierPlayerId === local.userId) {
+          console.log('[Main] Detected flag carry on scene load (likely /reload) — requesting drop')
+          room.send('requestDrop', { t: 0 })
+        }
+        // Flag data found — remove this system regardless
+        engine.removeSystem(reloadDropSystem)
+        return
+      }
+      // Give up after max frames
+      if (reloadCheckFrames >= RELOAD_CHECK_MAX_FRAMES) {
+        engine.removeSystem(reloadDropSystem)
+      }
+    })
+  }
+
   // Client systems
   engine.addSystem(flagClientSystem)
   engine.addSystem(combatClientSystem)

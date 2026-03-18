@@ -769,22 +769,22 @@ Whoever has the most points at the end of the round wins!"
                           padding: { left: 0, right: 8, top: 2, bottom: 2 },
                         }}
                       >
-                        <UiEntity uiTransform={{ width: '6%', flexDirection: 'row', alignItems: 'center' }}>
+                        <UiEntity uiTransform={{ width: '5%', flexDirection: 'row', alignItems: 'center' }}>
                           <Label 
                             value={visitor.isOnline ? "●" : "○"} 
-                            fontSize={16} 
+                            fontSize={14} 
                             color={visitor.isOnline ? WHITE : GREY} 
                             font="sans-serif" 
                           />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '20%' }}>
-                          <Label value={visitor.name} fontSize={ROW_FONT} color={WHITE} font="sans-serif" />
+                        <UiEntity uiTransform={{ width: '18%', overflow: 'hidden', height: VISITOR_ROW_H }}>
+                          <Label value={visitor.name} fontSize={12} color={WHITE} font="sans-serif" />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '60%' }}>
-                          <Label value={visitor.userId} fontSize={13} color={WHITE} font="sans-serif" />
+                        <UiEntity uiTransform={{ width: '65%', overflow: 'hidden', height: VISITOR_ROW_H }}>
+                          <Label value={visitor.userId} fontSize={11} color={WHITE} font="sans-serif" />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '14%', flexDirection: 'row', justifyContent: 'flex-end' }}>
-                          <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={ROW_FONT} color={WHITE} font="sans-serif" />
+                        <UiEntity uiTransform={{ width: '12%', flexDirection: 'row', justifyContent: 'flex-end' }}>
+                          <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={12} color={WHITE} font="sans-serif" />
                         </UiEntity>
                       </UiEntity>
                     ))
