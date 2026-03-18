@@ -472,11 +472,9 @@ export function flagClientSystem(dt: number): void {
 
     // Safety nets
     // 1. Flag is carried but clone is missing or broken — recreate it
+    // Only check GltfContainer — desktop clone has no Transform (AvatarAttach controls position)
     const cloneMissing = carryCloneEntity === null
-    const cloneBroken = carryCloneEntity !== null && (
-      !GltfContainer.has(carryCloneEntity) ||
-      !Transform.has(carryCloneEntity)
-    )
+    const cloneBroken = carryCloneEntity !== null && !GltfContainer.has(carryCloneEntity)
     if (flag.state === FlagState.Carried && (cloneMissing || cloneBroken) && !needsCloneCreate) {
       console.log('[C.16] SAFETY NET: Flag is carried but clone is', cloneMissing ? 'missing' : 'broken', '! Recreating...')
       VisibilityComponent.createOrReplace(flagEntity, { visible: false })
