@@ -11,6 +11,7 @@ import {
   Material,
   MaterialTransparencyMode,
   Tween,
+  TweenSequence,
   EasingFunction,
   Raycast,
   RaycastResult,
@@ -126,13 +127,22 @@ function showSplatEffect(position: Vector3): void {
     t.position = pos
     t.scale = Vector3.create(startScale, startScale, startScale)
 
+    const endVec = Vector3.create(endScale, endScale * 0.3, endScale)
     Tween.createOrReplace(sphere, {
       mode: Tween.Mode.Scale({
         start: Vector3.create(startScale, startScale, startScale),
-        end: Vector3.create(endScale, endScale * 0.3, endScale) // Flatten vertically for "splat"
+        end: endVec // Flatten vertically for "splat"
       }),
       duration: SPLAT_DURATION_MS,
       easingFunction: EasingFunction.EF_EASEOUTQUAD,
+    })
+    // Chain a shrink-to-zero so the splat disappears even if the timer cleanup doesn't fire (mobile bug)
+    TweenSequence.createOrReplace(sphere, {
+      sequence: [{
+        mode: Tween.Mode.Scale({ start: endVec, end: Vector3.Zero() }),
+        duration: SPLAT_DURATION_MS * 0.3,
+        easingFunction: EasingFunction.EF_EASEINQUAD,
+      }]
     })
 
     activeSplats.push({ entity: sphere, expiresAt })
@@ -143,6 +153,7 @@ function hideSplat(entity: Entity): void {
   const t = Transform.getMutable(entity)
   t.position = HIDDEN_POS
   t.scale = Vector3.Zero()
+  if (TweenSequence.has(entity)) TweenSequence.deleteFrom(entity)
   if (Tween.has(entity)) Tween.deleteFrom(entity)
 }
 
