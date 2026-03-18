@@ -21,6 +21,7 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
@@ -32,7 +33,56 @@ import { predictAttackLocally } from './combatSystem'
 let carryCloneEntity: Entity | null = null
 let attachAnchorEntity: Entity | null = null
 
-const CARRY_BASE_Y = 3.0  // base Y offset above AAPT_POSITION (feet)
+const CARRY_BASE_Y = 3.0  // base Y offset above AAPT_POSITION (feet) — mobile only
+
+/**
+ * Create the visual clone that follows the flag carrier.
+ * - Desktop: single entity with AAPT_NAME_TAG (parent/child breaks rendering)
+ * - Mobile: two-entity anchor (AAPT_POSITION) → child (Y offset) because AAPT_NAME_TAG is broken on mobile
+ */
+function createCarryClone(carrierId: string): void {
+  cleanupClone()
+
+  if (isMobile()) {
+    // Mobile: two-entity approach with AAPT_POSITION + Y offset
+    const anchor = engine.addEntity()
+    Transform.create(anchor, {
+      position: Vector3.Zero(),
+      scale: Vector3.One()
+    })
+    AvatarAttach.create(anchor, {
+      avatarId: carrierId,
+      anchorPointId: AvatarAnchorPointType.AAPT_POSITION
+    })
+    attachAnchorEntity = anchor
+
+    carryCloneEntity = engine.addEntity()
+    Transform.create(carryCloneEntity, {
+      parent: anchor,
+      position: Vector3.create(0, CARRY_BASE_Y, 0),
+      scale: Vector3.One()
+    })
+    GltfContainer.create(carryCloneEntity, {
+      src: BANNER_SRC,
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0
+    })
+    console.log('[Flag] Clone created (mobile: AAPT_POSITION + Y offset)')
+  } else {
+    // Desktop: single entity with AAPT_NAME_TAG (reliable on desktop)
+    carryCloneEntity = engine.addEntity()
+    AvatarAttach.create(carryCloneEntity, {
+      avatarId: carrierId,
+      anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+    })
+    GltfContainer.create(carryCloneEntity, {
+      src: BANNER_SRC,
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0
+    })
+    console.log('[Flag] Clone created (desktop: AAPT_NAME_TAG)')
+  }
+}
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
 // ── Trail pool (horizontal particles when carried) ──
@@ -387,38 +437,12 @@ export function flagClientSystem(dt: number): void {
       console.log('[C.11] Creating clone for carrier:', flag.carrierPlayerId.slice(0, 8), 
         '(reason:', isFirstFrame ? 'firstFrame' : stateChanged ? 'stateChanged' : carrierChanged ? 'carrierChanged' : 'missingClone', ')')
       
-      // Clean up any existing clone first
-      cleanupClone()
-      
       // Hide server flag with visibility (don't move it — avoids CRDT conflicts)
       VisibilityComponent.createOrReplace(flagEntity, { visible: false })
       
-      // Two-entity clone: anchor (AvatarAttach AAPT_POSITION) → child (GltfContainer with Y offset)
-      // Uses AAPT_POSITION (feet) + Y offset because AAPT_NAME_TAG is broken on mobile.
-      const anchor = engine.addEntity()
-      Transform.create(anchor, {
-        position: Vector3.Zero(),
-        scale: Vector3.One()
-      })
-      AvatarAttach.create(anchor, {
-        avatarId: flag.carrierPlayerId,
-        anchorPointId: AvatarAnchorPointType.AAPT_POSITION
-      })
-      attachAnchorEntity = anchor
-
-      carryCloneEntity = engine.addEntity()
-      Transform.create(carryCloneEntity, {
-        parent: anchor,
-        position: Vector3.create(0, CARRY_BASE_Y, 0),
-        scale: Vector3.One()
-      })
-      GltfContainer.create(carryCloneEntity, { 
-        src: BANNER_SRC,
-        visibleMeshesCollisionMask: 0,
-        invisibleMeshesCollisionMask: 0
-      })
-      
-      console.log('[C.12] Clone created successfully (AAPT_POSITION + Y offset)')
+      // Create platform-specific clone
+      createCarryClone(flag.carrierPlayerId)
+      console.log('[C.12] Clone created for carrier:', flag.carrierPlayerId.slice(0, 8))
 
     } else if (needsCloneRemove) {
       if (!isFirstFrame) {
@@ -447,33 +471,16 @@ export function flagClientSystem(dt: number): void {
     }
 
     // Safety nets
-    // 1. Flag is carried but clone is missing — recreate it
-    if (flag.state === FlagState.Carried && carryCloneEntity === null && !needsCloneCreate) {
-      console.log('[C.16] SAFETY NET: Flag is carried but clone is missing! Recreating...')
+    // 1. Flag is carried but clone is missing or broken — recreate it
+    const cloneMissing = carryCloneEntity === null
+    const cloneBroken = carryCloneEntity !== null && (
+      !GltfContainer.has(carryCloneEntity) ||
+      !Transform.has(carryCloneEntity)
+    )
+    if (flag.state === FlagState.Carried && (cloneMissing || cloneBroken) && !needsCloneCreate) {
+      console.log('[C.16] SAFETY NET: Flag is carried but clone is', cloneMissing ? 'missing' : 'broken', '! Recreating...')
       VisibilityComponent.createOrReplace(flagEntity, { visible: false })
-      
-      const safetyAnchor = engine.addEntity()
-      Transform.create(safetyAnchor, {
-        position: Vector3.Zero(),
-        scale: Vector3.One()
-      })
-      AvatarAttach.create(safetyAnchor, {
-        avatarId: flag.carrierPlayerId,
-        anchorPointId: AvatarAnchorPointType.AAPT_POSITION
-      })
-      attachAnchorEntity = safetyAnchor
-
-      carryCloneEntity = engine.addEntity()
-      Transform.create(carryCloneEntity, {
-        parent: safetyAnchor,
-        position: Vector3.create(0, CARRY_BASE_Y, 0),
-        scale: Vector3.One()
-      })
-      GltfContainer.create(carryCloneEntity, { 
-        src: BANNER_SRC,
-        visibleMeshesCollisionMask: 0,
-        invisibleMeshesCollisionMask: 0
-      })
+      createCarryClone(flag.carrierPlayerId)
     }
     
     // 2. Flag is NOT carried — ensure server flag is visible
