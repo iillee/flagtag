@@ -20,7 +20,7 @@ import {
   AudioSource,
   type Entity
 } from '@dcl/sdk/ecs'
-import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
+import { Vector3, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
@@ -32,11 +32,6 @@ import { predictAttackLocally } from './combatSystem'
 let carryCloneEntity: Entity | null = null
 let attachAnchorEntity: Entity | null = null
 
-// Carry animation — bob and swivel on the child entity (doesn't conflict with AvatarAttach on anchor)
-const CARRY_BOB_AMPLITUDE = 0.1
-const CARRY_BOB_SPEED = 3.0
-const CARRY_ROTATE_SPEED_DEG = 30
-let carryAnimTime = 0
 const CARRY_BASE_Y = 3.0  // base Y offset above AAPT_POSITION (feet)
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
@@ -423,7 +418,6 @@ export function flagClientSystem(dt: number): void {
         invisibleMeshesCollisionMask: 0
       })
       
-      carryAnimTime = 0
       console.log('[C.12] Clone created successfully (AAPT_POSITION + Y offset)')
 
     } else if (needsCloneRemove) {
@@ -498,15 +492,8 @@ export function flagClientSystem(dt: number): void {
 
   const clampedDt = Math.min(dt, 0.1)
 
-  // Animate the carried flag child entity — bob and swivel
-  if (carryCloneEntity !== null && Transform.has(carryCloneEntity)) {
-    carryAnimTime += clampedDt
-    const bobY = CARRY_BASE_Y + CARRY_BOB_AMPLITUDE * Math.sin(carryAnimTime * CARRY_BOB_SPEED)
-    const angleDeg = (carryAnimTime * CARRY_ROTATE_SPEED_DEG) % 360
-    const t = Transform.getMutable(carryCloneEntity)
-    t.position = Vector3.create(0, bobY, 0)
-    t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
-  }
+  // No per-frame animation on the carried clone — mutating Transform on AvatarAttach children
+  // causes the flag to disappear on the desktop client.
 
 
 
