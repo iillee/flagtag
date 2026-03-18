@@ -151,6 +151,42 @@ function roundEndSplashSystem(dt: number): void {
 engine.addSystem(roundEndSplashSystem)
 engine.addSystem(attackFlickerSystem)
 
+// ── Server-down detection ──
+// Wait a grace period after scene load before showing the server-down screen.
+// This prevents the overlay from flashing during normal scene startup when
+// CRDT data hasn't arrived yet.
+const SERVER_DOWN_GRACE_SEC = 15    // seconds after scene load before we check
+const SERVER_DOWN_CONFIRM_SEC = 5   // consecutive seconds of Server:N after grace before showing
+let sceneLoadElapsed = 0
+let serverDownTimer = 0
+let serverDownVisible = false
+let serverDownDismissed = false     // user manually closed it this session
+let closeServerDownHovered = false
+
+function serverDownDetectionSystem(dt: number): void {
+  sceneLoadElapsed += dt
+
+  // Don't check during the initial grace period
+  if (sceneLoadElapsed < SERVER_DOWN_GRACE_SEC) return
+
+  const connected = getServerConnectionStatus() === 'Y'
+
+  if (connected) {
+    // Server is up — reset everything
+    serverDownTimer = 0
+    serverDownVisible = false
+    serverDownDismissed = false
+  } else {
+    // Server is down — accumulate time
+    serverDownTimer += dt
+    if (serverDownTimer >= SERVER_DOWN_CONFIRM_SEC && !serverDownDismissed) {
+      serverDownVisible = true
+    }
+  }
+}
+
+engine.addSystem(serverDownDetectionSystem)
+
 // Tie-breaking tracking for stable leaderboard sorting
 const roundWinAchievementTime = new Map<string, number>() // userId -> timestamp when they first achieved current win count
 let lastKnownWins = new Map<string, number>() // userId -> last known round wins
@@ -255,7 +291,61 @@ function formatVisitorTime(totalSeconds: number): string {
 
 function PlayerListUi() {
   const mobile = isMobile()
-  return mobile ? <MobileLayout /> : <DesktopLayout />
+  return (
+    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
+      {mobile ? <MobileLayout /> : <DesktopLayout />}
+
+      {/* Server-down overlay */}
+      {serverDownVisible && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: 0, left: 0 },
+            width: '100%',
+            height: '100%',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}
+        >
+          <UiEntity
+            uiTransform={{
+              width: 460,
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 16,
+              padding: { top: 36, bottom: 32, left: 40, right: 40 },
+            }}
+            uiBackground={{ color: Color4.create(0.12, 0.12, 0.14, 0.96) }}
+          >
+            {/* Close button */}
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 8, right: 8 },
+                width: 56,
+                height: 56,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={() => { closeServerDownHovered = true }}
+              onMouseLeave={() => { closeServerDownHovered = false }}
+              onMouseDown={() => { playClickSound(); serverDownDismissed = true; serverDownVisible = false; closeServerDownHovered = false }}
+            >
+              <Label value="×" fontSize={44} color={closeServerDownHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+
+            <Label value="Server Maintenance" fontSize={28} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ height: 12 }} />
+            <Label value="try back later" fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+          </UiEntity>
+        </UiEntity>
+      )}
+    </UiEntity>
+  )
 }
 
 // ═══════════════════════════════════════════════════════════

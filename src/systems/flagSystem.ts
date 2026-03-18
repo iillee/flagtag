@@ -20,17 +20,24 @@ import {
   AudioSource,
   type Entity
 } from '@dcl/sdk/ecs'
-import { Vector3, Color4 } from '@dcl/sdk/math'
+import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
 import { predictAttackLocally } from './combatSystem'
 
 // Visual clone system for smooth flag carrying
-// Single-entity approach: AvatarAttach + GltfContainer on the same entity (SDK-recommended pattern)
+// Two-entity approach: anchor (AvatarAttach AAPT_POSITION) → child (GltfContainer with Y offset)
+// Uses AAPT_POSITION because AAPT_NAME_TAG is broken on mobile client.
 let carryCloneEntity: Entity | null = null
+let attachAnchorEntity: Entity | null = null
 
-// (Carry animation is handled by AvatarAttach — no manual bob/rotate needed)
+// Carry animation — bob and swivel on the child entity (doesn't conflict with AvatarAttach on anchor)
+const CARRY_BOB_AMPLITUDE = 0.1
+const CARRY_BOB_SPEED = 3.0
+const CARRY_ROTATE_SPEED_DEG = 30
+let carryAnimTime = 0
+const CARRY_BASE_Y = 3.0  // base Y offset above AAPT_POSITION (feet)
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
 // ── Trail pool (horizontal particles when carried) ──
@@ -214,6 +221,11 @@ function cleanupClone(): void {
     engine.removeEntity(carryCloneEntity)
     carryCloneEntity = null 
   }
+  if (attachAnchorEntity !== null) {
+    console.log('[Flag] Cleaning up existing anchor entity')
+    engine.removeEntity(attachAnchorEntity)
+    attachAnchorEntity = null
+  }
 }
 
 function playPickupSound(): void {
@@ -386,12 +398,24 @@ export function flagClientSystem(dt: number): void {
       // Hide server flag with visibility (don't move it — avoids CRDT conflicts)
       VisibilityComponent.createOrReplace(flagEntity, { visible: false })
       
-      // Single-entity clone: AvatarAttach + GltfContainer on the same entity
-      // This is the SDK-recommended pattern — no parent/child chain needed.
-      carryCloneEntity = engine.addEntity()
-      AvatarAttach.create(carryCloneEntity, {
+      // Two-entity clone: anchor (AvatarAttach AAPT_POSITION) → child (GltfContainer with Y offset)
+      // Uses AAPT_POSITION (feet) + Y offset because AAPT_NAME_TAG is broken on mobile.
+      const anchor = engine.addEntity()
+      Transform.create(anchor, {
+        position: Vector3.Zero(),
+        scale: Vector3.One()
+      })
+      AvatarAttach.create(anchor, {
         avatarId: flag.carrierPlayerId,
-        anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+        anchorPointId: AvatarAnchorPointType.AAPT_POSITION
+      })
+      attachAnchorEntity = anchor
+
+      carryCloneEntity = engine.addEntity()
+      Transform.create(carryCloneEntity, {
+        parent: anchor,
+        position: Vector3.create(0, CARRY_BASE_Y, 0),
+        scale: Vector3.One()
       })
       GltfContainer.create(carryCloneEntity, { 
         src: BANNER_SRC,
@@ -399,7 +423,8 @@ export function flagClientSystem(dt: number): void {
         invisibleMeshesCollisionMask: 0
       })
       
-      console.log('[C.12] Clone created successfully')
+      carryAnimTime = 0
+      console.log('[C.12] Clone created successfully (AAPT_POSITION + Y offset)')
 
     } else if (needsCloneRemove) {
       if (!isFirstFrame) {
@@ -433,10 +458,22 @@ export function flagClientSystem(dt: number): void {
       console.log('[C.16] SAFETY NET: Flag is carried but clone is missing! Recreating...')
       VisibilityComponent.createOrReplace(flagEntity, { visible: false })
       
-      carryCloneEntity = engine.addEntity()
-      AvatarAttach.create(carryCloneEntity, {
+      const safetyAnchor = engine.addEntity()
+      Transform.create(safetyAnchor, {
+        position: Vector3.Zero(),
+        scale: Vector3.One()
+      })
+      AvatarAttach.create(safetyAnchor, {
         avatarId: flag.carrierPlayerId,
-        anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+        anchorPointId: AvatarAnchorPointType.AAPT_POSITION
+      })
+      attachAnchorEntity = safetyAnchor
+
+      carryCloneEntity = engine.addEntity()
+      Transform.create(carryCloneEntity, {
+        parent: safetyAnchor,
+        position: Vector3.create(0, CARRY_BASE_Y, 0),
+        scale: Vector3.One()
       })
       GltfContainer.create(carryCloneEntity, { 
         src: BANNER_SRC,
@@ -461,8 +498,15 @@ export function flagClientSystem(dt: number): void {
 
   const clampedDt = Math.min(dt, 0.1)
 
-  // Note: No per-frame animation on the carried clone — AvatarAttach controls its world transform.
-  // The flag sits at the name tag anchor. Bob/rotate only happens for idle/dropped (server-driven).
+  // Animate the carried flag child entity — bob and swivel
+  if (carryCloneEntity !== null && Transform.has(carryCloneEntity)) {
+    carryAnimTime += clampedDt
+    const bobY = CARRY_BASE_Y + CARRY_BOB_AMPLITUDE * Math.sin(carryAnimTime * CARRY_BOB_SPEED)
+    const angleDeg = (carryAnimTime * CARRY_ROTATE_SPEED_DEG) % 360
+    const t = Transform.getMutable(carryCloneEntity)
+    t.position = Vector3.create(0, bobY, 0)
+    t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+  }
 
 
 
