@@ -88,6 +88,49 @@ export function nameResolverSystem(dt: number): void {
 }
 
 /** For UI: list of players with hold times from synced component. */
+// ── Client-side interpolation for smooth scoreboard counting ──
+// The server syncs hold time every ~0.2s via CRDT. Between updates, we locally
+// extrapolate the carrier's score so the UI counts up smoothly every frame.
+let lastCarrierId = ''
+let lastCarrierSyncedSeconds = 0
+let interpolationStartTime = 0
+
+/**
+ * Called every frame (from a system) to keep interpolation state fresh.
+ * Tracks when the carrier or their synced seconds change.
+ */
+export function updateHoldTimeInterpolation(): void {
+  let currentCarrierId = ''
+  for (const [, flag] of engine.getEntitiesWith(Flag)) {
+    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+      currentCarrierId = flag.carrierPlayerId.toLowerCase()
+    }
+    break
+  }
+
+  if (currentCarrierId !== lastCarrierId) {
+    // Carrier changed — reset interpolation
+    lastCarrierId = currentCarrierId
+    lastCarrierSyncedSeconds = 0
+    interpolationStartTime = Date.now()
+  }
+
+  if (currentCarrierId) {
+    // Read the latest synced seconds for the carrier
+    let maxSynced = 0
+    for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+      if (data.playerId.toLowerCase() === currentCarrierId) {
+        maxSynced = Math.max(maxSynced, data.seconds)
+      }
+    }
+    // When server sends a new value, re-anchor our interpolation
+    if (maxSynced > lastCarrierSyncedSeconds) {
+      lastCarrierSyncedSeconds = maxSynced
+      interpolationStartTime = Date.now()
+    }
+  }
+}
+
 export function getPlayersWithHoldTimes(): { userId: string; name: string; seconds: number }[] {
   // Build lookup from synced hold-time entities, keyed by lowercase playerId.
   // Multiple entities may exist for the same player (e.g. after server restart),
@@ -98,6 +141,14 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     const key = data.playerId.toLowerCase()
     const existing = synced.get(key) ?? 0
     synced.set(key, Math.max(existing, data.seconds))
+  }
+
+  // Client-side interpolation: add elapsed time since last CRDT update for the current carrier
+  if (lastCarrierId && lastCarrierSyncedSeconds > 0) {
+    const elapsedSec = (Date.now() - interpolationStartTime) / 1000
+    const interpolated = lastCarrierSyncedSeconds + elapsedSec
+    const existing = synced.get(lastCarrierId) ?? 0
+    synced.set(lastCarrierId, Math.max(existing, interpolated))
   }
 
   // Build result from players currently in the scene

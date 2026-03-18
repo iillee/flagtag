@@ -8,7 +8,7 @@ import { combatClientSystem } from './systems/combatSystem'
 import { bananaClientSystem } from './systems/bananaSystem'
 import { shellClientSystem } from './systems/shellSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
-import { addPlayer, removePlayer, nameResolverSystem } from './gameState/flagHoldTime'
+import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
 import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
@@ -377,4 +377,5 @@ export async function main() {
   engine.addSystem(nameResolverSystem)
   engine.addSystem(bananaClientSystem)
   engine.addSystem(shellClientSystem)
+  engine.addSystem(updateHoldTimeInterpolation)
 }
