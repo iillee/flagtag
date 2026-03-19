@@ -211,6 +211,12 @@ function processBananaRaycasts(): void {
   }
 }
 
+// ── Banana drop position cache ──
+// Store positions from 'bananaDropped' messages so we can use them as fallback
+// if the CRDT Transform sync is slow/incomplete.
+const recentBananaDropPositions: { x: number; y: number; z: number; timestamp: number }[] = []
+const MAX_RECENT_DROPS = 20
+
 // ── Message listeners ──
 let messagesRegistered = false
 
@@ -220,6 +226,9 @@ function registerBananaMessages(): void {
 
   room.onMessage('bananaDropped', (data) => {
     playBananaDropSound(Vector3.create(data.x, data.y, data.z))
+    // Cache the drop position for fallback model attachment
+    recentBananaDropPositions.push({ x: data.x, y: data.y, z: data.z, timestamp: Date.now() })
+    if (recentBananaDropPositions.length > MAX_RECENT_DROPS) recentBananaDropPositions.shift()
     // Fire ground raycast so server knows where to land this banana
     fireBananaGroundRaycast(data.x, data.y, data.z)
   })
@@ -375,38 +384,94 @@ function updateLocalBananas(dt: number): void {
   }
 }
 
-// ── Client-side GltfContainer attachment for synced banana entities ──
-// The server no longer syncs GltfContainer — clients attach the visual mesh locally
-// to avoid a Bevy renderer issue where server-synced GltfContainer sometimes fails to load.
-const bananasWithModel = new Set<number>()
+// ── Client-side visual entities for synced bananas ──
+// IMPORTANT: We NEVER modify the synced entity (Transform, GltfContainer, etc.)
+// because client writes to server-synced entities create CRDT conflicts that
+// break the authoritative server in deployed environments.
+//
+// Instead, for each synced Banana entity we create a LOCAL-ONLY visual entity
+// with the GltfContainer, and update its position from the server's synced Transform.
+interface BananaVisual {
+  localEntity: Entity
+}
+const bananaVisuals = new Map<number, BananaVisual>() // synced entity id -> local visual
 
-function ensureBananaModels(): void {
-  for (const [entity] of engine.getEntitiesWith(Banana, Transform)) {
+function updateBananaVisuals(): void {
+  // Create/update local visual entities for synced bananas
+  for (const [entity] of engine.getEntitiesWith(Banana)) {
     const eid = entity as number
-    if (!bananasWithModel.has(eid)) {
-      // Wait until the server's Transform has actually synced (scale should be 0.02, not default 1.0).
-      // This prevents the banana from briefly appearing huge at 0,0,0 before CRDT data arrives.
+
+    // Get position — prefer synced Transform, fall back to cached drop position
+    let posX = 0, posY = 0, posZ = 0
+    let hasPosition = false
+
+    if (Transform.has(entity)) {
       const t = Transform.get(entity)
-      if (t.scale.x > 0.5 || (t.position.x === 0 && t.position.y === 0 && t.position.z === 0)) {
-        continue // Transform hasn't synced yet — skip this frame
+      // Check if Transform has actually synced (not default 0,0,0 with scale 1,1,1)
+      const looksReal = t.scale.x < 0.5 && !(Math.abs(t.position.x) < 0.001 && Math.abs(t.position.y) < 0.001 && Math.abs(t.position.z) < 0.001)
+      if (looksReal) {
+        posX = t.position.x
+        posY = t.position.y
+        posZ = t.position.z
+        hasPosition = true
       }
-      if (!GltfContainer.has(entity)) {
-        GltfContainer.create(entity, {
-          src: BANANA_MODEL_SRC,
-          visibleMeshesCollisionMask: 0,
-          invisibleMeshesCollisionMask: 0
-        })
-        console.log('[Banana] 🍌 Attached local GltfContainer to synced banana entity', eid,
-          'pos:', t.position.x.toFixed(1), t.position.y.toFixed(1), t.position.z.toFixed(1),
-          'scale:', t.scale.x.toFixed(3))
+    }
+
+    // Fallback: use the most recent UNCONSUMED cached drop position
+    // (shift from the front so each banana entity gets its own unique position)
+    if (!hasPosition && recentBananaDropPositions.length > 0) {
+      const now = Date.now()
+      // Find the oldest still-valid cached position (FIFO order matches entity creation order)
+      const idx = recentBananaDropPositions.findIndex(d => now - d.timestamp < 30000)
+      if (idx !== -1) {
+        const drop = recentBananaDropPositions[idx]
+        posX = drop.x
+        posY = drop.y
+        posZ = drop.z
+        hasPosition = true
+        // Consume this cached position so the next banana gets the next one
+        recentBananaDropPositions.splice(idx, 1)
       }
-      bananasWithModel.add(eid)
+    }
+
+    // No position data yet — keep waiting (will retry next frame)
+    if (!hasPosition) continue
+
+    let visual = bananaVisuals.get(eid)
+    if (!visual) {
+      // Create local-only visual entity
+      const localEntity = engine.addEntity()
+      Transform.create(localEntity, {
+        position: Vector3.create(posX, posY, posZ),
+        scale: Vector3.create(0.02, 0.02, 0.02)
+      })
+      GltfContainer.create(localEntity, {
+        src: BANANA_MODEL_SRC,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
+      visual = { localEntity }
+      bananaVisuals.set(eid, visual)
+      console.log('[Banana] 🍌 Created local visual for synced banana', eid,
+        'at:', posX.toFixed(1), posY.toFixed(1), posZ.toFixed(1))
+    } else if (hasPosition) {
+      // Update position from synced Transform (banana may still be falling via server gravity)
+      // Only update from synced Transform, not from cached position (which was the initial drop point)
+      if (Transform.has(entity)) {
+        const t = Transform.get(entity)
+        if (t.scale.x < 0.5 && !(Math.abs(t.position.x) < 0.001 && Math.abs(t.position.y) < 0.001 && Math.abs(t.position.z) < 0.001)) {
+          const lt = Transform.getMutable(visual.localEntity)
+          lt.position = Vector3.create(t.position.x, t.position.y, t.position.z)
+        }
+      }
     }
   }
-  // Clean up tracking for removed entities
-  for (const eid of bananasWithModel) {
+
+  // Clean up visuals for bananas that no longer exist
+  for (const [eid, visual] of bananaVisuals) {
     if (!Banana.has(eid as Entity)) {
-      bananasWithModel.delete(eid)
+      engine.removeEntity(visual.localEntity)
+      bananaVisuals.delete(eid)
     }
   }
 }
@@ -418,9 +483,9 @@ export function bananaClientSystem(dt: number): void {
   const now = Date.now()
   const serverUp = isServerConnected()
 
-  // Attach GltfContainer to any synced banana entities that don't have one yet
+  // Update local visual entities for synced bananas (creates, positions, and cleans up)
   if (serverUp) {
-    ensureBananaModels()
+    updateBananaVisuals()
   }
 
   // Release banana stagger freeze

@@ -157,7 +157,7 @@ VisitorAnalytics.validateBeforeChange((value) => value.senderAddress === AUTH_SE
 
 export const Banana = engine.defineComponent('ctf-banana', {
   droppedByPlayerId: Schemas.String,
-  droppedAtMs: Schemas.Number,       // Date.now() when dropped — used for expiry
+  droppedAtMs: Schemas.Number,       // Date.now() when dropped — used for expiry (server-side only)
 }, {
   droppedByPlayerId: '',
   droppedAtMs: 0,
@@ -174,11 +174,16 @@ export const BANANA_MAX_ACTIVE = 3
 /** Radius for banana trigger (meters). */
 export const BANANA_TRIGGER_RADIUS = 2.0
 
-/** Sync ID range for bananas — supports up to 100 concurrent bananas. */
-const BANANA_SYNC_ID_BASE = 5000
+/**
+ * Sync ID range for bananas — monotonically increasing, never recycled.
+ * Each new banana gets a unique sync ID for the lifetime of the server process.
+ * The entityEnumId space is a 32-bit integer, so we have billions of IDs available.
+ * Base starts at 1000000 to avoid collisions with hold-time entities (10000–109999).
+ */
+const BANANA_SYNC_ID_BASE = 1000000
 let bananaIdCounter = 0
 export function getNextBananaSyncId(): number {
-  return BANANA_SYNC_ID_BASE + (bananaIdCounter++ % 100)
+  return BANANA_SYNC_ID_BASE + (bananaIdCounter++)
 }
 
 // ── Shell (powerup) ──
@@ -186,6 +191,9 @@ export function getNextBananaSyncId(): number {
 export const Shell = engine.defineComponent('ctf-shell', {
   firedByPlayerId: Schemas.String,
   firedAtMs: Schemas.Number,
+  startX: Schemas.Float,          // spawn position — client uses these for local movement prediction
+  startY: Schemas.Float,
+  startZ: Schemas.Float,
   dirX: Schemas.Float,           // normalized forward direction (XZ plane)
   dirZ: Schemas.Float,
   distanceTraveled: Schemas.Float,
@@ -194,6 +202,9 @@ export const Shell = engine.defineComponent('ctf-shell', {
 }, {
   firedByPlayerId: '',
   firedAtMs: 0,
+  startX: 0,
+  startY: 0,
+  startZ: 0,
   dirX: 0,
   dirZ: 0,
   distanceTraveled: 0,
@@ -216,11 +227,16 @@ export const SHELL_HIT_RADIUS = 2.0
 /** Max time a shell can exist (seconds) — safety net. */
 export const SHELL_LIFETIME_SEC = 5
 
-/** Sync ID range for shells — supports up to 100 concurrent shells. */
-const SHELL_SYNC_ID_BASE = 6000
+/**
+ * Sync ID range for shells — monotonically increasing, never recycled.
+ * Each new shell gets a unique sync ID for the lifetime of the server process.
+ * The entityEnumId space is a 32-bit integer, so we have billions of IDs available.
+ * Base starts at 2000000 to guarantee no overlap with bananas or hold-time entities.
+ */
+const SHELL_SYNC_ID_BASE = 2000000
 let shellIdCounter = 0
 export function getNextShellSyncId(): number {
-  return SHELL_SYNC_ID_BASE + (shellIdCounter++ % 100)
+  return SHELL_SYNC_ID_BASE + (shellIdCounter++)
 }
 
 export enum SyncIds {

@@ -989,6 +989,9 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   Shell.create(shellEntity, {
     firedByPlayerId: playerId,
     firedAtMs: now,
+    startX: spawnPos.x,
+    startY: spawnPos.y,
+    startZ: spawnPos.z,
     dirX: nDirX,
     dirZ: nDirZ,
     distanceTraveled: 0,

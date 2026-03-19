@@ -63,8 +63,7 @@ function stopShellSound(entity: Entity): void {
   }
 }
 
-// For server-mode: track which synced shell entities we've already attached sound to
-const serverShellsWithSound = new Set<number>()
+// (Sound tracking is now handled inside ShellVisual — no separate Set needed)
 
 /** Play the fire sound immediately at the player's position (instant feedback). */
 function playInstantFireSound(position: Vector3): void {
@@ -428,39 +427,98 @@ function updateLocalShells(dt: number): void {
   }
 }
 
-// ── Client-side GltfContainer attachment for synced shell entities ──
-// The server no longer syncs GltfContainer — clients attach the visual mesh locally
-// to avoid a Bevy renderer issue where server-synced GltfContainer sometimes fails to load.
-const shellsWithModel = new Set<number>()
+// ── Client-side visual entities for synced shells ──
+// IMPORTANT: We NEVER modify the synced entity (Transform, GltfContainer, etc.)
+// because client writes to server-synced entities create CRDT conflicts that
+// break the authoritative server in deployed environments.
+//
+// Instead, for each synced Shell entity we create a LOCAL-ONLY visual entity
+// with the GltfContainer + AudioSource, and drive its position each frame
+// using the Shell component data (start position + direction + distance).
+interface ShellVisual {
+  localEntity: Entity         // local-only entity with GltfContainer + AudioSource
+  lastServerDist: number      // last distanceTraveled from server (for extrapolation)
+  localExtraDist: number      // distance extrapolated locally since last server update
+}
+const shellVisuals = new Map<number, ShellVisual>() // synced entity id -> local visual
 
-function ensureShellModels(): void {
-  for (const [entity, shell] of engine.getEntitiesWith(Shell, Transform)) {
+function updateShellVisuals(dt: number): void {
+  // Create/update local visual entities for active synced shells
+  for (const [entity, shell] of engine.getEntitiesWith(Shell)) {
     if (!shell.active) continue
     const eid = entity as number
-    if (!shellsWithModel.has(eid)) {
-      // Wait until the server's Transform has actually synced (scale should be 0.02, not default 1.0).
-      // This prevents the shell from briefly appearing huge at 0,0,0 before CRDT data arrives.
+
+    // Determine best available position for this shell
+    let hasStartPos = shell.startX !== 0 || shell.startZ !== 0
+    let posX = shell.startX, posY = shell.startY, posZ = shell.startZ
+
+    // Fallback: if Shell fields haven't synced yet, use the synced Transform
+    if (!hasStartPos && Transform.has(entity)) {
       const t = Transform.get(entity)
-      if (t.scale.x > 0.5 || (t.position.x === 0 && t.position.y === 0 && t.position.z === 0)) {
-        continue // Transform hasn't synced yet — skip this frame
+      if (t.scale.x < 0.5 && !(Math.abs(t.position.x) < 0.001 && Math.abs(t.position.y) < 0.001 && Math.abs(t.position.z) < 0.001)) {
+        posX = t.position.x
+        posY = t.position.y
+        posZ = t.position.z
+        hasStartPos = true
       }
-      if (!GltfContainer.has(entity)) {
-        GltfContainer.create(entity, {
-          src: SHELL_MODEL_SRC,
-          visibleMeshesCollisionMask: 0,
-          invisibleMeshesCollisionMask: 0
-        })
-        console.log('[Shell] 🐚 Attached local GltfContainer to synced shell entity', eid,
-          'pos:', t.position.x.toFixed(1), t.position.y.toFixed(1), t.position.z.toFixed(1),
-          'scale:', t.scale.x.toFixed(3))
-      }
-      shellsWithModel.add(eid)
     }
+
+    // No position data yet — keep waiting (will retry next frame)
+    if (!hasStartPos) continue
+
+    let visual = shellVisuals.get(eid)
+    if (!visual) {
+      // Create a new local-only visual entity
+      const localEntity = engine.addEntity()
+      Transform.create(localEntity, {
+        position: Vector3.create(posX, posY, posZ),
+        scale: SHELL_SCALE,
+        rotation: Quaternion.fromEulerDegrees(0, Math.atan2(shell.dirX, shell.dirZ) * (180 / Math.PI), 0)
+      })
+      GltfContainer.create(localEntity, {
+        src: SHELL_MODEL_SRC,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
+      attachShellSound(localEntity)
+      visual = { localEntity, lastServerDist: shell.distanceTraveled, localExtraDist: 0 }
+      shellVisuals.set(eid, visual)
+      console.log('[Shell] 🐚 Created local visual for synced shell', eid,
+        'at:', posX.toFixed(1), posY.toFixed(1), posZ.toFixed(1))
+    }
+
+    // Use Shell component start position once it's available (may arrive after visual creation)
+    const useStartX = (shell.startX !== 0 || shell.startZ !== 0) ? shell.startX : posX
+    const useStartZ = (shell.startX !== 0 || shell.startZ !== 0) ? shell.startZ : posZ
+    const useStartY = (shell.startX !== 0 || shell.startZ !== 0) ? shell.startY : posY
+
+    // Extrapolate movement locally for smooth motion between CRDT updates
+    if (shell.distanceTraveled !== visual.lastServerDist) {
+      visual.lastServerDist = shell.distanceTraveled
+      visual.localExtraDist = 0
+    } else {
+      visual.localExtraDist += SHELL_SPEED * dt
+    }
+
+    const dist = visual.lastServerDist + visual.localExtraDist
+    const predictedX = useStartX + shell.dirX * dist
+    const predictedZ = useStartZ + shell.dirZ * dist
+    // Use server's synced Transform Y for gravity (if available), else startY
+    const serverY = Transform.has(entity) ? Transform.get(entity).position.y : useStartY
+    const predictedY = (serverY > 0.01 || serverY < -0.01) ? serverY : useStartY
+
+    const t = Transform.getMutable(visual.localEntity)
+    t.position = Vector3.create(predictedX, predictedY, predictedZ)
   }
-  // Clean up tracking for removed entities
-  for (const eid of shellsWithModel) {
-    if (!Shell.has(eid as Entity)) {
-      shellsWithModel.delete(eid)
+
+  // Clean up visuals for shells that are gone or inactive
+  for (const [eid, visual] of shellVisuals) {
+    const shellExists = Shell.has(eid as Entity)
+    const shellActive = shellExists && Shell.get(eid as Entity).active
+    if (!shellExists || !shellActive) {
+      stopShellSound(visual.localEntity)
+      engine.removeEntity(visual.localEntity)
+      shellVisuals.delete(eid)
     }
   }
 }
@@ -486,37 +544,8 @@ export function shellClientSystem(dt: number): void {
     // Continuously report ground Y for moving shells
     updateServerShellGroundRaycasts(dt)
 
-    // Attach GltfContainer + looping sound to any new synced Shell entities
-    ensureShellModels()
-    for (const [entity, shell] of engine.getEntitiesWith(Shell, Transform)) {
-      const eid = entity as number
-      if (shell.active && !serverShellsWithSound.has(eid)) {
-        // Only attach sound once the model is confirmed attached (Transform synced)
-        if (shellsWithModel.has(eid) && !AudioSource.has(entity)) {
-          attachShellSound(entity)
-        }
-        if (shellsWithModel.has(eid)) {
-          serverShellsWithSound.add(eid)
-        }
-      }
-      // Stop sound immediately when shell becomes inactive (hit something / expired)
-      if (!shell.active && serverShellsWithSound.has(eid)) {
-        if (AudioSource.has(entity)) {
-          stopShellSound(entity)
-        }
-        serverShellsWithSound.delete(eid)
-      }
-    }
-    // Clean up tracking for shells that no longer exist — stop sound before removal
-    for (const eid of serverShellsWithSound) {
-      if (!Shell.has(eid as Entity)) {
-        // Stop the looping sound so it doesn't linger after the entity is removed
-        if (AudioSource.has(eid as Entity)) {
-          stopShellSound(eid as Entity)
-        }
-        serverShellsWithSound.delete(eid)
-      }
-    }
+    // Update local visual entities for synced shells (creates, moves, and cleans up)
+    updateShellVisuals(dt)
   } else {
     // Local test mode
     updateLocalShells(dt)
