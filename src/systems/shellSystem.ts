@@ -215,7 +215,7 @@ function registerShellMessages(): void {
       playHitSound(pos)
 
       // Stagger the victim if it's the local player
-      const me = getPlayerData()?.userId
+      const me = getPlayerData()?.userId?.toLowerCase()
       if (me && data.victimId === me) {
         triggerEmote({ predefinedEmote: 'getHit' })
         InputModifier.createOrReplace(engine.PlayerEntity, {

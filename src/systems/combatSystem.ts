@@ -260,7 +260,7 @@ room.onMessage('missVfx', (data) => {
   pendingMissPositions.push(Vector3.create(data.x, data.y, data.z))
 })
 room.onMessage('stagger', (data) => {
-  const me = getPlayerData()?.userId
+  const me = getPlayerData()?.userId?.toLowerCase()
   if (me && data.victimId === me) pendingStagger = true
 })
 

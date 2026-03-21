@@ -133,7 +133,7 @@ async function loadPlayerNames(): Promise<void> {
       const obj: Record<string, string> = JSON.parse(saved)
       for (const [userId, name] of Object.entries(obj)) {
         if (isRealName(name)) {
-          playerNames.set(userId, name)
+          playerNames.set(userId.toLowerCase(), name)
         }
       }
       console.log('[Server] Loaded', playerNames.size, 'persisted player names')
@@ -173,17 +173,18 @@ async function loadVisitorData(): Promise<void> {
           const minutes = record.totalSeconds != null
             ? Math.floor(record.totalSeconds / 60)
             : (record.totalMinutes || 0)
+          const recordKey = (record.userId || '').toLowerCase()
           // Use persisted name directory if available, fall back to stored visitor name
-          const bestName = (playerNames.has(record.userId) && isRealName(playerNames.get(record.userId)!))
-            ? playerNames.get(record.userId)!
+          const bestName = (playerNames.has(recordKey) && isRealName(playerNames.get(recordKey)!))
+            ? playerNames.get(recordKey)!
             : record.name
-          visitorSessions.set(record.userId, {
+          visitorSessions.set(recordKey, {
             name: bestName,
             sessionStartMs: 0, // Not currently online after server restart
             totalMinutesToday: minutes
           })
           if (isRealName(bestName)) {
-            playerNames.set(record.userId, bestName)
+            playerNames.set(recordKey, bestName)
           }
         }
         console.log('[Server] Restored visitor data for', currentDay, '- loaded', visitorRecords.length, 'visitors')
@@ -391,7 +392,7 @@ export async function setupServer(): Promise<void> {
     const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(leaderboardJson)
     let patched = false
     for (const entry of entries) {
-      const knownName = playerNames.get(entry.userId)
+      const knownName = playerNames.get(entry.userId.toLowerCase())
       if (knownName && isRealName(knownName) && entry.name !== knownName) {
         entry.name = knownName
         patched = true
@@ -438,17 +439,19 @@ export async function setupServer(): Promise<void> {
   console.log('[Server] Flag Tag server ready')
 }
 
-// ── Helper: find player position by wallet address ──
+// ── Helper: find player position by wallet address (case-insensitive) ──
 function getPlayerPosition(address: string): Vector3 | null {
+  const needle = address.toLowerCase()
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address === address) return Transform.get(entity).position
+    if (identity.address.toLowerCase() === needle) return Transform.get(entity).position
   }
   return null
 }
 
 function getPlayerRotation(address: string): Quaternion | null {
+  const needle = address.toLowerCase()
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address === address) return Transform.get(entity).rotation
+    if (identity.address.toLowerCase() === needle) return Transform.get(entity).rotation
   }
   return null
 }
@@ -493,13 +496,14 @@ function resetGravityState(): void {
 function updatePlayerName(userId: string, name: string): boolean {
   if (!isRealName(name)) return false
   
-  const existing = playerNames.get(userId)
+  const key = userId.toLowerCase()
+  const existing = playerNames.get(key)
   if (existing === name) return false
   
-  playerNames.set(userId, name)
+  playerNames.set(key, name)
   
   // Update visitor session
-  const visitor = visitorSessions.get(userId)
+  const visitor = visitorSessions.get(key)
   if (visitor) {
     visitor.name = name
   }
@@ -511,7 +515,7 @@ function updatePlayerName(userId: string, name: string): boolean {
       const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(lb.json)
       let changed = false
       for (const entry of entries) {
-        if (entry.userId === userId && entry.name !== name) {
+        if (entry.userId.toLowerCase() === key && entry.name !== name) {
           entry.name = name
           changed = true
         }
@@ -532,41 +536,48 @@ function updatePlayerName(userId: string, name: string): boolean {
 function registerHandlers(): void {
   room.onMessage('registerName', (data, context) => {
     if (!context || !data.name) return
-    if (updatePlayerName(context.from, data.name)) {
-      console.log('[Server] registerName: updated', context.from.slice(0, 8), '->', data.name)
+    const from = context.from.toLowerCase()
+    if (updatePlayerName(from, data.name)) {
+      console.log('[Server] registerName: updated', from.slice(0, 8), '->', data.name)
       persistPlayerNames()
     }
   })
   room.onMessage('requestPickup', (_data, context) => {
     if (!context) return
-    console.log('[S.1] Received requestPickup from', context.from.slice(0, 8))
-    handlePickup(context.from)
+    const from = context.from.toLowerCase()
+    console.log('[S.1] Received requestPickup from', from.slice(0, 8))
+    handlePickup(from)
   })
   room.onMessage('requestDrop', (_data, context) => {
     if (!context) return
-    console.log('[S.2] Received requestDrop from', context.from.slice(0, 8))
-    handleDrop(context.from)
+    const from = context.from.toLowerCase()
+    console.log('[S.2] Received requestDrop from', from.slice(0, 8))
+    handleDrop(from)
   })
   room.onMessage('requestAttack', (_data, context) => {
     if (!context) return
-    console.log('[S.3] Received requestAttack from', context.from.slice(0, 8))
-    handleAttack(context.from)
+    const from = context.from.toLowerCase()
+    console.log('[S.3] Received requestAttack from', from.slice(0, 8))
+    handleAttack(from)
   })
   room.onMessage('requestBanana', (_data, context) => {
     if (!context) return
-    console.log('[Server] Received requestBanana from', context.from.slice(0, 8))
-    handleBananaDrop(context.from)
+    const from = context.from.toLowerCase()
+    console.log('[Server] Received requestBanana from', from.slice(0, 8))
+    handleBananaDrop(from)
   })
   room.onMessage('requestShell', (data, context) => {
     if (!context) return
-    console.log('[Server] Received requestShell from', context.from.slice(0, 8))
-    handleShellFire(context.from, data.dirX, data.dirZ)
+    const from = context.from.toLowerCase()
+    console.log('[Server] Received requestShell from', from.slice(0, 8))
+    handleShellFire(from, data.dirX, data.dirZ)
   })
   room.onMessage('reportShellWallDist', (data, context) => {
     if (!context) return
+    const from = context.from.toLowerCase()
     // Find the shell by sync id approximation — use the most recent shell from this player
     for (const shell of activeShells) {
-      if (shell.firedBy === context.from && !shell.wallDistReported) {
+      if (shell.firedBy === from && !shell.wallDistReported) {
         shell.maxDistance = Math.min(shell.maxDistance, data.maxDist)
         shell.wallDistReported = true
         console.log('[Server] 🐚 Shell wall distance updated:', data.maxDist.toFixed(1), 'm')
@@ -775,26 +786,27 @@ function handleAttack(attackerId: string): void {
   let immunePlayers = 0
 
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address === attackerId) continue
+    const victimAddr = identity.address.toLowerCase()
+    if (victimAddr === attackerId) continue
     playersChecked++
     
     // Check steal immunity (player who just stole the flag gets 3s protection to escape)
-    const stealTime = lastStealTime.get(identity.address) ?? 0
+    const stealTime = lastStealTime.get(victimAddr) ?? 0
     if (now - stealTime < STEAL_IMMUNITY_MS) {
       immunePlayers++
-      console.log('[S.14] Player', identity.address.slice(0, 8), 'is IMMUNE (just stole flag) -', (now - stealTime), 'ms since steal')
+      console.log('[S.14] Player', victimAddr.slice(0, 8), 'is IMMUNE (just stole flag) -', (now - stealTime), 'ms since steal')
       continue
     }
     
-    const pos = getPlayerPosition(identity.address)
+    const pos = getPlayerPosition(victimAddr)
     if (!pos) continue
     const dist = Vector3.distance(attackerPos, pos)
     
-    console.log('[S.15] Player', identity.address.slice(0, 8), 'at distance:', dist.toFixed(2), 'm')
+    console.log('[S.15] Player', victimAddr.slice(0, 8), 'at distance:', dist.toFixed(2), 'm')
     
     if (dist < closestDist) {
       closestDist = dist
-      closestId = identity.address
+      closestId = victimAddr
       closestPos = pos
     }
   }
@@ -915,24 +927,25 @@ function bananaServerSystem(dt: number): void {
     // Trigger check — any player (except the dropper) walks over it
     const bananaPos = Transform.get(banana.entity).position
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      if (identity.address === banana.droppedBy) continue // Can't trigger your own banana
+      const addr = identity.address.toLowerCase()
+      if (addr === banana.droppedBy) continue // Can't trigger your own banana
 
-      const playerPos = getPlayerPosition(identity.address)
+      const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
 
       const dist = Vector3.distance(playerPos, bananaPos)
       if (dist < BANANA_TRIGGER_RADIUS) {
-        console.log('[Server] 🍌 Banana triggered by', identity.address.slice(0, 8), '! Staggering...')
+        console.log('[Server] 🍌 Banana triggered by', addr.slice(0, 8), '! Staggering...')
 
         // Drop the flag if the victim is carrying it
         const flag = Flag.getOrNull(flagEntity)
-        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === identity.address) {
+        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🍌 Victim was carrying flag — forcing drop!')
-          handleDrop(identity.address)
+          handleDrop(addr)
         }
 
         // Single message — client handles all effects (VFX, sound, stagger) in one frame
-        room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: identity.address })
+        room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: addr })
 
         // Remove the banana
         engine.removeEntity(banana.entity)
@@ -1109,23 +1122,24 @@ function shellServerSystem(dt: number): void {
     let shellConsumed = false
 
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      if (identity.address === shell.firedBy) continue
+      const addr = identity.address.toLowerCase()
+      if (addr === shell.firedBy) continue
 
-      const playerPos = getPlayerPosition(identity.address)
+      const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
 
       const dist = Vector3.distance(playerPos, shellPos)
       if (dist < SHELL_HIT_RADIUS) {
-        console.log('[Server] 🐚 Shell hit player', identity.address.slice(0, 8), 'at distance', shell.distanceTraveled.toFixed(1), 'm')
+        console.log('[Server] 🐚 Shell hit player', addr.slice(0, 8), 'at distance', shell.distanceTraveled.toFixed(1), 'm')
 
         // Drop the flag if the victim is carrying it
         const flag = Flag.getOrNull(flagEntity)
-        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === identity.address) {
+        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🐚 Victim was carrying flag — forcing drop!')
-          handleDrop(identity.address)
+          handleDrop(addr)
         }
 
-        room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: identity.address })
+        room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: addr })
         engine.removeEntity(shell.entity)
         activeShells.splice(i, 1)
         shellConsumed = true
@@ -1211,11 +1225,12 @@ function flagServerSystem(dt: number): void {
     flagBobAccum = 0 // Reset when carried so first idle frame syncs immediately
   }
 
-  // Detect carrier disconnect
+  // Detect carrier disconnect (case-insensitive address comparison)
   if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
     let carrierConnected = false
+    const carrierLower = flag.carrierPlayerId.toLowerCase()
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-      if (identity.address === flag.carrierPlayerId) {
+      if (identity.address.toLowerCase() === carrierLower) {
         carrierConnected = true
         break
       }
@@ -1271,33 +1286,32 @@ function holdTimeServerSystem(dt: number): void {
 const currentlyConnected = new Set<string>()
 
 function playerTrackingSystem(): void {
-  // Build set of currently connected players
+  // Build set of currently connected players (normalized to lowercase)
   const nowConnected = new Set<string>()
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-    nowConnected.add(identity.address)
+    nowConnected.add(identity.address.toLowerCase())
   }
 
   let changed = false
 
   // Detect new joins (including reconnections)
-  for (const userId of nowConnected) {
-    if (!currentlyConnected.has(userId)) {
+  for (const userKey of nowConnected) {
+    if (!currentlyConnected.has(userKey)) {
       // Player just connected (or reconnected)
-      currentlyConnected.add(userId)
+      currentlyConnected.add(userKey)
 
-      // Create synced hold time entity only on first ever join (case-insensitive)
-      const userKey = userId.toLowerCase()
+      // Create synced hold time entity only on first ever join
       if (!knownPlayers.has(userKey)) {
         knownPlayers.add(userKey)
         const entity = engine.addEntity()
-        PlayerFlagHoldTime.create(entity, { playerId: userId, seconds: 0 })
+        PlayerFlagHoldTime.create(entity, { playerId: userKey, seconds: 0 })
         syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(userKey))
         holdTimeEntities.set(userKey, entity)
       }
 
       // Start/restart visitor session — use persisted name if available
-      const playerName = playerNames.get(userId) || userId.slice(0, 8)
-      const existingVisitor = visitorSessions.get(userId)
+      const playerName = playerNames.get(userKey) || userKey.slice(0, 8)
+      const existingVisitor = visitorSessions.get(userKey)
 
       if (existingVisitor) {
         existingVisitor.sessionStartMs = Date.now()
@@ -1306,7 +1320,7 @@ function playerTrackingSystem(): void {
           existingVisitor.name = playerName
         }
       } else {
-        visitorSessions.set(userId, {
+        visitorSessions.set(userKey, {
           name: playerName,
           sessionStartMs: Date.now(),
           totalMinutesToday: 0
@@ -1319,11 +1333,11 @@ function playerTrackingSystem(): void {
   }
 
   // Detect disconnects
-  for (const userId of currentlyConnected) {
-    if (!nowConnected.has(userId)) {
-      currentlyConnected.delete(userId)
+  for (const userKey of currentlyConnected) {
+    if (!nowConnected.has(userKey)) {
+      currentlyConnected.delete(userKey)
 
-      const visitor = visitorSessions.get(userId)
+      const visitor = visitorSessions.get(userKey)
       if (visitor && visitor.sessionStartMs > 0) {
         const sessionMs = Date.now() - visitor.sessionStartMs
         const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
@@ -1424,10 +1438,11 @@ async function handleRoundEnd(): Promise<void> {
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 3)
     .map(p => {
-      const storedName = playerNames.get(p.userId)
-      const displayName = storedName || p.userId.slice(0, 8)
+      const pKey = p.userId.toLowerCase()
+      const storedName = playerNames.get(pKey)
+      const displayName = storedName || pKey.slice(0, 8)
       return {
-        userId: p.userId,
+        userId: pKey,
         name: displayName,
         seconds: Math.floor(p.seconds)
       }
@@ -1456,14 +1471,15 @@ async function handleRoundEnd(): Promise<void> {
 
     for (const p of players) {
       if (p.seconds < maxSeconds) continue
-      const existing = entries.find((e) => e.userId === p.userId)
+      const pKey = p.userId.toLowerCase()
+      const existing = entries.find((e) => e.userId.toLowerCase() === pKey)
       if (existing) {
         existing.roundsWon += 1
-        const displayName = playerNames.get(p.userId)
+        const displayName = playerNames.get(pKey)
         if (displayName) existing.name = displayName
       } else {
-        const displayName = playerNames.get(p.userId) || p.userId.slice(0, 8)
-        entries.push({ userId: p.userId, name: displayName, roundsWon: 1 })
+        const displayName = playerNames.get(pKey) || pKey.slice(0, 8)
+        entries.push({ userId: pKey, name: displayName, roundsWon: 1 })
       }
     }
 
@@ -1547,7 +1563,7 @@ function nameResolverServerSystem(dt: number): void {
   let anyUpdated = false
 
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-    const userId = identity.address
+    const userId = identity.address.toLowerCase()
     if (!userId) continue
 
     // Already have a real name — skip

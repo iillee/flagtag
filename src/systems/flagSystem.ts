@@ -219,20 +219,21 @@ function hideBeaconPuff(entity: Entity): void {
 // Helper to find player entity by ID
 function getCarrierEntity(carrierPlayerId: string): Entity | null {
   if (!carrierPlayerId) return null
+  const needle = carrierPlayerId.toLowerCase()
   
   const local = getPlayerData()
   if (local) {
     const localIdentity = PlayerIdentityData.getOrNull(engine.PlayerEntity)
-    if (localIdentity && localIdentity.address === carrierPlayerId) {
+    if (localIdentity && localIdentity.address.toLowerCase() === needle) {
       return engine.PlayerEntity
     }
-    if (local.userId === carrierPlayerId) {
+    if (local.userId?.toLowerCase() === needle) {
       return engine.PlayerEntity
     }
   }
   
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address === carrierPlayerId) {
+    if (identity.address.toLowerCase() === needle) {
       return entity as Entity
     }
   }
@@ -340,7 +341,7 @@ export function flagClientSystem(dt: number): void {
   // Ensure the synced flag entity has a GltfContainer (attached locally, not synced from server)
   ensureFlagModel()
 
-  const userId = getPlayerData()?.userId
+  const userId = getPlayerData()?.userId?.toLowerCase()
 
   // Apply drop cooldown as soon as we see we're no longer carrying (before auto-pickup check).
   // This fixes same-frame re-pickup when shell/banana forces a drop.

@@ -242,7 +242,7 @@ function registerBananaMessages(): void {
 
     // Stagger the victim if it's the local player
     const me = getPlayerData()?.userId
-    if (me && data.victimId === me) {
+    if (me && data.victimId === me.toLowerCase()) {
       triggerEmote({ predefinedEmote: 'getHit' })
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: true })
