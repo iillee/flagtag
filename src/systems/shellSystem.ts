@@ -503,9 +503,9 @@ function updateShellVisuals(dt: number): void {
     const dist = visual.lastServerDist + visual.localExtraDist
     const predictedX = useStartX + shell.dirX * dist
     const predictedZ = useStartZ + shell.dirZ * dist
-    // Use server's synced Transform Y for gravity (if available), else startY
-    const serverY = Transform.has(entity) ? Transform.get(entity).position.y : useStartY
-    const predictedY = (serverY > 0.01 || serverY < -0.01) ? serverY : useStartY
+    // Shell Transform is not synced (to avoid CRDT saturation), so use startY.
+    // Shells travel at their spawn height — acceptable for a 5-second lifetime.
+    const predictedY = useStartY
 
     const t = Transform.getMutable(visual.localEntity)
     t.position = Vector3.create(predictedX, predictedY, predictedZ)

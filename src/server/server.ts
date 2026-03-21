@@ -33,6 +33,8 @@ let leaderboardEntity: Entity
 let visitorAnalyticsEntity: Entity
 let idleTime = 0
 let holdTimeAccum = 0
+let flagBobAccum = 0
+const FLAG_BOB_SYNC_INTERVAL = 0.1 // seconds between flag bob CRDT writes (~10Hz)
 const lastAttackTime = new Map<string, number>()
 const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
 const holdTimeEntities = new Map<string, Entity>()
@@ -81,8 +83,11 @@ interface ActiveShell {
   fallVelocity: number
   groundY: number        // latest ground height reported by client
   onGround: boolean      // true once shell has landed on a surface
+  // CRDT write throttle — sync distanceTraveled at 10Hz instead of 60fps
+  lastSyncedDist: number
 }
 const activeShells: ActiveShell[] = []
+const SHELL_SYNC_INTERVAL = 0.1 // seconds between Shell component CRDT writes
 
 // Gravity state for dropped flag
 let flagFalling = false
@@ -998,7 +1003,11 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     maxDistance: SHELL_MAX_RANGE,
     active: true,
   })
-  syncEntity(shellEntity, [Transform.componentId, Shell.componentId], getNextShellSyncId())
+  // NOTE: Transform is intentionally NOT synced for shells.
+  // Syncing Transform at 60fps per shell saturates the CRDT buffer and freezes
+  // ALL synced components (including the scoreboard). Clients use local visual
+  // entities positioned via Shell component data (startX/Y/Z + direction + distanceTraveled).
+  syncEntity(shellEntity, [Shell.componentId], getNextShellSyncId())
 
   activeShells.push({
     entity: shellEntity,
@@ -1016,6 +1025,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     fallVelocity: 0,
     groundY: 0,
     onGround: false,
+    lastSyncedDist: 0,
   })
   lastShellFireTime.set(playerId, now)
 
@@ -1085,9 +1095,14 @@ function shellServerSystem(dt: number): void {
     const t = Transform.getMutable(shell.entity)
     t.position = Vector3.create(newX, shell.currentY, newZ)
 
-    // Update synced component
-    const shellComp = Shell.getMutable(shell.entity)
-    shellComp.distanceTraveled = shell.distanceTraveled
+    // Update synced component — throttled to avoid CRDT saturation.
+    // Client extrapolates locally between updates for smooth motion.
+    const distDelta = shell.distanceTraveled - shell.lastSyncedDist
+    if (distDelta >= SHELL_SPEED * SHELL_SYNC_INTERVAL) {
+      const shellComp = Shell.getMutable(shell.entity)
+      shellComp.distanceTraveled = shell.distanceTraveled
+      shell.lastSyncedDist = shell.distanceTraveled
+    }
 
     // Check player hits — any player (except the shooter)
     const shellPos = Transform.get(shell.entity).position
@@ -1178,15 +1193,22 @@ function flagServerSystem(dt: number): void {
 
   // Idle bob animation (server is sole writer for non-carried states)
   // Disable bob while falling so the flag drops smoothly
+  // Throttled to ~10Hz to avoid saturating the CRDT sync buffer.
   if (flag.state !== FlagState.Carried) {
-    const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
-    const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
-    const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
-    const bobY = flagFalling ? 0 : IDLE_BOB_AMPLITUDE * Math.sin(idleTime * IDLE_BOB_SPEED)
-    const angleDeg = (idleTime * IDLE_ROT_SPEED_DEG_PER_SEC) % 360
-    const t = Transform.getMutable(flagEntity)
-    t.position = Vector3.create(restX, restY + bobY, restZ)
-    t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+    flagBobAccum += clampedDt
+    if (flagBobAccum >= FLAG_BOB_SYNC_INTERVAL || flagFalling) {
+      flagBobAccum = 0
+      const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
+      const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
+      const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
+      const bobY = flagFalling ? 0 : IDLE_BOB_AMPLITUDE * Math.sin(idleTime * IDLE_BOB_SPEED)
+      const angleDeg = (idleTime * IDLE_ROT_SPEED_DEG_PER_SEC) % 360
+      const t = Transform.getMutable(flagEntity)
+      t.position = Vector3.create(restX, restY + bobY, restZ)
+      t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+    }
+  } else {
+    flagBobAccum = 0 // Reset when carried so first idle frame syncs immediately
   }
 
   // Detect carrier disconnect

@@ -7,8 +7,8 @@
     "start:server": "npx @dcl/hammurabi-server@next",
     "deploy": "sdk-commands deploy",
     "build": "sdk-commands build",
-    "upgrade-sdk": "npm install --save-dev @dcl/sdk@latest",
-    "upgrade-sdk:next": "npm install --save-dev @dcl/sdk@next",
+    "upgrade-sdk": "npm install --save-dev @dcl/sdk@auth-server",
+    "upgrade-sdk:next": "npm install --save-dev @dcl/sdk@auth-server",
     "server-logs": "sdk-commands sdk-server-logs"
   },
   "devDependencies": {
