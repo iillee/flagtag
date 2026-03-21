@@ -22,6 +22,16 @@ export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
 }
 
+/** Returns true if any UI overlay is currently visible (How to Play, Leaderboard, Analytics, Splash, etc.) */
+export function isAnyOverlayOpen(): boolean {
+  return getWinConditionOverlayVisible()
+    || getLeaderboardOverlayVisible()
+    || getAnalyticsOverlayVisible()
+    || splashVisible
+    || serverDownVisible
+    || mobileScoreboardOverlayVisible
+}
+
 // ── UI click sound (preloaded) ──
 const uiClickSoundEntity = engine.addEntity()
 Transform.create(uiClickSoundEntity, { position: Vector3.Zero() })
@@ -54,7 +64,7 @@ const ATTACK_FLICKER_MS = 150
 let lastAttackPressMs = 0
 
 function attackFlickerSystem(): void {
-  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) {
+  if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && !isAnyOverlayOpen()) {
     lastAttackPressMs = Date.now()
   }
 }
@@ -157,10 +167,11 @@ engine.addSystem(attackFlickerSystem)
 // CRDT data hasn't arrived yet.
 const SERVER_DOWN_GRACE_SEC = 15    // seconds after scene load before we check
 const SERVER_DOWN_CONFIRM_SEC = 5   // consecutive seconds of Server:N after grace before showing
+const SERVER_DOWN_RESHOW_SEC = 60   // re-show the overlay every 60s after dismissal
 let sceneLoadElapsed = 0
 let serverDownTimer = 0
 let serverDownVisible = false
-let serverDownDismissed = false     // user manually closed it this session
+let serverDownDismissedAt = 0       // timestamp when user dismissed (0 = not dismissed)
 let closeServerDownHovered = false
 
 function serverDownDetectionSystem(dt: number): void {
@@ -175,12 +186,19 @@ function serverDownDetectionSystem(dt: number): void {
     // Server is up — reset everything
     serverDownTimer = 0
     serverDownVisible = false
-    serverDownDismissed = false
+    serverDownDismissedAt = 0
   } else {
     // Server is down — accumulate time
     serverDownTimer += dt
-    if (serverDownTimer >= SERVER_DOWN_CONFIRM_SEC && !serverDownDismissed) {
-      serverDownVisible = true
+    if (serverDownTimer >= SERVER_DOWN_CONFIRM_SEC) {
+      if (serverDownDismissedAt === 0) {
+        // Never dismissed or reset — show it
+        serverDownVisible = true
+      } else if (Date.now() - serverDownDismissedAt >= SERVER_DOWN_RESHOW_SEC * 1000) {
+        // Enough time has passed since dismissal — re-show
+        serverDownVisible = true
+        serverDownDismissedAt = 0
+      }
     }
   }
 }
@@ -333,14 +351,14 @@ function PlayerListUi() {
               }}
               onMouseEnter={() => { closeServerDownHovered = true }}
               onMouseLeave={() => { closeServerDownHovered = false }}
-              onMouseDown={() => { playClickSound(); serverDownDismissed = true; serverDownVisible = false; closeServerDownHovered = false }}
+              onMouseDown={() => { playClickSound(); serverDownDismissedAt = Date.now(); serverDownVisible = false; closeServerDownHovered = false }}
             >
               <Label value="×" fontSize={44} color={closeServerDownHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
 
-            <Label value="Server Maintenance" fontSize={28} color={GOLD} font="sans-serif" />
+            <Label value="Server Down" fontSize={28} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: 12 }} />
-            <Label value="try back later" fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+            <Label value="all players please leave scene for 5 minutes while server resets" fontSize={18} color={LIGHT_GREY} font="sans-serif" />
           </UiEntity>
         </UiEntity>
       )}
@@ -559,7 +577,7 @@ function DesktopLayout() {
             <Label
               value="Grab the flag and earn 1 point for every 1 second it's held.
 
-Steal the flag by hitting the flag holder with E.
+Steal the flag by clicking on the flag holder.
 
 Whoever has the most points at the end of the round wins!"
               fontSize={16}
@@ -570,10 +588,10 @@ Whoever has the most points at the end of the round wins!"
             <UiEntity uiTransform={{ height: 20 }} />
             <Label value="Controls" fontSize={28} color={LIGHT_BLUE} font="sans-serif" textAlign="top-left" />
             <UiEntity uiTransform={{ height: 8 }} />
-            <Label value="E     attack / steal flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
-            <Label value="F     drop flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
-            <Label value="3     fire shell" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
-            <Label value="4     drop banana" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="LMB   attack / steal flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="E     fire shell" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="F     drop banana" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="3     drop flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
             <Label value="" fontSize={8} color={MUTED} font="sans-serif" textAlign="top-left" />
             <Label value="Walk into the flag to pick it up!" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
           </UiEntity>
@@ -971,7 +989,7 @@ Whoever has the most points at the end of the round wins!"
             margin: { bottom: 6 },
           }}
         >
-          {/* Attack (E) */}
+          {/* Attack (Left Click) */}
           <UiEntity
             uiTransform={{
               width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
@@ -980,8 +998,13 @@ Whoever has the most points at the end of the round wins!"
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
-            <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 4 } }}
+            <UiEntity
+              uiTransform={{ positionType: 'absolute', position: { top: 4, left: 1 }, width: 27, height: 27 }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: 'assets/images/cursor.png' },
+                color: LIGHT_GREY
+              }}
             />
             <UiEntity
               uiTransform={{ width: ABILITY_ICON_SIZE, height: ABILITY_ICON_SIZE, margin: { top: 6 } }}
@@ -993,7 +1016,7 @@ Whoever has the most points at the end of the round wins!"
             />
           </UiEntity>
 
-          {/* Shell (3) */}
+          {/* Shell (E) */}
           <UiEntity
             uiTransform={{
               width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
@@ -1002,7 +1025,7 @@ Whoever has the most points at the end of the round wins!"
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
-            <Label value="3" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+            <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
               uiTransform={{ positionType: 'absolute', position: { top: -2, left: 4 } }}
             />
             <UiEntity
@@ -1020,7 +1043,7 @@ Whoever has the most points at the end of the round wins!"
             )}
           </UiEntity>
 
-          {/* Banana (4) */}
+          {/* Banana (F) */}
           <UiEntity
             uiTransform={{
               width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
@@ -1029,7 +1052,7 @@ Whoever has the most points at the end of the round wins!"
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
-            <Label value="4" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+            <Label value="F" fontSize={16} color={LIGHT_GREY} font="sans-serif"
               uiTransform={{ positionType: 'absolute', position: { top: -2, left: 4 } }}
             />
             <UiEntity
@@ -1238,7 +1261,7 @@ function MobileLayout() {
             alignItems: 'center',
           }}
         >
-          {/* Attack (E) */}
+          {/* Attack (Left Click) */}
           <UiEntity
             uiTransform={{
               width: 68, height: 68,
@@ -1247,8 +1270,13 @@ function MobileLayout() {
             }}
             uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
           >
-            <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: 0, left: 3 } }}
+            <UiEntity
+              uiTransform={{ positionType: 'absolute', position: { top: 4, left: 1 }, width: 24, height: 24 }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: 'assets/images/cursor.png' },
+                color: LIGHT_GREY
+              }}
             />
             <UiEntity
               uiTransform={{ width: 44, height: 44, margin: { top: 6 } }}
@@ -1260,7 +1288,7 @@ function MobileLayout() {
             />
           </UiEntity>
 
-          {/* Shell (3) */}
+          {/* Shell (E) */}
           <UiEntity
             uiTransform={{
               width: 68, height: 68,
@@ -1269,7 +1297,7 @@ function MobileLayout() {
             }}
             uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
           >
-            <Label value="3" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+            <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
               uiTransform={{ positionType: 'absolute', position: { top: 0, left: 3 } }}
             />
             <UiEntity
@@ -1287,7 +1315,7 @@ function MobileLayout() {
             )}
           </UiEntity>
 
-          {/* Banana (4) */}
+          {/* Banana (F) */}
           <UiEntity
             uiTransform={{
               width: 68, height: 68,
@@ -1295,7 +1323,7 @@ function MobileLayout() {
             }}
             uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
           >
-            <Label value="4" fontSize={16} color={LIGHT_GREY} font="sans-serif"
+            <Label value="F" fontSize={16} color={LIGHT_GREY} font="sans-serif"
               uiTransform={{ positionType: 'absolute', position: { top: 0, left: 3 } }}
             />
             <UiEntity
@@ -1577,7 +1605,7 @@ function MobileLayout() {
             <Label
               value="Grab the flag and earn 1 point for every second held.
 
-Hit the flag holder with E to steal it.
+Click the flag holder to steal it.
 
 Most points at round end wins!"
               fontSize={22}
@@ -1588,10 +1616,10 @@ Most points at round end wins!"
             <UiEntity uiTransform={{ height: 18 }} />
             <Label value="Controls" fontSize={36} color={LIGHT_BLUE} font="sans-serif" textAlign="top-left" />
             <UiEntity uiTransform={{ height: 8 }} />
-            <Label value="E     attack / steal flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
-            <Label value="F     drop flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
-            <Label value="3     fire shell" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
-            <Label value="4     drop banana" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="LMB   attack / steal flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="E     fire shell" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="F     drop banana" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+            <Label value="3     drop flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
             <UiEntity uiTransform={{ height: 8 }} />
             <Label value="Walk into the flag to pick it up!" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
           </UiEntity>

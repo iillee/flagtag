@@ -515,8 +515,7 @@ export function bananaClientSystem(dt: number): void {
   }
 
   // F key — drop banana
-  // Key 4 — drop banana
-  if (inputSystem.isTriggered(InputAction.IA_ACTION_6, PointerEventType.PET_DOWN)) {
+  if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN)) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

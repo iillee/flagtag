@@ -551,16 +551,15 @@ export function shellClientSystem(dt: number): void {
     updateLocalShells(dt)
   }
 
-  // Key 1 — fire shell
-  // Key 3 — fire shell
-  if (inputSystem.isTriggered(InputAction.IA_ACTION_5, PointerEventType.PET_DOWN)) {
+  // E key — fire shell
+  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 
     // Client-side cooldown check
     if (now - lastLocalShellFireTime < SHELL_COOLDOWN_SEC * 1000) {
       const remaining = ((SHELL_COOLDOWN_SEC * 1000 - (now - lastLocalShellFireTime)) / 1000).toFixed(1)
-      console.log('[Shell] 1 pressed but cooldown active —', remaining, 's remaining')
+      console.log('[Shell] E pressed but cooldown active —', remaining, 's remaining')
       return
     }
 
@@ -568,7 +567,7 @@ export function shellClientSystem(dt: number): void {
     const { dirX, dirZ } = getPlayerForward()
 
     if (serverUp) {
-      console.log('[Shell] 🐚 1 pressed — requesting shell fire (server)')
+      console.log('[Shell] 🐚 E pressed — requesting shell fire (server)')
       room.send('requestShell', { dirX, dirZ })
 
       // Play instant fire sound so there's no lag waiting for server
@@ -579,7 +578,7 @@ export function shellClientSystem(dt: number): void {
         fireWallRaycast(spawnPos, dirX, dirZ)
       }
     } else {
-      console.log('[Shell] 🐚 1 pressed — firing shell locally (no server)')
+      console.log('[Shell] 🐚 E pressed — firing shell locally (no server)')
       fireShellLocally()
     }
   }

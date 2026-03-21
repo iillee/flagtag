@@ -279,8 +279,8 @@ function localTestFlagSystem(dt: number): void {
   const myPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : null
   const myRot = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).rotation : null
 
-  // E key: pickup / drop
-  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) {
+  // Key 3: drop flag
+  if (inputSystem.isTriggered(InputAction.IA_ACTION_5, PointerEventType.PET_DOWN)) {
     if (state === 'carried') {
       // Drop using clone system - at player's feet to prevent wall clipping
       let dropPos: Vector3
@@ -310,8 +310,12 @@ function localTestFlagSystem(dt: number): void {
       fireGroundRaycast(dropPos)
       playDrop()
       console.log('[LocalTest] Dropped flag using clone system')
-      
-    } else {
+    }
+  }
+
+  // Left click: pickup flag
+  if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN)) {
+    if (state !== 'carried') {
       // Try pickup using clone system
       if (myPos) {
         const flagPos = Transform.get(testFlagEntity).position

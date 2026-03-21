@@ -26,6 +26,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
 import { predictAttackLocally } from './combatSystem'
+import { isAnyOverlayOpen } from '../ui'
 
 // Visual clone system for smooth flag carrying
 // Two-entity approach: anchor (AvatarAttach AAPT_POSITION) → child (GltfContainer with Y offset)
@@ -382,15 +383,15 @@ export function flagClientSystem(dt: number): void {
     }
   }
 
-  // E key — attack only
-  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && userId) {
-    console.log('[C.5] E pressed - sending requestAttack')
+  // Left click — attack only (skip if a UI overlay is open)
+  if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && userId && !isAnyOverlayOpen()) {
+    console.log('[C.5] Left click - sending requestAttack')
     predictAttackLocally()
     room.send('requestAttack', { t: 0 })
   }
 
-  // ── Manual drop (F key) ──
-  if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN) && userId) {
+  // ── Manual drop (3 key) ──
+  if (inputSystem.isTriggered(InputAction.IA_ACTION_5, PointerEventType.PET_DOWN) && userId) {
     let amCarrying = false
     for (const [, flag] of engine.getEntitiesWith(Flag)) {
       if (flag.state === FlagState.Carried && flag.carrierPlayerId === userId) {
@@ -399,7 +400,7 @@ export function flagClientSystem(dt: number): void {
       }
     }
     if (amCarrying) {
-      console.log('[C.1] F pressed - sending requestDrop')
+      console.log('[C.1] 3 pressed - sending requestDrop')
       playDropSound()
       skipNextDropSound = true
       lastDropTimeMs = Date.now()
