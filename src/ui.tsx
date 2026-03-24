@@ -1297,7 +1297,7 @@ function MobileLayout() {
 
   // Mobile circle style constants
   const M_CIRCLE_SIZE = 60
-  const M_CIRCLE_TEXTURE = 'assets/images/circle-bg.png'
+  const M_CIRCLE_TEXTURE = 'assets/images/UI_circle.png'
   const M_ICON_SIZE = 36
   const M_KEYBIND_FONT = 16
   const analyticsOverlayVisible = getAnalyticsOverlayVisible()
