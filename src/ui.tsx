@@ -1295,6 +1295,14 @@ function MobileLayout() {
   const rawLeaderboardEntries = getLeaderboardEntries()
   const leaderboardEntries = getSortedLeaderboardEntries(rawLeaderboardEntries)
 
+  // Mobile circle style constants
+  const M_CIRCLE_SIZE = 60
+  const M_CIRCLE_BG = Color4.create(0.15, 0.15, 0.15, 0.92)
+  const M_CIRCLE_BORDER = Color4.create(1, 1, 1, 0.6)
+  const M_ICON_SIZE = 36
+  const M_KEYBIND_FONT = 16
+  const analyticsOverlayVisible = getAnalyticsOverlayVisible()
+
   return (
     <UiEntity
       uiTransform={{
@@ -1303,145 +1311,8 @@ function MobileLayout() {
         positionType: 'relative',
       }}
     >
-      {/* ── Top bar: [★ ?] [timer] [E 3 4] — aligned with mobile system icons ── */}
-      <UiEntity
-        uiTransform={{
-          positionType: 'absolute',
-          position: { top: 28, left: '25%' },
-          width: '50%',
-          height: 68,
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        {/* Menu icons (★ ?) — left side */}
-        <UiEntity
-          uiTransform={{
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          <UiEntity
-            uiTransform={{ width: 68, height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { right: 6 } }}
-            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
-            onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
-          >
-            <Label value="★" fontSize={36} color={leaderboardOverlayVisible ? GOLD : WHITE} font="sans-serif" />
-          </UiEntity>
-          <UiEntity
-            uiTransform={{ width: 68, height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
-            onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
-          >
-            <Label value="?" fontSize={38} color={winConditionOverlayVisible ? LIGHT_BLUE : WHITE} font="sans-serif" />
-          </UiEntity>
-        </UiEntity>
-
-        {/* Timer — center */}
-        <UiEntity
-          uiTransform={{
-            height: 68,
-            flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            padding: { left: 24, right: 24 },
-          }}
-          uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
-        >
-          <Label value={formatCountdown(countdownSeconds)} fontSize={46} color={WHITE} font="sans-serif" />
-        </UiEntity>
-
-        {/* Ability cooldown indicators — right side */}
-        <UiEntity
-          uiTransform={{
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          {/* Attack (Left Click) */}
-          <UiEntity
-            uiTransform={{
-              width: 68, height: 68,
-              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              margin: { right: 6 },
-            }}
-            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
-          >
-            <UiEntity
-              uiTransform={{ positionType: 'absolute', position: { top: 4, left: 1 }, width: 24, height: 24 }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: 'assets/images/cursor.png' },
-                color: LIGHT_GREY
-              }}
-            />
-            <UiEntity
-              uiTransform={{ width: 44, height: 44, margin: { top: 6 } }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: 'assets/images/hit-color.png' },
-                color: isAttackFlickering() ? Color4.create(1, 1, 1, 0.25) : Color4.White()
-              }}
-            />
-          </UiEntity>
-
-          {/* Shell (E) */}
-          <UiEntity
-            uiTransform={{
-              width: 68, height: 68,
-              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              margin: { right: 6 },
-            }}
-            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
-          >
-            <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: 0, left: 3 } }}
-            />
-            <UiEntity
-              uiTransform={{ width: 40, height: 40, margin: { top: 6 } }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png' },
-                color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
-              }}
-            />
-            {isShellOnCooldown() && (
-              <Label value={`${getShellCooldownRemaining()}`} fontSize={28} color={WHITE} font="sans-serif"
-                uiTransform={{ positionType: 'absolute' }}
-              />
-            )}
-          </UiEntity>
-
-          {/* Banana (F) */}
-          <UiEntity
-            uiTransform={{
-              width: 68, height: 68,
-              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            }}
-            uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
-          >
-            <Label value="F" fontSize={16} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: 0, left: 3 } }}
-            />
-            <UiEntity
-              uiTransform={{ width: 44, height: 44, margin: { top: 6 } }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
-                color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
-              }}
-            />
-            {isBananaOnCooldown() && (
-              <Label value={`${getBananaCooldownRemaining()}`} fontSize={28} color={WHITE} font="sans-serif"
-                uiTransform={{ positionType: 'absolute' }}
-              />
-            )}
-          </UiEntity>
-        </UiEntity>
-      </UiEntity>
-
-      {/* ── Bottom-center: Score display with expand button ── */}
+      {/* ── Top center: Timer + Score ── */}
       {(() => {
-        // Find the local player's score
         const localPlayer = players.find(p => localUserId !== null && p.userId === localUserId)
         const myScore = localPlayer ? localPlayer.seconds : 0
         const isLeader = localPlayer && leaderUserId !== null && localPlayer.userId === leaderUserId
@@ -1452,27 +1323,44 @@ function MobileLayout() {
           <UiEntity
             uiTransform={{
               positionType: 'absolute',
-              position: { bottom: 30, left: '25%' },
-              width: '50%',
+              position: { top: 28, left: 0 },
+              width: '100%',
+              height: 68,
               flexDirection: 'row',
               justifyContent: 'center',
               alignItems: 'center',
             }}
           >
+            {/* Timer pill */}
             <UiEntity
               uiTransform={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                padding: { left: 16, right: 16, top: 10, bottom: 10 },
+                height: 58,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                padding: { left: 28, right: 28 },
+                borderRadius: 29,
+                margin: { right: 10 },
+              }}
+              uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
+            >
+              <Label value={formatCountdown(countdownSeconds)} fontSize={38} color={WHITE} font="sans-serif" />
+            </UiEntity>
+
+            {/* Score pill with expand button */}
+            <UiEntity
+              uiTransform={{
+                height: 58,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                padding: { left: 14, right: 22 },
+                borderRadius: 29,
               }}
               uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
             >
               {/* Expand button */}
               <UiEntity
                 uiTransform={{
-                  width: 36,
-                  height: 36,
-                  margin: { right: 10 },
+                  width: 32,
+                  height: 32,
+                  margin: { right: 8 },
                 }}
                 uiBackground={{
                   textureMode: 'stretch',
@@ -1484,22 +1372,200 @@ function MobileLayout() {
                   setWinConditionOverlayVisible(false)
                   setAnalyticsOverlayVisible(false)
                   setLeaderboardOverlayVisible(false)
-                  // Toggle mobile scoreboard overlay
                   mobileScoreboardOverlayVisible = !mobileScoreboardOverlayVisible
                 }}
               />
-              {/* Score text */}
-              <Label value="Score:" fontSize={30} color={scoreColor} font="sans-serif" />
-              <UiEntity uiTransform={{ width: 8 }} />
-              <Label value={`${myScore}`} fontSize={30} color={scoreColor} font="sans-serif" />
-              {/* Gold star if player has the flag */}
+              <Label value="Score:" fontSize={28} color={scoreColor} font="sans-serif" />
+              <UiEntity uiTransform={{ width: 6 }} />
+              <Label value={`${myScore}`} fontSize={28} color={scoreColor} font="sans-serif" />
               {hasFlag && (
-                <Label value=" ★" fontSize={30} color={GOLD} font="sans-serif" />
+                <Label value=" ★" fontSize={28} color={GOLD} font="sans-serif" />
               )}
             </UiEntity>
           </UiEntity>
         )
       })()}
+
+      {/* ── Bottom-left: Menu icons (? ★ #) as circles with white border ── */}
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { bottom: 24, left: '26%' },
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}
+      >
+        {/* ? — How to Play */}
+        <UiEntity
+          uiTransform={{
+            width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            borderRadius: M_CIRCLE_SIZE / 2,
+            margin: { right: 10 },
+            borderWidth: 2,
+            borderColor: M_CIRCLE_BORDER,
+          }}
+          uiBackground={{ color: M_CIRCLE_BG }}
+          onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
+        >
+          <Label value="?" fontSize={32} color={winConditionOverlayVisible ? GOLD : WHITE} font="sans-serif" />
+        </UiEntity>
+
+        {/* ★ — Leaderboard */}
+        <UiEntity
+          uiTransform={{
+            width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            borderRadius: M_CIRCLE_SIZE / 2,
+            margin: { right: 10 },
+            borderWidth: 2,
+            borderColor: M_CIRCLE_BORDER,
+          }}
+          uiBackground={{ color: M_CIRCLE_BG }}
+          onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
+        >
+          <Label value="★" fontSize={30} color={leaderboardOverlayVisible ? GOLD : WHITE} font="sans-serif" />
+        </UiEntity>
+
+        {/* # — Analytics */}
+        <UiEntity
+          uiTransform={{
+            width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            borderRadius: M_CIRCLE_SIZE / 2,
+            borderWidth: 2,
+            borderColor: M_CIRCLE_BORDER,
+          }}
+          uiBackground={{ color: M_CIRCLE_BG }}
+          onMouseDown={() => {
+            playClickSound();
+            setWinConditionOverlayVisible(false);
+            setLeaderboardOverlayVisible(false);
+            mobileScoreboardOverlayVisible = false;
+            visitorScrollOffset = 0;
+            toggleAnalyticsOverlay();
+          }}
+        >
+          <Label value="#" fontSize={28} color={analyticsOverlayVisible ? GOLD : WHITE} font="sans-serif" />
+        </UiEntity>
+      </UiEntity>
+
+      {/* ── Bottom-right: Ability icons as circles with white border + keybind labels ── */}
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { bottom: 24, right: '26%' },
+          flexDirection: 'row',
+          alignItems: 'flex-end',
+        }}
+      >
+        {/* Banana (F) */}
+        <UiEntity
+          uiTransform={{
+            flexDirection: 'column', alignItems: 'center',
+            margin: { right: 10 },
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              borderRadius: M_CIRCLE_SIZE / 2,
+              borderWidth: 2,
+              borderColor: M_CIRCLE_BORDER,
+            }}
+            uiBackground={{ color: M_CIRCLE_BG }}
+          >
+            <UiEntity
+              uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
+                color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+              }}
+            />
+            {isBananaOnCooldown() && (
+              <Label value={`${getBananaCooldownRemaining()}`} fontSize={24} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
+              />
+            )}
+          </UiEntity>
+          <Label value="F" fontSize={M_KEYBIND_FONT} color={LIGHT_GREY} font="sans-serif"
+            uiTransform={{ margin: { top: 4 } }}
+          />
+        </UiEntity>
+
+        {/* Shell (E) */}
+        <UiEntity
+          uiTransform={{
+            flexDirection: 'column', alignItems: 'center',
+            margin: { right: 10 },
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              borderRadius: M_CIRCLE_SIZE / 2,
+              borderWidth: 2,
+              borderColor: M_CIRCLE_BORDER,
+            }}
+            uiBackground={{ color: M_CIRCLE_BG }}
+          >
+            <UiEntity
+              uiTransform={{ width: M_ICON_SIZE - 4, height: M_ICON_SIZE - 4 }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png' },
+                color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+              }}
+            />
+            {isShellOnCooldown() && (
+              <Label value={`${getShellCooldownRemaining()}`} fontSize={24} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
+              />
+            )}
+          </UiEntity>
+          <Label value="E" fontSize={M_KEYBIND_FONT} color={LIGHT_GREY} font="sans-serif"
+            uiTransform={{ margin: { top: 4 } }}
+          />
+        </UiEntity>
+
+        {/* Attack (Click) */}
+        <UiEntity
+          uiTransform={{
+            flexDirection: 'column', alignItems: 'center',
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              borderRadius: M_CIRCLE_SIZE / 2,
+              borderWidth: 2,
+              borderColor: M_CIRCLE_BORDER,
+            }}
+            uiBackground={{ color: M_CIRCLE_BG }}
+          >
+            <UiEntity
+              uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: 'assets/images/hit-color.png' },
+                color: isAttackFlickering() ? Color4.create(1, 1, 1, 0.25) : Color4.White()
+              }}
+            />
+          </UiEntity>
+          <UiEntity
+            uiTransform={{ width: 20, height: 16, margin: { top: 4 } }}
+            uiBackground={{
+              textureMode: 'stretch',
+              texture: { src: 'assets/images/cursor.png' },
+              color: LIGHT_GREY
+            }}
+          />
+        </UiEntity>
+      </UiEntity>
 
       {/* ── Mobile Scoreboard Overlay — full scoreboard in center ── */}
       {mobileScoreboardOverlayVisible && (
@@ -1910,6 +1976,127 @@ function MobileLayout() {
                 uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
                 uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }}
                 onMouseDown={() => { leaderboardScrollOffset += 1 }}
+              >
+                <Label value="▼ More" fontSize={22} color={WHITE} font="sans-serif" />
+              </UiEntity>
+            )}
+          </UiEntity>
+        </UiEntity>
+        )
+      })()}
+
+      {/* ── Analytics overlay — centered (safe area) ── */}
+      {analyticsOverlayVisible && (() => {
+        const allVisitors = [...getAllVisitors()].sort((a, b) => {
+          if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
+          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        })
+        const visitorCount = getTodayVisitorCount()
+        const onlineCount = getCurrentOnlineCount()
+        const serverConnected = getServerConnectionStatus()
+        const M_VISITORS_PER_PAGE = 8
+        const totalVisitors = allVisitors.length
+        const maxOffset = Math.max(0, totalVisitors - M_VISITORS_PER_PAGE)
+        if (visitorScrollOffset > maxOffset) visitorScrollOffset = maxOffset
+        if (visitorScrollOffset < 0) visitorScrollOffset = 0
+        const visibleVisitors = allVisitors.slice(visitorScrollOffset, visitorScrollOffset + M_VISITORS_PER_PAGE)
+        const canScrollUp = visitorScrollOffset > 0
+        const canScrollDown = visitorScrollOffset < maxOffset
+
+        return (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { left: 0, top: 0 },
+            width: '100%', height: '100%',
+            flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              positionType: 'relative',
+              width: '42%',
+              height: '62%',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              padding: 28,
+              overflow: 'hidden',
+            }}
+            uiBackground={{ color: PANEL_BG }}
+          >
+            {/* Close button */}
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 6, right: 6 },
+                width: 64, height: 64,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              }}
+              onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false) }}
+            >
+              <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+            <Label value="Daily Visitors" fontSize={36} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ height: 8 }} />
+
+            {/* Stats row */}
+            <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 36 }}>
+              <Label value={`Unique: ${visitorCount}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ width: 16 }} />
+              <Label value={`Online: ${onlineCount}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ width: 16 }} />
+              <Label value={`Server: ${serverConnected}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+            </UiEntity>
+            <UiEntity uiTransform={{ height: 12 }} />
+
+            {/* Scroll up */}
+            {canScrollUp && (
+              <UiEntity
+                uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }}
+                onMouseDown={() => { visitorScrollOffset -= 1 }}
+              >
+                <Label value="▲ More" fontSize={22} color={WHITE} font="sans-serif" />
+              </UiEntity>
+            )}
+
+            <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
+              {totalVisitors === 0 ? (
+                <UiEntity uiTransform={{ height: 44 * 2, justifyContent: 'center', alignItems: 'center' }}>
+                  <Label value="No visitors today" fontSize={22} color={MUTED} font="sans-serif" />
+                </UiEntity>
+              ) : (
+                visibleVisitors.map((visitor, i) => (
+                  <UiEntity
+                    key={`m-vis-${visitor.userId}-${visitorScrollOffset}-${i}`}
+                    uiTransform={{
+                      height: 44,
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                      padding: { left: 4, right: 4 },
+                    }}
+                  >
+                    <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+                      <Label
+                        value={visitor.isOnline ? "●" : "○"}
+                        fontSize={18}
+                        color={visitor.isOnline ? WHITE : GREY}
+                        font="sans-serif"
+                      />
+                      <UiEntity uiTransform={{ width: 8 }} />
+                      <Label value={visitor.name} fontSize={20} color={WHITE} font="sans-serif" />
+                    </UiEntity>
+                    <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                ))
+              )}
+            </UiEntity>
+
+            {/* Scroll down */}
+            {canScrollDown && (
+              <UiEntity
+                uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }}
+                onMouseDown={() => { visitorScrollOffset += 1 }}
               >
                 <Label value="▼ More" fontSize={22} color={WHITE} font="sans-serif" />
               </UiEntity>
