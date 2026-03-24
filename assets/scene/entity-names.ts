@@ -5,7 +5,6 @@
  * Object containing all entity names in the scene for autocomplete support.
  */
 export enum EntityNames {
-  Admin_Tools = "Admin Tools",
   Caribbean_Water = "Caribbean Water",
   Castle_06_glb = "Castle_06.glb",
   Lilypad = "Lilypad",
