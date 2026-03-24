@@ -1390,7 +1390,7 @@ function MobileLayout() {
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
-          position: { bottom: 46, left: '27%' },
+          position: { bottom: 46, left: '7%' },
           flexDirection: 'row',
           alignItems: 'center',
         }}
