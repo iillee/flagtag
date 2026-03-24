@@ -1342,7 +1342,7 @@ function MobileLayout() {
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 6 },
+                  margin: { right: 4 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
@@ -1353,7 +1353,7 @@ function MobileLayout() {
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 6 },
+                  margin: { right: 4 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
@@ -1390,25 +1390,23 @@ function MobileLayout() {
             >
               <UiEntity
                 uiTransform={{
-                  height: 68,
+                  width: 140,
+                  height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  padding: { left: 28, right: 28 },
-                  borderRadius: 34,
-                  margin: { right: 10 },
+                  margin: { right: 4 },
                 }}
-                uiBackground={{ color: Color4.create(0, 0, 0, 0.72) }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_timer.png' }, color: M_CIRCLE_OPACITY }}
               >
                 <Label value={formatCountdown(countdownSeconds)} fontSize={32} color={WHITE} font="sans-serif" />
               </UiEntity>
 
               <UiEntity
                 uiTransform={{
-                  height: 68,
+                  width: 290,
+                  height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  padding: { left: 18, right: 30 },
-                  borderRadius: 34,
                 }}
-                uiBackground={{ color: Color4.create(0, 0, 0, 0.72) }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => {
                   playClickSound()
                   setWinConditionOverlayVisible(false)
@@ -1449,7 +1447,7 @@ function MobileLayout() {
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 6 },
+                  margin: { right: 4 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               >
@@ -1472,7 +1470,7 @@ function MobileLayout() {
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 6 },
+                  margin: { right: 4 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               >
@@ -1521,6 +1519,7 @@ function MobileLayout() {
             width: '100%', height: '100%',
             flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
           }}
+          onMouseDown={() => { playClickSound(); mobileScoreboardOverlayVisible = false }}
         >
           <UiEntity
             uiTransform={{
@@ -1603,6 +1602,7 @@ function MobileLayout() {
             justifyContent: 'center',
             alignItems: 'center',
           }}
+          onMouseDown={() => { playClickSound(); splashVisible = false }}
         >
           <UiEntity
             uiTransform={{
@@ -1683,6 +1683,7 @@ function MobileLayout() {
             width: '100%', height: 'auto',
             flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start',
           }}
+          onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false) }}
         >
           <UiEntity
             uiTransform={{
@@ -1850,6 +1851,7 @@ function MobileLayout() {
             width: '100%', height: '100%',
             flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
           }}
+          onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false) }}
         >
           <UiEntity
             uiTransform={{
@@ -1955,6 +1957,7 @@ function MobileLayout() {
             width: '100%', height: '100%',
             flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
           }}
+          onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false) }}
         >
           <UiEntity
             uiTransform={{
