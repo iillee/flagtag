@@ -98,6 +98,7 @@ let interpolationStartTime = 0
 /**
  * Called every frame (from a system) to keep interpolation state fresh.
  * Tracks when the carrier or their synced seconds change.
+ * Also detects round resets (all scores drop to 0) to prevent stale interpolation.
  */
 export function updateHoldTimeInterpolation(): void {
   let currentCarrierId = ''
@@ -122,6 +123,12 @@ export function updateHoldTimeInterpolation(): void {
       if (data.playerId.toLowerCase() === currentCarrierId) {
         maxSynced = Math.max(maxSynced, data.seconds)
       }
+    }
+    // Detect round reset: if server synced value drops below our last known value,
+    // the round was reset. Re-anchor interpolation to the new (lower) value.
+    if (maxSynced < lastCarrierSyncedSeconds) {
+      lastCarrierSyncedSeconds = maxSynced
+      interpolationStartTime = Date.now()
     }
     // When server sends a new value, re-anchor our interpolation
     if (maxSynced > lastCarrierSyncedSeconds) {
@@ -151,7 +158,10 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     synced.set(lastCarrierId, Math.max(existing, interpolated))
   }
 
-  // Build result from players currently in the scene
+  // Build result ONLY from players currently in the scene.
+  // We no longer include "synced-but-not-in-scene" players because the server
+  // now cleans up hold-time entities for disconnected players at round end,
+  // and showing stale ghost entries was causing the duplicate name bug.
   const seen = new Set<string>()
   const result: { userId: string; name: string; seconds: number; rawSeconds: number }[] = []
   for (const [userId, name] of playersInScene) {
@@ -166,21 +176,6 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
       name: displayName,
       seconds: Math.floor(raw),
       rawSeconds: raw
-    })
-  }
-
-  // Safety net: include any synced players with scores who aren't in playersInScene
-  // This handles race conditions where PlayerFlagHoldTime arrives before onEnterScene
-  for (const [key, seconds] of synced) {
-    if (seen.has(key)) continue
-    if (seconds <= 0) continue
-    seen.add(key)
-    const displayName = getKnownPlayerName(key) || key.slice(0, 8)
-    result.push({
-      userId: key,
-      name: displayName,
-      seconds: Math.floor(seconds),
-      rawSeconds: seconds
     })
   }
 

@@ -16,7 +16,7 @@ const PICKUP_RADIUS = 3
 const HIT_RADIUS = 2.5
 const HIT_COOLDOWN_MS = 450       // Attacker cooldown (how soon they can attack again)
 const STEAL_IMMUNITY_MS = 3000    // Immunity for the player who STEALS the flag (time to escape the crowd)
-const HOLD_TIME_SYNC_INTERVAL = 0.2
+const HOLD_TIME_SYNC_INTERVAL = 0.5  // Sync hold time every 0.5s (was 0.2s) — reduces CRDT pressure; client interpolates between updates
 const IDLE_BOB_AMPLITUDE = 0.15
 const IDLE_BOB_SPEED = 2
 const IDLE_ROT_SPEED_DEG_PER_SEC = 25
@@ -34,13 +34,32 @@ let visitorAnalyticsEntity: Entity
 let idleTime = 0
 let holdTimeAccum = 0
 let flagBobAccum = 0
-const FLAG_BOB_SYNC_INTERVAL = 0.1 // seconds between flag bob CRDT writes (~10Hz)
+const FLAG_BOB_SYNC_INTERVAL = 0.25 // seconds between flag bob CRDT writes (~4Hz, was ~10Hz) — reduces CRDT pressure
 const lastAttackTime = new Map<string, number>()
 const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
 const holdTimeEntities = new Map<string, Entity>()
 const knownPlayers = new Set<string>()
 const playerNames = new Map<string, string>()
 let lastLeaderboardResetDay = ''
+
+/**
+ * Single entry point for creating/retrieving a PlayerFlagHoldTime entity.
+ * Prevents the race condition where both playerTrackingSystem and
+ * holdTimeServerSystem create duplicate entities for the same player.
+ */
+function getOrCreateHoldTimeEntity(userKey: string): Entity {
+  const key = userKey.toLowerCase()
+  let entity = holdTimeEntities.get(key)
+  if (entity) return entity
+
+  entity = engine.addEntity()
+  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: 0 })
+  syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(key))
+  holdTimeEntities.set(key, entity)
+  knownPlayers.add(key)
+  console.log('[Server] Created hold-time entity for', key.slice(0, 8))
+  return entity
+}
 
 // ── Visitor tracking ──
 const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesToday: number }>()
@@ -1264,18 +1283,8 @@ function holdTimeServerSystem(dt: number): void {
   if (holdTimeAccum < HOLD_TIME_SYNC_INTERVAL) return
 
   const carrierKey = flag.carrierPlayerId.toLowerCase()
-  let entity = holdTimeEntities.get(carrierKey)
-  
-  // Safety net: create hold time entity if it doesn't exist yet
-  // This handles edge cases where playerTrackingSystem hasn't detected the player yet
-  if (!entity) {
-    console.log('[Server] holdTimeServerSystem: creating missing hold time entity for', carrierKey.slice(0, 8))
-    entity = engine.addEntity()
-    PlayerFlagHoldTime.create(entity, { playerId: flag.carrierPlayerId, seconds: 0 })
-    syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(carrierKey))
-    holdTimeEntities.set(carrierKey, entity)
-    knownPlayers.add(carrierKey)
-  }
+  // Use centralized helper — safe to call even if entity already exists
+  const entity = getOrCreateHoldTimeEntity(carrierKey)
 
   const mutable = PlayerFlagHoldTime.getMutable(entity)
   mutable.seconds += holdTimeAccum
@@ -1300,14 +1309,8 @@ function playerTrackingSystem(): void {
       // Player just connected (or reconnected)
       currentlyConnected.add(userKey)
 
-      // Create synced hold time entity only on first ever join
-      if (!knownPlayers.has(userKey)) {
-        knownPlayers.add(userKey)
-        const entity = engine.addEntity()
-        PlayerFlagHoldTime.create(entity, { playerId: userKey, seconds: 0 })
-        syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(userKey))
-        holdTimeEntities.set(userKey, entity)
-      }
+      // Create synced hold time entity if this is a new player
+      getOrCreateHoldTimeEntity(userKey)
 
       // Start/restart visitor session — use persisted name if available
       const playerName = playerNames.get(userKey) || userKey.slice(0, 8)
@@ -1505,6 +1508,10 @@ async function handleRoundEnd(): Promise<void> {
   lastShellFireTime.clear()
   console.log('[Server] 🐚 All shells cleared for new round')
 
+  // ── 5c. Clear combat cooldown maps to prevent memory growth ──
+  lastAttackTime.clear()
+  lastStealTime.clear()
+
   // ── 6. Reset flag to random spawn point ──
   resetGravityState()
   const spawnPoint = getRandomSpawnPoint()
@@ -1523,9 +1530,31 @@ async function handleRoundEnd(): Promise<void> {
   t.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
   await persistFlagState()
 
-  // ── 6. Reset all hold times (splash reads from snapshot, not live data) ──
-  for (const [entity] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
-    PlayerFlagHoldTime.getMutable(entity).seconds = 0
+  // ── 7. Reset hold times — remove entities for disconnected players to prevent CRDT accumulation ──
+  // Connected players keep their entity (reset to 0). Disconnected players' entities are fully removed.
+  const connectedNow = new Set<string>()
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    connectedNow.add(identity.address.toLowerCase())
+  }
+
+  const entitiesToRemove: string[] = []
+  for (const [userKey, entity] of holdTimeEntities) {
+    if (connectedNow.has(userKey)) {
+      // Still connected — reset score to 0
+      PlayerFlagHoldTime.getMutable(entity).seconds = 0
+    } else {
+      // Disconnected — fully remove the synced entity to free CRDT space
+      entitiesToRemove.push(userKey)
+    }
+  }
+  for (const userKey of entitiesToRemove) {
+    const entity = holdTimeEntities.get(userKey)!
+    engine.removeEntity(entity)
+    holdTimeEntities.delete(userKey)
+    knownPlayers.delete(userKey)
+  }
+  if (entitiesToRemove.length > 0) {
+    console.log('[Server] Cleaned up', entitiesToRemove.length, 'hold-time entities for disconnected players')
   }
 }
 

@@ -124,15 +124,14 @@ function roundEndSplashSystem(dt: number): void {
     })
   }
 
-  // While splash is showing, try to upgrade to server data
-  // Only accept server data if it has at least as many entries as the client snapshot
-  // to prevent 2nd/3rd place from disappearing mid-display
+  // While splash is showing, upgrade to server-authoritative data as soon as it arrives.
+  // Server data is always correct — client interpolation can drift, so always prefer server.
   if (splashVisible && !splashFromServer) {
     for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
       if (timer.roundWinnerJson) {
         try {
           const serverData = JSON.parse(timer.roundWinnerJson) as Array<{ userId?: string; name: string; seconds: number }>
-          if (serverData.length > 0 && serverData.length >= splashPlayers.length) {
+          if (serverData.length > 0) {
             splashPlayers = serverData.slice(0, 3).map(p => ({
               name: (p.userId ? getKnownPlayerName(p.userId) : null) || p.name,
               seconds: p.seconds
