@@ -1297,8 +1297,7 @@ function MobileLayout() {
 
   // Mobile circle style constants
   const M_CIRCLE_SIZE = 60
-  const M_CIRCLE_BG = Color4.create(0.15, 0.15, 0.15, 0.92)
-  const M_CIRCLE_BORDER = Color4.create(1, 1, 1, 0.6)
+  const M_CIRCLE_TEXTURE = 'assets/images/circle-bg.png'
   const M_ICON_SIZE = 36
   const M_KEYBIND_FONT = 16
   const analyticsOverlayVisible = getAnalyticsOverlayVisible()
@@ -1400,12 +1399,9 @@ function MobileLayout() {
           uiTransform={{
             width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            borderRadius: M_CIRCLE_SIZE / 2,
             margin: { right: 10 },
-            borderWidth: 2,
-            borderColor: M_CIRCLE_BORDER,
           }}
-          uiBackground={{ color: M_CIRCLE_BG }}
+          uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: Color4.White() }}
           onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
         >
           <Label value="?" fontSize={32} color={winConditionOverlayVisible ? GOLD : WHITE} font="sans-serif" />
@@ -1416,12 +1412,9 @@ function MobileLayout() {
           uiTransform={{
             width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            borderRadius: M_CIRCLE_SIZE / 2,
             margin: { right: 10 },
-            borderWidth: 2,
-            borderColor: M_CIRCLE_BORDER,
           }}
-          uiBackground={{ color: M_CIRCLE_BG }}
+          uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: Color4.White() }}
           onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
         >
           <Label value="★" fontSize={30} color={leaderboardOverlayVisible ? GOLD : WHITE} font="sans-serif" />
@@ -1432,11 +1425,8 @@ function MobileLayout() {
           uiTransform={{
             width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            borderRadius: M_CIRCLE_SIZE / 2,
-            borderWidth: 2,
-            borderColor: M_CIRCLE_BORDER,
           }}
-          uiBackground={{ color: M_CIRCLE_BG }}
+          uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: Color4.White() }}
           onMouseDown={() => {
             playClickSound();
             setWinConditionOverlayVisible(false);
@@ -1470,11 +1460,8 @@ function MobileLayout() {
             uiTransform={{
               width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
               flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-              borderRadius: M_CIRCLE_SIZE / 2,
-              borderWidth: 2,
-              borderColor: M_CIRCLE_BORDER,
             }}
-            uiBackground={{ color: M_CIRCLE_BG }}
+            uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: Color4.White() }}
           >
             <UiEntity
               uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
@@ -1506,11 +1493,8 @@ function MobileLayout() {
             uiTransform={{
               width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
               flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-              borderRadius: M_CIRCLE_SIZE / 2,
-              borderWidth: 2,
-              borderColor: M_CIRCLE_BORDER,
             }}
-            uiBackground={{ color: M_CIRCLE_BG }}
+            uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: Color4.White() }}
           >
             <UiEntity
               uiTransform={{ width: M_ICON_SIZE - 4, height: M_ICON_SIZE - 4 }}
@@ -1541,11 +1525,8 @@ function MobileLayout() {
             uiTransform={{
               width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
               flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-              borderRadius: M_CIRCLE_SIZE / 2,
-              borderWidth: 2,
-              borderColor: M_CIRCLE_BORDER,
             }}
-            uiBackground={{ color: M_CIRCLE_BG }}
+            uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: Color4.White() }}
           >
             <UiEntity
               uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
