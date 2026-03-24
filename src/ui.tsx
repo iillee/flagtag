@@ -274,7 +274,7 @@ function formatCountdown(seconds: number): string {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = seconds % 60
-  if (h === 0) return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  if (h === 0) return `${m}:${s.toString().padStart(2, '0')}`
   return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
 }
 
@@ -640,7 +640,7 @@ function DesktopLayout() {
                   </UiEntity>
                   <Label value="to attack/steal flag" fontSize={16} color={MUTED} font="sans-serif" />
                   <UiEntity
-                    uiTransform={{ width: 54, height: 54, margin: { left: 8 } }}
+                    uiTransform={{ width: 43, height: 43, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/hit-color.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
@@ -656,7 +656,7 @@ function DesktopLayout() {
                   </UiEntity>
                   <Label value="to fire shell" fontSize={16} color={MUTED} font="sans-serif" />
                   <UiEntity
-                    uiTransform={{ width: 51, height: 51, margin: { left: 8 } }}
+                    uiTransform={{ width: 41, height: 41, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/shell-color.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
@@ -672,7 +672,7 @@ function DesktopLayout() {
                   </UiEntity>
                   <Label value="to drop banana" fontSize={16} color={MUTED} font="sans-serif" />
                   <UiEntity
-                    uiTransform={{ width: 54, height: 54, margin: { left: 8 } }}
+                    uiTransform={{ width: 43, height: 43, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
@@ -1298,8 +1298,8 @@ function MobileLayout() {
   // Mobile circle style constants
   const M_CIRCLE_SIZE = 68
   const M_CIRCLE_TEXTURE = 'assets/images/UI_circle.png'
-  const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 0.95) // Slightly increased opacity for circle PNG
-  const M_ICON_SIZE = 40
+  const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 0.8) // 80% opacity for circle PNG
+  const M_ICON_SIZE = 50
   const M_KEYBIND_FONT = 16
   const analyticsOverlayVisible = getAnalyticsOverlayVisible()
 
@@ -1311,7 +1311,7 @@ function MobileLayout() {
         positionType: 'relative',
       }}
     >
-      {/* ── Top center: Timer + Score ── */}
+      {/* ── Top bar: [? ★ #] left — [timer] [score] center — [🍌 🐚 ⚔] right ── */}
       {(() => {
         const localPlayer = players.find(p => localUserId !== null && p.userId === localUserId)
         const myScore = localPlayer ? localPlayer.seconds : 0
@@ -1323,231 +1323,194 @@ function MobileLayout() {
           <UiEntity
             uiTransform={{
               positionType: 'absolute',
-              position: { top: 28, left: 0 },
-              width: '100%',
+              position: { top: 28, left: '24%' },
+              width: '58%',
               height: 68,
               flexDirection: 'row',
-              justifyContent: 'center',
+              justifyContent: 'space-between',
               alignItems: 'center',
             }}
           >
-            {/* Timer pill */}
+            {/* Menu icons (? ★ #) — left */}
             <UiEntity
               uiTransform={{
-                height: 68,
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                padding: { left: 32, right: 32 },
-                borderRadius: 34,
-                margin: { right: 10 },
-              }}
-              uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
-            >
-              <Label value={formatCountdown(countdownSeconds)} fontSize={42} color={WHITE} font="sans-serif" />
-            </UiEntity>
-
-            {/* Score pill — entire pill is tappable to expand scoreboard */}
-            <UiEntity
-              uiTransform={{
-                height: 68,
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                padding: { left: 18, right: 26 },
-                borderRadius: 34,
-              }}
-              uiBackground={{ color: Color4.create(0, 0, 0, 0.9) }}
-              onMouseDown={() => {
-                playClickSound()
-                setWinConditionOverlayVisible(false)
-                setAnalyticsOverlayVisible(false)
-                setLeaderboardOverlayVisible(false)
-                mobileScoreboardOverlayVisible = !mobileScoreboardOverlayVisible
+                flexDirection: 'row',
+                alignItems: 'center',
               }}
             >
-              {/* Expand icon (visual only — tap target is the whole pill) */}
               <UiEntity
                 uiTransform={{
-                  width: 34,
-                  height: 34,
-                  margin: { right: 8 },
+                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  margin: { right: 6 },
                 }}
-                uiBackground={{
-                  textureMode: 'stretch',
-                  texture: { src: 'assets/images/expand.png' },
-                  color: Color4.White()
+                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
+              >
+                <Label value="?" fontSize={36} color={winConditionOverlayVisible ? GOLD : WHITE} font="sans-serif" />
+              </UiEntity>
+              <UiEntity
+                uiTransform={{
+                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  margin: { right: 6 },
                 }}
-              />
-              <Label value="Score:" fontSize={32} color={scoreColor} font="sans-serif" />
-              <UiEntity uiTransform={{ width: 6 }} />
-              <Label value={`${myScore}`} fontSize={32} color={scoreColor} font="sans-serif" />
-              {hasFlag && (
-                <Label value=" ★" fontSize={32} color={GOLD} font="sans-serif" />
-              )}
+                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
+              >
+                <Label value="★" fontSize={34} color={leaderboardOverlayVisible ? GOLD : WHITE} font="sans-serif"
+                  uiTransform={{ margin: { bottom: 4 } }}
+                />
+              </UiEntity>
+              <UiEntity
+                uiTransform={{
+                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => {
+                  playClickSound();
+                  setWinConditionOverlayVisible(false);
+                  setLeaderboardOverlayVisible(false);
+                  mobileScoreboardOverlayVisible = false;
+                  visitorScrollOffset = 0;
+                  toggleAnalyticsOverlay();
+                }}
+              >
+                <Label value="#" fontSize={32} color={analyticsOverlayVisible ? GOLD : WHITE} font="sans-serif" />
+              </UiEntity>
+            </UiEntity>
+
+            {/* Timer + Score — center */}
+            <UiEntity
+              uiTransform={{
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <UiEntity
+                uiTransform={{
+                  height: 68,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  padding: { left: 28, right: 28 },
+                  borderRadius: 34,
+                  margin: { right: 10 },
+                }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 0.72) }}
+              >
+                <Label value={formatCountdown(countdownSeconds)} fontSize={32} color={WHITE} font="sans-serif" />
+              </UiEntity>
+
+              <UiEntity
+                uiTransform={{
+                  height: 68,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  padding: { left: 18, right: 30 },
+                  borderRadius: 34,
+                }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 0.72) }}
+                onMouseDown={() => {
+                  playClickSound()
+                  setWinConditionOverlayVisible(false)
+                  setAnalyticsOverlayVisible(false)
+                  setLeaderboardOverlayVisible(false)
+                  mobileScoreboardOverlayVisible = !mobileScoreboardOverlayVisible
+                }}
+              >
+                <UiEntity
+                  uiTransform={{
+                    width: 34,
+                    height: 34,
+                    margin: { right: 8 },
+                  }}
+                  uiBackground={{
+                    textureMode: 'stretch',
+                    texture: { src: 'assets/images/expand.png' },
+                    color: Color4.White()
+                  }}
+                />
+                <Label value="Score:" fontSize={32} color={scoreColor} font="sans-serif" />
+                <UiEntity uiTransform={{ width: 6 }} />
+                <Label value={`${myScore}`} fontSize={32} color={scoreColor} font="sans-serif" />
+                {hasFlag && (
+                  <Label value=" ★" fontSize={32} color={GOLD} font="sans-serif" />
+                )}
+              </UiEntity>
+            </UiEntity>
+
+            {/* Ability icons — right */}
+            <UiEntity
+              uiTransform={{
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <UiEntity
+                uiTransform={{
+                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  margin: { right: 6 },
+                }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+              >
+                <UiEntity
+                  uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
+                  uiBackground={{
+                    textureMode: 'stretch',
+                    texture: { src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
+                    color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                  }}
+                />
+                {isBananaOnCooldown() && (
+                  <Label value={`${getBananaCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+                    uiTransform={{ positionType: 'absolute' }}
+                  />
+                )}
+              </UiEntity>
+
+              <UiEntity
+                uiTransform={{
+                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  margin: { right: 6 },
+                }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+              >
+                <UiEntity
+                  uiTransform={{ width: M_ICON_SIZE - 4, height: M_ICON_SIZE - 4 }}
+                  uiBackground={{
+                    textureMode: 'stretch',
+                    texture: { src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png' },
+                    color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                  }}
+                />
+                {isShellOnCooldown() && (
+                  <Label value={`${getShellCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+                    uiTransform={{ positionType: 'absolute' }}
+                  />
+                )}
+              </UiEntity>
+
+              <UiEntity
+                uiTransform={{
+                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+              >
+                <UiEntity
+                  uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
+                  uiBackground={{
+                    textureMode: 'stretch',
+                    texture: { src: 'assets/images/hit-color.png' },
+                    color: isAttackFlickering() ? Color4.create(1, 1, 1, 0.25) : Color4.White()
+                  }}
+                />
+              </UiEntity>
             </UiEntity>
           </UiEntity>
         )
       })()}
-
-      {/* ── Bottom-left: Menu icons (? ★ #) — aligned with system UI row ── */}
-      <UiEntity
-        uiTransform={{
-          positionType: 'absolute',
-          position: { bottom: 46, left: '7%' },
-          flexDirection: 'row',
-          alignItems: 'center',
-        }}
-      >
-        {/* ? — How to Play */}
-        <UiEntity
-          uiTransform={{
-            width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            margin: { right: 10 },
-          }}
-          uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-          onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
-        >
-          <Label value="?" fontSize={36} color={winConditionOverlayVisible ? GOLD : WHITE} font="sans-serif" />
-        </UiEntity>
-
-        {/* ★ — Leaderboard */}
-        <UiEntity
-          uiTransform={{
-            width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            margin: { right: 10 },
-          }}
-          uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-          onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
-        >
-          <Label value="★" fontSize={34} color={leaderboardOverlayVisible ? GOLD : WHITE} font="sans-serif" />
-        </UiEntity>
-
-        {/* # — Analytics */}
-        <UiEntity
-          uiTransform={{
-            width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-          }}
-          uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-          onMouseDown={() => {
-            playClickSound();
-            setWinConditionOverlayVisible(false);
-            setLeaderboardOverlayVisible(false);
-            mobileScoreboardOverlayVisible = false;
-            visitorScrollOffset = 0;
-            toggleAnalyticsOverlay();
-          }}
-        >
-          <Label value="#" fontSize={32} color={analyticsOverlayVisible ? GOLD : WHITE} font="sans-serif" />
-        </UiEntity>
-      </UiEntity>
-
-      {/* ── Bottom-right: Ability icons — aligned with system UI row ── */}
-      <UiEntity
-        uiTransform={{
-          positionType: 'absolute',
-          position: { bottom: 46, right: '27%' },
-          flexDirection: 'row',
-          alignItems: 'flex-end',
-        }}
-      >
-        {/* Banana (F) */}
-        <UiEntity
-          uiTransform={{
-            flexDirection: 'column', alignItems: 'center',
-            margin: { right: 10 },
-          }}
-        >
-          <UiEntity
-            uiTransform={{
-              width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            }}
-            uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-          >
-            <UiEntity
-              uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
-                color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
-              }}
-            />
-            {isBananaOnCooldown() && (
-              <Label value={`${getBananaCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
-                uiTransform={{ positionType: 'absolute' }}
-              />
-            )}
-          </UiEntity>
-          <Label value="F" fontSize={M_KEYBIND_FONT} color={LIGHT_GREY} font="sans-serif"
-            uiTransform={{ margin: { top: 4 } }}
-          />
-        </UiEntity>
-
-        {/* Shell (E) */}
-        <UiEntity
-          uiTransform={{
-            flexDirection: 'column', alignItems: 'center',
-            margin: { right: 10 },
-          }}
-        >
-          <UiEntity
-            uiTransform={{
-              width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            }}
-            uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-          >
-            <UiEntity
-              uiTransform={{ width: M_ICON_SIZE - 4, height: M_ICON_SIZE - 4 }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png' },
-                color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
-              }}
-            />
-            {isShellOnCooldown() && (
-              <Label value={`${getShellCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
-                uiTransform={{ positionType: 'absolute' }}
-              />
-            )}
-          </UiEntity>
-          <Label value="E" fontSize={M_KEYBIND_FONT} color={LIGHT_GREY} font="sans-serif"
-            uiTransform={{ margin: { top: 4 } }}
-          />
-        </UiEntity>
-
-        {/* Attack (Click) */}
-        <UiEntity
-          uiTransform={{
-            flexDirection: 'column', alignItems: 'center',
-          }}
-        >
-          <UiEntity
-            uiTransform={{
-              width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            }}
-            uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-          >
-            <UiEntity
-              uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: 'assets/images/hit-color.png' },
-                color: isAttackFlickering() ? Color4.create(1, 1, 1, 0.25) : Color4.White()
-              }}
-            />
-          </UiEntity>
-          <UiEntity
-            uiTransform={{ width: 22, height: 18, margin: { top: 4 } }}
-            uiBackground={{
-              textureMode: 'stretch',
-              texture: { src: 'assets/images/cursor.png' },
-              color: LIGHT_GREY
-            }}
-          />
-        </UiEntity>
-      </UiEntity>
 
       {/* ── Mobile Scoreboard Overlay — full scoreboard in center ── */}
       {mobileScoreboardOverlayVisible && (
@@ -1640,7 +1603,6 @@ function MobileLayout() {
             justifyContent: 'center',
             alignItems: 'center',
           }}
-          uiBackground={{ color: Color4.create(0, 0, 0, 0.45) }}
         >
           <UiEntity
             uiTransform={{
@@ -1717,15 +1679,15 @@ function MobileLayout() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { left: 0, top: 0 },
-            width: '100%', height: '100%',
-            flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+            position: { left: 0, top: 106 },
+            width: '100%', height: 'auto',
+            flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start',
           }}
         >
           <UiEntity
             uiTransform={{
               positionType: 'relative',
-              width: '50%',
+              width: '65%',
               flexDirection: 'column',
               alignItems: 'center',
               padding: { top: 32, bottom: 32, left: 32, right: 32 },
@@ -1815,7 +1777,7 @@ function MobileLayout() {
                   </UiEntity>
                   <Label value="to attack/steal flag" fontSize={22} color={MUTED} font="sans-serif" />
                   <UiEntity
-                    uiTransform={{ width: 69, height: 69, margin: { left: 8 } }}
+                    uiTransform={{ width: 55, height: 55, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/hit-color.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
@@ -1831,7 +1793,7 @@ function MobileLayout() {
                   </UiEntity>
                   <Label value="to fire shell" fontSize={22} color={MUTED} font="sans-serif" />
                   <UiEntity
-                    uiTransform={{ width: 65, height: 65, margin: { left: 8 } }}
+                    uiTransform={{ width: 52, height: 52, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/shell-color.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
@@ -1847,7 +1809,7 @@ function MobileLayout() {
                   </UiEntity>
                   <Label value="to drop banana" fontSize={22} color={MUTED} font="sans-serif" />
                   <UiEntity
-                    uiTransform={{ width: 69, height: 69, margin: { left: 8 } }}
+                    uiTransform={{ width: 55, height: 55, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
