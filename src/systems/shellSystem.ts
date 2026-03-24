@@ -219,7 +219,7 @@ function registerShellMessages(): void {
       if (me && data.victimId === me) {
         triggerEmote({ predefinedEmote: 'getHit' })
         InputModifier.createOrReplace(engine.PlayerEntity, {
-          mode: InputModifier.Mode.Standard({ disableAll: true })
+          mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
         })
         shellStaggerUntil = Date.now() + SHELL_STAGGER_MS
       }

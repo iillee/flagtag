@@ -245,7 +245,7 @@ function registerBananaMessages(): void {
     if (me && data.victimId === me.toLowerCase()) {
       triggerEmote({ predefinedEmote: 'getHit' })
       InputModifier.createOrReplace(engine.PlayerEntity, {
-        mode: InputModifier.Mode.Standard({ disableAll: true })
+        mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
       })
       bananaStaggerUntil = Date.now() + BANANA_STAGGER_MS
     }

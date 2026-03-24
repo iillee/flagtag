@@ -395,7 +395,7 @@ export function combatClientSystem(_dt: number): void {
     staggerTriggerAt = 0
     triggerEmote({ predefinedEmote: STAGGER_EMOTE })
     if (!InputModifier.has(engine.PlayerEntity)) {
-      InputModifier.create(engine.PlayerEntity, { mode: InputModifier.Mode.Standard({ disableAll: true }) })
+      InputModifier.create(engine.PlayerEntity, { mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true }) })
     }
     staggerFreezeUntil = now + STAGGER_FREEZE_MS
   }

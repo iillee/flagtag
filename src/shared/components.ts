@@ -168,7 +168,7 @@ Banana.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_
 /** How long a banana stays on the ground before despawning (seconds). */
 export const BANANA_LIFETIME_SEC = 15
 /** Cooldown between banana drops (seconds). */
-export const BANANA_COOLDOWN_SEC = 10
+export const BANANA_COOLDOWN_SEC = 5
 /** Max bananas one player can have on the ground at once. */
 export const BANANA_MAX_ACTIVE = 3
 /** Radius for banana trigger (meters). */
