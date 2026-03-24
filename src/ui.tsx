@@ -6,8 +6,9 @@ import {
   getCurrentFlagCarrierUserId,
   getKnownPlayerName
 } from './gameState/flagHoldTime'
-import { isBananaOnCooldown, getBananaCooldownRemaining } from './systems/bananaSystem'
-import { isShellOnCooldown, getShellCooldownRemaining } from './systems/shellSystem'
+import { isBananaOnCooldown, getBananaCooldownRemaining, triggerBananaFromUI } from './systems/bananaSystem'
+import { isShellOnCooldown, getShellCooldownRemaining, triggerShellFromUI } from './systems/shellSystem'
+import { triggerAttackFromUI } from './systems/flagSystem'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
@@ -1450,6 +1451,7 @@ function MobileLayout() {
                   margin: { right: 4 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => { if (!isBananaOnCooldown()) { playClickSound(); triggerBananaFromUI() } }}
               >
                 <UiEntity
                   uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
@@ -1473,6 +1475,7 @@ function MobileLayout() {
                   margin: { right: 4 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => { if (!isShellOnCooldown()) { playClickSound(); triggerShellFromUI() } }}
               >
                 <UiEntity
                   uiTransform={{ width: M_ICON_SIZE - 4, height: M_ICON_SIZE - 4 }}
@@ -1495,6 +1498,7 @@ function MobileLayout() {
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => { playClickSound(); triggerAttackFromUI(); lastAttackPressMs = Date.now() }}
               >
                 <UiEntity
                   uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}

@@ -886,7 +886,7 @@ function handleBananaDrop(playerId: string): void {
   const bananaEntity = engine.addEntity()
   Transform.create(bananaEntity, {
     position: dropPos,
-    scale: Vector3.create(0.02, 0.02, 0.02)
+    scale: Vector3.create(1, 1, 1)
   })
   // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
   Banana.create(bananaEntity, {
@@ -1019,7 +1019,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   const shellEntity = engine.addEntity()
   Transform.create(shellEntity, {
     position: spawnPos,
-    scale: Vector3.create(0.02, 0.02, 0.02),
+    scale: Vector3.create(1, 1, 1),
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
   })
   // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
@@ -1061,7 +1061,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   })
   lastShellFireTime.set(playerId, now)
 
-  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z })
+  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ })
   console.log('[Server] 🐚 Shell fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 

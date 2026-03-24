@@ -338,6 +338,15 @@ function ensureFlagModel(): void {
   }
 }
 
+/** Trigger an attack from the UI (mobile tap). Same logic as left click. */
+export function triggerAttackFromUI(): void {
+  const userId = getPlayerData()?.userId?.toLowerCase()
+  if (!userId) return
+  console.log('[C.5] UI tap - sending requestAttack')
+  predictAttackLocally()
+  room.send('requestAttack', { t: 0 })
+}
+
 export function flagClientSystem(dt: number): void {
   // Ensure the synced flag entity has a GltfContainer (attached locally, not synced from server)
   ensureFlagModel()
