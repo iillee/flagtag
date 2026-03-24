@@ -34,7 +34,7 @@ let visitorAnalyticsEntity: Entity
 let idleTime = 0
 let holdTimeAccum = 0
 let flagBobAccum = 0
-const FLAG_BOB_SYNC_INTERVAL = 0.25 // seconds between flag bob CRDT writes (~4Hz, was ~10Hz) — reduces CRDT pressure
+const FLAG_BOB_SYNC_INTERVAL = 0.1 // seconds between flag bob CRDT writes (~10Hz)
 const lastAttackTime = new Map<string, number>()
 const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
 const holdTimeEntities = new Map<string, Entity>()
