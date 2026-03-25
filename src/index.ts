@@ -109,7 +109,7 @@ export async function main() {
         audioClipUrl: 'assets/sounds/Medieval-mono.mp3',
         playing: true,
         loop: false,
-        volume: 0.175,
+        volume: 0.35,
         global: false  // using player-follow instead — global:true blocks other global sounds on mobile
       })
       musicTimer = 0
