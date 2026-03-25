@@ -22,7 +22,7 @@ import { Flag, FlagState } from '../shared/components'
 import { triggerEmote } from '~system/RestrictedActions'
 
 // ── VFX Constants ──
-const VFX_DURATION_MS = 250
+const VFX_DURATION_MS = 450
 const SPIKES_PER_HIT = 6
 const SPIKE_THIN = 0.08
 const SPIKE_START_LEN = 0.10
@@ -70,7 +70,7 @@ const missPool: Entity[] = []
 let missPoolIdx = 0
 let poolsReady = false
 const HIDDEN_POS = Vector3.create(0, -100, 0)
-const VFX_HARD_TIMEOUT_MS = 500 // Safety: force-hide any VFX older than this (prevents stuck VFX on mobile)
+const VFX_HARD_TIMEOUT_MS = 1000 // Safety: force-hide any VFX older than this (prevents stuck VFX on mobile)
 const activeVfx: { entity: Entity; expiresAt: number; createdAt: number }[] = []
 
 function initPools(): void {
@@ -149,13 +149,13 @@ export function showHitEffect(targetPos: Vector3): void {
     // The Tween engine owns scale — hideVfxEntity only moves position off-screen.
     Tween.createOrReplace(spike, {
       mode: Tween.Mode.Scale({ start: Vector3.create(sThin, sLen, sThin), end: Vector3.create(eThin, eLen, eThin) }),
-      duration: VFX_DURATION_MS * 0.6,
+      duration: VFX_DURATION_MS * 0.75,
       easingFunction: EasingFunction.EF_EASEOUTEXPO,
     })
     TweenSequence.createOrReplace(spike, {
       sequence: [{
         mode: Tween.Mode.Scale({ start: Vector3.create(eThin, eLen, eThin), end: Vector3.Zero() }),
-        duration: VFX_DURATION_MS * 0.4,
+        duration: VFX_DURATION_MS * 0.25,
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
@@ -190,13 +190,13 @@ function showMissEffect(targetPos: Vector3): void {
     // The Tween engine owns scale — hideVfxEntity only moves position off-screen.
     Tween.createOrReplace(sphere, {
       mode: Tween.Mode.Scale({ start: Vector3.create(s, s, s), end: Vector3.create(e, e, e) }),
-      duration: VFX_DURATION_MS * 0.6,
+      duration: VFX_DURATION_MS * 0.75,
       easingFunction: EasingFunction.EF_EASEOUTQUAD,
     })
     TweenSequence.createOrReplace(sphere, {
       sequence: [{
         mode: Tween.Mode.Scale({ start: Vector3.create(e, e, e), end: Vector3.Zero() }),
-        duration: VFX_DURATION_MS * 0.4,
+        duration: VFX_DURATION_MS * 0.25,
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
