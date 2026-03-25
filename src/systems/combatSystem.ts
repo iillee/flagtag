@@ -93,17 +93,22 @@ function initPools(): void {
 }
 
 function hideVfxEntity(entity: Entity): void {
+  // Move off-screen. Do NOT set scale — the Tween engine owns scale and will
+  // overwrite any Transform.scale write on the next frame, causing the entity
+  // to reappear at a stale scale. Moving position off-screen is instant and
+  // the tween can finish harmlessly at y=-100.
   const t = Transform.getMutable(entity)
   t.position = HIDDEN_POS
-  t.scale = Vector3.Zero()
-  if (TweenSequence.has(entity)) TweenSequence.deleteFrom(entity)
-  if (Tween.has(entity)) Tween.deleteFrom(entity)
 }
 
 /**
  * When a pool entity is about to be reused, remove any stale activeVfx entries
  * for it. This prevents the old timer from hiding the entity mid-animation
  * and prevents duplicate entries from accumulating.
+ * 
+ * We do NOT delete Tween/TweenSequence here — createOrReplace in the caller
+ * will overwrite them atomically. Deleting then recreating in the same frame
+ * causes race conditions on mobile where the engine drops the new tween.
  */
 function evictActiveVfx(entity: Entity): void {
   for (let i = activeVfx.length - 1; i >= 0; i--) {
@@ -111,9 +116,6 @@ function evictActiveVfx(entity: Entity): void {
       activeVfx.splice(i, 1)
     }
   }
-  // Also clean up any in-progress tween so the new one starts fresh
-  if (TweenSequence.has(entity)) TweenSequence.deleteFrom(entity)
-  if (Tween.has(entity)) Tween.deleteFrom(entity)
 }
 
 export function showHitEffect(targetPos: Vector3): void {
@@ -143,10 +145,19 @@ export function showHitEffect(targetPos: Vector3): void {
     t.position = centerPos
     t.scale = Vector3.create(sThin, sLen, sThin)
     t.rotation = Quaternion.fromEulerDegrees(rotX + hitRotX, rotY + hitRotY, rotZ)
+    // Grow phase, then TweenSequence shrinks to zero.
+    // The Tween engine owns scale — hideVfxEntity only moves position off-screen.
     Tween.createOrReplace(spike, {
       mode: Tween.Mode.Scale({ start: Vector3.create(sThin, sLen, sThin), end: Vector3.create(eThin, eLen, eThin) }),
-      duration: VFX_DURATION_MS,
+      duration: VFX_DURATION_MS * 0.6,
       easingFunction: EasingFunction.EF_EASEOUTEXPO,
+    })
+    TweenSequence.createOrReplace(spike, {
+      sequence: [{
+        mode: Tween.Mode.Scale({ start: Vector3.create(eThin, eLen, eThin), end: Vector3.Zero() }),
+        duration: VFX_DURATION_MS * 0.4,
+        easingFunction: EasingFunction.EF_EASEINQUAD,
+      }]
     })
     activeVfx.push({ entity: spike, expiresAt, createdAt: now })
   }
@@ -175,10 +186,19 @@ function showMissEffect(targetPos: Vector3): void {
     const t = Transform.getMutable(sphere)
     t.position = sPos
     t.scale = Vector3.create(s, s, s)
+    // Grow phase, then TweenSequence shrinks to zero.
+    // The Tween engine owns scale — hideVfxEntity only moves position off-screen.
     Tween.createOrReplace(sphere, {
       mode: Tween.Mode.Scale({ start: Vector3.create(s, s, s), end: Vector3.create(e, e, e) }),
-      duration: VFX_DURATION_MS,
+      duration: VFX_DURATION_MS * 0.6,
       easingFunction: EasingFunction.EF_EASEOUTQUAD,
+    })
+    TweenSequence.createOrReplace(sphere, {
+      sequence: [{
+        mode: Tween.Mode.Scale({ start: Vector3.create(e, e, e), end: Vector3.Zero() }),
+        duration: VFX_DURATION_MS * 0.4,
+        easingFunction: EasingFunction.EF_EASEINQUAD,
+      }]
     })
     activeVfx.push({ entity: sphere, expiresAt, createdAt: now })
   }
