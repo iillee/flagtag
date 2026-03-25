@@ -70,7 +70,7 @@ const missPool: Entity[] = []
 let missPoolIdx = 0
 let poolsReady = false
 const HIDDEN_POS = Vector3.create(0, -100, 0)
-const VFX_HARD_TIMEOUT_MS = 1000 // Safety: force-hide any VFX older than this (prevents stuck spikes on mobile)
+const VFX_HARD_TIMEOUT_MS = 500 // Safety: force-hide any VFX older than this (prevents stuck VFX on mobile)
 const activeVfx: { entity: Entity; expiresAt: number; createdAt: number }[] = []
 
 function initPools(): void {
@@ -122,7 +122,8 @@ export function showHitEffect(targetPos: Vector3): void {
   const hitRotY = Math.random() * 360
   const hitRotX = (Math.random() - 0.5) * 30
   const scaleMult = 0.9 + Math.random() * 0.25
-  const expiresAt = Date.now() + VFX_DURATION_MS + 50
+  const now = Date.now()
+  const expiresAt = now + VFX_DURATION_MS
 
   for (let i = 0; i < SPIKES_PER_HIT; i++) {
     const spike = hitPool[hitPoolIdx % HIT_POOL_SIZE]
@@ -144,18 +145,10 @@ export function showHitEffect(targetPos: Vector3): void {
     t.rotation = Quaternion.fromEulerDegrees(rotX + hitRotX, rotY + hitRotY, rotZ)
     Tween.createOrReplace(spike, {
       mode: Tween.Mode.Scale({ start: Vector3.create(sThin, sLen, sThin), end: Vector3.create(eThin, eLen, eThin) }),
-      duration: VFX_DURATION_MS * 0.7,
+      duration: VFX_DURATION_MS,
       easingFunction: EasingFunction.EF_EASEOUTEXPO,
     })
-    // Chain a shrink-to-zero so the spike disappears even if the timer cleanup doesn't fire (mobile bug)
-    TweenSequence.createOrReplace(spike, {
-      sequence: [{
-        mode: Tween.Mode.Scale({ start: Vector3.create(eThin, eLen, eThin), end: Vector3.Zero() }),
-        duration: VFX_DURATION_MS * 0.3,
-        easingFunction: EasingFunction.EF_EASEINQUAD,
-      }]
-    })
-    activeVfx.push({ entity: spike, expiresAt, createdAt: Date.now() })
+    activeVfx.push({ entity: spike, expiresAt, createdAt: now })
   }
 }
 
@@ -166,7 +159,8 @@ function showMissEffect(targetPos: Vector3): void {
   cloudConfigIndex++
   const scaleMult = 0.85 + Math.random() * 0.3
   const clusterRotY = Math.random() * 360
-  const expiresAt = Date.now() + VFX_DURATION_MS + 80
+  const now = Date.now()
+  const expiresAt = now + VFX_DURATION_MS
 
   for (const cfg of config) {
     const sphere = missPool[missPoolIdx % MISS_POOL_SIZE]
@@ -186,15 +180,7 @@ function showMissEffect(targetPos: Vector3): void {
       duration: VFX_DURATION_MS,
       easingFunction: EasingFunction.EF_EASEOUTQUAD,
     })
-    // Chain a shrink-to-zero so the bubble disappears even if the timer cleanup doesn't fire (mobile bug)
-    TweenSequence.createOrReplace(sphere, {
-      sequence: [{
-        mode: Tween.Mode.Scale({ start: Vector3.create(e, e, e), end: Vector3.Zero() }),
-        duration: VFX_DURATION_MS * 0.3,
-        easingFunction: EasingFunction.EF_EASEINQUAD,
-      }]
-    })
-    activeVfx.push({ entity: sphere, expiresAt, createdAt: Date.now() })
+    activeVfx.push({ entity: sphere, expiresAt, createdAt: now })
   }
 }
 
