@@ -63,7 +63,7 @@ let cloudConfigIndex = 0
 
 // ── Entity Pools ──
 const HIT_POOL_SIZE = SPIKES_PER_HIT * 3
-const MISS_POOL_SIZE = 3 * 2
+const MISS_POOL_SIZE = 3 * 4  // 4 concurrent miss effects (was 2 — too small, caused rapid pool recycling)
 const hitPool: Entity[] = []
 let hitPoolIdx = 0
 const missPool: Entity[] = []
