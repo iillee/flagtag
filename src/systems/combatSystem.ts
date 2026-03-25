@@ -70,7 +70,8 @@ const missPool: Entity[] = []
 let missPoolIdx = 0
 let poolsReady = false
 const HIDDEN_POS = Vector3.create(0, -100, 0)
-const activeVfx: { entity: Entity; expiresAt: number }[] = []
+const VFX_HARD_TIMEOUT_MS = 1000 // Safety: force-hide any VFX older than this (prevents stuck spikes on mobile)
+const activeVfx: { entity: Entity; expiresAt: number; createdAt: number }[] = []
 
 function initPools(): void {
   if (poolsReady) return
@@ -99,6 +100,22 @@ function hideVfxEntity(entity: Entity): void {
   if (Tween.has(entity)) Tween.deleteFrom(entity)
 }
 
+/**
+ * When a pool entity is about to be reused, remove any stale activeVfx entries
+ * for it. This prevents the old timer from hiding the entity mid-animation
+ * and prevents duplicate entries from accumulating.
+ */
+function evictActiveVfx(entity: Entity): void {
+  for (let i = activeVfx.length - 1; i >= 0; i--) {
+    if (activeVfx[i].entity === entity) {
+      activeVfx.splice(i, 1)
+    }
+  }
+  // Also clean up any in-progress tween so the new one starts fresh
+  if (TweenSequence.has(entity)) TweenSequence.deleteFrom(entity)
+  if (Tween.has(entity)) Tween.deleteFrom(entity)
+}
+
 export function showHitEffect(targetPos: Vector3): void {
   initPools()
   const centerPos = Vector3.add(targetPos, Vector3.create(0, 1.2, 0))
@@ -110,6 +127,7 @@ export function showHitEffect(targetPos: Vector3): void {
   for (let i = 0; i < SPIKES_PER_HIT; i++) {
     const spike = hitPool[hitPoolIdx % HIT_POOL_SIZE]
     hitPoolIdx++
+    evictActiveVfx(spike) // Remove stale timer entries before reuse
     const baseAngle = (i / SPIKES_PER_HIT) * 180 + (Math.random() - 0.5) * 25
     let rotX = 0, rotY = 0, rotZ = 0
     if (i % 3 === 0) rotZ = baseAngle
@@ -137,7 +155,7 @@ export function showHitEffect(targetPos: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeVfx.push({ entity: spike, expiresAt })
+    activeVfx.push({ entity: spike, expiresAt, createdAt: Date.now() })
   }
 }
 
@@ -153,6 +171,7 @@ function showMissEffect(targetPos: Vector3): void {
   for (const cfg of config) {
     const sphere = missPool[missPoolIdx % MISS_POOL_SIZE]
     missPoolIdx++
+    evictActiveVfx(sphere) // Remove stale timer entries before reuse
     const rotOff = Vector3.rotate(cfg.offset, Quaternion.fromEulerDegrees(0, clusterRotY, 0))
     const jitter = Vector3.create((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1)
     const sPos = Vector3.add(centerPos, Vector3.add(rotOff, jitter))
@@ -175,7 +194,7 @@ function showMissEffect(targetPos: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeVfx.push({ entity: sphere, expiresAt })
+    activeVfx.push({ entity: sphere, expiresAt, createdAt: Date.now() })
   }
 }
 
@@ -332,10 +351,12 @@ export function combatClientSystem(_dt: number): void {
     break
   }
 
-  // Cleanup expired VFX
+  // Cleanup expired VFX + safety sweep for stuck spikes on mobile
   for (let i = activeVfx.length - 1; i >= 0; i--) {
-    if (now >= activeVfx[i].expiresAt) {
-      hideVfxEntity(activeVfx[i].entity)
+    const entry = activeVfx[i]
+    if (now >= entry.expiresAt || now - entry.createdAt >= VFX_HARD_TIMEOUT_MS) {
+      // Normal expiry OR hard timeout (catches stuck tweens on mobile)
+      hideVfxEntity(entry.entity)
       activeVfx.splice(i, 1)
     }
   }
