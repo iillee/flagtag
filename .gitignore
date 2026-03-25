@@ -49,4 +49,5 @@ Thumbs.db
 
 # Ensure logs folder is tracked (contains important development documentation)
 !logs/
-!logs/**
+!logs/***.bak
+nul

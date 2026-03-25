@@ -1405,7 +1405,8 @@ function MobileLayout() {
                 uiTransform={{
                   width: 290,
                   height: M_CIRCLE_SIZE,
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start',
+                  padding: { left: 32 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => {
