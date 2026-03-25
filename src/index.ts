@@ -1,5 +1,5 @@
 import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
-import { engine, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType } from '@dcl/sdk/ecs'
+import { engine, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, pointerEventsSystem, InputAction } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
@@ -91,15 +91,38 @@ export async function main() {
     removePlayerSession(userId)
   })
 
-  // Background music
-  const musicEntity = engine.addEntity()
-  Transform.create(musicEntity, { position: Vector3.create(0, 0, 0) })
-  AudioSource.create(musicEntity, {
-    audioClipUrl: 'assets/sounds/Medieval.mp3',
-    playing: true,
-    loop: true,
-    volume: 0.175,
-    global: true
+  // Background music — workaround for mobile bug where global:true + loop:true
+  // is broken. We use loop:false and manually re-trigger playback on a timer.
+  const MUSIC_DURATION = 462 // Medieval-mono.mp3 duration in seconds (~7.7 min)
+  let musicEntity: ReturnType<typeof engine.addEntity> | null = null
+  let musicTimer = 0
+  engine.addSystem((dt: number) => {
+    if (!Transform.has(engine.PlayerEntity)) return
+    const playerPos = Transform.get(engine.PlayerEntity).position
+    if (!musicEntity) {
+      musicEntity = engine.addEntity()
+      Transform.create(musicEntity, {
+        parent: engine.PlayerEntity,
+        position: Vector3.Zero()
+      })
+      AudioSource.create(musicEntity, {
+        audioClipUrl: 'assets/sounds/Medieval-mono.mp3',
+        playing: true,
+        loop: false,
+        volume: 0.175,
+        global: false  // using player-follow instead — global:true blocks other global sounds on mobile
+      })
+      musicTimer = 0
+    } else {
+      // Manually restart when track ends
+      musicTimer += dt
+      if (musicTimer >= MUSIC_DURATION) {
+        musicTimer = 0
+        const a = AudioSource.getMutable(musicEntity)
+        a.currentTime = 0
+        a.playing = true
+      }
+    }
   })
 
   // Disable passport UI (clicking on avatars to view profiles)
