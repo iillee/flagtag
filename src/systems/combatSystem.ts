@@ -22,7 +22,7 @@ import { Flag, FlagState } from '../shared/components'
 import { triggerEmote } from '~system/RestrictedActions'
 
 // ── VFX Constants ──
-const VFX_DURATION_MS = 450
+const VFX_DURATION_MS = 250
 const SPIKES_PER_HIT = 6
 const SPIKE_THIN = 0.08
 const SPIKE_START_LEN = 0.10
@@ -125,7 +125,7 @@ export function showHitEffect(targetPos: Vector3): void {
   const hitRotX = (Math.random() - 0.5) * 30
   const scaleMult = 0.9 + Math.random() * 0.25
   const now = Date.now()
-  const expiresAt = now + VFX_DURATION_MS
+  const expiresAt = now + VFX_DURATION_MS + 50
 
   for (let i = 0; i < SPIKES_PER_HIT; i++) {
     const spike = hitPool[hitPoolIdx % HIT_POOL_SIZE]
@@ -145,17 +145,15 @@ export function showHitEffect(targetPos: Vector3): void {
     t.position = centerPos
     t.scale = Vector3.create(sThin, sLen, sThin)
     t.rotation = Quaternion.fromEulerDegrees(rotX + hitRotX, rotY + hitRotY, rotZ)
-    // Grow phase, then TweenSequence shrinks to zero.
-    // The Tween engine owns scale — hideVfxEntity only moves position off-screen.
     Tween.createOrReplace(spike, {
       mode: Tween.Mode.Scale({ start: Vector3.create(sThin, sLen, sThin), end: Vector3.create(eThin, eLen, eThin) }),
-      duration: VFX_DURATION_MS * 0.75,
+      duration: VFX_DURATION_MS * 0.7,
       easingFunction: EasingFunction.EF_EASEOUTEXPO,
     })
     TweenSequence.createOrReplace(spike, {
       sequence: [{
         mode: Tween.Mode.Scale({ start: Vector3.create(eThin, eLen, eThin), end: Vector3.Zero() }),
-        duration: VFX_DURATION_MS * 0.25,
+        duration: VFX_DURATION_MS * 0.3,
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
@@ -171,7 +169,7 @@ function showMissEffect(targetPos: Vector3): void {
   const scaleMult = 0.85 + Math.random() * 0.3
   const clusterRotY = Math.random() * 360
   const now = Date.now()
-  const expiresAt = now + VFX_DURATION_MS
+  const expiresAt = now + VFX_DURATION_MS + 80
 
   for (const cfg of config) {
     const sphere = missPool[missPoolIdx % MISS_POOL_SIZE]
@@ -186,17 +184,15 @@ function showMissEffect(targetPos: Vector3): void {
     const t = Transform.getMutable(sphere)
     t.position = sPos
     t.scale = Vector3.create(s, s, s)
-    // Grow phase, then TweenSequence shrinks to zero.
-    // The Tween engine owns scale — hideVfxEntity only moves position off-screen.
     Tween.createOrReplace(sphere, {
       mode: Tween.Mode.Scale({ start: Vector3.create(s, s, s), end: Vector3.create(e, e, e) }),
-      duration: VFX_DURATION_MS * 0.75,
+      duration: VFX_DURATION_MS,
       easingFunction: EasingFunction.EF_EASEOUTQUAD,
     })
     TweenSequence.createOrReplace(sphere, {
       sequence: [{
         mode: Tween.Mode.Scale({ start: Vector3.create(e, e, e), end: Vector3.Zero() }),
-        duration: VFX_DURATION_MS * 0.25,
+        duration: VFX_DURATION_MS * 0.3,
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
