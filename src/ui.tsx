@@ -17,7 +17,7 @@ import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
-import { isMobile } from '@dcl/sdk/platform'
+// import { isMobile } from '@dcl/sdk/platform'  // temporarily disabled — crashes desktop client
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
@@ -306,7 +306,7 @@ function formatVisitorTime(totalSeconds: number): string {
 // ═══════════════════════════════════════════════════════════
 
 function PlayerListUi() {
-  const mobile = isMobile()
+  const mobile = false // isMobile() — temporarily disabled
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
       {mobile ? <MobileLayout /> : <DesktopLayout />}

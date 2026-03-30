@@ -21,7 +21,7 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
-import { isMobile } from '@dcl/sdk/platform'
+// import { isMobile } from '@dcl/sdk/platform'  // temporarily disabled — crashes desktop client
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
@@ -44,7 +44,7 @@ const CARRY_BASE_Y = 3.0  // base Y offset above AAPT_POSITION (feet) — mobile
 function createCarryClone(carrierId: string): void {
   cleanupClone()
 
-  if (isMobile()) {
+  if (false /* isMobile() — temporarily disabled */) {
     // Mobile: two-entity approach with AAPT_POSITION + Y offset
     const anchor = engine.addEntity()
     Transform.create(anchor, {

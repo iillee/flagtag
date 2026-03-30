@@ -1110,7 +1110,7 @@
         "0": {
           "json": {
             "name": "Flag Tag",
-            "description": "Multiplayer keep away game with a flag!\n\nFive minute rounds running 24/7",
+            "description": "Multiplayer keep away game with a flag!\n\nFive minute rounds running 24/7\n\n⚠️ Scene temporarily down on desktop client until ~May 2026. Best experienced on mobile client until then.",
             "thumbnail": "assets/images/flagtag_splash.png",
             "ageRating": "T",
             "categories": [
