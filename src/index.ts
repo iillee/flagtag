@@ -98,19 +98,15 @@ export async function main() {
   let musicTimer = 0
   engine.addSystem((dt: number) => {
     if (!Transform.has(engine.PlayerEntity)) return
-    const playerPos = Transform.get(engine.PlayerEntity).position
     if (!musicEntity) {
       musicEntity = engine.addEntity()
-      Transform.create(musicEntity, {
-        parent: engine.PlayerEntity,
-        position: Vector3.Zero()
-      })
+      Transform.create(musicEntity, { position: Vector3.create(80, 0, 120) })  // center of scene
       AudioSource.create(musicEntity, {
         audioClipUrl: 'assets/sounds/Medieval-mono.mp3',
         playing: true,
         loop: false,
         volume: 0.35,
-        global: false  // using player-follow instead — global:true blocks other global sounds on mobile
+        global: true  // non-spatial constant volume (global:true is broken on mobile — revisit when isMobile() is re-enabled)
       })
       musicTimer = 0
     } else {

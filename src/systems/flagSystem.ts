@@ -58,12 +58,12 @@ function createCarryClone(carrierId: string): void {
     attachAnchorEntity = anchor
 
     carryCloneEntity = engine.addEntity()
-    Transform.create(carryCloneEntity, {
+    Transform.create(carryCloneEntity!, {
       parent: anchor,
       position: Vector3.create(0, CARRY_BASE_Y, 0),
       scale: Vector3.One()
     })
-    GltfContainer.create(carryCloneEntity, {
+    GltfContainer.create(carryCloneEntity!, {
       src: BANNER_SRC,
       visibleMeshesCollisionMask: 0,
       invisibleMeshesCollisionMask: 0

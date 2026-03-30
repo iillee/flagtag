@@ -1110,16 +1110,21 @@
         "0": {
           "json": {
             "name": "Flag Tag",
-            "description": "Multiplayer keep away game with a flag!\n\nFive minute rounds running 24/7\n\n⚠️ Scene temporarily down on desktop client until ~May 2026. Best experienced on mobile client until then.",
+            "description": "Multiplayer keep away game with a flag!\n\nFive minute rounds running 24/7",
             "thumbnail": "assets/images/flagtag_splash.png",
             "ageRating": "T",
             "categories": [
               "game"
             ],
             "author": "ile",
-            "email": "",
-            "tags": [],
+            "tags": [
+              ""
+            ],
             "layout": {
+              "base": {
+                "x": 0,
+                "y": 0
+              },
               "parcels": [
                 {
                   "x": 0,
@@ -1721,13 +1726,8 @@
                   "x": 9,
                   "y": 0
                 }
-              ],
-              "base": {
-                "x": 0,
-                "y": 0
-              }
+              ]
             },
-            "silenceVoiceChat": false,
             "disablePortableExperiences": true,
             "spawnPoints": [
               {
@@ -1742,11 +1742,8 @@
                     ]
                   },
                   "y": {
-                    "$case": "range",
-                    "value": [
-                      13,
-                      13
-                    ]
+                    "$case": "single",
+                    "value": 13
                   },
                   "z": {
                     "$case": "range",
