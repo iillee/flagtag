@@ -204,7 +204,7 @@ export function playHitSound(position: Vector3): void {
   a.playing = true
 }
 
-function playMissSound(position: Vector3): void {
+export function playMissSound(position: Vector3): void {
   if (!missSoundEntity) {
     missSoundEntity = engine.addEntity()
     Transform.create(missSoundEntity, { position: Vector3.Zero() })

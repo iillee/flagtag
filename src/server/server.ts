@@ -1039,7 +1039,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     wallDistReported: false,
     currentY: spawnPos.y,
     fallVelocity: 0,
-    groundY: 0,
+    groundY: Math.max(0, playerPos.y - 0.88),  // Approximate ground level from player height (~0.88m avatar offset)
     onGround: false,
     lastSyncedDist: 0,
   })

@@ -17,7 +17,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, Shell, SHELL_COOLDOWN_SEC, SHELL_LIFETIME_SEC, SHELL_SPEED, SHELL_MAX_RANGE, SHELL_HIT_RADIUS } from '../shared/components'
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
-import { showHitEffect, playHitSound } from './combatSystem'
+import { showHitEffect, playHitSound, playMissSound } from './combatSystem'
 
 const SHELL_MODEL_SRC = 'assets/scene/Models/shell_scaled.glb'
 const SHELL_SCALE = Vector3.create(1, 1, 1)
@@ -30,19 +30,7 @@ const GROUND_RAY_INTERVAL = 0.05 // seconds between ground raycasts for moving s
 let shellStaggerUntil = 0
 
 // ── Sound ──
-const SHELL_SOUND_SRC = 'assets/sounds/mk_shell.mp3'
-
-// Pre-create the instant fire sound entity at module load so the audio file
-// is loaded into memory before the player ever presses fire (eliminates first-shot lag).
-const instantFireSoundEntity = engine.addEntity()
-Transform.create(instantFireSoundEntity, { position: Vector3.create(0, -100, 0) })
-AudioSource.create(instantFireSoundEntity, {
-  audioClipUrl: SHELL_SOUND_SRC,
-  playing: true,   // play once silently underground to force the engine to cache the clip
-  loop: false,
-  volume: 0.0,
-  global: false
-})
+const SHELL_SOUND_SRC = 'assets/sounds/mk_shell_short.mp3'
 
 /** Attach a looping spatial shell sound directly to a shell entity. */
 function attachShellSound(entity: Entity): void {
@@ -60,19 +48,9 @@ function stopShellSound(entity: Entity): void {
   if (AudioSource.has(entity)) {
     const a = AudioSource.getMutable(entity)
     a.playing = false
+    a.volume = 0
+    a.loop = false
   }
-}
-
-// (Sound tracking is now handled inside ShellVisual — no separate Set needed)
-
-/** Play the fire sound immediately at the player's position (instant feedback). */
-function playInstantFireSound(position: Vector3): void {
-  const t = Transform.getMutable(instantFireSoundEntity)
-  t.position = position
-  const a = AudioSource.getMutable(instantFireSoundEntity)
-  a.volume = 1.0
-  a.currentTime = 0
-  a.playing = true
 }
 
 // ── Client cooldown tracking ──
@@ -208,11 +186,10 @@ function registerShellMessages(): void {
 
   room.onMessage('shellTriggered', (data) => {
     const pos = Vector3.create(data.x, data.y, data.z)
-
     // Remove the message-driven shell visual closest to the hit position
     removeMsgShellVisualNear(data.x, data.y, data.z)
 
-    // Only show hit particles + sound when shell hits a player (not walls/bananas)
+    // Hit a player: particles + hit sound + stagger. Hit a wall: miss sound.
     if (data.victimId && data.victimId !== '') {
       showHitEffect(pos)
       playHitSound(pos)
@@ -226,6 +203,10 @@ function registerShellMessages(): void {
         })
         shellStaggerUntil = Date.now() + SHELL_STAGGER_MS
       }
+    } else {
+      // Play miss sound at player position so it's always audible
+      const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : pos
+      playMissSound(playerPos)
     }
   })
 }
@@ -487,12 +468,13 @@ function createMsgShellVisual(x: number, y: number, z: number, dirX: number, dir
 
 function removeMsgShellVisualNear(x: number, y: number, z: number): void {
   let closestIdx = -1
-  let closestDist = 15
+  let closestDist = Infinity  // Always find the closest shell, no distance cap
   for (let i = 0; i < msgShellVisuals.length; i++) {
     const vis = msgShellVisuals[i]
     const pos = Transform.get(vis.entity).position
     const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
     if (dist < closestDist) { closestDist = dist; closestIdx = i }
   }
   if (closestIdx !== -1) {
@@ -588,7 +570,6 @@ export function triggerShellFromUI(): void {
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.2, playerPos.z + dirZ * 1.0)
-      playInstantFireSound(spawnPos)
       fireWallRaycast(spawnPos, dirX, dirZ)
     }
   } else {
@@ -644,11 +625,9 @@ export function shellClientSystem(dt: number): void {
       console.log('[Shell] 🐚 E pressed — requesting shell fire (server)')
       room.send('requestShell', { dirX, dirZ })
 
-      // Play instant fire sound so there's no lag waiting for server
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position
         const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.2, playerPos.z + dirZ * 1.0)
-        playInstantFireSound(spawnPos)
         fireWallRaycast(spawnPos, dirX, dirZ)
       }
     } else {
