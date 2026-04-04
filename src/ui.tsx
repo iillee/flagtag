@@ -6,9 +6,8 @@ import {
   getCurrentFlagCarrierUserId,
   getKnownPlayerName
 } from './gameState/flagHoldTime'
-import { isBananaOnCooldown, getBananaCooldownRemaining, triggerBananaFromUI } from './systems/bananaSystem'
-import { isShellOnCooldown, getShellCooldownRemaining, triggerShellFromUI } from './systems/shellSystem'
-import { triggerAttackFromUI } from './systems/flagSystem'
+import { isBananaOnCooldown, getBananaCooldownRemaining } from './systems/bananaSystem'
+import { isShellOnCooldown, getShellCooldownRemaining } from './systems/shellSystem'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
@@ -17,7 +16,7 @@ import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
-// import { isMobile } from '@dcl/sdk/platform'  // temporarily disabled — crashes desktop client
+// import { isMobile } from '@dcl/sdk/platform'  // disabled — causes crashes
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
@@ -306,7 +305,7 @@ function formatVisitorTime(totalSeconds: number): string {
 // ═══════════════════════════════════════════════════════════
 
 function PlayerListUi() {
-  const mobile = false // isMobile() — temporarily disabled
+  const mobile = false // isMobile() — disabled
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
       {mobile ? <MobileLayout /> : <DesktopLayout />}
@@ -1343,7 +1342,7 @@ function MobileLayout() {
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 4 },
+                  margin: { right: 6 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
@@ -1354,7 +1353,7 @@ function MobileLayout() {
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 4 },
+                  margin: { right: 6 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
@@ -1391,24 +1390,25 @@ function MobileLayout() {
             >
               <UiEntity
                 uiTransform={{
-                  width: 140,
-                  height: M_CIRCLE_SIZE,
+                  height: 68,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 4 },
+                  padding: { left: 28, right: 28 },
+                  borderRadius: 34,
+                  margin: { right: 10 },
                 }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_timer.png' }, color: M_CIRCLE_OPACITY }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 0.72) }}
               >
                 <Label value={formatCountdown(countdownSeconds)} fontSize={32} color={WHITE} font="sans-serif" />
               </UiEntity>
 
               <UiEntity
                 uiTransform={{
-                  width: 290,
-                  height: M_CIRCLE_SIZE,
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start',
-                  padding: { left: 32 },
+                  height: 68,
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  padding: { left: 18, right: 30 },
+                  borderRadius: 34,
                 }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' }, color: M_CIRCLE_OPACITY }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 0.72) }}
                 onMouseDown={() => {
                   playClickSound()
                   setWinConditionOverlayVisible(false)
@@ -1449,10 +1449,9 @@ function MobileLayout() {
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 4 },
+                  margin: { right: 6 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { if (!isBananaOnCooldown()) { playClickSound(); triggerBananaFromUI() } }}
               >
                 <UiEntity
                   uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
@@ -1473,10 +1472,9 @@ function MobileLayout() {
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 4 },
+                  margin: { right: 6 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { if (!isShellOnCooldown()) { playClickSound(); triggerShellFromUI() } }}
               >
                 <UiEntity
                   uiTransform={{ width: M_ICON_SIZE - 4, height: M_ICON_SIZE - 4 }}
@@ -1499,7 +1497,6 @@ function MobileLayout() {
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); triggerAttackFromUI(); lastAttackPressMs = Date.now() }}
               >
                 <UiEntity
                   uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
@@ -1524,7 +1521,6 @@ function MobileLayout() {
             width: '100%', height: '100%',
             flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
           }}
-          onMouseDown={() => { playClickSound(); mobileScoreboardOverlayVisible = false }}
         >
           <UiEntity
             uiTransform={{
@@ -1607,7 +1603,6 @@ function MobileLayout() {
             justifyContent: 'center',
             alignItems: 'center',
           }}
-          onMouseDown={() => { playClickSound(); splashVisible = false }}
         >
           <UiEntity
             uiTransform={{
@@ -1688,7 +1683,6 @@ function MobileLayout() {
             width: '100%', height: 'auto',
             flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start',
           }}
-          onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false) }}
         >
           <UiEntity
             uiTransform={{
@@ -1856,7 +1850,6 @@ function MobileLayout() {
             width: '100%', height: '100%',
             flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
           }}
-          onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false) }}
         >
           <UiEntity
             uiTransform={{
@@ -1962,7 +1955,6 @@ function MobileLayout() {
             width: '100%', height: '100%',
             flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
           }}
-          onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false) }}
         >
           <UiEntity
             uiTransform={{

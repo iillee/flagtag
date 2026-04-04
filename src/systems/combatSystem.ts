@@ -63,15 +63,14 @@ let cloudConfigIndex = 0
 
 // ── Entity Pools ──
 const HIT_POOL_SIZE = SPIKES_PER_HIT * 3
-const MISS_POOL_SIZE = 3 * 4  // 4 concurrent miss effects (was 2 — too small, caused rapid pool recycling)
+const MISS_POOL_SIZE = 3 * 2
 const hitPool: Entity[] = []
 let hitPoolIdx = 0
 const missPool: Entity[] = []
 let missPoolIdx = 0
 let poolsReady = false
 const HIDDEN_POS = Vector3.create(0, -100, 0)
-const VFX_HARD_TIMEOUT_MS = 500 // Safety: force-hide any VFX older than this (prevents stuck VFX on mobile)
-const activeVfx: { entity: Entity; expiresAt: number; createdAt: number }[] = []
+const activeVfx: { entity: Entity; expiresAt: number }[] = []
 
 function initPools(): void {
   if (poolsReady) return
@@ -93,29 +92,11 @@ function initPools(): void {
 }
 
 function hideVfxEntity(entity: Entity): void {
-  // Move off-screen. Do NOT set scale — the Tween engine owns scale and will
-  // overwrite any Transform.scale write on the next frame, causing the entity
-  // to reappear at a stale scale. Moving position off-screen is instant and
-  // the tween can finish harmlessly at y=-100.
   const t = Transform.getMutable(entity)
   t.position = HIDDEN_POS
-}
-
-/**
- * When a pool entity is about to be reused, remove any stale activeVfx entries
- * for it. This prevents the old timer from hiding the entity mid-animation
- * and prevents duplicate entries from accumulating.
- * 
- * We do NOT delete Tween/TweenSequence here — createOrReplace in the caller
- * will overwrite them atomically. Deleting then recreating in the same frame
- * causes race conditions on mobile where the engine drops the new tween.
- */
-function evictActiveVfx(entity: Entity): void {
-  for (let i = activeVfx.length - 1; i >= 0; i--) {
-    if (activeVfx[i].entity === entity) {
-      activeVfx.splice(i, 1)
-    }
-  }
+  t.scale = Vector3.Zero()
+  if (TweenSequence.has(entity)) TweenSequence.deleteFrom(entity)
+  if (Tween.has(entity)) Tween.deleteFrom(entity)
 }
 
 export function showHitEffect(targetPos: Vector3): void {
@@ -124,13 +105,11 @@ export function showHitEffect(targetPos: Vector3): void {
   const hitRotY = Math.random() * 360
   const hitRotX = (Math.random() - 0.5) * 30
   const scaleMult = 0.9 + Math.random() * 0.25
-  const now = Date.now()
-  const expiresAt = now + VFX_DURATION_MS + 50
+  const expiresAt = Date.now() + VFX_DURATION_MS + 50
 
   for (let i = 0; i < SPIKES_PER_HIT; i++) {
     const spike = hitPool[hitPoolIdx % HIT_POOL_SIZE]
     hitPoolIdx++
-    evictActiveVfx(spike) // Remove stale timer entries before reuse
     const baseAngle = (i / SPIKES_PER_HIT) * 180 + (Math.random() - 0.5) * 25
     let rotX = 0, rotY = 0, rotZ = 0
     if (i % 3 === 0) rotZ = baseAngle
@@ -150,6 +129,7 @@ export function showHitEffect(targetPos: Vector3): void {
       duration: VFX_DURATION_MS * 0.7,
       easingFunction: EasingFunction.EF_EASEOUTEXPO,
     })
+    // Chain a shrink-to-zero so the spike disappears even if the timer cleanup doesn't fire (mobile bug)
     TweenSequence.createOrReplace(spike, {
       sequence: [{
         mode: Tween.Mode.Scale({ start: Vector3.create(eThin, eLen, eThin), end: Vector3.Zero() }),
@@ -157,7 +137,7 @@ export function showHitEffect(targetPos: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeVfx.push({ entity: spike, expiresAt, createdAt: now })
+    activeVfx.push({ entity: spike, expiresAt })
   }
 }
 
@@ -168,13 +148,11 @@ function showMissEffect(targetPos: Vector3): void {
   cloudConfigIndex++
   const scaleMult = 0.85 + Math.random() * 0.3
   const clusterRotY = Math.random() * 360
-  const now = Date.now()
-  const expiresAt = now + VFX_DURATION_MS + 80
+  const expiresAt = Date.now() + VFX_DURATION_MS + 80
 
   for (const cfg of config) {
     const sphere = missPool[missPoolIdx % MISS_POOL_SIZE]
     missPoolIdx++
-    evictActiveVfx(sphere) // Remove stale timer entries before reuse
     const rotOff = Vector3.rotate(cfg.offset, Quaternion.fromEulerDegrees(0, clusterRotY, 0))
     const jitter = Vector3.create((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1)
     const sPos = Vector3.add(centerPos, Vector3.add(rotOff, jitter))
@@ -189,6 +167,7 @@ function showMissEffect(targetPos: Vector3): void {
       duration: VFX_DURATION_MS,
       easingFunction: EasingFunction.EF_EASEOUTQUAD,
     })
+    // Chain a shrink-to-zero so the bubble disappears even if the timer cleanup doesn't fire (mobile bug)
     TweenSequence.createOrReplace(sphere, {
       sequence: [{
         mode: Tween.Mode.Scale({ start: Vector3.create(e, e, e), end: Vector3.Zero() }),
@@ -196,7 +175,7 @@ function showMissEffect(targetPos: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeVfx.push({ entity: sphere, expiresAt, createdAt: now })
+    activeVfx.push({ entity: sphere, expiresAt })
   }
 }
 
@@ -353,12 +332,10 @@ export function combatClientSystem(_dt: number): void {
     break
   }
 
-  // Cleanup expired VFX + safety sweep for stuck spikes on mobile
+  // Cleanup expired VFX
   for (let i = activeVfx.length - 1; i >= 0; i--) {
-    const entry = activeVfx[i]
-    if (now >= entry.expiresAt || now - entry.createdAt >= VFX_HARD_TIMEOUT_MS) {
-      // Normal expiry OR hard timeout (catches stuck tweens on mobile)
-      hideVfxEntity(entry.entity)
+    if (now >= activeVfx[i].expiresAt) {
+      hideVfxEntity(activeVfx[i].entity)
       activeVfx.splice(i, 1)
     }
   }

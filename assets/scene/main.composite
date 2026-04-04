@@ -1117,14 +1117,9 @@
               "game"
             ],
             "author": "ile",
-            "tags": [
-              ""
-            ],
+            "email": "",
+            "tags": [],
             "layout": {
-              "base": {
-                "x": 0,
-                "y": 0
-              },
               "parcels": [
                 {
                   "x": 0,
@@ -1726,8 +1721,13 @@
                   "x": 9,
                   "y": 0
                 }
-              ]
+              ],
+              "base": {
+                "x": 0,
+                "y": 0
+              }
             },
+            "silenceVoiceChat": false,
             "disablePortableExperiences": true,
             "spawnPoints": [
               {
@@ -1742,8 +1742,11 @@
                     ]
                   },
                   "y": {
-                    "$case": "single",
-                    "value": 13
+                    "$case": "range",
+                    "value": [
+                      13,
+                      13
+                    ]
                   },
                   "z": {
                     "$case": "range",

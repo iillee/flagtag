@@ -17,9 +17,7 @@ const HIT_RADIUS = 2.5
 const HIT_COOLDOWN_MS = 450       // Attacker cooldown (how soon they can attack again)
 const STEAL_IMMUNITY_MS = 3000    // Immunity for the player who STEALS the flag (time to escape the crowd)
 const HOLD_TIME_SYNC_INTERVAL = 0.5  // Sync hold time every 0.5s (was 0.2s) — reduces CRDT pressure; client interpolates between updates
-const IDLE_BOB_AMPLITUDE = 0.15
-const IDLE_BOB_SPEED = 2
-const IDLE_ROT_SPEED_DEG_PER_SEC = 25
+// Bob/spin constants removed — animation is now client-side only
 const SPLASH_DURATION_MS = 3000
 const FLAG_GRAVITY = 15          // m/s² (slightly faster than real gravity for snappy game feel)
 const FLAG_MIN_Y = 0.5           // absolute minimum Y (ground plane)
@@ -31,10 +29,9 @@ let flagEntity: Entity
 let countdownEntity: Entity
 let leaderboardEntity: Entity
 let visitorAnalyticsEntity: Entity
-let idleTime = 0
+
 let holdTimeAccum = 0
-let flagBobAccum = 0
-const FLAG_BOB_SYNC_INTERVAL = 0.1 // seconds between flag bob CRDT writes (~10Hz)
+
 const lastAttackTime = new Map<string, number>()
 const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
 const holdTimeEntities = new Map<string, Entity>()
@@ -113,6 +110,15 @@ let flagFalling = false
 let flagFallVelocity = 0
 let flagGravityTargetY = FLAG_MIN_Y
 const carrierYSamples: { y: number; time: number }[] = []
+
+// Carrier staleness detection — force-drop if carrier position is unavailable
+const CARRIER_NO_POSITION_TIMEOUT_MS = 5000   // No position data → likely disconnected
+let lastCarrierPositionMs = 0          // Last time we got a valid position from carrier
+
+function resetCarrierTracking(): void {
+  lastCarrierPositionMs = 0
+  carrierYSamples.length = 0
+}
 
 function isRealName(name: string): boolean {
   return name.length > 0 && !name.startsWith('0x')
@@ -442,18 +448,45 @@ export async function setupServer(): Promise<void> {
   syncEntity(visitorAnalyticsEntity, [VisitorAnalytics.componentId], SyncIds.VISITOR_ANALYTICS)
   await syncVisitorAnalytics()
 
-  // Register message handlers (added in next step)
+  // ── Reconcile stale CRDT entities from previous server lifetime ──
+  // After a server restart, in-memory Maps are empty but old synced
+  // PlayerFlagHoldTime entities persist in CRDT state. Reclaim them
+  // to prevent duplicates. Reset scores to 0 since round state is lost.
+  let reconciledCount = 0
+  for (const [entity, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+    const key = data.playerId.toLowerCase()
+    if (!holdTimeEntities.has(key)) {
+      holdTimeEntities.set(key, entity)
+      knownPlayers.add(key)
+      // Reset score — we can't trust stale mid-round values after restart
+      PlayerFlagHoldTime.getMutable(entity).seconds = 0
+      reconciledCount++
+    } else {
+      // Duplicate entity for same player — remove it
+      engine.removeEntity(entity)
+      console.log('[Server] Removed duplicate hold-time entity for', key.slice(0, 8))
+    }
+  }
+  if (reconciledCount > 0) {
+    console.log('[Server] Reconciled', reconciledCount, 'stale hold-time entities from previous server lifetime')
+  }
+
+  // Register message handlers
   registerHandlers()
 
-  // Register systems (added in next step)
-  engine.addSystem(flagServerSystem)
-  engine.addSystem(holdTimeServerSystem)
-  engine.addSystem(playerTrackingSystem)
-  engine.addSystem(countdownServerSystem)
-  engine.addSystem(visitorTrackingServerSystem)
-  engine.addSystem(nameResolverServerSystem)
-  engine.addSystem(bananaServerSystem)
-  engine.addSystem(shellServerSystem)
+  // Register systems
+  // Wrap all systems in try/catch — one bad frame shouldn't crash the server
+  const safeSystem = (name: string, fn: (dt: number) => void) => (dt: number) => {
+    try { fn(dt) } catch (err) { console.error(`[Server] ❌ ${name} error:`, err) }
+  }
+  engine.addSystem(safeSystem('flagServerSystem', flagServerSystem))
+  engine.addSystem(safeSystem('holdTimeServerSystem', holdTimeServerSystem))
+  engine.addSystem(safeSystem('playerTrackingSystem', playerTrackingSystem))
+  engine.addSystem(safeSystem('countdownServerSystem', countdownServerSystem))
+  engine.addSystem(safeSystem('visitorTrackingServerSystem', visitorTrackingServerSystem))
+  engine.addSystem(safeSystem('nameResolverServerSystem', nameResolverServerSystem))
+  engine.addSystem(safeSystem('bananaServerSystem', bananaServerSystem))
+  engine.addSystem(safeSystem('shellServerSystem', shellServerSystem))
 
   console.log('[Server] Flag Tag server ready')
 }
@@ -505,6 +538,7 @@ function resetGravityState(): void {
   flagFalling = false
   flagFallVelocity = 0
   carrierYSamples.length = 0
+  resetCarrierTracking()
 }
 
 /**
@@ -554,125 +588,138 @@ function updatePlayerName(userId: string, name: string): boolean {
 // ── Message handlers ──
 function registerHandlers(): void {
   room.onMessage('registerName', (data, context) => {
-    if (!context || !data.name) return
-    const from = context.from.toLowerCase()
-    if (updatePlayerName(from, data.name)) {
-      console.log('[Server] registerName: updated', from.slice(0, 8), '->', data.name)
-      persistPlayerNames()
-    }
+    try {
+      if (!context || !data.name) return
+      const from = context.from.toLowerCase()
+      if (updatePlayerName(from, data.name)) {
+        console.log('[Server] registerName: updated', from.slice(0, 8), '->', data.name)
+        persistPlayerNames()
+      }
+    } catch (err) { console.error('[Server] ❌ registerName handler error:', err) }
   })
   room.onMessage('requestPickup', (_data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    console.log('[S.1] Received requestPickup from', from.slice(0, 8))
-    handlePickup(from)
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      console.log('[S.1] Received requestPickup from', from.slice(0, 8))
+      handlePickup(from)
+    } catch (err) { console.error('[Server] ❌ requestPickup handler error:', err) }
   })
   room.onMessage('requestDrop', (_data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    console.log('[S.2] Received requestDrop from', from.slice(0, 8))
-    handleDrop(from)
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      console.log('[S.2] Received requestDrop from', from.slice(0, 8))
+      handleDrop(from)
+    } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
   room.onMessage('requestAttack', (_data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    console.log('[S.3] Received requestAttack from', from.slice(0, 8))
-    handleAttack(from)
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      console.log('[S.3] Received requestAttack from', from.slice(0, 8))
+      handleAttack(from)
+    } catch (err) { console.error('[Server] ❌ requestAttack handler error:', err) }
   })
   room.onMessage('requestBanana', (_data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    console.log('[Server] Received requestBanana from', from.slice(0, 8))
-    handleBananaDrop(from)
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      console.log('[Server] Received requestBanana from', from.slice(0, 8))
+      handleBananaDrop(from)
+    } catch (err) { console.error('[Server] ❌ requestBanana handler error:', err) }
   })
   room.onMessage('requestShell', (data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    console.log('[Server] Received requestShell from', from.slice(0, 8))
-    handleShellFire(from, data.dirX, data.dirZ)
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      console.log('[Server] Received requestShell from', from.slice(0, 8))
+      handleShellFire(from, data.dirX, data.dirZ)
+    } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
   room.onMessage('reportShellWallDist', (data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    // Find the shell by sync id approximation — use the most recent shell from this player
-    for (const shell of activeShells) {
-      if (shell.firedBy === from && !shell.wallDistReported) {
-        shell.maxDistance = Math.min(shell.maxDistance, data.maxDist)
-        shell.wallDistReported = true
-        console.log('[Server] 🐚 Shell wall distance updated:', data.maxDist.toFixed(1), 'm')
-        break
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      for (const shell of activeShells) {
+        if (shell.firedBy === from && !shell.wallDistReported) {
+          shell.maxDistance = Math.min(shell.maxDistance, data.maxDist)
+          shell.wallDistReported = true
+          console.log('[Server] 🐚 Shell wall distance updated:', data.maxDist.toFixed(1), 'm')
+          break
+        }
       }
-    }
+    } catch (err) { console.error('[Server] ❌ reportShellWallDist handler error:', err) }
   })
   room.onMessage('reportShellGroundY', (data, context) => {
-    if (!context) return
-    // Find the shell closest to the reported X/Z and update its ground Y
-    let closest: ActiveShell | null = null
-    let closestDist = 5
-    for (const shell of activeShells) {
-      const pos = Transform.get(shell.entity).position
-      const dx = pos.x - data.shellX
-      const dz = pos.z - data.shellZ
-      const dist = Math.sqrt(dx * dx + dz * dz)
-      if (dist < closestDist) {
-        closestDist = dist
-        closest = shell
+    try {
+      if (!context) return
+      let closest: ActiveShell | null = null
+      let closestDist = 5
+      for (const shell of activeShells) {
+        const pos = Transform.get(shell.entity).position
+        const dx = pos.x - data.shellX
+        const dz = pos.z - data.shellZ
+        const dist = Math.sqrt(dx * dx + dz * dz)
+        if (dist < closestDist) {
+          closestDist = dist
+          closest = shell
+        }
       }
-    }
-    if (closest) {
-      closest.groundY = Math.max(0, data.groundY)
-    }
+      if (closest) {
+        closest.groundY = Math.max(0, data.groundY)
+      }
+    } catch (err) { console.error('[Server] ❌ reportShellGroundY handler error:', err) }
   })
   room.onMessage('reportBananaGroundY', (data, context) => {
-    if (!context) return
-    // Find the banana closest to the reported X/Z and update its ground target
-    let closest: ActiveBanana | null = null
-    let closestDist = 3 // must be within 3m horizontally
-    for (const banana of activeBananas) {
-      const pos = Transform.get(banana.entity).position
-      const dx = pos.x - data.bananaX
-      const dz = pos.z - data.bananaZ
-      const dist = Math.sqrt(dx * dx + dz * dz)
-      if (dist < closestDist) {
-        closestDist = dist
-        closest = banana
+    try {
+      if (!context) return
+      let closest: ActiveBanana | null = null
+      let closestDist = 3
+      for (const banana of activeBananas) {
+        const pos = Transform.get(banana.entity).position
+        const dx = pos.x - data.bananaX
+        const dz = pos.z - data.bananaZ
+        const dist = Math.sqrt(dx * dx + dz * dz)
+        if (dist < closestDist) {
+          closestDist = dist
+          closest = banana
+        }
       }
-    }
-    if (closest && !closest.groundResolved) {
-      closest.targetY = Math.max(0, data.groundY)
-      closest.groundResolved = true
-      // If already at or below target, snap
-      const currentY = Transform.get(closest.entity).position.y
-      if (currentY <= closest.targetY) {
-        const t = Transform.getMutable(closest.entity)
-        t.position = Vector3.create(t.position.x, closest.targetY, t.position.z)
-        closest.falling = false
-        closest.fallVelocity = 0
+      if (closest && !closest.groundResolved) {
+        closest.targetY = Math.max(0, data.groundY)
+        closest.groundResolved = true
+        const currentY = Transform.get(closest.entity).position.y
+        if (currentY <= closest.targetY) {
+          const t = Transform.getMutable(closest.entity)
+          t.position = Vector3.create(t.position.x, closest.targetY, t.position.z)
+          closest.falling = false
+          closest.fallVelocity = 0
+        }
       }
-    }
+    } catch (err) { console.error('[Server] ❌ reportBananaGroundY handler error:', err) }
   })
   room.onMessage('reportGroundY', (data, context) => {
-    if (!context) return
-    const flag = Flag.getOrNull(flagEntity)
-    if (!flag || flag.state !== FlagState.Dropped) return
+    try {
+      if (!context) return
+      const flag = Flag.getOrNull(flagEntity)
+      if (!flag || flag.state !== FlagState.Dropped) return
 
-    const newTarget = Math.max(FLAG_MIN_Y, data.y + 0.5)
-    flagGravityTargetY = newTarget
+      const newTarget = Math.max(FLAG_MIN_Y, data.y + 0.5)
+      flagGravityTargetY = newTarget
 
-    const currentAnchorY = flag.dropAnchorY
-    if (currentAnchorY <= newTarget) {
-      // Already at or below target — snap and stop
-      const flagMutable = Flag.getMutable(flagEntity)
-      flagMutable.dropAnchorY = newTarget
-      flagFalling = false
-      flagFallVelocity = 0
-      persistFlagState()
-    } else if (!flagFalling) {
-      // Target is below current position but gravity stopped — restart it
-      flagFalling = true
-      flagFallVelocity = 0
-    }
-    // If already falling, gravity will naturally reach the new target
+      const currentAnchorY = flag.dropAnchorY
+      if (currentAnchorY <= newTarget) {
+        const flagMutable = Flag.getMutable(flagEntity)
+        flagMutable.dropAnchorY = newTarget
+        flagFalling = false
+        flagFallVelocity = 0
+        persistFlagState()
+      } else if (!flagFalling) {
+        flagFalling = true
+        flagFallVelocity = 0
+      }
+    } catch (err) { console.error('[Server] ❌ reportGroundY handler error:', err) }
   })
 }
 
@@ -886,7 +933,7 @@ function handleBananaDrop(playerId: string): void {
   const bananaEntity = engine.addEntity()
   Transform.create(bananaEntity, {
     position: dropPos,
-    scale: Vector3.create(1, 1, 1)
+    scale: Vector3.create(0.02, 0.02, 0.02)
   })
   // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
   Banana.create(bananaEntity, {
@@ -1019,7 +1066,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   const shellEntity = engine.addEntity()
   Transform.create(shellEntity, {
     position: spawnPos,
-    scale: Vector3.create(1, 1, 1),
+    scale: Vector3.create(0.02, 0.02, 0.02),
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
   })
   // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
@@ -1061,7 +1108,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   })
   lastShellFireTime.set(playerId, now)
 
-  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ })
+  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z })
   console.log('[Server] 🐚 Shell fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 
@@ -1194,18 +1241,40 @@ function flagServerSystem(dt: number): void {
   if (!flag) return
 
   const clampedDt = Math.min(dt, 0.1)
-  idleTime += clampedDt
 
-  // Track carrier Y for gravity target estimation (rolling window of recent positions)
+  // Track carrier Y for gravity target estimation + staleness detection
   if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+    const nowMs = Date.now()
     const carrierPos = getPlayerPosition(flag.carrierPlayerId)
     if (carrierPos) {
-      const now = Date.now() / 1000
-      carrierYSamples.push({ y: carrierPos.y, time: now })
-      while (carrierYSamples.length > 0 && now - carrierYSamples[0].time > CARRIER_Y_WINDOW_SEC) {
+      lastCarrierPositionMs = nowMs
+
+      // Y samples for gravity estimation
+      const nowSec = nowMs / 1000
+      carrierYSamples.push({ y: carrierPos.y, time: nowSec })
+      while (carrierYSamples.length > 0 && nowSec - carrierYSamples[0].time > CARRIER_Y_WINDOW_SEC) {
         carrierYSamples.shift()
       }
     }
+
+    // Staleness check: force-drop if carrier position is unavailable for 5s
+    if (lastCarrierPositionMs > 0 && (nowMs - lastCarrierPositionMs) > CARRIER_NO_POSITION_TIMEOUT_MS) {
+      console.log('[Server] ⚠️ STALE CARRIER DETECTED:', flag.carrierPlayerId.slice(0, 8), '- no position data for', Math.round((nowMs - lastCarrierPositionMs) / 1000) + 's — force-dropping flag')
+      const flagPos = Transform.get(flagEntity).position
+      const mutable = Flag.getMutable(flagEntity)
+      mutable.state = FlagState.Dropped
+      mutable.carrierPlayerId = ''
+      mutable.dropAnchorX = flagPos.x
+      mutable.dropAnchorY = flagPos.y
+      mutable.dropAnchorZ = flagPos.z
+      resetCarrierTracking()
+      computeGravityTarget(flagPos.y)
+      room.send('dropSound', { t: 0 })
+      persistFlagState()
+    }
+  } else {
+    // Not carried — reset tracking so next pickup starts fresh
+    resetCarrierTracking()
   }
 
   // Gravity for dropped flag — accelerate downward until reaching ground estimate
@@ -1224,24 +1293,15 @@ function flagServerSystem(dt: number): void {
     flagMutable.dropAnchorY = newY
   }
 
-  // Idle bob animation (server is sole writer for non-carried states)
-  // Disable bob while falling so the flag drops smoothly
-  // Throttled to ~10Hz to avoid saturating the CRDT sync buffer.
-  if (flag.state !== FlagState.Carried) {
-    flagBobAccum += clampedDt
-    if (flagBobAccum >= FLAG_BOB_SYNC_INTERVAL || flagFalling) {
-      flagBobAccum = 0
-      const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
-      const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
-      const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
-      const bobY = flagFalling ? 0 : IDLE_BOB_AMPLITUDE * Math.sin(idleTime * IDLE_BOB_SPEED)
-      const angleDeg = (idleTime * IDLE_ROT_SPEED_DEG_PER_SEC) % 360
-      const t = Transform.getMutable(flagEntity)
-      t.position = Vector3.create(restX, restY + bobY, restZ)
-      t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
-    }
-  } else {
-    flagBobAccum = 0 // Reset when carried so first idle frame syncs immediately
+  // Server only writes the raw rest position — no bob/spin animation.
+  // Bob and spin are handled client-side to eliminate ~10Hz CRDT writes.
+  // Only write Transform when the flag is falling (gravity updates).
+  if (flag.state !== FlagState.Carried && flagFalling) {
+    const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
+    const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
+    const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
+    const t = Transform.getMutable(flagEntity)
+    t.position = Vector3.create(restX, restY, restZ)
   }
 
   // Detect carrier disconnect (case-insensitive address comparison)
@@ -1255,6 +1315,7 @@ function flagServerSystem(dt: number): void {
       }
     }
     if (!carrierConnected) {
+      console.log('[Server] ⚠️ Carrier', carrierLower.slice(0, 8), 'disconnected (PlayerIdentityData gone) — dropping flag')
       const flagPos = Transform.get(flagEntity).position
       const mutable = Flag.getMutable(flagEntity)
       mutable.state = FlagState.Dropped
@@ -1263,7 +1324,7 @@ function flagServerSystem(dt: number): void {
       mutable.dropAnchorY = flagPos.y
       mutable.dropAnchorZ = flagPos.z
 
-      // Start gravity on disconnect drop
+      resetCarrierTracking()
       computeGravityTarget(flagPos.y)
 
       room.send('dropSound', { t: 0 })

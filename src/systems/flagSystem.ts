@@ -20,8 +20,8 @@ import {
   AudioSource,
   type Entity
 } from '@dcl/sdk/ecs'
-import { Vector3, Color4 } from '@dcl/sdk/math'
-// import { isMobile } from '@dcl/sdk/platform'  // temporarily disabled — crashes desktop client
+import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
+// import { isMobile } from '@dcl/sdk/platform'  // disabled — causes crashes
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
@@ -41,48 +41,34 @@ const CARRY_BASE_Y = 3.0  // base Y offset above AAPT_POSITION (feet) — mobile
  * - Desktop: single entity with AAPT_NAME_TAG (parent/child breaks rendering)
  * - Mobile: two-entity anchor (AAPT_POSITION) → child (Y offset) because AAPT_NAME_TAG is broken on mobile
  */
+let carryCloneVisual: Entity | null = null  // Child entity with model + bob/spin
+
 function createCarryClone(carrierId: string): void {
   cleanupClone()
 
-  if (false /* isMobile() — temporarily disabled */) {
-    // Mobile: two-entity approach with AAPT_POSITION + Y offset
-    const anchor = engine.addEntity()
-    Transform.create(anchor, {
-      position: Vector3.Zero(),
-      scale: Vector3.One()
-    })
-    AvatarAttach.create(anchor, {
-      avatarId: carrierId,
-      anchorPointId: AvatarAnchorPointType.AAPT_POSITION
-    })
-    attachAnchorEntity = anchor
+  // Anchor entity attached to player's name tag
+  carryCloneEntity = engine.addEntity()
+  AvatarAttach.create(carryCloneEntity, {
+    avatarId: carrierId,
+    anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+  })
+  Transform.create(carryCloneEntity, {
+    position: Vector3.Zero(),
+    scale: Vector3.One()
+  })
 
-    carryCloneEntity = engine.addEntity()
-    Transform.create(carryCloneEntity!, {
-      parent: anchor,
-      position: Vector3.create(0, CARRY_BASE_Y, 0),
-      scale: Vector3.One()
-    })
-    GltfContainer.create(carryCloneEntity!, {
-      src: BANNER_SRC,
-      visibleMeshesCollisionMask: 0,
-      invisibleMeshesCollisionMask: 0
-    })
-    console.log('[Flag] Clone created (mobile: AAPT_POSITION + Y offset)')
-  } else {
-    // Desktop: single entity with AAPT_NAME_TAG (reliable on desktop)
-    carryCloneEntity = engine.addEntity()
-    AvatarAttach.create(carryCloneEntity, {
-      avatarId: carrierId,
-      anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
-    })
-    GltfContainer.create(carryCloneEntity, {
-      src: BANNER_SRC,
-      visibleMeshesCollisionMask: 0,
-      invisibleMeshesCollisionMask: 0
-    })
-    console.log('[Flag] Clone created (desktop: AAPT_NAME_TAG)')
-  }
+  // Child entity with model — bob/spin animated locally
+  carryCloneVisual = engine.addEntity()
+  Transform.create(carryCloneVisual, {
+    parent: carryCloneEntity,
+    position: Vector3.Zero()
+  })
+  GltfContainer.create(carryCloneVisual, {
+    src: BANNER_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
+  console.log('[Flag] Clone created (desktop: AAPT_NAME_TAG + bob/spin child)')
 }
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
@@ -263,6 +249,10 @@ let skipNextDropSound = false
 
 // Cleanup function to prevent clone duplication
 function cleanupClone(): void {
+  if (carryCloneVisual !== null) {
+    engine.removeEntity(carryCloneVisual)
+    carryCloneVisual = null
+  }
   if (carryCloneEntity !== null) { 
     console.log('[Flag] Cleaning up existing clone entity')
     engine.removeEntity(carryCloneEntity)
@@ -317,39 +307,67 @@ function fireGroundRaycastForServer(dropPos: Vector3): void {
   })
 }
 
-// ── Client-side GltfContainer attachment for the synced flag entity ──
-// The server no longer syncs GltfContainer — the client attaches the visual mesh locally
-// to avoid a Bevy renderer issue where server-synced GltfContainer sometimes fails to load.
+// ── Client-side visual flag with local bob/spin ──
+// The synced flag entity is a plain Transform anchor (position only, no model).
+// We create a LOCAL child entity that holds the GltfContainer and animates bob/spin
+// every frame — zero CRDT writes, smooth on every client.
+const IDLE_BOB_AMPLITUDE = 0.15
+const IDLE_BOB_SPEED = 2
+const IDLE_ROT_SPEED_DEG_PER_SEC = 25
+let flagVisualEntity: Entity | null = null
+let flagSyncedEntity: Entity | null = null
+let flagBobTime = 0
 let flagModelAttached = false
 
 function ensureFlagModel(): void {
   if (flagModelAttached) return
   for (const [entity] of engine.getEntitiesWith(Flag, Transform)) {
-    if (!GltfContainer.has(entity)) {
-      GltfContainer.create(entity, {
-        src: BANNER_SRC,
-        visibleMeshesCollisionMask: 0,
-        invisibleMeshesCollisionMask: 0
-      })
-      console.log('[Flag] 🚩 Attached local GltfContainer to synced flag entity')
-    }
+    // Create a local child entity for the visual model + bob/spin
+    flagVisualEntity = engine.addEntity()
+    Transform.create(flagVisualEntity, {
+      parent: entity,
+      position: Vector3.create(0, 0, 0)
+    })
+    GltfContainer.create(flagVisualEntity, {
+      src: BANNER_SRC,
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0
+    })
+    flagSyncedEntity = entity
     flagModelAttached = true
+    console.log('[Flag] 🚩 Created local visual child with bob/spin')
     break
   }
 }
 
-/** Trigger an attack from the UI (mobile tap). Same logic as left click. */
-export function triggerAttackFromUI(): void {
-  const userId = getPlayerData()?.userId?.toLowerCase()
-  if (!userId) return
-  console.log('[C.5] UI tap - sending requestAttack')
-  predictAttackLocally()
-  room.send('requestAttack', { t: 0 })
+/** Animate the flag bob/spin locally — runs every frame, no CRDT writes. */
+function updateFlagBob(dt: number): void {
+  flagBobTime += dt
+  const bobY = IDLE_BOB_AMPLITUDE * Math.sin(flagBobTime * IDLE_BOB_SPEED)
+  const angleDeg = (flagBobTime * IDLE_ROT_SPEED_DEG_PER_SEC) % 360
+
+  // Animate the idle flag visual (at base or dropped)
+  if (flagVisualEntity && Transform.has(flagVisualEntity)) {
+    const flag = flagSyncedEntity ? Flag.getOrNull(flagSyncedEntity) : null
+    if (flag && flag.state !== FlagState.Carried) {
+      const t = Transform.getMutable(flagVisualEntity)
+      t.position = Vector3.create(0, bobY, 0)
+      t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+    }
+  }
+
+  // Animate the carried flag visual (above player's head)
+  if (carryCloneVisual && Transform.has(carryCloneVisual)) {
+    const t = Transform.getMutable(carryCloneVisual)
+    t.position = Vector3.create(0, bobY, 0)
+    t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+  }
 }
 
 export function flagClientSystem(dt: number): void {
-  // Ensure the synced flag entity has a GltfContainer (attached locally, not synced from server)
+  // Ensure the synced flag entity has a local visual child (GltfContainer + bob/spin)
   ensureFlagModel()
+  updateFlagBob(dt)
 
   const userId = getPlayerData()?.userId?.toLowerCase()
 
@@ -448,8 +466,8 @@ export function flagClientSystem(dt: number): void {
       console.log('[C.11] Creating clone for carrier:', flag.carrierPlayerId.slice(0, 8), 
         '(reason:', isFirstFrame ? 'firstFrame' : stateChanged ? 'stateChanged' : carrierChanged ? 'carrierChanged' : 'missingClone', ')')
       
-      // Hide server flag with visibility (don't move it — avoids CRDT conflicts)
-      VisibilityComponent.createOrReplace(flagEntity, { visible: false })
+      // Hide flag visual (don't move synced entity — avoids CRDT conflicts)
+      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
       
       // Create platform-specific clone
       createCarryClone(flag.carrierPlayerId)
@@ -473,8 +491,8 @@ export function flagClientSystem(dt: number): void {
       // Clean up all clones
       cleanupClone()
       
-      // Restore server flag visibility (server controls position via CRDT)
-      VisibilityComponent.createOrReplace(flagEntity, { visible: true })
+      // Restore flag visual visibility (server controls position via CRDT)
+      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
 
       if (flag.state === FlagState.Dropped) {
         fireGroundRaycastForServer(Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ))
@@ -485,19 +503,19 @@ export function flagClientSystem(dt: number): void {
     // 1. Flag is carried but clone is missing or broken — recreate it
     // Only check GltfContainer — desktop clone has no Transform (AvatarAttach controls position)
     const cloneMissing = carryCloneEntity === null
-    const cloneBroken = carryCloneEntity !== null && !GltfContainer.has(carryCloneEntity)
+    const cloneBroken = carryCloneEntity !== null && (carryCloneVisual === null || !GltfContainer.has(carryCloneVisual))
     if (flag.state === FlagState.Carried && (cloneMissing || cloneBroken) && !needsCloneCreate) {
       console.log('[C.16] SAFETY NET: Flag is carried but clone is', cloneMissing ? 'missing' : 'broken', '! Recreating...')
-      VisibilityComponent.createOrReplace(flagEntity, { visible: false })
+      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
       createCarryClone(flag.carrierPlayerId)
     }
     
-    // 2. Flag is NOT carried — ensure server flag is visible
-    if (flag.state !== FlagState.Carried) {
-      if (!VisibilityComponent.has(flagEntity)) {
-        VisibilityComponent.create(flagEntity, { visible: true })
-      } else if (!VisibilityComponent.get(flagEntity).visible) {
-        VisibilityComponent.createOrReplace(flagEntity, { visible: true })
+    // 2. Flag is NOT carried — ensure flag visual is visible
+    if (flag.state !== FlagState.Carried && flagVisualEntity) {
+      if (!VisibilityComponent.has(flagVisualEntity)) {
+        VisibilityComponent.create(flagVisualEntity, { visible: true })
+      } else if (!VisibilityComponent.get(flagVisualEntity).visible) {
+        VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
       }
     }
 

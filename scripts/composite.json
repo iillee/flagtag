@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "0": {
+          "json": {
+            "value": "TheForge"
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Actions",
+      "data": {
+        "0": {
+          "json": {
+            "id": "{self}",
+            "value": [
+              {
+                "name": "ForgeConnect",
+                "type": "call_script_method",
+                "jsonPayload": "{\"scriptPath\":\"assets/scene/Scripts/ForgeScriptModular.tsx\",\"methodName\":\"FORGEConnect\",\"params\":{}}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "0": {
+          "json": {
+            "value": [
+              {
+                "path": "{assetPath}/ForgeScriptModular.tsx",
+                "priority": 0,
+                "layout": "{\"params\":{\"verseId\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"autoConnect\":{\"type\":\"boolean\",\"optional\":true,\"value\":true},\"showUI\":{\"type\":\"boolean\",\"optional\":true,\"value\":true},\"showIcon\":{\"type\":\"boolean\",\"optional\":true,\"value\":true},\"showLoginSplashScreen\":{\"type\":\"boolean\",\"optional\":true,\"value\":false},\"ConnectNotifications\":{\"type\":\"boolean\",\"optional\":true,\"value\":false},\"QuestUpdateNotifications\":{\"type\":\"boolean\",\"optional\":true,\"value\":false},\"InventoryUpdateNotifications\":{\"type\":\"boolean\",\"optional\":true,\"value\":false},\"debugUserProfileLogs\":{\"type\":\"boolean\",\"optional\":true,\"value\":false}},\"actions\":[{\"methodName\":\"FORGEConnect\",\"description\":\"Connect this entity’s Forge script to the backend (auth + heartbeat). Trigger from another entity (e.g. button or trigger), or rely on **Auto connect** in the inspector.\",\"params\":{}},{\"methodName\":\"FORGEDisconnect\",\"description\":\"Disconnect from Forge: stops heartbeat and clears the session token. Trigger from another entity when you want to fully tear down the connection.\",\"params\":{}},{\"methodName\":\"FORGEQuestAction\",\"description\":\"Send a quest action to Forge (e.g. complete a step or task). **Creator Hub:** use optional `variableKey1` / `variableValue1` (and 2–3) for up to three variables. **From code:** pass a single variables object as 4th arg, or an array of `{ id, value }`, or use the flat key/value slots.\",\"params\":{\"questId\":{\"type\":\"string\",\"optional\":false,\"value\":\"\"},\"stepId\":{\"type\":\"string\",\"optional\":false,\"value\":\"\"},\"taskId\":{\"type\":\"string\",\"optional\":false,\"value\":\"\"},\"variableKey1\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableValue1\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableKey2\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableValue2\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableKey3\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableValue3\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"}}},{\"methodName\":\"FORGEGenericAction\",\"description\":\"Send a generic Forge action by **action ID** (configured in The Forge dashboard). **Creator Hub:** use optional `variableKey1` / `variableValue1` (and 2–3) for up to three variables. **From code:** pass a variables object as 2nd arg, or `[{id,value},…]`, or use flat key/value slots.\",\"params\":{\"actionId\":{\"type\":\"string\",\"optional\":false,\"value\":\"\"},\"variableKey1\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableValue1\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableKey2\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableValue2\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableKey3\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"},\"variableValue3\":{\"type\":\"string\",\"optional\":true,\"value\":\"\"}}},{\"methodName\":\"FORGEOpenShop\",\"description\":\"Open the shop for a specific creator wallet. If a shop is already open it is closed first — only one shop can be open at a time. Seeds wallet + resets shop state, then runs uiActions[\\\"open-shop\\\"] from config.\",\"params\":{\"creatorWallet\":{\"type\":\"string\",\"optional\":false,\"value\":\"\"}}},{\"methodName\":\"FORGECloseShop\",\"description\":\"Close the shop. Steps are defined in the behavior config under uiActions[\\\"close-shop\\\"].\",\"params\":{}},{\"methodName\":\"FORGEPurchaseItem\",\"description\":\"Purchase the currently selected item. Steps (POST purchase, handle result, refresh inventory) are defined in the behavior config under uiActions[\\\"purchase-item\\\"].\",\"params\":{}},{\"methodName\":\"FORGERefreshLeaderboard\",\"description\":\"Refetch leaderboard from GET /api/leaderboard/:id (honors uiState.leaderboardSource: cache | subgraph).\",\"params\":{}}]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
