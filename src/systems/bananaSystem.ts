@@ -27,7 +27,7 @@ import { triggerEmote } from '~system/RestrictedActions'
 
 const BANANA_MODEL_SRC = 'assets/scene/Models/banana_scaled.glb'
 const BANANA_SCALE = Vector3.create(1, 1, 1)
-const BANANA_STAGGER_MS = 800 // Same duration as combat stagger
+const BANANA_STAGGER_MS = 1000 // Duration when hitting own banana
 
 // Stagger state for banana hits
 let bananaStaggerUntil = 0

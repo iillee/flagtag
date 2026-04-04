@@ -52,10 +52,11 @@ function createCarryClone(carrierId: string): void {
   })
 
   // Child entity with model — bob/spin animated locally
+  // Offset upward ~0.85m above name tag so the flag doesn't clip into the avatar's head
   carryCloneVisual = engine.addEntity()
   Transform.create(carryCloneVisual, {
     parent: carryCloneEntity,
-    position: Vector3.Zero()
+    position: Vector3.create(0, 0.85, 0)
   })
   GltfContainer.create(carryCloneVisual, {
     src: BANNER_SRC,
@@ -230,7 +231,7 @@ let prevCarrierId: string = ''
 const AUTO_PICKUP_RADIUS = 3
 const AUTO_PICKUP_COOLDOWN_MS = 500 // don't spam server
 let lastAutoPickupRequestMs = 0
-const DROP_PICKUP_COOLDOWN_MS = 3000 // after dropping, can't auto-pickup for 3s
+const DROP_PICKUP_COOLDOWN_MS = 2000 // after dropping, can't auto-pickup for 2s
 let lastDropTimeMs = 0
 
 // Sound entities
@@ -344,10 +345,10 @@ function updateFlagBob(dt: number): void {
     }
   }
 
-  // Animate the carried flag visual (above player's head)
+  // Animate the carried flag visual (above player's head, offset 0.85m above name tag)
   if (carryCloneVisual && Transform.has(carryCloneVisual)) {
     const t = Transform.getMutable(carryCloneVisual)
-    t.position = Vector3.create(0, bobY, 0)
+    t.position = Vector3.create(0, 0.425 + bobY, 0)
     t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
   }
 }

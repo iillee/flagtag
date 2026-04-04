@@ -12,6 +12,8 @@ const playersInScene = new Map<string, string>()
  * even after players leave the scene.
  */
 const knownPlayerNames = new Map<string, string>()
+// Track previous sort order so ties preserve existing positions (no flickering)
+const previousRank = new Map<string, number>()
 
 function isRealName(name: string): boolean {
   return name.length > 0 && !name.startsWith('0x')
@@ -150,12 +152,16 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     synced.set(key, Math.max(existing, data.seconds))
   }
 
-  // Client-side interpolation: add elapsed time since last CRDT update for the current carrier
+  // Client-side interpolation: add elapsed time since last CRDT update for the current carrier.
+  // Only apply if the synced value is still > 0 — if the server reset scores to 0 (round end)
+  // but updateHoldTimeInterpolation hasn't run yet this frame, we must not inject stale data.
   if (lastCarrierId && lastCarrierSyncedSeconds > 0) {
-    const elapsedSec = (Date.now() - interpolationStartTime) / 1000
-    const interpolated = lastCarrierSyncedSeconds + elapsedSec
-    const existing = synced.get(lastCarrierId) ?? 0
-    synced.set(lastCarrierId, Math.max(existing, interpolated))
+    const carrierSynced = synced.get(lastCarrierId) ?? 0
+    if (carrierSynced > 0) {
+      const elapsedSec = (Date.now() - interpolationStartTime) / 1000
+      const interpolated = lastCarrierSyncedSeconds + elapsedSec
+      synced.set(lastCarrierId, Math.max(carrierSynced, interpolated))
+    }
   }
 
   // Build result ONLY from players currently in the scene.
@@ -179,11 +185,21 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     })
   }
 
-  // Sort by raw float seconds (desc) for accurate ordering, then alphabetically for ties
+  // Sort by floored seconds (what the user sees) so sub-second interpolation
+  // jitter doesn't cause visible reordering.  Ties preserve previous order
+  // (whoever was higher first stays higher) to prevent flickering.
   result.sort((a, b) => {
-    if (a.rawSeconds !== b.rawSeconds) return b.rawSeconds - a.rawSeconds
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    const floorDiff = Math.floor(b.rawSeconds) - Math.floor(a.rawSeconds)
+    if (floorDiff !== 0) return floorDiff
+    // Tie: preserve previous rank order (lower rank index = higher position)
+    const prevA = previousRank.get(a.userId.toLowerCase()) ?? 9999
+    const prevB = previousRank.get(b.userId.toLowerCase()) ?? 9999
+    return prevA - prevB
   })
+
+  // Update previous rank for next frame
+  previousRank.clear()
+  result.forEach((p, i) => previousRank.set(p.userId.toLowerCase(), i))
   return result
 }
 

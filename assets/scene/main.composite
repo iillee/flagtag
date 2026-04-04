@@ -111,6 +111,69 @@
             "parent": 0
           }
         },
+        "514": {
+          "json": {
+            "position": {
+              "x": 47.014488220214844,
+              "y": 0.5766844153404236,
+              "z": 88.21995544433594
+            },
+            "scale": {
+              "x": 3.299999952316284,
+              "y": 1,
+              "z": 5.5
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.8660253882408142,
+              "z": 0,
+              "w": 0.5
+            },
+            "parent": 0
+          }
+        },
+        "515": {
+          "json": {
+            "position": {
+              "x": 67.53003692626953,
+              "y": 0.6302027106285095,
+              "z": 79.62249755859375
+            },
+            "scale": {
+              "x": 1.7100000381469727,
+              "y": 1.7100000381469727,
+              "z": 1.7100000381469727
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.49725884199142456,
+              "z": 0,
+              "w": 0.8676022291183472
+            },
+            "parent": 0
+          }
+        },
+        "516": {
+          "json": {
+            "position": {
+              "x": 69.76000213623047,
+              "y": 0.6302027106285095,
+              "z": 86.07373046875
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
         "517": {
           "json": {
             "position": {
@@ -170,6 +233,27 @@
               "y": 0.4162278473377228,
               "z": 0,
               "w": 0.9092603325843811
+            },
+            "parent": 0
+          }
+        },
+        "520": {
+          "json": {
+            "position": {
+              "x": 82.26000213623047,
+              "y": 0.6302027106285095,
+              "z": 92.32373046875
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.5,
+              "z": 0,
+              "w": 0.8660253882408142
             },
             "parent": 0
           }
@@ -362,6 +446,48 @@
             },
             "parent": 0
           }
+        },
+        "530": {
+          "json": {
+            "position": {
+              "x": 80.53003692626953,
+              "y": 0.6302027106285095,
+              "z": 93.87249755859375
+            },
+            "scale": {
+              "x": 1.7100000381469727,
+              "y": 1.7100000381469727,
+              "z": 1.7100000381469727
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.0031623251270502806,
+              "z": 0,
+              "w": 0.9999949932098389
+            },
+            "parent": 0
+          }
+        },
+        "531": {
+          "json": {
+            "position": {
+              "x": 63.53003692626953,
+              "y": 0.6302027106285095,
+              "z": 74.87249755859375
+            },
+            "scale": {
+              "x": 1.7100000381469727,
+              "y": 1.7100000381469727,
+              "z": 1.7100000381469727
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.96510249376297,
+              "z": 0,
+              "w": 0.2618723213672638
+            },
+            "parent": 0
+          }
         }
       }
     },
@@ -381,6 +507,27 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "514": {
+          "json": {
+            "src": "assets/asset-packs/caribbean_water/WaterPatchFull_01/WaterPatchFull_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "515": {
+          "json": {
+            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "516": {
+          "json": {
+            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "517": {
           "json": {
             "src": "assets/asset-packs/caribbean_water/WaterPatchFull_01/WaterPatchFull_01.glb",
@@ -396,6 +543,13 @@
           }
         },
         "519": {
+          "json": {
+            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "520": {
           "json": {
             "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
@@ -464,6 +618,20 @@
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
+        },
+        "530": {
+          "json": {
+            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "531": {
+          "json": {
+            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
         }
       }
     },
@@ -485,6 +653,21 @@
             "value": "Castle_06.glb"
           }
         },
+        "514": {
+          "json": {
+            "value": "Caribbean Water_2"
+          }
+        },
+        "515": {
+          "json": {
+            "value": "Lilypad_12"
+          }
+        },
+        "516": {
+          "json": {
+            "value": "Lilypad_13"
+          }
+        },
         "517": {
           "json": {
             "value": "Caribbean Water"
@@ -498,6 +681,11 @@
         "519": {
           "json": {
             "value": "Lilypad_2"
+          }
+        },
+        "520": {
+          "json": {
+            "value": "Lilypad_14"
           }
         },
         "521": {
@@ -543,6 +731,16 @@
         "529": {
           "json": {
             "value": "Lilypad_11"
+          }
+        },
+        "530": {
+          "json": {
+            "value": "Lilypad_15"
+          }
+        },
+        "531": {
+          "json": {
+            "value": "Lilypad_16"
           }
         }
       }
@@ -654,7 +852,13 @@
                   526,
                   527,
                   528,
-                  529
+                  529,
+                  514,
+                  515,
+                  516,
+                  520,
+                  530,
+                  531
                 ]
               },
               {
@@ -716,6 +920,30 @@
               {
                 "entity": 529,
                 "children": []
+              },
+              {
+                "entity": 514,
+                "children": []
+              },
+              {
+                "entity": 515,
+                "children": []
+              },
+              {
+                "entity": 516,
+                "children": []
+              },
+              {
+                "entity": 520,
+                "children": []
+              },
+              {
+                "entity": 530,
+                "children": []
+              },
+              {
+                "entity": 531,
+                "children": []
               }
             ]
           }
@@ -745,6 +973,15 @@
         "513": {
           "json": {}
         },
+        "514": {
+          "json": {}
+        },
+        "515": {
+          "json": {}
+        },
+        "516": {
+          "json": {}
+        },
         "517": {
           "json": {}
         },
@@ -752,6 +989,9 @@
           "json": {}
         },
         "519": {
+          "json": {}
+        },
+        "520": {
           "json": {}
         },
         "521": {
@@ -779,6 +1019,12 @@
           "json": {}
         },
         "529": {
+          "json": {}
+        },
+        "530": {
+          "json": {}
+        },
+        "531": {
           "json": {}
         }
       }

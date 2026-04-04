@@ -164,8 +164,8 @@ engine.addSystem(attackFlickerSystem)
 // Wait a grace period after scene load before showing the server-down screen.
 // This prevents the overlay from flashing during normal scene startup when
 // CRDT data hasn't arrived yet.
-const SERVER_DOWN_GRACE_SEC = 15    // seconds after scene load before we check
-const SERVER_DOWN_CONFIRM_SEC = 5   // consecutive seconds of Server:N after grace before showing
+const SERVER_DOWN_GRACE_SEC = 20    // seconds after scene load before we check
+const SERVER_DOWN_CONFIRM_SEC = 10  // consecutive seconds of Server:N after grace before showing
 const SERVER_DOWN_RESHOW_SEC = 60   // re-show the overlay every 60s after dismissal
 let sceneLoadElapsed = 0
 let serverDownTimer = 0
@@ -429,7 +429,7 @@ function DesktopLayout() {
         }}
       >
         <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
-          <Label value="Time until round ends" fontSize={16} color={WHITE} font="sans-serif" />
+          <Label value="Round ends in:" fontSize={16} color={WHITE} font="sans-serif" />
           <Label value={formatCountdown(countdownSeconds)} fontSize={40} color={WHITE} font="sans-serif" />
         </UiEntity>
       </UiEntity>
@@ -605,13 +605,13 @@ function DesktopLayout() {
                 <UiEntity uiTransform={{ height: 12 }} />
                 <Label value="•  Walk into the flag to pick it up" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Score 1 point for every second you hold the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Attack the carrier to knock the flag loose and grab it" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Attack the carrier to steal the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
                 <Label value="•  Deploy shells and banana traps to stun your rivals" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  The player with the most points wins!" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  The player with the most points after 5 min. wins!" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
               </UiEntity>
 
               {/* Right column — Controls */}
@@ -624,8 +624,6 @@ function DesktopLayout() {
               >
                 <Label value="Controls" fontSize={24} color={GOLD} font="sans-serif" />
                 <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="Walk into flag to pick up" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 14 }} />
 
                 {/* LMB — attack/steal */}
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 34 }}>
@@ -634,8 +632,8 @@ function DesktopLayout() {
                     uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
                   >
                     <UiEntity
-                      uiTransform={{ width: 24, height: 24 }}
-                      uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/cursor.png' }, color: WHITE }}
+                      uiTransform={{ width: 29, height: 29 }}
+                      uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/cursor2.png' }, color: WHITE }}
                     />
                   </UiEntity>
                   <Label value="to attack/steal flag" fontSize={16} color={MUTED} font="sans-serif" />
@@ -981,10 +979,10 @@ function DesktopLayout() {
                             font="sans-serif" 
                           />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '18%', overflow: 'hidden', height: VISITOR_ROW_H }}>
+                        <UiEntity uiTransform={{ width: '15%', overflow: 'hidden', height: VISITOR_ROW_H }}>
                           <Label value={visitor.name} fontSize={12} color={WHITE} font="sans-serif" />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '65%', overflow: 'hidden', height: VISITOR_ROW_H }}>
+                        <UiEntity uiTransform={{ width: '68%', overflow: 'hidden', height: VISITOR_ROW_H, padding: { left: 16 } }}>
                           <Label value={visitor.userId} fontSize={11} color={WHITE} font="sans-serif" />
                         </UiEntity>
                         <UiEntity uiTransform={{ width: '12%', flexDirection: 'row', justifyContent: 'flex-end' }}>
@@ -1095,10 +1093,10 @@ function DesktopLayout() {
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
             <UiEntity
-              uiTransform={{ positionType: 'absolute', position: { top: 4, left: 1 }, width: 27, height: 27 }}
+              uiTransform={{ positionType: 'absolute', position: { top: 4, left: 1 }, width: 32, height: 32 }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: 'assets/images/cursor.png' },
+                texture: { src: 'assets/images/cursor2.png' },
                 color: LIGHT_GREY
               }}
             />
@@ -1122,7 +1120,7 @@ function DesktopLayout() {
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
             <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 4 } }}
+              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 5 } }}
             />
             <UiEntity
               uiTransform={{ width: ABILITY_ICON_SIZE - 6, height: ABILITY_ICON_SIZE - 6, margin: { top: 6 } }}
@@ -1149,7 +1147,7 @@ function DesktopLayout() {
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
             <Label value="F" fontSize={16} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 4 } }}
+              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 5 } }}
             />
             <UiEntity
               uiTransform={{ width: ABILITY_ICON_SIZE, height: ABILITY_ICON_SIZE, margin: { top: 6 } }}
@@ -1742,13 +1740,13 @@ function MobileLayout() {
                 <UiEntity uiTransform={{ height: 14 }} />
                 <Label value="•  Walk into the flag to pick it up" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Score 1 point for every second you hold the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Attack the carrier to knock the flag loose and grab it" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Attack the carrier to steal the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
                 <Label value="•  Deploy shells and banana traps to stun your rivals" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  The player with the most points wins!" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  The player with the most points after 5 min. wins!" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
               </UiEntity>
 
               {/* Right column — Controls */}
@@ -1761,8 +1759,6 @@ function MobileLayout() {
               >
                 <Label value="Controls" fontSize={30} color={GOLD} font="sans-serif" />
                 <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="Walk into flag to pick up" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 16 }} />
 
                 {/* LMB — attack/steal */}
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
@@ -1771,8 +1767,8 @@ function MobileLayout() {
                     uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
                   >
                     <UiEntity
-                      uiTransform={{ width: 28, height: 28 }}
-                      uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/cursor.png' }, color: WHITE }}
+                      uiTransform={{ width: 34, height: 34 }}
+                      uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/cursor2.png' }, color: WHITE }}
                     />
                   </UiEntity>
                   <Label value="to attack/steal flag" fontSize={22} color={MUTED} font="sans-serif" />
