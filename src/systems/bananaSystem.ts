@@ -25,8 +25,8 @@ import { room } from '../shared/messages'
 
 import { triggerEmote } from '~system/RestrictedActions'
 
-const BANANA_MODEL_SRC = 'assets/scene/Models/banana.glb'
-const BANANA_SCALE = Vector3.create(0.02, 0.02, 0.02)
+const BANANA_MODEL_SRC = 'assets/scene/Models/banana_scaled.glb'
+const BANANA_SCALE = Vector3.create(1, 1, 1)
 const BANANA_STAGGER_MS = 800 // Same duration as combat stagger
 
 // Stagger state for banana hits
@@ -226,15 +226,17 @@ function registerBananaMessages(): void {
 
   room.onMessage('bananaDropped', (data) => {
     playBananaDropSound(Vector3.create(data.x, data.y, data.z))
-    // Cache the drop position for fallback model attachment
-    recentBananaDropPositions.push({ x: data.x, y: data.y, z: data.z, timestamp: Date.now() })
-    if (recentBananaDropPositions.length > MAX_RECENT_DROPS) recentBananaDropPositions.shift()
+    // Create visual from message bus (instant, no CRDT dependency)
+    createMsgBananaVisual(data.x, data.y, data.z)
     // Fire ground raycast so server knows where to land this banana
     fireBananaGroundRaycast(data.x, data.y, data.z)
   })
 
   room.onMessage('bananaTriggered', (data) => {
     const pos = Vector3.create(data.x, data.y, data.z)
+
+    // Remove the message-driven banana visual
+    removeMsgBananaVisualNear(data.x, data.y, data.z)
 
     // All effects in one frame for clean sync
     showSplatEffect(pos)
@@ -390,89 +392,126 @@ function updateLocalBananas(dt: number): void {
 // break the authoritative server in deployed environments.
 //
 // Instead, for each synced Banana entity we create a LOCAL-ONLY visual entity
-// with the GltfContainer, and update its position from the server's synced Transform.
-interface BananaVisual {
-  localEntity: Entity
+// ── Message-driven visual entities for bananas ──
+// Visuals are created from the 'bananaDropped' message (WebSocket, instant) rather than
+// from CRDT-synced Banana entities. Mobile live CRDT sync is unreliable.
+interface MsgBananaVisual {
+  entity: Entity
+  x: number
+  z: number
+  createdAtMs: number
+  falling: boolean
+  fallVelocity: number
+  currentY: number
+  targetY: number
+  groundResolved: boolean
+  groundRayEntity: Entity | null
 }
-const bananaVisuals = new Map<number, BananaVisual>() // synced entity id -> local visual
+const msgBananaVisuals: MsgBananaVisual[] = []
 
-function updateBananaVisuals(): void {
-  // Create/update local visual entities for synced bananas
-  for (const [entity] of engine.getEntitiesWith(Banana)) {
-    const eid = entity as number
+function createMsgBananaVisual(x: number, y: number, z: number): void {
+  const localEntity = engine.addEntity()
+  Transform.create(localEntity, {
+    position: Vector3.create(x, y, z),
+    scale: BANANA_SCALE
+  })
+  GltfContainer.create(localEntity, {
+    src: BANANA_MODEL_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
 
-    // Get position — prefer synced Transform, fall back to cached drop position
-    let posX = 0, posY = 0, posZ = 0
-    let hasPosition = false
+  // Fire ground raycast for this visual
+  const groundRayEntity = engine.addEntity()
+  Transform.create(groundRayEntity, { position: Vector3.create(x, y + 0.5, z) })
+  Raycast.create(groundRayEntity, {
+    direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
+    maxDistance: 200, queryType: RaycastQueryType.RQT_HIT_FIRST, continuous: false
+  })
 
-    if (Transform.has(entity)) {
-      const t = Transform.get(entity)
-      // Check if Transform has actually synced (not default 0,0,0 with scale 1,1,1)
-      const looksReal = t.scale.x < 0.5 && !(Math.abs(t.position.x) < 0.001 && Math.abs(t.position.y) < 0.001 && Math.abs(t.position.z) < 0.001)
-      if (looksReal) {
-        posX = t.position.x
-        posY = t.position.y
-        posZ = t.position.z
-        hasPosition = true
-      }
-    }
+  msgBananaVisuals.push({
+    entity: localEntity, x, z,
+    createdAtMs: Date.now(),
+    falling: true, fallVelocity: 0, currentY: y, targetY: 0,
+    groundResolved: false, groundRayEntity,
+  })
+  console.log('[Banana] 🍌 Created message-driven banana visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))
+}
 
-    // Fallback: use the most recent UNCONSUMED cached drop position
-    // (shift from the front so each banana entity gets its own unique position)
-    if (!hasPosition && recentBananaDropPositions.length > 0) {
-      const now = Date.now()
-      // Find the oldest still-valid cached position (FIFO order matches entity creation order)
-      const idx = recentBananaDropPositions.findIndex(d => now - d.timestamp < 30000)
-      if (idx !== -1) {
-        const drop = recentBananaDropPositions[idx]
-        posX = drop.x
-        posY = drop.y
-        posZ = drop.z
-        hasPosition = true
-        // Consume this cached position so the next banana gets the next one
-        recentBananaDropPositions.splice(idx, 1)
-      }
-    }
-
-    // No position data yet — keep waiting (will retry next frame)
-    if (!hasPosition) continue
-
-    let visual = bananaVisuals.get(eid)
-    if (!visual) {
-      // Create local-only visual entity
-      const localEntity = engine.addEntity()
-      Transform.create(localEntity, {
-        position: Vector3.create(posX, posY, posZ),
-        scale: Vector3.create(0.02, 0.02, 0.02)
-      })
-      GltfContainer.create(localEntity, {
-        src: BANANA_MODEL_SRC,
-        visibleMeshesCollisionMask: 0,
-        invisibleMeshesCollisionMask: 0
-      })
-      visual = { localEntity }
-      bananaVisuals.set(eid, visual)
-      console.log('[Banana] 🍌 Created local visual for synced banana', eid,
-        'at:', posX.toFixed(1), posY.toFixed(1), posZ.toFixed(1))
-    } else if (hasPosition) {
-      // Update position from synced Transform (banana may still be falling via server gravity)
-      // Only update from synced Transform, not from cached position (which was the initial drop point)
-      if (Transform.has(entity)) {
-        const t = Transform.get(entity)
-        if (t.scale.x < 0.5 && !(Math.abs(t.position.x) < 0.001 && Math.abs(t.position.y) < 0.001 && Math.abs(t.position.z) < 0.001)) {
-          const lt = Transform.getMutable(visual.localEntity)
-          lt.position = Vector3.create(t.position.x, t.position.y, t.position.z)
-        }
-      }
-    }
+function removeMsgBananaVisualNear(x: number, y: number, z: number): void {
+  let closestIdx = -1
+  let closestDist = 5
+  for (let i = 0; i < msgBananaVisuals.length; i++) {
+    const vis = msgBananaVisuals[i]
+    const pos = Transform.get(vis.entity).position
+    const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    if (dist < closestDist) { closestDist = dist; closestIdx = i }
   }
+  if (closestIdx !== -1) {
+    const vis = msgBananaVisuals[closestIdx]
+    if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+    engine.removeEntity(vis.entity)
+    msgBananaVisuals.splice(closestIdx, 1)
+  }
+}
 
-  // Clean up visuals for bananas that no longer exist
-  for (const [eid, visual] of bananaVisuals) {
-    if (!Banana.has(eid as Entity)) {
-      engine.removeEntity(visual.localEntity)
-      bananaVisuals.delete(eid)
+function updateMsgBananaVisuals(dt: number): void {
+  const now = Date.now()
+  const clampedDt = Math.min(dt, 0.1)
+
+  for (let i = msgBananaVisuals.length - 1; i >= 0; i--) {
+    const vis = msgBananaVisuals[i]
+
+    // Safety expiry
+    if (now - vis.createdAtMs > BANANA_LIFETIME_SEC * 1000) {
+      if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+      engine.removeEntity(vis.entity)
+      msgBananaVisuals.splice(i, 1)
+      continue
     }
+
+    // Ground raycast result
+    if (vis.groundRayEntity !== null) {
+      const result = RaycastResult.getOrNull(vis.groundRayEntity)
+      if (result) {
+        if (result.hits.length > 0) vis.targetY = Math.max(0, result.hits[0].position!.y)
+        vis.groundResolved = true
+        engine.removeEntity(vis.groundRayEntity)
+        vis.groundRayEntity = null
+        if (vis.currentY <= vis.targetY) { vis.currentY = vis.targetY; vis.falling = false; vis.fallVelocity = 0 }
+      }
+    }
+
+    // Gravity
+    if (vis.falling) {
+      vis.fallVelocity += LOCAL_GRAVITY * clampedDt
+      vis.currentY -= vis.fallVelocity * clampedDt
+      if (vis.currentY <= vis.targetY) { vis.currentY = vis.targetY; vis.falling = false; vis.fallVelocity = 0 }
+    }
+
+    const t = Transform.getMutable(vis.entity)
+    t.position = Vector3.create(vis.x, vis.currentY, vis.z)
+  }
+}
+
+/** Drop a banana from the UI (mobile tap). Same logic as F key press. */
+export function triggerBananaFromUI(): void {
+  const now = Date.now()
+  const userId = getPlayerData()?.userId
+  if (!userId) return
+
+  if (now - lastLocalBananaDropTime < BANANA_COOLDOWN_SEC * 1000) return
+
+  lastLocalBananaDropTime = now
+  const serverUp = isServerConnected()
+
+  if (serverUp) {
+    console.log('[Banana] 🍌 UI tap — requesting banana drop (server)')
+    room.send('requestBanana', { t: 0 })
+  } else {
+    console.log('[Banana] 🍌 UI tap — dropping banana locally (no server)')
+    dropBananaLocally()
   }
 }
 
@@ -485,7 +524,7 @@ export function bananaClientSystem(dt: number): void {
 
   // Update local visual entities for synced bananas (creates, positions, and cleans up)
   if (serverUp) {
-    updateBananaVisuals()
+    updateMsgBananaVisuals(dt)
   }
 
   // Release banana stagger freeze

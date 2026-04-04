@@ -19,8 +19,8 @@ import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
 import { showHitEffect, playHitSound } from './combatSystem'
 
-const SHELL_MODEL_SRC = 'assets/scene/Models/shell.glb'
-const SHELL_SCALE = Vector3.create(0.02, 0.02, 0.02)
+const SHELL_MODEL_SRC = 'assets/scene/Models/shell_scaled.glb'
+const SHELL_SCALE = Vector3.create(1, 1, 1)
 const SHELL_STAGGER_MS = 800
 const SHELL_GRAVITY = 15  // m/s² — matches server FLAG_GRAVITY
 const SHELL_GROUND_OFFSET = 0.35 // Raise shell above ground so it doesn't clip terrain — matches server
@@ -200,14 +200,17 @@ function registerShellMessages(): void {
   if (messagesRegistered) return
   messagesRegistered = true
 
-  room.onMessage('shellDropped', (_data) => {
-    // Sound is now attached to the shell entity itself via synced Shell components.
-    // The local player gets instant feedback from playInstantFireSound().
-    // Other players' shells get sound attached in the system loop when we detect new Shell entities.
+  room.onMessage('shellDropped', (data) => {
+    // Create visual from message bus (instant, no CRDT dependency).
+    // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
+    createMsgShellVisual(data.x, data.y, data.z, data.dirX, data.dirZ)
   })
 
   room.onMessage('shellTriggered', (data) => {
     const pos = Vector3.create(data.x, data.y, data.z)
+
+    // Remove the message-driven shell visual closest to the hit position
+    removeMsgShellVisualNear(data.x, data.y, data.z)
 
     // Only show hit particles + sound when shell hits a player (not walls/bananas)
     if (data.victimId && data.victimId !== '') {
@@ -427,99 +430,170 @@ function updateLocalShells(dt: number): void {
   }
 }
 
-// ── Client-side visual entities for synced shells ──
-// IMPORTANT: We NEVER modify the synced entity (Transform, GltfContainer, etc.)
-// because client writes to server-synced entities create CRDT conflicts that
-// break the authoritative server in deployed environments.
-//
-// Instead, for each synced Shell entity we create a LOCAL-ONLY visual entity
-// with the GltfContainer + AudioSource, and drive its position each frame
-// using the Shell component data (start position + direction + distance).
-interface ShellVisual {
-  localEntity: Entity         // local-only entity with GltfContainer + AudioSource
-  lastServerDist: number      // last distanceTraveled from server (for extrapolation)
-  localExtraDist: number      // distance extrapolated locally since last server update
+// ── Message-driven visual entities for shells ──
+// Visuals are created from the 'shellDropped' message (WebSocket, instant) rather than
+// from CRDT-synced Shell entities. Mobile live CRDT sync is unreliable — shells expire
+// before entities arrive. The message bus delivers position + direction instantly.
+// 'shellTriggered' message or time-based safety expiry removes the visual.
+interface MsgShellVisual {
+  entity: Entity
+  startX: number
+  startY: number
+  startZ: number
+  dirX: number
+  dirZ: number
+  createdAtMs: number
+  distanceTraveled: number
+  maxDistance: number
+  currentY: number
+  fallVelocity: number
+  groundY: number
+  onGround: boolean
+  groundRayEntity: Entity | null
+  lastGroundRayTime: number
 }
-const shellVisuals = new Map<number, ShellVisual>() // synced entity id -> local visual
+const msgShellVisuals: MsgShellVisual[] = []
 
-function updateShellVisuals(dt: number): void {
-  // Create/update local visual entities for active synced shells
-  for (const [entity, shell] of engine.getEntitiesWith(Shell)) {
-    if (!shell.active) continue
-    const eid = entity as number
+function createMsgShellVisual(x: number, y: number, z: number, dirX: number, dirZ: number): void {
+  const localEntity = engine.addEntity()
+  Transform.create(localEntity, {
+    position: Vector3.create(x, y, z),
+    scale: SHELL_SCALE,
+    rotation: Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
+  })
+  GltfContainer.create(localEntity, {
+    src: SHELL_MODEL_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
+  attachShellSound(localEntity)
 
-    // Determine best available position for this shell
-    let hasStartPos = shell.startX !== 0 || shell.startZ !== 0
-    let posX = shell.startX, posY = shell.startY, posZ = shell.startZ
+  msgShellVisuals.push({
+    entity: localEntity,
+    startX: x, startY: y, startZ: z,
+    dirX, dirZ,
+    createdAtMs: Date.now(),
+    distanceTraveled: 0,
+    maxDistance: SHELL_MAX_RANGE,
+    currentY: y,
+    fallVelocity: 0,
+    groundY: 0,
+    onGround: false,
+    groundRayEntity: null,
+    lastGroundRayTime: 0,
+  })
+  console.log('[Shell] 🐚 Created message-driven shell visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))
+}
 
-    // Fallback: if Shell fields haven't synced yet, use the synced Transform
-    if (!hasStartPos && Transform.has(entity)) {
-      const t = Transform.get(entity)
-      if (t.scale.x < 0.5 && !(Math.abs(t.position.x) < 0.001 && Math.abs(t.position.y) < 0.001 && Math.abs(t.position.z) < 0.001)) {
-        posX = t.position.x
-        posY = t.position.y
-        posZ = t.position.z
-        hasStartPos = true
+function removeMsgShellVisualNear(x: number, y: number, z: number): void {
+  let closestIdx = -1
+  let closestDist = 15
+  for (let i = 0; i < msgShellVisuals.length; i++) {
+    const vis = msgShellVisuals[i]
+    const pos = Transform.get(vis.entity).position
+    const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    if (dist < closestDist) { closestDist = dist; closestIdx = i }
+  }
+  if (closestIdx !== -1) {
+    const vis = msgShellVisuals[closestIdx]
+    stopShellSound(vis.entity)
+    if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+    engine.removeEntity(vis.entity)
+    msgShellVisuals.splice(closestIdx, 1)
+  }
+}
+
+function updateMsgShellVisuals(dt: number): void {
+  const now = Date.now()
+  const clampedDt = Math.min(dt, 0.1)
+
+  for (let i = msgShellVisuals.length - 1; i >= 0; i--) {
+    const vis = msgShellVisuals[i]
+
+    // Safety expiry
+    if (now - vis.createdAtMs > SHELL_LIFETIME_SEC * 1000) {
+      stopShellSound(vis.entity)
+      if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+      engine.removeEntity(vis.entity)
+      msgShellVisuals.splice(i, 1)
+      continue
+    }
+
+    // Ground raycast result
+    if (vis.groundRayEntity !== null) {
+      const result = RaycastResult.getOrNull(vis.groundRayEntity)
+      if (result) {
+        if (result.hits.length > 0) vis.groundY = result.hits[0].position!.y
+        engine.removeEntity(vis.groundRayEntity)
+        vis.groundRayEntity = null
       }
     }
 
-    // No position data yet — keep waiting (will retry next frame)
-    if (!hasStartPos) continue
-
-    let visual = shellVisuals.get(eid)
-    if (!visual) {
-      // Create a new local-only visual entity
-      const localEntity = engine.addEntity()
-      Transform.create(localEntity, {
-        position: Vector3.create(posX, posY, posZ),
-        scale: SHELL_SCALE,
-        rotation: Quaternion.fromEulerDegrees(0, Math.atan2(shell.dirX, shell.dirZ) * (180 / Math.PI), 0)
+    // Fire ground raycast periodically
+    if (vis.groundRayEntity === null && now - vis.lastGroundRayTime > GROUND_RAY_INTERVAL * 1000) {
+      vis.lastGroundRayTime = now
+      const pos = Transform.get(vis.entity).position
+      vis.groundRayEntity = engine.addEntity()
+      Transform.create(vis.groundRayEntity, { position: Vector3.create(pos.x, pos.y + 2, pos.z) })
+      Raycast.create(vis.groundRayEntity, {
+        direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
+        maxDistance: 200, queryType: RaycastQueryType.RQT_HIT_FIRST, continuous: false
       })
-      GltfContainer.create(localEntity, {
-        src: SHELL_MODEL_SRC,
-        visibleMeshesCollisionMask: 0,
-        invisibleMeshesCollisionMask: 0
-      })
-      attachShellSound(localEntity)
-      visual = { localEntity, lastServerDist: shell.distanceTraveled, localExtraDist: 0 }
-      shellVisuals.set(eid, visual)
-      console.log('[Shell] 🐚 Created local visual for synced shell', eid,
-        'at:', posX.toFixed(1), posY.toFixed(1), posZ.toFixed(1))
     }
 
-    // Use Shell component start position once it's available (may arrive after visual creation)
-    const useStartX = (shell.startX !== 0 || shell.startZ !== 0) ? shell.startX : posX
-    const useStartZ = (shell.startX !== 0 || shell.startZ !== 0) ? shell.startZ : posZ
-    const useStartY = (shell.startX !== 0 || shell.startZ !== 0) ? shell.startY : posY
+    // Move forward
+    vis.distanceTraveled += SHELL_SPEED * clampedDt
+    if (vis.distanceTraveled >= vis.maxDistance) {
+      stopShellSound(vis.entity)
+      if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+      engine.removeEntity(vis.entity)
+      msgShellVisuals.splice(i, 1)
+      continue
+    }
 
-    // Extrapolate movement locally for smooth motion between CRDT updates
-    if (shell.distanceTraveled !== visual.lastServerDist) {
-      visual.lastServerDist = shell.distanceTraveled
-      visual.localExtraDist = 0
+    // Gravity
+    const groundTarget = vis.groundY + SHELL_GROUND_OFFSET
+    if (!vis.onGround) {
+      vis.fallVelocity += SHELL_GRAVITY * clampedDt
+      vis.currentY -= vis.fallVelocity * clampedDt
+      if (vis.currentY <= groundTarget) { vis.currentY = groundTarget; vis.fallVelocity = 0; vis.onGround = true }
     } else {
-      visual.localExtraDist += SHELL_SPEED * dt
+      const diff = groundTarget - vis.currentY
+      if (Math.abs(diff) < 0.05) vis.currentY = groundTarget
+      else if (diff > 0) vis.currentY = groundTarget
+      else { vis.onGround = false; vis.fallVelocity = 0 }
     }
 
-    const dist = visual.lastServerDist + visual.localExtraDist
-    const predictedX = useStartX + shell.dirX * dist
-    const predictedZ = useStartZ + shell.dirZ * dist
-    // Shell Transform is not synced (to avoid CRDT saturation), so use startY.
-    // Shells travel at their spawn height — acceptable for a 5-second lifetime.
-    const predictedY = useStartY
-
-    const t = Transform.getMutable(visual.localEntity)
-    t.position = Vector3.create(predictedX, predictedY, predictedZ)
+    const t = Transform.getMutable(vis.entity)
+    t.position = Vector3.create(vis.startX + vis.dirX * vis.distanceTraveled, vis.currentY, vis.startZ + vis.dirZ * vis.distanceTraveled)
   }
+}
 
-  // Clean up visuals for shells that are gone or inactive
-  for (const [eid, visual] of shellVisuals) {
-    const shellExists = Shell.has(eid as Entity)
-    const shellActive = shellExists && Shell.get(eid as Entity).active
-    if (!shellExists || !shellActive) {
-      stopShellSound(visual.localEntity)
-      engine.removeEntity(visual.localEntity)
-      shellVisuals.delete(eid)
+/** Fire a shell from the UI (mobile tap). Same logic as E key press. */
+export function triggerShellFromUI(): void {
+  const now = Date.now()
+  const userId = getPlayerData()?.userId
+  if (!userId) return
+
+  if (now - lastLocalShellFireTime < SHELL_COOLDOWN_SEC * 1000) return
+
+  lastLocalShellFireTime = now
+  const { dirX, dirZ } = getPlayerForward()
+  const serverUp = isServerConnected()
+
+  if (serverUp) {
+    console.log('[Shell] 🐚 UI tap — requesting shell fire (server)')
+    room.send('requestShell', { dirX, dirZ })
+    if (Transform.has(engine.PlayerEntity)) {
+      const playerPos = Transform.get(engine.PlayerEntity).position
+      const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.2, playerPos.z + dirZ * 1.0)
+      playInstantFireSound(spawnPos)
+      fireWallRaycast(spawnPos, dirX, dirZ)
     }
+  } else {
+    console.log('[Shell] 🐚 UI tap — firing shell locally (no server)')
+    fireShellLocally()
   }
 }
 
@@ -544,8 +618,8 @@ export function shellClientSystem(dt: number): void {
     // Continuously report ground Y for moving shells
     updateServerShellGroundRaycasts(dt)
 
-    // Update local visual entities for synced shells (creates, moves, and cleans up)
-    updateShellVisuals(dt)
+    // Animate message-driven shell visuals (movement, gravity, expiry)
+    updateMsgShellVisuals(dt)
   } else {
     // Local test mode
     updateLocalShells(dt)

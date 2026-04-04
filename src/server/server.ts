@@ -13,7 +13,7 @@ import { room } from '../shared/messages'
 
 // ── Constants ──
 const PICKUP_RADIUS = 3
-const HIT_RADIUS = 2.5
+const HIT_RADIUS = 3.0
 const HIT_COOLDOWN_MS = 450       // Attacker cooldown (how soon they can attack again)
 const STEAL_IMMUNITY_MS = 3000    // Immunity for the player who STEALS the flag (time to escape the crowd)
 const HOLD_TIME_SYNC_INTERVAL = 0.5  // Sync hold time every 0.5s (was 0.2s) — reduces CRDT pressure; client interpolates between updates
@@ -933,7 +933,7 @@ function handleBananaDrop(playerId: string): void {
   const bananaEntity = engine.addEntity()
   Transform.create(bananaEntity, {
     position: dropPos,
-    scale: Vector3.create(0.02, 0.02, 0.02)
+    scale: Vector3.create(1, 1, 1)
   })
   // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
   Banana.create(bananaEntity, {
@@ -994,7 +994,8 @@ function bananaServerSystem(dt: number): void {
     const bananaPos = Transform.get(banana.entity).position
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       const addr = identity.address.toLowerCase()
-      if (addr === banana.droppedBy) continue // Can't trigger your own banana
+      // Self-hit: immune for 2 seconds after dropping, then fair game
+      if (addr === banana.droppedBy && (now - banana.droppedAtMs) < 2000) continue
 
       const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
@@ -1066,7 +1067,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   const shellEntity = engine.addEntity()
   Transform.create(shellEntity, {
     position: spawnPos,
-    scale: Vector3.create(0.02, 0.02, 0.02),
+    scale: Vector3.create(1, 1, 1),
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
   })
   // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
@@ -1108,7 +1109,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   })
   lastShellFireTime.set(playerId, now)
 
-  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z })
+  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ })
   console.log('[Server] 🐚 Shell fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 
