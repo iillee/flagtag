@@ -601,7 +601,6 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      console.log('[S.1] Received requestPickup from', from.slice(0, 8))
       handlePickup(from)
     } catch (err) { console.error('[Server] ❌ requestPickup handler error:', err) }
   })
@@ -609,7 +608,6 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      console.log('[S.2] Received requestDrop from', from.slice(0, 8))
       handleDrop(from)
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
@@ -617,7 +615,6 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      console.log('[S.3] Received requestAttack from', from.slice(0, 8))
       handleAttack(from)
     } catch (err) { console.error('[Server] ❌ requestAttack handler error:', err) }
   })
@@ -625,7 +622,6 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      console.log('[Server] Received requestBanana from', from.slice(0, 8))
       handleBananaDrop(from)
     } catch (err) { console.error('[Server] ❌ requestBanana handler error:', err) }
   })
@@ -633,7 +629,6 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      console.log('[Server] Received requestShell from', from.slice(0, 8))
       handleShellFire(from, data.dirX, data.dirZ)
     } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
@@ -725,22 +720,16 @@ function registerHandlers(): void {
 
 function handlePickup(playerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
-  if (!flag) { console.log('[Server] handlePickup: no flag component'); return }
-  if (flag.state !== FlagState.AtBase && flag.state !== FlagState.Dropped) {
-    console.log('[Server] handlePickup: flag state is', flag.state, '— not pickupable')
-    return
-  }
+  if (!flag) return
+  if (flag.state !== FlagState.AtBase && flag.state !== FlagState.Dropped) return
 
   const playerPos = getPlayerPosition(playerId)
-  if (!playerPos) { console.log('[Server] handlePickup: player position not found for', playerId); return }
+  if (!playerPos) return
 
   const flagPos = Transform.get(flagEntity).position
   const dist = Vector3.distance(playerPos, flagPos)
-  if (dist > PICKUP_RADIUS) {
-    console.log('[Server] handlePickup: too far — dist:', dist.toFixed(2), 'player:', JSON.stringify(playerPos), 'flag:', JSON.stringify(flagPos))
-    return
-  }
-  console.log('[Server] handlePickup: SUCCESS for', playerId)
+  if (dist > PICKUP_RADIUS) return
+  console.log('[Server] 🚩 Pickup by', playerId.slice(0, 8))
 
   const mutable = Flag.getMutable(flagEntity)
   mutable.state = FlagState.Carried
@@ -786,89 +775,45 @@ function handleDrop(playerId: string): void {
 
 function handleFlagSteal(victimId: string, attackerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
-  if (!flag) {
-    console.log('[S.30] Flag steal FAILED: no flag component')
-    return
-  }
-  
-  // Safety check: ensure victim actually has the flag
-  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) {
-    console.log('[S.31] Flag steal FAILED: victim does not have flag. State:', flag.state, 'Carrier:', flag.carrierPlayerId.slice(0, 8), 'Expected victim:', victimId.slice(0, 8))
-    return
-  }
+  if (!flag) return
+  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) return
 
-  console.log('[S.32] EXECUTING FLAG STEAL:', victimId.slice(0, 8), '->', attackerId.slice(0, 8))
-  console.log('[S.33] Before: state =', flag.state, ', carrier =', flag.carrierPlayerId.slice(0, 8))
-
-  // Directly transfer flag to attacker (no drop to ground)
   const mutable = Flag.getMutable(flagEntity)
   mutable.state = FlagState.Carried
   mutable.carrierPlayerId = attackerId
 
-  console.log('[S.34] After:  state =', mutable.state, ', carrier =', mutable.carrierPlayerId.slice(0, 8))
-
-  // Grant steal immunity to the new carrier (3s protection to escape the crowd)
   lastStealTime.set(attackerId, Date.now())
-  console.log('[S.34b] Granted', STEAL_IMMUNITY_MS, 'ms steal immunity to', attackerId.slice(0, 8))
-
-  // Reset gravity state since flag isn't being dropped
   resetGravityState()
-  
-  // Play pickup sound for new carrier (global so everyone hears it)
   room.send('pickupSound', { t: 0 })
-  
-  // Persist the new flag state immediately
   persistFlagState()
-  
-  console.log('[S.35] Flag steal completed successfully - new carrier:', attackerId.slice(0, 8))
 }
 
 function handleAttack(attackerId: string): void {
   const now = Date.now()
   
-  console.log('[S.10] handleAttack called by:', attackerId.slice(0, 8))
-  
   const lastAttack = lastAttackTime.get(attackerId) ?? 0
-  if (now - lastAttack < HIT_COOLDOWN_MS) {
-    console.log('[S.11] Attack on cooldown for', attackerId.slice(0, 8), '- time since last:', (now - lastAttack), 'ms')
-    return
-  }
+  if (now - lastAttack < HIT_COOLDOWN_MS) return
   lastAttackTime.set(attackerId, now)
 
   const attackerPos = getPlayerPosition(attackerId)
-  if (!attackerPos) {
-    console.log('[S.12] Attack failed: attacker position not found for', attackerId.slice(0, 8))
-    return
-  }
-
-  console.log('[S.13] Attacker position:', attackerPos.x.toFixed(1), attackerPos.y.toFixed(1), attackerPos.z.toFixed(1))
+  if (!attackerPos) return
 
   // Find closest victim (excluding immune players)
   let closestId: string | null = null
   let closestPos: Vector3 | null = null
   let closestDist = HIT_RADIUS
-  
-  let playersChecked = 0
-  let immunePlayers = 0
 
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
     const victimAddr = identity.address.toLowerCase()
     if (victimAddr === attackerId) continue
-    playersChecked++
     
     // Check steal immunity (player who just stole the flag gets 3s protection to escape)
     const stealTime = lastStealTime.get(victimAddr) ?? 0
-    if (now - stealTime < STEAL_IMMUNITY_MS) {
-      immunePlayers++
-      console.log('[S.14] Player', victimAddr.slice(0, 8), 'is IMMUNE (just stole flag) -', (now - stealTime), 'ms since steal')
-      continue
-    }
+    if (now - stealTime < STEAL_IMMUNITY_MS) continue
     
     const pos = getPlayerPosition(victimAddr)
     if (!pos) continue
     const dist = Vector3.distance(attackerPos, pos)
-    
-    console.log('[S.15] Player', victimAddr.slice(0, 8), 'at distance:', dist.toFixed(2), 'm')
     
     if (dist < closestDist) {
       closestDist = dist
@@ -876,28 +821,19 @@ function handleAttack(attackerId: string): void {
       closestPos = pos
     }
   }
-  
-  console.log('[S.16] Players checked:', playersChecked, 'Immune:', immunePlayers, 'Closest dist:', closestDist.toFixed(2))
 
   if (closestId && closestPos) {
-    console.log('[S.20] HIT CONFIRMED! Attacker:', attackerId.slice(0, 8), 'Victim:', closestId.slice(0, 8), 'Distance:', closestDist.toFixed(2))
     room.send('hitVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
     room.send('stagger', { victimId: closestId })
 
-    // STEAL flag if victim was carrying (instead of dropping)
+    // STEAL flag if victim was carrying
     const flag = Flag.getOrNull(flagEntity)
-    console.log('[S.21] Flag check - State:', flag?.state, 'Carrier:', flag?.carrierPlayerId?.slice(0, 8), 'Victim:', closestId.slice(0, 8))
-    
     if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === closestId) {
-      console.log('[S.22] VICTIM HAS FLAG! Initiating steal...')
+      console.log('[Server] ⚔️ Flag stolen:', attackerId.slice(0, 8), '<-', closestId.slice(0, 8))
       handleFlagSteal(closestId, attackerId)
-      console.log('[S.23] Attacker', attackerId.slice(0, 8), 'now has', STEAL_IMMUNITY_MS, 'ms steal immunity')
-    } else {
-      console.log('[S.24] Regular hit (victim does not have flag)')
     }
   } else {
     // Miss — send attacker position, client computes forward offset locally
-    console.log('[S.25] ATTACK MISSED - no valid targets in range')
     room.send('missVfx', { x: attackerPos.x, y: attackerPos.y, z: attackerPos.z })
   }
 }

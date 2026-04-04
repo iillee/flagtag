@@ -29,17 +29,11 @@ import { predictAttackLocally } from './combatSystem'
 import { isAnyOverlayOpen } from '../ui'
 
 // Visual clone system for smooth flag carrying
-// Two-entity approach: anchor (AvatarAttach AAPT_POSITION) → child (GltfContainer with Y offset)
-// Uses AAPT_POSITION because AAPT_NAME_TAG is broken on mobile client.
 let carryCloneEntity: Entity | null = null
-let attachAnchorEntity: Entity | null = null
-
-const CARRY_BASE_Y = 3.0  // base Y offset above AAPT_POSITION (feet) — mobile only
 
 /**
  * Create the visual clone that follows the flag carrier.
- * - Desktop: single entity with AAPT_NAME_TAG (parent/child breaks rendering)
- * - Mobile: two-entity anchor (AAPT_POSITION) → child (Y offset) because AAPT_NAME_TAG is broken on mobile
+ * Uses AAPT_NAME_TAG anchor with a child entity for bob/spin animation.
  */
 let carryCloneVisual: Entity | null = null  // Child entity with model + bob/spin
 
@@ -254,14 +248,8 @@ function cleanupClone(): void {
     carryCloneVisual = null
   }
   if (carryCloneEntity !== null) { 
-    console.log('[Flag] Cleaning up existing clone entity')
     engine.removeEntity(carryCloneEntity)
     carryCloneEntity = null 
-  }
-  if (attachAnchorEntity !== null) {
-    console.log('[Flag] Cleaning up existing anchor entity')
-    engine.removeEntity(attachAnchorEntity)
-    attachAnchorEntity = null
   }
 }
 
@@ -399,7 +387,6 @@ export function flagClientSystem(dt: number): void {
         if (flag.state === FlagState.Carried) continue
         const dist = Vector3.distance(myPos, Transform.get(flagEnt).position)
         if (dist <= AUTO_PICKUP_RADIUS) {
-          console.log('[C.4] Auto-pickup — flag nearby, distance:', dist.toFixed(2))
           playPickupSound()
           skipNextPickupSound = true
           room.send('requestPickup', { t: 0 })
@@ -412,7 +399,6 @@ export function flagClientSystem(dt: number): void {
 
   // Left click — attack only (skip if a UI overlay is open)
   if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && userId && !isAnyOverlayOpen()) {
-    console.log('[C.5] Left click - sending requestAttack')
     predictAttackLocally()
     room.send('requestAttack', { t: 0 })
   }
@@ -427,7 +413,6 @@ export function flagClientSystem(dt: number): void {
       }
     }
     if (amCarrying) {
-      console.log('[C.1] 3 pressed - sending requestDrop')
       playDropSound()
       skipNextDropSound = true
       lastDropTimeMs = Date.now()
@@ -463,15 +448,11 @@ export function flagClientSystem(dt: number): void {
         }
       }
       
-      console.log('[C.11] Creating clone for carrier:', flag.carrierPlayerId.slice(0, 8), 
-        '(reason:', isFirstFrame ? 'firstFrame' : stateChanged ? 'stateChanged' : carrierChanged ? 'carrierChanged' : 'missingClone', ')')
-      
       // Hide flag visual (don't move synced entity — avoids CRDT conflicts)
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
       
       // Create platform-specific clone
       createCarryClone(flag.carrierPlayerId)
-      console.log('[C.12] Clone created for carrier:', flag.carrierPlayerId.slice(0, 8))
 
     } else if (needsCloneRemove) {
       if (!isFirstFrame) {
@@ -481,7 +462,6 @@ export function flagClientSystem(dt: number): void {
           playDropSound()
         }
       }
-      console.log('[C.15] STATE CHANGED to', flag.state === FlagState.Dropped ? 'Dropped' : 'AtBase', '- cleaning up clone')
       
       // If we were the carrier, apply drop pickup cooldown (covers forced drops from banana/shell hits)
       if (userId && prevCarrierId === userId) {
@@ -505,7 +485,6 @@ export function flagClientSystem(dt: number): void {
     const cloneMissing = carryCloneEntity === null
     const cloneBroken = carryCloneEntity !== null && (carryCloneVisual === null || !GltfContainer.has(carryCloneVisual))
     if (flag.state === FlagState.Carried && (cloneMissing || cloneBroken) && !needsCloneCreate) {
-      console.log('[C.16] SAFETY NET: Flag is carried but clone is', cloneMissing ? 'missing' : 'broken', '! Recreating...')
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
       createCarryClone(flag.carrierPlayerId)
     }
