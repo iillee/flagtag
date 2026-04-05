@@ -772,7 +772,7 @@ function registerHandlers(): void {
       console.log('[Server] 🍄 Mushroom', mid, 'picked up by', from.slice(0, 8))
       mushroomShieldActive.add(from)
       room.send('mushroomPickedUp', { id: mid, playerId: from })
-      room.send('mushroomShield', { durationMs: 0 })
+      room.send('mushroomShield', { durationMs: 0, playerId: from })
       room.send('playerShieldActive', { playerId: from, active: 1 })
       // Spawn a replacement mushroom
       spawnOneMushroom()

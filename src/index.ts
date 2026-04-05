@@ -9,6 +9,7 @@ import { bananaClientSystem } from './systems/bananaSystem'
 import { shellClientSystem } from './systems/shellSystem'
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
+import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
@@ -371,6 +372,10 @@ export async function main() {
       }
     })
   }
+
+  // Proximity lighting
+  setupProximityLights()
+  engine.addSystem(proximityLightSystem)
 
   // Client systems
   engine.addSystem(flagClientSystem)

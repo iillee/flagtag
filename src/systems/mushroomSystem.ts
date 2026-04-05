@@ -224,15 +224,21 @@ function registerMushroomMessages(): void {
     }
   })
 
-  // Server grants shield to local player
-  room.onMessage('mushroomShield', (_data) => {
+  // Server grants shield to a player
+  room.onMessage('mushroomShield', (data) => {
+    const pid = (data as any).playerId as string
+    const me = getPlayer()
+    if (!me?.userId || me.userId.toLowerCase() !== pid?.toLowerCase()) return
     shieldActive = true
     console.log('[Mushroom] 🍄🛡️ Shield active until hit or round end')
     showShield()
   })
 
   // Server says shield was consumed (blocked a hit)
-  room.onMessage('shieldConsumed', (_data) => {
+  room.onMessage('shieldConsumed', (data) => {
+    const pid = (data as any).playerId as string
+    const me = getPlayer()
+    if (!me?.userId || me.userId.toLowerCase() !== pid?.toLowerCase()) return
     shieldActive = false
     console.log('[Mushroom] 🛡️ Shield consumed!')
     hideShield()

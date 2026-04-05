@@ -90,27 +90,6 @@
         "serializationType": "transform"
       },
       "data": {
-        "512": {
-          "json": {
-            "position": {
-              "x": 74.75,
-              "y": -2,
-              "z": 119.5
-            },
-            "scale": {
-              "x": 5,
-              "y": 5,
-              "z": 5
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
         "514": {
           "json": {
             "position": {
@@ -488,6 +467,955 @@
             },
             "parent": 0
           }
+        },
+        "532": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 533
+          }
+        },
+        "533": {
+          "json": {
+            "position": {
+              "x": 87.93211364746094,
+              "y": 1.5,
+              "z": 81.77686309814453
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.4342974126338959,
+              "z": 0,
+              "w": 0.9007357954978943
+            },
+            "parent": 0
+          }
+        },
+        "534": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 533
+          }
+        },
+        "535": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 537
+          }
+        },
+        "536": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 537
+          }
+        },
+        "537": {
+          "json": {
+            "position": {
+              "x": 116.43473052978516,
+              "y": 1.5,
+              "z": 108.68574523925781
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.9997351765632629,
+              "z": 0,
+              "w": 0.021650947630405426
+            },
+            "parent": 0
+          }
+        },
+        "538": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 540
+          }
+        },
+        "539": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 540
+          }
+        },
+        "540": {
+          "json": {
+            "position": {
+              "x": 117.68473052978516,
+              "y": 1.5,
+              "z": 122.18574523925781
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.9967822432518005,
+              "z": 0,
+              "w": -0.07977720350027084
+            },
+            "parent": 0
+          }
+        },
+        "541": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 543
+          }
+        },
+        "542": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 543
+          }
+        },
+        "543": {
+          "json": {
+            "position": {
+              "x": 101.93473052978516,
+              "y": 1.5,
+              "z": 115.18574523925781
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.9995023012161255,
+              "z": 0,
+              "w": -0.030566958710551262
+            },
+            "parent": 0
+          }
+        },
+        "545": {
+          "json": {
+            "position": {
+              "x": 74.75,
+              "y": -2,
+              "z": 119.5
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "546": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 548
+          }
+        },
+        "547": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 548
+          }
+        },
+        "548": {
+          "json": {
+            "position": {
+              "x": 101.5499267578125,
+              "y": 1.5,
+              "z": 109.45564270019531
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.9995023012161255,
+              "z": 0,
+              "w": -0.030566958710551262
+            },
+            "parent": 0
+          }
+        },
+        "549": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 551
+          }
+        },
+        "550": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 551
+          }
+        },
+        "551": {
+          "json": {
+            "position": {
+              "x": 105.26467895507812,
+              "y": 1.5,
+              "z": 114.46129608154297
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.02841031178832054,
+              "z": 0,
+              "w": -0.9995658993721008
+            },
+            "parent": 0
+          }
+        },
+        "552": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 554
+          }
+        },
+        "553": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 554
+          }
+        },
+        "554": {
+          "json": {
+            "position": {
+              "x": 105.52532958984375,
+              "y": 1.5126774311065674,
+              "z": 122.70845031738281
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.02841031178832054,
+              "z": 0,
+              "w": -0.9995658993721008
+            },
+            "parent": 0
+          }
+        },
+        "555": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 557
+          }
+        },
+        "556": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 557
+          }
+        },
+        "557": {
+          "json": {
+            "position": {
+              "x": 97.97000122070312,
+              "y": 1.5062000751495361,
+              "z": 124.45845031738281
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.6488242745399475,
+              "z": 0,
+              "w": -0.7608982920646667
+            },
+            "parent": 0
+          }
+        },
+        "558": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 560
+          }
+        },
+        "559": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 560
+          }
+        },
+        "560": {
+          "json": {
+            "position": {
+              "x": 90.72000122070312,
+              "y": 1.4530751705169678,
+              "z": 121.20845031738281
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.6741704344749451,
+              "z": 0,
+              "w": -0.7385346293449402
+            },
+            "parent": 0
+          }
+        },
+        "561": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 563
+          }
+        },
+        "562": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 563
+          }
+        },
+        "563": {
+          "json": {
+            "position": {
+              "x": 69.17121887207031,
+              "y": 1.4644384384155273,
+              "z": 115.77174377441406
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.4600518047809601,
+              "z": 0,
+              "w": -0.8878577947616577
+            },
+            "parent": 0
+          }
+        },
+        "564": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": 0.5600000023841858
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 566
+          }
+        },
+        "565": {
+          "json": {
+            "position": {
+              "x": -0.2800000011920929,
+              "y": 0,
+              "z": -0.4000000059604645
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.7071067690849304,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "parent": 566
+          }
+        },
+        "566": {
+          "json": {
+            "position": {
+              "x": 60.67121887207031,
+              "y": 1.491446852684021,
+              "z": 106.77174377441406
+            },
+            "scale": {
+              "x": 1.25,
+              "y": 1.25,
+              "z": 1.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.2951371967792511,
+              "z": 0,
+              "w": -0.9554229974746704
+            },
+            "parent": 0
+          }
+        },
+        "567": {
+          "json": {
+            "position": {
+              "x": 74.75,
+              "y": -2,
+              "z": 119.5
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "569": {
+          "json": {
+            "position": {
+              "x": 74.75,
+              "y": -2,
+              "z": 119.5
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "570": {
+          "json": {
+            "position": {
+              "x": 74.75,
+              "y": -2,
+              "z": 119.5
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "571": {
+          "json": {
+            "position": {
+              "x": 74.75,
+              "y": -2,
+              "z": 119.5
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "core-schema::Network-Entity",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "networkId": {
+            "type": "integer",
+            "serializationType": "int64"
+          },
+          "entityId": {
+            "type": "integer",
+            "serializationType": "entity"
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "532": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8002
+          }
+        },
+        "534": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8003
+          }
+        },
+        "535": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8005
+          }
+        },
+        "536": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8004
+          }
+        },
+        "538": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8007
+          }
+        },
+        "539": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8006
+          }
+        },
+        "541": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8009
+          }
+        },
+        "542": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8008
+          }
+        },
+        "546": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8011
+          }
+        },
+        "547": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8010
+          }
+        },
+        "549": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8013
+          }
+        },
+        "550": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8012
+          }
+        },
+        "552": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8015
+          }
+        },
+        "553": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8014
+          }
+        },
+        "555": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8017
+          }
+        },
+        "556": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8016
+          }
+        },
+        "558": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8019
+          }
+        },
+        "559": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8018
+          }
+        },
+        "561": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8021
+          }
+        },
+        "562": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8020
+          }
+        },
+        "564": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8023
+          }
+        },
+        "565": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8022
+          }
         }
       }
     },
@@ -500,13 +1428,6 @@
         "protocolBuffer": "PBGltfContainer"
       },
       "data": {
-        "512": {
-          "json": {
-            "src": "assets/scene/Models/Castle_06/Castle_06.glb",
-            "visibleMeshesCollisionMask": 3,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "514": {
           "json": {
             "src": "assets/asset-packs/caribbean_water/WaterPatchFull_01/WaterPatchFull_01.glb",
@@ -632,6 +1553,118 @@
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
+        },
+        "533": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "537": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "540": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "543": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "545": {
+          "json": {
+            "src": "assets/scene/Models/castle.glb",
+            "visibleMeshesCollisionMask": 3,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "548": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "551": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "554": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "557": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "560": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "563": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "566": {
+          "json": {
+            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "567": {
+          "json": {
+            "src": "assets/scene/Models/props.glb",
+            "visibleMeshesCollisionMask": 3,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "569": {
+          "json": {
+            "src": "assets/scene/Models/plants.glb",
+            "visibleMeshesCollisionMask": 3,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "570": {
+          "json": {
+            "src": "assets/scene/Models/birds.glb",
+            "visibleMeshesCollisionMask": 3,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "571": {
+          "json": {
+            "src": "assets/scene/Models/lights.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
         }
       }
     },
@@ -648,11 +1681,6 @@
         "serializationType": "map"
       },
       "data": {
-        "512": {
-          "json": {
-            "value": "Castle_06.glb"
-          }
-        },
         "514": {
           "json": {
             "value": "Caribbean Water_2"
@@ -741,6 +1769,556 @@
         "531": {
           "json": {
             "value": "Lilypad_16"
+          }
+        },
+        "532": {
+          "json": {
+            "value": "Sit Spot 1"
+          }
+        },
+        "533": {
+          "json": {
+            "value": "Classic Bench"
+          }
+        },
+        "534": {
+          "json": {
+            "value": "Sit Spot 2"
+          }
+        },
+        "535": {
+          "json": {
+            "value": "Sit Spot 1_2"
+          }
+        },
+        "536": {
+          "json": {
+            "value": "Sit Spot 2_2"
+          }
+        },
+        "537": {
+          "json": {
+            "value": "Classic Bench_2"
+          }
+        },
+        "538": {
+          "json": {
+            "value": "Sit Spot 1_3"
+          }
+        },
+        "539": {
+          "json": {
+            "value": "Sit Spot 2_3"
+          }
+        },
+        "540": {
+          "json": {
+            "value": "Classic Bench_3"
+          }
+        },
+        "541": {
+          "json": {
+            "value": "Sit Spot 1_4"
+          }
+        },
+        "542": {
+          "json": {
+            "value": "Sit Spot 2_4"
+          }
+        },
+        "543": {
+          "json": {
+            "value": "Classic Bench_4"
+          }
+        },
+        "545": {
+          "json": {
+            "value": "castle.glb"
+          }
+        },
+        "546": {
+          "json": {
+            "value": "Sit Spot 1_5"
+          }
+        },
+        "547": {
+          "json": {
+            "value": "Sit Spot 2_5"
+          }
+        },
+        "548": {
+          "json": {
+            "value": "Classic Bench_5"
+          }
+        },
+        "549": {
+          "json": {
+            "value": "Sit Spot 1_6"
+          }
+        },
+        "550": {
+          "json": {
+            "value": "Sit Spot 2_6"
+          }
+        },
+        "551": {
+          "json": {
+            "value": "Classic Bench_6"
+          }
+        },
+        "552": {
+          "json": {
+            "value": "Sit Spot 1_7"
+          }
+        },
+        "553": {
+          "json": {
+            "value": "Sit Spot 2_7"
+          }
+        },
+        "554": {
+          "json": {
+            "value": "Classic Bench_7"
+          }
+        },
+        "555": {
+          "json": {
+            "value": "Sit Spot 1_8"
+          }
+        },
+        "556": {
+          "json": {
+            "value": "Sit Spot 2_8"
+          }
+        },
+        "557": {
+          "json": {
+            "value": "Classic Bench_8"
+          }
+        },
+        "558": {
+          "json": {
+            "value": "Sit Spot 1_9"
+          }
+        },
+        "559": {
+          "json": {
+            "value": "Sit Spot 2_9"
+          }
+        },
+        "560": {
+          "json": {
+            "value": "Classic Bench_9"
+          }
+        },
+        "561": {
+          "json": {
+            "value": "Sit Spot 1_10"
+          }
+        },
+        "562": {
+          "json": {
+            "value": "Sit Spot 2_10"
+          }
+        },
+        "563": {
+          "json": {
+            "value": "Classic Bench_10"
+          }
+        },
+        "564": {
+          "json": {
+            "value": "Sit Spot 1_11"
+          }
+        },
+        "565": {
+          "json": {
+            "value": "Sit Spot 2_11"
+          }
+        },
+        "566": {
+          "json": {
+            "value": "Classic Bench_11"
+          }
+        },
+        "567": {
+          "json": {
+            "value": "props.glb"
+          }
+        },
+        "569": {
+          "json": {
+            "value": "plants.glb"
+          }
+        },
+        "570": {
+          "json": {
+            "value": "birds.glb"
+          }
+        },
+        "571": {
+          "json": {
+            "value": "lights.glb"
+          }
+        }
+      }
+    },
+    {
+      "name": "core::PointerEvents",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {},
+        "serializationType": "protocol-buffer",
+        "protocolBuffer": "PBPointerEvents"
+      },
+      "data": {
+        "533": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "537": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "540": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "543": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "548": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "551": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "554": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "557": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "560": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "563": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        },
+        "566": {
+          "json": {
+            "pointerEvents": [
+              {
+                "eventType": 1,
+                "eventInfo": {
+                  "button": 1,
+                  "hoverText": "Sit Here",
+                  "maxDistance": 10,
+                  "showFeedback": true,
+                  "showHighlight": true
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "core-schema::Sync-Components",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "componentIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "serializationType": "int64"
+            },
+            "serializationType": "array"
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "532": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "534": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "535": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "536": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "538": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "539": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "541": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "542": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "546": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "547": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "549": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "550": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "552": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "553": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "555": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "556": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "558": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "559": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "561": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "562": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "564": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
+          }
+        },
+        "565": {
+          "json": {
+            "componentIds": [
+              2709697014
+            ]
           }
         }
       }
@@ -840,7 +2418,6 @@
                 "entity": 0,
                 "open": true,
                 "children": [
-                  512,
                   517,
                   518,
                   519,
@@ -858,7 +2435,23 @@
                   516,
                   520,
                   530,
-                  531
+                  531,
+                  533,
+                  537,
+                  540,
+                  543,
+                  545,
+                  548,
+                  551,
+                  554,
+                  557,
+                  560,
+                  563,
+                  566,
+                  567,
+                  569,
+                  570,
+                  571
                 ]
               },
               {
@@ -867,10 +2460,6 @@
               },
               {
                 "entity": 2,
-                "children": []
-              },
-              {
-                "entity": 512,
                 "children": []
               },
               {
@@ -944,6 +2533,191 @@
               {
                 "entity": 531,
                 "children": []
+              },
+              {
+                "entity": 532,
+                "children": []
+              },
+              {
+                "entity": 533,
+                "children": [
+                  534,
+                  532
+                ]
+              },
+              {
+                "entity": 534,
+                "children": []
+              },
+              {
+                "entity": 537,
+                "children": [
+                  536,
+                  535
+                ]
+              },
+              {
+                "entity": 536,
+                "children": []
+              },
+              {
+                "entity": 535,
+                "children": []
+              },
+              {
+                "entity": 540,
+                "children": [
+                  539,
+                  538
+                ]
+              },
+              {
+                "entity": 539,
+                "children": []
+              },
+              {
+                "entity": 538,
+                "children": []
+              },
+              {
+                "entity": 543,
+                "children": [
+                  542,
+                  541
+                ]
+              },
+              {
+                "entity": 542,
+                "children": []
+              },
+              {
+                "entity": 541,
+                "children": []
+              },
+              {
+                "entity": 545,
+                "children": []
+              },
+              {
+                "entity": 548,
+                "children": [
+                  547,
+                  546
+                ]
+              },
+              {
+                "entity": 547,
+                "children": []
+              },
+              {
+                "entity": 546,
+                "children": []
+              },
+              {
+                "entity": 551,
+                "children": [
+                  550,
+                  549
+                ]
+              },
+              {
+                "entity": 550,
+                "children": []
+              },
+              {
+                "entity": 549,
+                "children": []
+              },
+              {
+                "entity": 554,
+                "children": [
+                  553,
+                  552
+                ]
+              },
+              {
+                "entity": 553,
+                "children": []
+              },
+              {
+                "entity": 552,
+                "children": []
+              },
+              {
+                "entity": 557,
+                "children": [
+                  556,
+                  555
+                ]
+              },
+              {
+                "entity": 556,
+                "children": []
+              },
+              {
+                "entity": 555,
+                "children": []
+              },
+              {
+                "entity": 560,
+                "children": [
+                  559,
+                  558
+                ]
+              },
+              {
+                "entity": 559,
+                "children": []
+              },
+              {
+                "entity": 558,
+                "children": []
+              },
+              {
+                "entity": 563,
+                "children": [
+                  562,
+                  561
+                ]
+              },
+              {
+                "entity": 562,
+                "children": []
+              },
+              {
+                "entity": 561,
+                "children": []
+              },
+              {
+                "entity": 566,
+                "children": [
+                  565,
+                  564
+                ]
+              },
+              {
+                "entity": 565,
+                "children": []
+              },
+              {
+                "entity": 564,
+                "children": []
+              },
+              {
+                "entity": 567,
+                "children": []
+              },
+              {
+                "entity": 569,
+                "children": []
+              },
+              {
+                "entity": 570,
+                "children": []
+              },
+              {
+                "entity": 571,
+                "children": []
               }
             ]
           }
@@ -967,9 +2741,6 @@
         "serializationType": "map"
       },
       "data": {
-        "512": {
-          "json": {}
-        },
         "513": {
           "json": {}
         },
@@ -983,9 +2754,6 @@
           "json": {}
         },
         "517": {
-          "json": {}
-        },
-        "518": {
           "json": {}
         },
         "519": {
@@ -1026,6 +2794,1121 @@
         },
         "531": {
           "json": {}
+        },
+        "533": {
+          "json": {}
+        },
+        "537": {
+          "json": {}
+        },
+        "540": {
+          "json": {}
+        },
+        "543": {
+          "json": {}
+        },
+        "545": {
+          "json": {}
+        },
+        "548": {
+          "json": {}
+        },
+        "551": {
+          "json": {}
+        },
+        "554": {
+          "json": {}
+        },
+        "557": {
+          "json": {}
+        },
+        "560": {
+          "json": {}
+        },
+        "563": {
+          "json": {}
+        },
+        "566": {
+          "json": {}
+        },
+        "568": {
+          "json": {}
+        },
+        "569": {
+          "json": {}
+        },
+        "570": {
+          "json": {}
+        },
+        "571": {
+          "json": {}
+        }
+      }
+    },
+    {
+      "name": "inspector::Hide",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "boolean",
+            "serializationType": "boolean"
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "571": {
+          "json": {
+            "value": true
+          }
+        }
+      }
+    },
+    {
+      "name": "inspector::Config",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "isBasicViewEnabled": {
+            "type": "boolean",
+            "serializationType": "boolean"
+          },
+          "componentName": {
+            "type": "string",
+            "serializationType": "utf8-string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "serializationType": "utf8-string"
+                },
+                "type": {
+                  "type": "string",
+                  "serializationType": "utf8-string"
+                },
+                "layout": {
+                  "type": "string",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "string",
+                    "serializationType": "utf8-string"
+                  }
+                },
+                "basicViewId": {
+                  "type": "string",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "string",
+                    "serializationType": "utf8-string"
+                  }
+                }
+              },
+              "serializationType": "map"
+            },
+            "serializationType": "array"
+          },
+          "assetId": {
+            "type": "string",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "string",
+              "serializationType": "utf8-string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "string",
+              "serializationType": "utf8-string"
+            }
+          },
+          "sections": {
+            "type": "array",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "serializationType": "utf8-string"
+                  },
+                  "label": {
+                    "type": "string",
+                    "serializationType": "optional",
+                    "optionalJsonSchema": {
+                      "type": "string",
+                      "serializationType": "utf8-string"
+                    }
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "component": {
+                          "type": "string",
+                          "serializationType": "utf8-string"
+                        },
+                        "widget": {
+                          "type": "string",
+                          "serializationType": "utf8-string"
+                        },
+                        "label": {
+                          "type": "string",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "string",
+                            "serializationType": "utf8-string"
+                          }
+                        },
+                        "type": {
+                          "type": "string",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "string",
+                            "serializationType": "utf8-string"
+                          }
+                        },
+                        "path": {
+                          "type": "string",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "string",
+                            "serializationType": "utf8-string"
+                          }
+                        },
+                        "basicViewId": {
+                          "type": "string",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "string",
+                            "serializationType": "utf8-string"
+                          }
+                        },
+                        "props": {
+                          "type": "object",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "object",
+                            "properties": {
+                              "basic": {
+                                "type": "boolean",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "boolean",
+                                  "serializationType": "boolean"
+                                }
+                              }
+                            },
+                            "serializationType": "map"
+                          }
+                        },
+                        "constraints": {
+                          "type": "object",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "object",
+                            "properties": {
+                              "min": {
+                                "type": "number",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "number",
+                                  "serializationType": "float32"
+                                }
+                              },
+                              "max": {
+                                "type": "number",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "number",
+                                  "serializationType": "float32"
+                                }
+                              },
+                              "minExclusive": {
+                                "type": "number",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "number",
+                                  "serializationType": "float32"
+                                }
+                              },
+                              "maxExclusive": {
+                                "type": "number",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "number",
+                                  "serializationType": "float32"
+                                }
+                              },
+                              "step": {
+                                "type": "number",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "number",
+                                  "serializationType": "float32"
+                                }
+                              },
+                              "multipleOf": {
+                                "type": "number",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "number",
+                                  "serializationType": "float32"
+                                }
+                              },
+                              "minLength": {
+                                "type": "number",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "number",
+                                  "serializationType": "float32"
+                                }
+                              },
+                              "maxLength": {
+                                "type": "number",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "number",
+                                  "serializationType": "float32"
+                                }
+                              },
+                              "pattern": {
+                                "type": "string",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "string",
+                                  "serializationType": "utf8-string"
+                                }
+                              },
+                              "format": {
+                                "type": "string",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "string",
+                                  "serializationType": "utf8-string"
+                                }
+                              },
+                              "default": {
+                                "type": "string",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "string",
+                                  "serializationType": "utf8-string"
+                                }
+                              }
+                            },
+                            "serializationType": "map"
+                          }
+                        },
+                        "transform": {
+                          "type": "object",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "object",
+                            "properties": {
+                              "in": {
+                                "type": "object",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "object",
+                                  "properties": {
+                                    "steps": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "op": {
+                                            "type": "string",
+                                            "serializationType": "utf8-string"
+                                          },
+                                          "onError": {
+                                            "type": "string",
+                                            "serializationType": "optional",
+                                            "optionalJsonSchema": {
+                                              "type": "string",
+                                              "enum": [
+                                                "fail",
+                                                "skip",
+                                                "noop"
+                                              ],
+                                              "default": "noop",
+                                              "serializationType": "enum-string",
+                                              "enumObject": {
+                                                "FAIL": "fail",
+                                                "SKIP": "skip",
+                                                "NOOP": "noop"
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "serializationType": "map"
+                                      },
+                                      "serializationType": "array"
+                                    }
+                                  },
+                                  "serializationType": "map"
+                                }
+                              },
+                              "out": {
+                                "type": "object",
+                                "serializationType": "optional",
+                                "optionalJsonSchema": {
+                                  "type": "object",
+                                  "properties": {
+                                    "steps": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "op": {
+                                            "type": "string",
+                                            "serializationType": "utf8-string"
+                                          },
+                                          "onError": {
+                                            "type": "string",
+                                            "serializationType": "optional",
+                                            "optionalJsonSchema": {
+                                              "type": "string",
+                                              "enum": [
+                                                "fail",
+                                                "skip",
+                                                "noop"
+                                              ],
+                                              "default": "noop",
+                                              "serializationType": "enum-string",
+                                              "enumObject": {
+                                                "FAIL": "fail",
+                                                "SKIP": "skip",
+                                                "NOOP": "noop"
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "serializationType": "map"
+                                      },
+                                      "serializationType": "array"
+                                    }
+                                  },
+                                  "serializationType": "map"
+                                }
+                              }
+                            },
+                            "serializationType": "map"
+                          }
+                        },
+                        "dataSource": {
+                          "type": "object",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "serializationType": "utf8-string"
+                              }
+                            },
+                            "serializationType": "map"
+                          }
+                        }
+                      },
+                      "serializationType": "map"
+                    },
+                    "serializationType": "array"
+                  },
+                  "columns": {
+                    "type": "number",
+                    "serializationType": "optional",
+                    "optionalJsonSchema": {
+                      "type": "number",
+                      "serializationType": "float32"
+                    }
+                  },
+                  "helpTooltip": {
+                    "type": "object",
+                    "serializationType": "optional",
+                    "optionalJsonSchema": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "serializationType": "utf8-string"
+                        },
+                        "link": {
+                          "type": "string",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "string",
+                            "serializationType": "utf8-string"
+                          }
+                        }
+                      },
+                      "serializationType": "map"
+                    }
+                  }
+                },
+                "serializationType": "map"
+              },
+              "serializationType": "array"
+            }
+          },
+          "helpTooltip": {
+            "type": "object",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "serializationType": "utf8-string"
+                },
+                "link": {
+                  "type": "string",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "string",
+                    "serializationType": "utf8-string"
+                  }
+                }
+              },
+              "serializationType": "map"
+            }
+          },
+          "version": {
+            "type": "number",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "number",
+              "serializationType": "float32"
+            }
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "532": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "533": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "534": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "535": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "536": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "537": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "538": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "539": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "540": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "541": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "542": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "543": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "546": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "547": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "548": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "549": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "550": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "551": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "552": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "553": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "554": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "555": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "556": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "557": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "558": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "559": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "560": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "561": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "562": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "563": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "564": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "565": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Sit Spot",
+            "fields": [
+              {
+                "name": "Hover Text",
+                "type": "core::PointerEvents"
+              },
+              {
+                "name": "When Clicked",
+                "type": "asset-packs::Triggers",
+                "basicViewId": "trigger-when-clicked"
+              }
+            ],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
+            },
+            "version": 1
+          }
+        },
+        "566": {
+          "json": {
+            "isBasicViewEnabled": false,
+            "componentName": "Classic Bench",
+            "fields": [],
+            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
+            "helpTooltip": {
+              "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
         }
       }
     },
@@ -2009,9 +4892,7 @@
                 }
               }
             ],
-            "skyboxConfig": {
-              "fixedTime": 43200
-            },
+            "skyboxConfig": {},
             "creator": "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b"
           }
         }
@@ -2301,6 +5182,1365 @@
       }
     },
     {
+      "name": "asset-packs::Actions",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "serializationType": "int32"
+          },
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "serializationType": "utf8-string"
+                },
+                "type": {
+                  "type": "string",
+                  "serializationType": "utf8-string"
+                },
+                "jsonPayload": {
+                  "type": "string",
+                  "serializationType": "utf8-string"
+                },
+                "allowedInBasicView": {
+                  "type": "boolean",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "boolean",
+                    "serializationType": "boolean"
+                  }
+                },
+                "basicViewId": {
+                  "type": "string",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "string",
+                    "serializationType": "utf8-string"
+                  }
+                },
+                "default": {
+                  "type": "boolean",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "boolean",
+                    "serializationType": "boolean"
+                  }
+                }
+              },
+              "serializationType": "map"
+            },
+            "serializationType": "array"
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "532": {
+          "json": {
+            "id": 1,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "534": {
+          "json": {
+            "id": 2,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "535": {
+          "json": {
+            "id": 5,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "536": {
+          "json": {
+            "id": 7,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "538": {
+          "json": {
+            "id": 9,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "539": {
+          "json": {
+            "id": 11,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "541": {
+          "json": {
+            "id": 13,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "542": {
+          "json": {
+            "id": 15,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "546": {
+          "json": {
+            "id": 17,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "547": {
+          "json": {
+            "id": 19,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "549": {
+          "json": {
+            "id": 21,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "550": {
+          "json": {
+            "id": 23,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "552": {
+          "json": {
+            "id": 25,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "553": {
+          "json": {
+            "id": 27,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "555": {
+          "json": {
+            "id": 29,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "556": {
+          "json": {
+            "id": 31,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "558": {
+          "json": {
+            "id": 33,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "559": {
+          "json": {
+            "id": 35,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "561": {
+          "json": {
+            "id": 37,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "562": {
+          "json": {
+            "id": 39,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "564": {
+          "json": {
+            "id": 41,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        },
+        "565": {
+          "json": {
+            "id": 43,
+            "value": [
+              {
+                "name": "Move here",
+                "type": "move_player_here",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Sit anim1",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
+              },
+              {
+                "name": "Mark as taken",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Taken\"}"
+              },
+              {
+                "name": "Mark as free",
+                "type": "set_state",
+                "jsonPayload": "{\"state\":\"Free\"}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit Here",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Sit anim2",
+                "type": "play_default_emote",
+                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
+              },
+              {
+                "name": "Random sit anim",
+                "type": "random",
+                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
+              },
+              {
+                "name": "Print text",
+                "type": "show_text",
+                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
+              },
+              {
+                "name": "Hide text",
+                "type": "hide_text",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Show text",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
       "name": "asset-packs::Counter",
       "jsonSchema": {
         "type": "object",
@@ -2320,7 +6560,1689 @@
         "0": {
           "json": {
             "id": 0,
-            "value": 0
+            "value": 44
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Triggers",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "on_click",
+                    "on_input_action",
+                    "on_state_change",
+                    "on_spawn",
+                    "on_tween_end",
+                    "on_counter_change",
+                    "on_player_enters_area",
+                    "on_player_leaves_area",
+                    "on_delay",
+                    "on_loop",
+                    "on_clone",
+                    "on_click_image",
+                    "on_damage",
+                    "on_global_click",
+                    "on_global_primary",
+                    "on_global_secondary",
+                    "on_tick",
+                    "on_heal_player",
+                    "on_player_spawn"
+                  ],
+                  "default": "on_input_action",
+                  "serializationType": "enum-string",
+                  "enumObject": {
+                    "ON_CLICK": "on_click",
+                    "ON_INPUT_ACTION": "on_input_action",
+                    "ON_STATE_CHANGE": "on_state_change",
+                    "ON_SPAWN": "on_spawn",
+                    "ON_TWEEN_END": "on_tween_end",
+                    "ON_COUNTER_CHANGE": "on_counter_change",
+                    "ON_PLAYER_ENTERS_AREA": "on_player_enters_area",
+                    "ON_PLAYER_LEAVES_AREA": "on_player_leaves_area",
+                    "ON_DELAY": "on_delay",
+                    "ON_LOOP": "on_loop",
+                    "ON_CLONE": "on_clone",
+                    "ON_CLICK_IMAGE": "on_click_image",
+                    "ON_DAMAGE": "on_damage",
+                    "ON_GLOBAL_CLICK": "on_global_click",
+                    "ON_GLOBAL_PRIMARY": "on_global_primary",
+                    "ON_GLOBAL_SECONDARY": "on_global_secondary",
+                    "ON_TICK": "on_tick",
+                    "ON_HEAL_PLAYER": "on_heal_player",
+                    "ON_PLAYER_SPAWN": "on_player_spawn"
+                  }
+                },
+                "conditions": {
+                  "type": "array",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "serializationType": "optional",
+                          "optionalJsonSchema": {
+                            "type": "integer",
+                            "serializationType": "int32"
+                          }
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "when_state_is",
+                            "when_state_is_not",
+                            "when_counter_equals",
+                            "when_counter_is_greater_than",
+                            "when_counter_is_less_than",
+                            "when_distance_to_player_less_than",
+                            "when_distance_to_player_greater_than",
+                            "when_previous_state_is",
+                            "when_previous_state_is_not"
+                          ],
+                          "default": "when_state_is",
+                          "serializationType": "enum-string",
+                          "enumObject": {
+                            "WHEN_STATE_IS": "when_state_is",
+                            "WHEN_STATE_IS_NOT": "when_state_is_not",
+                            "WHEN_COUNTER_EQUALS": "when_counter_equals",
+                            "WHEN_COUNTER_IS_GREATER_THAN": "when_counter_is_greater_than",
+                            "WHEN_COUNTER_IS_LESS_THAN": "when_counter_is_less_than",
+                            "WHEN_DISTANCE_TO_PLAYER_LESS_THAN": "when_distance_to_player_less_than",
+                            "WHEN_DISTANCE_TO_PLAYER_GREATER_THAN": "when_distance_to_player_greater_than",
+                            "WHEN_PREVIOUS_STATE_IS": "when_previous_state_is",
+                            "WHEN_PREVIOUS_STATE_IS_NOT": "when_previous_state_is_not"
+                          }
+                        },
+                        "value": {
+                          "type": "string",
+                          "serializationType": "utf8-string"
+                        }
+                      },
+                      "serializationType": "map"
+                    },
+                    "serializationType": "array"
+                  }
+                },
+                "operation": {
+                  "type": "string",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "string",
+                    "enum": [
+                      "and",
+                      "or"
+                    ],
+                    "default": "and",
+                    "serializationType": "enum-string",
+                    "enumObject": {
+                      "AND": "and",
+                      "OR": "or"
+                    }
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer",
+                        "serializationType": "optional",
+                        "optionalJsonSchema": {
+                          "type": "integer",
+                          "serializationType": "int32"
+                        }
+                      },
+                      "name": {
+                        "type": "string",
+                        "serializationType": "optional",
+                        "optionalJsonSchema": {
+                          "type": "string",
+                          "serializationType": "utf8-string"
+                        }
+                      }
+                    },
+                    "serializationType": "map"
+                  },
+                  "serializationType": "array"
+                },
+                "basicViewId": {
+                  "type": "string",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "string",
+                    "serializationType": "utf8-string"
+                  }
+                }
+              },
+              "serializationType": "map"
+            },
+            "serializationType": "array"
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "532": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 3,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 1,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "533": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 3,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 1,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 3,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 4,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 2,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 3,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 4,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 1,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "534": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 4,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 2,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "535": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 6,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 5,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "536": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 8,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 7,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "537": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 6,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 5,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 6,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 8,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 7,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 6,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 8,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 5,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "538": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 10,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 9,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "539": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 12,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 11,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "540": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 10,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 9,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 10,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 12,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 11,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 10,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 12,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 9,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "541": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 14,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 13,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "542": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 16,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 15,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "543": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 14,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 13,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 14,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 16,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 15,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 14,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 16,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 13,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "546": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 18,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 17,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "547": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 20,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 19,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "548": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 18,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 17,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 18,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 20,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 19,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 18,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 20,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 17,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "549": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 22,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 21,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "550": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 24,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 23,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "551": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 22,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 21,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 22,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 24,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 23,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 22,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 24,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 21,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "552": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 26,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 25,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "553": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 28,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 27,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "554": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 26,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 25,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 26,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 28,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 27,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 26,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 28,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 25,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "555": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 30,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 29,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "556": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 32,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 31,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "557": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 30,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 29,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 30,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 32,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 31,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 30,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 32,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 29,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "558": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 34,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 33,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "559": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 36,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 35,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "560": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 34,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 33,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 34,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 36,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 35,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 34,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 36,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 33,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "561": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 38,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 37,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "562": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 40,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 39,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "563": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 38,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 37,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 38,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 40,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 39,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 38,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 40,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 37,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "564": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 42,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 41,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "565": {
+          "json": {
+            "value": [
+              {
+                "type": "on_player_leaves_area",
+                "conditions": [
+                  {
+                    "id": 44,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 43,
+                    "name": "Mark as free"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "566": {
+          "json": {
+            "value": [
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 42,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 41,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 42,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 44,
+                    "type": "when_state_is",
+                    "value": "Free"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 43,
+                    "name": "Sit Here"
+                  }
+                ]
+              },
+              {
+                "type": "on_input_action",
+                "conditions": [
+                  {
+                    "id": 42,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  },
+                  {
+                    "id": 44,
+                    "type": "when_state_is",
+                    "value": "Taken"
+                  }
+                ],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 41,
+                    "name": "Show text"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::States",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "serializationType": "float32"
+          },
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "serializationType": "utf8-string"
+            },
+            "serializationType": "array"
+          },
+          "defaultValue": {
+            "type": "string",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "string",
+              "serializationType": "utf8-string"
+            }
+          },
+          "currentValue": {
+            "type": "string",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "string",
+              "serializationType": "utf8-string"
+            }
+          },
+          "previousValue": {
+            "type": "string",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "string",
+              "serializationType": "utf8-string"
+            }
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "532": {
+          "json": {
+            "id": 3,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "534": {
+          "json": {
+            "id": 4,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "535": {
+          "json": {
+            "id": 6,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "536": {
+          "json": {
+            "id": 8,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "538": {
+          "json": {
+            "id": 10,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "539": {
+          "json": {
+            "id": 12,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "541": {
+          "json": {
+            "id": 14,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "542": {
+          "json": {
+            "id": 16,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "546": {
+          "json": {
+            "id": 18,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "547": {
+          "json": {
+            "id": 20,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "549": {
+          "json": {
+            "id": 22,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "550": {
+          "json": {
+            "id": 24,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "552": {
+          "json": {
+            "id": 26,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "553": {
+          "json": {
+            "id": 28,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "555": {
+          "json": {
+            "id": 30,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "556": {
+          "json": {
+            "id": 32,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "558": {
+          "json": {
+            "id": 34,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "559": {
+          "json": {
+            "id": 36,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "561": {
+          "json": {
+            "id": 38,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "562": {
+          "json": {
+            "id": 40,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "564": {
+          "json": {
+            "id": 42,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
+          }
+        },
+        "565": {
+          "json": {
+            "id": 44,
+            "value": [
+              "Free",
+              "Taken"
+            ],
+            "defaultValue": "Free"
           }
         }
       }

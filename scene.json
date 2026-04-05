@@ -205,9 +205,7 @@
     "portableExperiences": "disabled"
   },
   "creator": "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b",
-  "skyboxConfig": {
-    "fixedTime": 43200
-  },
+  "skyboxConfig": {},
   "source": {
     "origin": "creator-hub",
     "projectId": "230cc8aa-9d67-4c20-a6b1-7187bc0e4044"
