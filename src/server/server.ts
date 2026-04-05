@@ -63,6 +63,7 @@ let leaderboardEntity: Entity
 let visitorAnalyticsEntity: Entity
 
 let holdTimeAccum = 0
+let holdTimeCarrierKey = '' // Track WHO we're accumulating for
 
 const lastAttackTime = new Map<string, number>()
 const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
@@ -793,6 +794,9 @@ function handlePickup(playerId: string): void {
   if (dist > PICKUP_RADIUS) return
   console.log('[Server] 🚩 Pickup by', playerId.slice(0, 8))
 
+  // Flush any leftover hold time from a previous carrier (safety)
+  flushHoldTimeAccum()
+
   const mutable = Flag.getMutable(flagEntity)
   mutable.state = FlagState.Carried
   mutable.carrierPlayerId = playerId
@@ -806,6 +810,9 @@ function handleDrop(playerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
   if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return
+
+  // Flush accumulated hold time to the carrier BEFORE dropping
+  flushHoldTimeAccum()
 
   const playerPos = getPlayerPosition(playerId)
   const playerRot = getPlayerRotation(playerId)
@@ -839,6 +846,9 @@ function handleFlagSteal(victimId: string, attackerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
   if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) return
+
+  // Flush accumulated hold time to the VICTIM before transferring flag
+  flushHoldTimeAccum()
 
   const mutable = Flag.getMutable(flagEntity)
   mutable.state = FlagState.Carried
@@ -1279,6 +1289,7 @@ function flagServerSystem(dt: number): void {
     // Staleness check: force-drop if carrier position is unavailable for 5s
     if (lastCarrierPositionMs > 0 && (nowMs - lastCarrierPositionMs) > CARRIER_NO_POSITION_TIMEOUT_MS) {
       console.log('[Server] ⚠️ STALE CARRIER DETECTED:', flag.carrierPlayerId.slice(0, 8), '- no position data for', Math.round((nowMs - lastCarrierPositionMs) / 1000) + 's — force-dropping flag')
+      flushHoldTimeAccum()
       const flagPos = Transform.get(flagEntity).position
       const mutable = Flag.getMutable(flagEntity)
       mutable.state = FlagState.Dropped
@@ -1335,6 +1346,7 @@ function flagServerSystem(dt: number): void {
     }
     if (!carrierConnected) {
       console.log('[Server] ⚠️ Carrier', carrierLower.slice(0, 8), 'disconnected (PlayerIdentityData gone) — dropping flag')
+      flushHoldTimeAccum()
       const flagPos = Transform.get(flagEntity).position
       const mutable = Flag.getMutable(flagEntity)
       mutable.state = FlagState.Dropped
@@ -1352,17 +1364,41 @@ function flagServerSystem(dt: number): void {
   }
 }
 
+/**
+ * Flush any accumulated hold time to the specified player.
+ * Called when the carrier changes or the flag is dropped so that
+ * no accumulated time is lost or credited to the wrong player.
+ */
+function flushHoldTimeAccum(): void {
+  if (holdTimeAccum > 0 && holdTimeCarrierKey) {
+    const entity = getOrCreateHoldTimeEntity(holdTimeCarrierKey)
+    const mutable = PlayerFlagHoldTime.getMutable(entity)
+    mutable.seconds += holdTimeAccum
+    console.log('[Server] Flushed', holdTimeAccum.toFixed(2), 's hold time to', holdTimeCarrierKey.slice(0, 8), '(total:', mutable.seconds.toFixed(1), 's)')
+  }
+  holdTimeAccum = 0
+  holdTimeCarrierKey = ''
+}
+
 function holdTimeServerSystem(dt: number): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) {
-    holdTimeAccum = 0
+    // Flag not carried — flush any remaining time to the previous carrier
+    flushHoldTimeAccum()
     return
+  }
+
+  const carrierKey = flag.carrierPlayerId.toLowerCase()
+
+  // Carrier changed — flush accumulated time to the PREVIOUS carrier first
+  if (carrierKey !== holdTimeCarrierKey) {
+    flushHoldTimeAccum()
+    holdTimeCarrierKey = carrierKey
   }
 
   holdTimeAccum += Math.min(dt, 0.1)
   if (holdTimeAccum < HOLD_TIME_SYNC_INTERVAL) return
 
-  const carrierKey = flag.carrierPlayerId.toLowerCase()
   // Use centralized helper — safe to call even if entity already exists
   const entity = getOrCreateHoldTimeEntity(carrierKey)
 
@@ -1502,7 +1538,10 @@ function countdownServerSystem(): void {
 async function handleRoundEnd(): Promise<void> {
   const now = Date.now()
 
-  // ── 0. Check for daily leaderboard reset ──
+  // ── 0a. Flush any in-progress hold time so final scores are accurate ──
+  flushHoldTimeAccum()
+
+  // ── 0b. Check for daily leaderboard reset ──
   await checkLeaderboardDailyReset()
 
   // ── 1. Determine winner(s) ──
