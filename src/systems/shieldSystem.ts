@@ -4,8 +4,6 @@ import {
   MeshRenderer,
   Material,
   MaterialTransparencyMode,
-  Billboard,
-  BillboardMode,
   AvatarAttach,
   AvatarAnchorPointType,
   type Entity
@@ -13,146 +11,153 @@ import {
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 
-// Forcefield visual config — tweak these!
-const SHIELD_COLOR = Color4.create(1.0, 0.82, 0.2, 0.12)       // Gold, very transparent
-const SHIELD_EMISSIVE = Color4.create(1.0, 0.75, 0.1, 1.0)     // Gold glow
+// Forcefield visual config
+const SHIELD_COLOR = Color4.create(1.0, 0.82, 0.2, 0.12)
+const SHIELD_EMISSIVE = Color4.create(1.0, 0.75, 0.1, 1.0)
 const SHIELD_EMISSIVE_INTENSITY = 4.0
-const SHIELD_RADIUS = 1.3                                        // Distance from center to each plane
-const SHIELD_Y_OFFSET = 0.9                                      // Center height (hip level)
-const PLANE_WIDTH = 1.1                                           // Width of each plane
-const PLANE_HEIGHT = 2.2                                          // Height of each plane (covers avatar)
-const NUM_PLANES = 8                                              // Octagon
+const SHIELD_RADIUS = 0.64475
+const SHIELD_Y_OFFSET = 0.9
+const PLANE_WIDTH = 0.53
+const PLANE_HEIGHT = 2.2
+const NUM_PLANES = 8
 
 // Pulse animation
-const PULSE_SPEED = 2.0        // Pulses per second
-const PULSE_ALPHA_MIN = 0.06   // Minimum opacity
-const PULSE_ALPHA_MAX = 0.18   // Maximum opacity
-const PULSE_SCALE_MIN = 0.97   // Minimum scale multiplier
-const PULSE_SCALE_MAX = 1.03   // Maximum scale multiplier
+const PULSE_SPEED = 0.8
+const PULSE_ALPHA_MIN = 0.06
+const PULSE_ALPHA_MAX = 0.18
+const PULSE_SCALE_MIN = 0.97
+const PULSE_SCALE_MAX = 1.03
 
 // Rotation
-const ROTATE_SPEED_DEG = 30    // Degrees per second — slow spin
+const ROTATE_SPEED_DEG = 10
+const SHIELD_GRADIENT_TEXTURE = Material.Texture.Common({ src: 'images/beacon-gradient.png' })
 
-let shieldAnchor: Entity | null = null
-let shieldPlanes: Entity[] = []
-let shieldVisible = false
-let pulseTime = 0
-let rotationAngle = 0
+// ── Per-player shield tracking ──
+interface PlayerShield {
+  anchor: Entity
+  planes: Entity[]
+  pulseTime: number
+  rotationAngle: number
+}
 
-export function showShield(): void {
-  if (shieldVisible) return
+const activeShields = new Map<string, PlayerShield>()
 
-  const me = getPlayerData()
-  if (!me?.userId) return
+export function showShieldForPlayer(playerId: string): void {
+  if (activeShields.has(playerId)) return
 
-  // Create anchor attached to local player
-  shieldAnchor = engine.addEntity()
-  Transform.create(shieldAnchor, { position: Vector3.Zero() })
-  AvatarAttach.create(shieldAnchor, {
-    avatarId: me.userId,
+  const anchor = engine.addEntity()
+  Transform.create(anchor, { position: Vector3.Zero() })
+  AvatarAttach.create(anchor, {
+    avatarId: playerId,
     anchorPointId: AvatarAnchorPointType.AAPT_POSITION
   })
 
-  // Create 8 planes arranged in an octagon
+  const planes: Entity[] = []
   for (let i = 0; i < NUM_PLANES; i++) {
     const angleDeg = (360 / NUM_PLANES) * i
     const angleRad = angleDeg * (Math.PI / 180)
-
     const x = Math.sin(angleRad) * SHIELD_RADIUS
     const z = Math.cos(angleRad) * SHIELD_RADIUS
 
     const plane = engine.addEntity()
     Transform.create(plane, {
-      parent: shieldAnchor,
+      parent: anchor,
       position: Vector3.create(x, SHIELD_Y_OFFSET, z),
-      // Face outward from center — rotate to face away from anchor
       rotation: Quaternion.fromEulerDegrees(0, angleDeg, 0),
       scale: Vector3.create(PLANE_WIDTH, PLANE_HEIGHT, 1)
     })
     MeshRenderer.setPlane(plane)
     Material.setPbrMaterial(plane, {
       albedoColor: SHIELD_COLOR,
+      texture: SHIELD_GRADIENT_TEXTURE,
+      alphaTexture: SHIELD_GRADIENT_TEXTURE,
       emissiveColor: SHIELD_EMISSIVE,
       emissiveIntensity: SHIELD_EMISSIVE_INTENSITY,
       roughness: 1.0,
       metallic: 0.0,
       specularIntensity: 0.0,
-      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+      transparencyMode: MaterialTransparencyMode.MTM_AUTO,
     })
-
-    shieldPlanes.push(plane)
+    planes.push(plane)
   }
 
-  shieldVisible = true
-  pulseTime = 0
-  rotationAngle = 0
-  console.log('[Shield] Forcefield shown (octagon)')
+  activeShields.set(playerId, { anchor, planes, pulseTime: 0, rotationAngle: 0 })
+  console.log('[Shield] Forcefield shown for', playerId.slice(0, 8))
+}
+
+export function hideShieldForPlayer(playerId: string): void {
+  const shield = activeShields.get(playerId)
+  if (!shield) return
+
+  for (const plane of shield.planes) {
+    engine.removeEntity(plane)
+  }
+  engine.removeEntity(shield.anchor)
+  activeShields.delete(playerId)
+  console.log('[Shield] Forcefield hidden for', playerId.slice(0, 8))
+}
+
+/** Convenience wrappers for local player */
+export function showShield(): void {
+  const me = getPlayerData()
+  if (me?.userId) showShieldForPlayer(me.userId)
 }
 
 export function hideShield(): void {
-  if (!shieldVisible) return
+  const me = getPlayerData()
+  if (me?.userId) hideShieldForPlayer(me.userId)
+}
 
-  for (const plane of shieldPlanes) {
-    engine.removeEntity(plane)
+export function hideAllShields(): void {
+  for (const playerId of [...activeShields.keys()]) {
+    hideShieldForPlayer(playerId)
   }
-  shieldPlanes = []
-
-  if (shieldAnchor !== null) {
-    engine.removeEntity(shieldAnchor)
-    shieldAnchor = null
-  }
-
-  shieldVisible = false
-  console.log('[Shield] Forcefield hidden')
 }
 
 export function isShieldVisible(): boolean {
-  return shieldVisible
+  return activeShields.size > 0
 }
 
-/** Call from a system each frame to animate the pulse + rotation */
+/** Call from a system each frame to animate all active shields */
 export function shieldSystem(dt: number): void {
-  if (!shieldVisible || shieldPlanes.length === 0) return
+  for (const [, shield] of activeShields) {
+    if (shield.planes.length === 0) continue
 
-  pulseTime += dt
-  rotationAngle += ROTATE_SPEED_DEG * dt
+    shield.pulseTime += dt
+    shield.rotationAngle += ROTATE_SPEED_DEG * dt
 
-  const t = (Math.sin(pulseTime * PULSE_SPEED * Math.PI * 2) + 1) / 2 // 0..1
+    const t = (Math.sin(shield.pulseTime * PULSE_SPEED * Math.PI * 2) + 1) / 2
+    const alpha = PULSE_ALPHA_MIN + t * (PULSE_ALPHA_MAX - PULSE_ALPHA_MIN)
+    const scaleMul = PULSE_SCALE_MIN + t * (PULSE_SCALE_MAX - PULSE_SCALE_MIN)
 
-  // Pulse alpha
-  const alpha = PULSE_ALPHA_MIN + t * (PULSE_ALPHA_MAX - PULSE_ALPHA_MIN)
+    for (let i = 0; i < shield.planes.length; i++) {
+      const plane = shield.planes[i]
+      if (!Transform.has(plane)) continue
 
-  // Pulse scale
-  const scaleMul = PULSE_SCALE_MIN + t * (PULSE_SCALE_MAX - PULSE_SCALE_MIN)
+      const baseDeg = (360 / NUM_PLANES) * i + shield.rotationAngle
+      const baseRad = baseDeg * (Math.PI / 180)
+      const r = SHIELD_RADIUS * scaleMul
+      const x = Math.sin(baseRad) * r
+      const z = Math.cos(baseRad) * r
 
-  for (let i = 0; i < shieldPlanes.length; i++) {
-    const plane = shieldPlanes[i]
-    if (!Transform.has(plane)) continue
+      const transform = Transform.getMutable(plane)
+      transform.position = Vector3.create(x, SHIELD_Y_OFFSET, z)
+      transform.rotation = Quaternion.fromEulerDegrees(0, baseDeg, 0)
+      transform.scale = Vector3.create(PLANE_WIDTH * scaleMul, PLANE_HEIGHT * scaleMul, 1)
+    }
 
-    // Base angle for this plane + rotation offset
-    const baseDeg = (360 / NUM_PLANES) * i + rotationAngle
-    const baseRad = baseDeg * (Math.PI / 180)
-
-    const r = SHIELD_RADIUS * scaleMul
-    const x = Math.sin(baseRad) * r
-    const z = Math.cos(baseRad) * r
-
-    const transform = Transform.getMutable(plane)
-    transform.position = Vector3.create(x, SHIELD_Y_OFFSET, z)
-    transform.rotation = Quaternion.fromEulerDegrees(0, baseDeg, 0)
-    transform.scale = Vector3.create(PLANE_WIDTH * scaleMul, PLANE_HEIGHT * scaleMul, 1)
-  }
-
-  // Update material for all planes (alpha pulse)
-  for (const plane of shieldPlanes) {
-    Material.setPbrMaterial(plane, {
-      albedoColor: Color4.create(SHIELD_COLOR.r, SHIELD_COLOR.g, SHIELD_COLOR.b, alpha),
-      emissiveColor: SHIELD_EMISSIVE,
-      emissiveIntensity: SHIELD_EMISSIVE_INTENSITY,
-      roughness: 1.0,
-      metallic: 0.0,
-      specularIntensity: 0.0,
-      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-    })
+    for (const plane of shield.planes) {
+      Material.setPbrMaterial(plane, {
+        albedoColor: Color4.create(SHIELD_COLOR.r, SHIELD_COLOR.g, SHIELD_COLOR.b, alpha),
+        texture: SHIELD_GRADIENT_TEXTURE,
+        alphaTexture: SHIELD_GRADIENT_TEXTURE,
+        emissiveColor: SHIELD_EMISSIVE,
+        emissiveIntensity: SHIELD_EMISSIVE_INTENSITY,
+        roughness: 1.0,
+        metallic: 0.0,
+        specularIntensity: 0.0,
+        transparencyMode: MaterialTransparencyMode.MTM_AUTO,
+      })
+    }
   }
 }

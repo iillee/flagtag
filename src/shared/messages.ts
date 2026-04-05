@@ -24,6 +24,15 @@ export const Messages = {
   bananaTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
   shellDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, dirX: Schemas.Float, dirZ: Schemas.Float }),
   shellTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
+
+  // Mushroom messages
+  requestMushroomPositions: Schemas.Map({ t: Schemas.Int }),
+  pickupMushroom: Schemas.Map({ id: Schemas.Int }),
+  mushroomPositions: Schemas.Map({ mushroomsJson: Schemas.String }),   // JSON array of {id, x, z}
+  mushroomPickedUp: Schemas.Map({ id: Schemas.Int, playerId: Schemas.String }),
+  mushroomShield: Schemas.Map({ durationMs: Schemas.Int }),
+  shieldConsumed: Schemas.Map({ playerId: Schemas.String }),
+  playerShieldActive: Schemas.Map({ playerId: Schemas.String, active: Schemas.Int }),
 }
 
 export const room = registerMessages(Messages)

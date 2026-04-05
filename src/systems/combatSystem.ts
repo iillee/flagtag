@@ -141,7 +141,7 @@ export function showHitEffect(targetPos: Vector3): void {
   }
 }
 
-function showMissEffect(targetPos: Vector3): void {
+export function showMissEffect(targetPos: Vector3): void {
   initPools()
   const centerPos = Vector3.add(targetPos, Vector3.create(0, 1.2, 0))
   const config = CLOUD_CONFIGS[cloudConfigIndex % CLOUD_CONFIGS.length]

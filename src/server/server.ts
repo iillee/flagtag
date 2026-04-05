@@ -24,6 +24,38 @@ const FLAG_MIN_Y = 0.5           // absolute minimum Y (ground plane)
 const CARRIER_Y_WINDOW_SEC = 2.0 // seconds of carrier Y history to estimate ground level
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
+// ── Mushroom constants ──
+const MUSHROOM_COUNT = 1
+// Shield lasts until hit or round end
+const MUSHROOM_SCENE_MIN_X = 2
+const MUSHROOM_SCENE_MAX_X = 158
+const MUSHROOM_SCENE_MIN_Z = 2
+const MUSHROOM_SCENE_MAX_Z = 238
+
+interface ServerMushroom {
+  id: number
+  x: number
+  z: number
+  pickedUp: boolean
+}
+const activeMushrooms: ServerMushroom[] = []
+let mushroomIdCounter = 0
+const mushroomShieldActive = new Set<string>()  // playerIds with active shields
+
+function hasServerShield(playerId: string): boolean {
+  return mushroomShieldActive.has(playerId)
+}
+
+/** Consume the shield — returns true if player had an active shield */
+function consumeShield(playerId: string): boolean {
+  if (!mushroomShieldActive.has(playerId)) return false
+  mushroomShieldActive.delete(playerId)
+  console.log('[Server] 🛡️ Shield consumed for', playerId.slice(0, 8))
+  room.send('shieldConsumed', { playerId })
+  room.send('playerShieldActive', { playerId, active: 0 })
+  return true
+}
+
 // ── Server state ──
 let flagEntity: Entity
 let countdownEntity: Entity
@@ -488,6 +520,9 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(safeSystem('bananaServerSystem', bananaServerSystem))
   engine.addSystem(safeSystem('shellServerSystem', shellServerSystem))
 
+  // ── Spawn mushrooms ──
+  spawnMushrooms()
+
   console.log('[Server] Flag Tag server ready')
 }
 
@@ -716,6 +751,33 @@ function registerHandlers(): void {
       }
     } catch (err) { console.error('[Server] ❌ reportGroundY handler error:', err) }
   })
+
+  // ── Mushroom position request (client asks on connect) ──
+  room.onMessage('requestMushroomPositions', (_data, _context) => {
+    try {
+      const remaining = activeMushrooms.filter(m => !m.pickedUp).map(m => ({ id: m.id, x: m.x, z: m.z }))
+      room.send('mushroomPositions', { mushroomsJson: JSON.stringify(remaining) })
+    } catch (err) { console.error('[Server] ❌ requestMushroomPositions handler error:', err) }
+  })
+
+  // ── Mushroom pickup ──
+  room.onMessage('pickupMushroom', (data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      const mid = (data as any).id as number
+      const mushroom = activeMushrooms.find(m => m.id === mid)
+      if (!mushroom || mushroom.pickedUp) return
+      mushroom.pickedUp = true
+      console.log('[Server] 🍄 Mushroom', mid, 'picked up by', from.slice(0, 8))
+      mushroomShieldActive.add(from)
+      room.send('mushroomPickedUp', { id: mid, playerId: from })
+      room.send('mushroomShield', { durationMs: 0 })
+      room.send('playerShieldActive', { playerId: from, active: 1 })
+      // Spawn a replacement mushroom
+      spawnOneMushroom()
+    } catch (err) { console.error('[Server] ❌ pickupMushroom handler error:', err) }
+  })
 }
 
 function handlePickup(playerId: string): void {
@@ -823,6 +885,13 @@ function handleAttack(attackerId: string): void {
   }
 
   if (closestId && closestPos) {
+    // Shield blocks melee
+    if (consumeShield(closestId)) {
+      console.log('[Server] ⚔️🛡️ Melee blocked by shield for', closestId.slice(0, 8))
+      room.send('missVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
+      return
+    }
+
     room.send('hitVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
     room.send('stagger', { victimId: closestId })
 
@@ -843,8 +912,9 @@ function handleBananaDrop(playerId: string): void {
 
   // Cooldown check
   const lastDrop = lastBananaDropTime.get(playerId) ?? 0
-  if (now - lastDrop < BANANA_COOLDOWN_SEC * 1000) {
-    console.log('[Server] Banana denied: cooldown active, wait', ((BANANA_COOLDOWN_SEC * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
+  const bananaCd = BANANA_COOLDOWN_SEC
+  if (now - lastDrop < bananaCd * 1000) {
+    console.log('[Server] Banana denied: cooldown active, wait', ((bananaCd * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
     return
   }
 
@@ -938,17 +1008,22 @@ function bananaServerSystem(dt: number): void {
 
       const dist = Vector3.distance(playerPos, bananaPos)
       if (dist < BANANA_TRIGGER_RADIUS) {
-        console.log('[Server] 🍌 Banana triggered by', addr.slice(0, 8), '! Staggering...')
+        // Shield blocks the hit — banana is consumed but no stagger/drop
+        if (consumeShield(addr)) {
+          console.log('[Server] 🍌🛡️ Banana blocked by shield for', addr.slice(0, 8))
+          room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: '' })
+        } else {
+          console.log('[Server] 🍌 Banana triggered by', addr.slice(0, 8), '! Staggering...')
 
-        // Drop the flag if the victim is carrying it
-        const flag = Flag.getOrNull(flagEntity)
-        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-          console.log('[Server] 🍌 Victim was carrying flag — forcing drop!')
-          handleDrop(addr)
+          // Drop the flag if the victim is carrying it
+          const flag = Flag.getOrNull(flagEntity)
+          if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
+            console.log('[Server] 🍌 Victim was carrying flag — forcing drop!')
+            handleDrop(addr)
+          }
+
+          room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: addr })
         }
-
-        // Single message — client handles all effects (VFX, sound, stagger) in one frame
-        room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: addr })
 
         // Remove the banana
         engine.removeEntity(banana.entity)
@@ -964,7 +1039,8 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
 
   // Cooldown check
   const lastFire = lastShellFireTime.get(playerId) ?? 0
-  if (now - lastFire < SHELL_COOLDOWN_SEC * 1000) {
+  const shellCd = SHELL_COOLDOWN_SEC
+  if (now - lastFire < shellCd * 1000) {
     console.log('[Server] Shell denied: cooldown active')
     return
   }
@@ -1133,16 +1209,22 @@ function shellServerSystem(dt: number): void {
 
       const dist = Vector3.distance(playerPos, shellPos)
       if (dist < SHELL_HIT_RADIUS) {
-        console.log('[Server] 🐚 Shell hit player', addr.slice(0, 8), 'at distance', shell.distanceTraveled.toFixed(1), 'm')
+        // Shield blocks the hit — shell is consumed but no stagger/drop
+        if (consumeShield(addr)) {
+          console.log('[Server] 🐚🛡️ Shell blocked by shield for', addr.slice(0, 8))
+          room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
+        } else {
+          console.log('[Server] 🐚 Shell hit player', addr.slice(0, 8), 'at distance', shell.distanceTraveled.toFixed(1), 'm')
 
-        // Drop the flag if the victim is carrying it
-        const flag = Flag.getOrNull(flagEntity)
-        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-          console.log('[Server] 🐚 Victim was carrying flag — forcing drop!')
-          handleDrop(addr)
+          // Drop the flag if the victim is carrying it
+          const flag = Flag.getOrNull(flagEntity)
+          if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
+            console.log('[Server] 🐚 Victim was carrying flag — forcing drop!')
+            handleDrop(addr)
+          }
+
+          room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: addr })
         }
-
-        room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: addr })
         engine.removeEntity(shell.entity)
         activeShells.splice(i, 1)
         shellConsumed = true
@@ -1510,6 +1592,14 @@ async function handleRoundEnd(): Promise<void> {
   lastAttackTime.clear()
   lastStealTime.clear()
 
+  // ── 5d. Respawn mushrooms ──
+  for (const pid of mushroomShieldActive) {
+    room.send('playerShieldActive', { playerId: pid, active: 0 })
+  }
+  mushroomShieldActive.clear()
+  spawnMushrooms()
+  console.log('[Server] 🍄 Mushrooms respawned for new round')
+
   // ── 6. Reset flag to random spawn point ──
   resetGravityState()
   const spawnPoint = getRandomSpawnPoint()
@@ -1611,4 +1701,31 @@ function nameResolverServerSystem(dt: number): void {
     persistPlayerNames()
     void syncVisitorAnalytics()
   }
+}
+
+// ── Mushroom spawning ──
+function spawnOneMushroom(): void {
+  const x = MUSHROOM_SCENE_MIN_X + Math.random() * (MUSHROOM_SCENE_MAX_X - MUSHROOM_SCENE_MIN_X)
+  const z = MUSHROOM_SCENE_MIN_Z + Math.random() * (MUSHROOM_SCENE_MAX_Z - MUSHROOM_SCENE_MIN_Z)
+  const m = { id: mushroomIdCounter++, x, z, pickedUp: false }
+  activeMushrooms.push(m)
+  console.log('[Server] 🍄 Spawned replacement mushroom', m.id, 'at', x.toFixed(1), z.toFixed(1))
+  room.send('mushroomPositions', { mushroomsJson: JSON.stringify([{ id: m.id, x: m.x, z: m.z }]) })
+}
+
+function spawnMushrooms(): void {
+  activeMushrooms.length = 0
+  for (let i = 0; i < MUSHROOM_COUNT; i++) {
+    const x = MUSHROOM_SCENE_MIN_X + Math.random() * (MUSHROOM_SCENE_MAX_X - MUSHROOM_SCENE_MIN_X)
+    const z = MUSHROOM_SCENE_MIN_Z + Math.random() * (MUSHROOM_SCENE_MAX_Z - MUSHROOM_SCENE_MIN_Z)
+    activeMushrooms.push({
+      id: mushroomIdCounter++,
+      x, z,
+      pickedUp: false
+    })
+  }
+  console.log('[Server] 🍄 Spawned', MUSHROOM_COUNT, 'mushrooms')
+  // Broadcast to all connected clients
+  const positions = activeMushrooms.map(m => ({ id: m.id, x: m.x, z: m.z }))
+  room.send('mushroomPositions', { mushroomsJson: JSON.stringify(positions) })
 }

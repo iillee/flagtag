@@ -21,6 +21,7 @@ import {
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, Banana, BANANA_COOLDOWN_SEC, BANANA_LIFETIME_SEC, BANANA_TRIGGER_RADIUS } from '../shared/components'
+
 import { room } from '../shared/messages'
 
 import { triggerEmote } from '~system/RestrictedActions'
@@ -163,14 +164,16 @@ let lastLocalBananaDropTime = 0
 /** Returns true if banana is on cooldown (for UI). */
 export function isBananaOnCooldown(): boolean {
   if (lastLocalBananaDropTime === 0) return false
-  return (Date.now() - lastLocalBananaDropTime) < BANANA_COOLDOWN_SEC * 1000
+  const cooldown = BANANA_COOLDOWN_SEC
+  return (Date.now() - lastLocalBananaDropTime) < cooldown * 1000
 }
 
 /** Returns cooldown remaining in seconds (0 if ready). */
 export function getBananaCooldownRemaining(): number {
   if (lastLocalBananaDropTime === 0) return 0
+  const cooldown = BANANA_COOLDOWN_SEC
   const elapsed = Date.now() - lastLocalBananaDropTime
-  const remaining = BANANA_COOLDOWN_SEC * 1000 - elapsed
+  const remaining = cooldown * 1000 - elapsed
   return remaining > 0 ? Math.ceil(remaining / 1000) : 0
 }
 
@@ -238,8 +241,6 @@ function registerBananaMessages(): void {
     // Remove the message-driven banana visual
     removeMsgBananaVisualNear(data.x, data.y, data.z)
 
-    // All effects in one frame for clean sync
-    showSplatEffect(pos)
     playBananaSplatSound(pos)
 
     // Stagger the victim if it's the local player
@@ -377,7 +378,6 @@ function updateLocalBananas(dt: number): void {
       const dist = Vector3.distance(playerPos, bananaPos)
       if (dist < BANANA_TRIGGER_RADIUS) {
         console.log('[Banana] 🍌 LOCAL banana triggered!')
-        showSplatEffect(bananaPos)
         playBananaSplatSound(bananaPos)
         triggerEmote({ predefinedEmote: 'getHit' })
         removeLocalBanana(i)
@@ -559,8 +559,9 @@ export function bananaClientSystem(dt: number): void {
     if (!userId) return
 
     // Client-side cooldown check (prevents spamming server)
-    if (now - lastLocalBananaDropTime < BANANA_COOLDOWN_SEC * 1000) {
-      const remaining = ((BANANA_COOLDOWN_SEC * 1000 - (now - lastLocalBananaDropTime)) / 1000).toFixed(1)
+    const bananaCd = BANANA_COOLDOWN_SEC
+    if (now - lastLocalBananaDropTime < bananaCd * 1000) {
+      const remaining = ((bananaCd * 1000 - (now - lastLocalBananaDropTime)) / 1000).toFixed(1)
       console.log('[Banana] F pressed but cooldown active —', remaining, 's remaining')
       return
     }

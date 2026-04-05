@@ -8,6 +8,7 @@ import {
 } from './gameState/flagHoldTime'
 import { isBananaOnCooldown, getBananaCooldownRemaining } from './systems/bananaSystem'
 import { isShellOnCooldown, getShellCooldownRemaining } from './systems/shellSystem'
+import { clearMushroomShield } from './systems/mushroomSystem'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
@@ -101,6 +102,7 @@ function roundEndSplashSystem(dt: number): void {
     splashVisible = true
     splashHideTime = now + SPLASH_DURATION_MS
     splashFromServer = false
+    clearMushroomShield()
 
     // Snapshot client-side scoreboard immediately (before CRDT resets arrive)
     const currentPlayers = getPlayersWithHoldTimes()
@@ -353,7 +355,7 @@ function PlayerListUi() {
               <Label value="×" fontSize={44} color={closeServerDownHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
 
-            <Label value="Server Down" fontSize={28} color={GOLD} font="sans-serif" />
+            <Label value="Server Disconnected" fontSize={28} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: 12 }} />
             <Label value="all players please leave scene for 5 minutes while server resets" fontSize={18} color={LIGHT_GREY} font="sans-serif" />
           </UiEntity>

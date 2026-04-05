@@ -15,9 +15,10 @@ import {
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, Shell, SHELL_COOLDOWN_SEC, SHELL_LIFETIME_SEC, SHELL_SPEED, SHELL_MAX_RANGE, SHELL_HIT_RADIUS } from '../shared/components'
+
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
-import { showHitEffect, playHitSound, playMissSound } from './combatSystem'
+import { showHitEffect, showMissEffect, playHitSound, playMissSound } from './combatSystem'
 
 const SHELL_MODEL_SRC = 'assets/scene/Models/shell_scaled.glb'
 const SHELL_SCALE = Vector3.create(1, 1, 1)
@@ -59,14 +60,16 @@ let lastLocalShellFireTime = 0
 /** Returns true if shell is on cooldown (for UI). */
 export function isShellOnCooldown(): boolean {
   if (lastLocalShellFireTime === 0) return false
-  return (Date.now() - lastLocalShellFireTime) < SHELL_COOLDOWN_SEC * 1000
+  const cooldown = SHELL_COOLDOWN_SEC
+  return (Date.now() - lastLocalShellFireTime) < cooldown * 1000
 }
 
 /** Returns cooldown remaining in seconds (0 if ready). */
 export function getShellCooldownRemaining(): number {
   if (lastLocalShellFireTime === 0) return 0
+  const cooldown = SHELL_COOLDOWN_SEC
   const elapsed = Date.now() - lastLocalShellFireTime
-  const remaining = SHELL_COOLDOWN_SEC * 1000 - elapsed
+  const remaining = cooldown * 1000 - elapsed
   return remaining > 0 ? Math.ceil(remaining / 1000) : 0
 }
 
@@ -204,7 +207,8 @@ function registerShellMessages(): void {
         shellStaggerUntil = Date.now() + SHELL_STAGGER_MS
       }
     } else {
-      // Play miss sound at player position so it's always audible
+      // Shell hit banana or wall — show miss cloud + sound
+      showMissEffect(pos)
       const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : pos
       playMissSound(playerPos)
     }
@@ -612,8 +616,9 @@ export function shellClientSystem(dt: number): void {
     if (!userId) return
 
     // Client-side cooldown check
-    if (now - lastLocalShellFireTime < SHELL_COOLDOWN_SEC * 1000) {
-      const remaining = ((SHELL_COOLDOWN_SEC * 1000 - (now - lastLocalShellFireTime)) / 1000).toFixed(1)
+    const shellCd = SHELL_COOLDOWN_SEC
+    if (now - lastLocalShellFireTime < shellCd * 1000) {
+      const remaining = ((shellCd * 1000 - (now - lastLocalShellFireTime)) / 1000).toFixed(1)
       console.log('[Shell] E pressed but cooldown active —', remaining, 's remaining')
       return
     }

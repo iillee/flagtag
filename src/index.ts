@@ -7,6 +7,8 @@ import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
 import { bananaClientSystem } from './systems/bananaSystem'
 import { shellClientSystem } from './systems/shellSystem'
+import { mushroomClientSystem } from './systems/mushroomSystem'
+import { shieldSystem } from './systems/shieldSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
@@ -377,6 +379,8 @@ export async function main() {
   engine.addSystem(nameResolverSystem)
   engine.addSystem(bananaClientSystem)
   engine.addSystem(shellClientSystem)
+  engine.addSystem(mushroomClientSystem)
+  engine.addSystem(shieldSystem)
   engine.addSystem(updateHoldTimeInterpolation)
 
 
