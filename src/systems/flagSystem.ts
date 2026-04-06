@@ -18,6 +18,7 @@ import {
   VisibilityComponent,
   GltfContainer,
   AudioSource,
+  PointerEvents,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
@@ -398,10 +399,15 @@ export function flagClientSystem(dt: number): void {
     }
   }
 
-  // Left click — attack only (skip if a UI overlay is open)
+  // Left click — attack only (skip if a UI overlay is open or clicking an interactive object)
   if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && userId && !isAnyOverlayOpen()) {
-    predictAttackLocally()
-    room.send('requestAttack', { t: 0 })
+    const cmd = inputSystem.getInputCommand(InputAction.IA_POINTER, PointerEventType.PET_DOWN)
+    const hitEntity = cmd?.hit?.entityId
+    // Skip attack if the click landed on an entity with pointer events (bench, scope, etc.)
+    if (!hitEntity || !PointerEvents.has(hitEntity as Entity)) {
+      predictAttackLocally()
+      room.send('requestAttack', { t: 0 })
+    }
   }
 
   // ── Manual drop (3 key) ──

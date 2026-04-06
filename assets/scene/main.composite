@@ -1059,20 +1059,20 @@
         "575": {
           "json": {
             "position": {
-              "x": 32.77006530761719,
+              "x": 33.27006530761719,
               "y": 11.530471801757812,
-              "z": 147.74755859375
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "z": 147.99755859375
             },
             "rotation": {
               "x": 0,
               "y": -0.5439031720161438,
               "z": 0,
               "w": -0.8391279578208923
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 0
           }
@@ -1703,7 +1703,7 @@
               {
                 "eventType": 1,
                 "eventInfo": {
-                  "button": 1,
+                  "button": 0,
                   "hoverText": "Sit Here",
                   "maxDistance": 10,
                   "showFeedback": true,
@@ -1719,7 +1719,7 @@
               {
                 "eventType": 1,
                 "eventInfo": {
-                  "button": 1,
+                  "button": 0,
                   "hoverText": "Sit Here",
                   "maxDistance": 10,
                   "showFeedback": true,
@@ -1735,7 +1735,7 @@
               {
                 "eventType": 1,
                 "eventInfo": {
-                  "button": 1,
+                  "button": 0,
                   "hoverText": "Sit Here",
                   "maxDistance": 10,
                   "showFeedback": true,
@@ -1751,7 +1751,7 @@
               {
                 "eventType": 1,
                 "eventInfo": {
-                  "button": 1,
+                  "button": 0,
                   "hoverText": "Sit Here",
                   "maxDistance": 10,
                   "showFeedback": true,
@@ -1767,7 +1767,7 @@
               {
                 "eventType": 1,
                 "eventInfo": {
-                  "button": 1,
+                  "button": 0,
                   "hoverText": "Sit Here",
                   "maxDistance": 10,
                   "showFeedback": true,
@@ -1783,7 +1783,7 @@
               {
                 "eventType": 1,
                 "eventInfo": {
-                  "button": 1,
+                  "button": 0,
                   "hoverText": "Sit Here",
                   "maxDistance": 10,
                   "showFeedback": true,
@@ -1799,7 +1799,7 @@
               {
                 "eventType": 1,
                 "eventInfo": {
-                  "button": 1,
+                  "button": 0,
                   "hoverText": "Sit Here",
                   "maxDistance": 10,
                   "showFeedback": true,
@@ -1984,9 +1984,9 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "545": {
           "json": {
-            "gizmo": 0
+            "gizmo": 1
           }
         }
       }
@@ -2403,6 +2403,9 @@
           "json": {}
         },
         "571": {
+          "json": {}
+        },
+        "575": {
           "json": {}
         }
       }
@@ -5802,7 +5805,7 @@
           "json": {
             "value": [
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 3,
@@ -5819,7 +5822,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 3,
@@ -5841,7 +5844,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 3,
@@ -5858,7 +5861,7 @@
                 "actions": [
                   {
                     "id": 1,
-                    "name": "Show text"
+                    "name": "Hide text"
                   }
                 ]
               }
@@ -5938,7 +5941,7 @@
           "json": {
             "value": [
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 6,
@@ -5955,7 +5958,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 6,
@@ -5977,7 +5980,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 6,
@@ -5994,7 +5997,7 @@
                 "actions": [
                   {
                     "id": 5,
-                    "name": "Show text"
+                    "name": "Hide text"
                   }
                 ]
               }
@@ -6051,7 +6054,7 @@
           "json": {
             "value": [
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 10,
@@ -6068,7 +6071,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 10,
@@ -6090,7 +6093,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 10,
@@ -6107,7 +6110,7 @@
                 "actions": [
                   {
                     "id": 9,
-                    "name": "Show text"
+                    "name": "Hide text"
                   }
                 ]
               }
@@ -6164,7 +6167,7 @@
           "json": {
             "value": [
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 18,
@@ -6181,7 +6184,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 18,
@@ -6203,7 +6206,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 18,
@@ -6220,7 +6223,7 @@
                 "actions": [
                   {
                     "id": 17,
-                    "name": "Show text"
+                    "name": "Hide text"
                   }
                 ]
               }
@@ -6277,7 +6280,7 @@
           "json": {
             "value": [
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 30,
@@ -6294,7 +6297,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 30,
@@ -6316,7 +6319,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 30,
@@ -6333,7 +6336,7 @@
                 "actions": [
                   {
                     "id": 29,
-                    "name": "Show text"
+                    "name": "Hide text"
                   }
                 ]
               }
@@ -6390,7 +6393,7 @@
           "json": {
             "value": [
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 34,
@@ -6407,7 +6410,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 34,
@@ -6429,7 +6432,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 34,
@@ -6446,7 +6449,7 @@
                 "actions": [
                   {
                     "id": 33,
-                    "name": "Show text"
+                    "name": "Hide text"
                   }
                 ]
               }
@@ -6503,7 +6506,7 @@
           "json": {
             "value": [
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 38,
@@ -6520,7 +6523,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 38,
@@ -6542,7 +6545,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 38,
@@ -6559,7 +6562,7 @@
                 "actions": [
                   {
                     "id": 37,
-                    "name": "Show text"
+                    "name": "Hide text"
                   }
                 ]
               }
@@ -6616,7 +6619,7 @@
           "json": {
             "value": [
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 50,
@@ -6633,7 +6636,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 50,
@@ -6655,7 +6658,7 @@
                 ]
               },
               {
-                "type": "on_input_action",
+                "type": "on_click",
                 "conditions": [
                   {
                     "id": 50,
@@ -6672,7 +6675,7 @@
                 "actions": [
                   {
                     "id": 49,
-                    "name": "Show text"
+                    "name": "Hide text"
                   }
                 ]
               }

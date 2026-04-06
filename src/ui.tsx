@@ -12,7 +12,7 @@ import { clearMushroomShield } from './systems/mushroomSystem'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
-import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType, type Entity } from '@dcl/sdk/ecs'
+import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType, PointerEvents, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
@@ -76,6 +76,10 @@ let lastAttackPressMs = 0
 
 function attackFlickerSystem(): void {
   if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && !isAnyOverlayOpen()) {
+    // Don't flicker if clicking an interactive object (bench, scope, etc.)
+    const cmd = inputSystem.getInputCommand(InputAction.IA_POINTER, PointerEventType.PET_DOWN)
+    const hitEntity = cmd?.hit?.entityId
+    if (hitEntity && PointerEvents.has(hitEntity as Entity)) return
     lastAttackPressMs = Date.now()
   }
 }

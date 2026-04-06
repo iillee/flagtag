@@ -11,6 +11,7 @@ import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
 import { setupSpectator } from './systems/spectatorSystem'
+
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
@@ -377,6 +378,8 @@ export async function main() {
 
   // Spectator camera
   setupSpectator()
+
+
 
   // Proximity lighting
   setupProximityLights()
