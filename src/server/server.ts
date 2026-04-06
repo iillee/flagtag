@@ -291,12 +291,89 @@ async function checkLeaderboardDailyReset(): Promise<boolean> {
   return false
 }
 
+// ── Discord webhook for daily analytics ──
+const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1490808436097679540/wEwupNTGN90YCZ46iPHSt_YEm6SW6xS8x4Ybw4Ls1JVfQzgVXkeJ7VHWl67F2tS8Fug2'
+
+async function sendDailyAnalyticsToDiscord(): Promise<void> {
+  try {
+    const now = Date.now()
+    const totalVisitors = visitorSessions.size
+    const onlineNow = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
+
+    // Build visitor summary sorted by time
+    const visitors = Array.from(visitorSessions.entries()).map(([userId, data]) => {
+      const isOnline = data.sessionStartMs > 0
+      let totalSeconds = data.totalMinutesToday * 60
+      if (isOnline) {
+        totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
+      }
+      return { name: data.name || userId.slice(0, 8), totalSeconds, isOnline }
+    }).sort((a, b) => b.totalSeconds - a.totalSeconds)
+
+    // Get leaderboard data
+    let leaderboardSummary = ''
+    const lb = LeaderboardState.getOrNull(leaderboardEntity)
+    if (lb && lb.json) {
+      try {
+        const entries = JSON.parse(lb.json) as Array<{ name: string; roundsWon: number }>
+        if (entries.length > 0) {
+          leaderboardSummary = entries
+            .sort((a, b) => b.roundsWon - a.roundsWon)
+            .slice(0, 10)
+            .map((e, i) => `${i + 1}. ${e.name} — ${e.roundsWon} wins`)
+            .join('\n')
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Format visitor list
+    const visitorList = visitors.slice(0, 20).map((v, i) => {
+      const mins = Math.floor(v.totalSeconds / 60)
+      const secs = v.totalSeconds % 60
+      const status = v.isOnline ? '🟢' : '⚫'
+      return `${status} ${v.name} — ${mins}m ${secs}s`
+    }).join('\n')
+
+    const embed = {
+      title: `📊 Flagtag Daily Report — ${lastVisitorResetDay}`,
+      color: 0x3498db,
+      fields: [
+        { name: 'Total Unique Visitors', value: `${totalVisitors}`, inline: true },
+        { name: 'Currently Online', value: `${onlineNow}`, inline: true },
+        { name: '\u200b', value: '\u200b', inline: true },
+        { name: 'Visitors (Top 20)', value: visitorList || 'No visitors today', inline: false },
+      ] as Array<{ name: string; value: string; inline: boolean }>,
+      timestamp: new Date().toISOString()
+    }
+
+    if (leaderboardSummary) {
+      embed.fields.push({ name: 'Leaderboard (Rounds Won)', value: leaderboardSummary, inline: false })
+    }
+
+    const payload = JSON.stringify({ embeds: [embed] })
+
+    const res = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    })
+
+    console.log('[Server] Discord webhook response:', res.status)
+  } catch (err) {
+    console.error('[Server] Failed to send Discord webhook:', err)
+  }
+}
+
 // Check and perform daily visitor reset at 12:00 AM UTC (midnight)
 async function checkVisitorDailyReset(): Promise<boolean> {
   const currentDay = getTodayDateString()
   
   if (lastVisitorResetDay !== currentDay) {
     console.log('[Server] Daily visitor reset at midnight UTC for new day:', currentDay)
+    
+    // Send analytics to Discord BEFORE clearing data
+    await sendDailyAnalyticsToDiscord()
+    
     lastVisitorResetDay = currentDay
     
     // Clear visitor data for new day

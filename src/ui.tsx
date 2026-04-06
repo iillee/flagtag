@@ -22,7 +22,7 @@ import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
 import { signedFetch } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
-const SOCIAL_API = `https://social-service.decentraland.org/v1/communities/${COMMUNITY_ID}/members`
+const SOCIAL_API = `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`
 
 function joinCommunity() {
   executeTask(async () => {

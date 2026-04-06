@@ -1,6 +1,6 @@
 import {
   engine, Transform, pointerEventsSystem, InputAction,
-  MeshRenderer, Material
+  MeshRenderer, Material, AudioSource
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { showMailboxPopup } from '../ui'
@@ -20,9 +20,23 @@ export function mailboxSystem() {
     if (Vector3.distance(t.position, MAILBOX_POS) < MATCH_DIST) {
       if (entity === engine.PlayerEntity || entity === engine.CameraEntity) continue
 
+      // Mailbox sound effect
+      const mailboxSound = engine.addEntity()
+      Transform.create(mailboxSound, { position: MAILBOX_POS })
+      AudioSource.create(mailboxSound, {
+        audioClipUrl: 'assets/sounds/mailbox.mp3',
+        playing: false,
+        loop: false,
+        volume: 1,
+        global: false
+      })
+
       pointerEventsSystem.onPointerDown(
         { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Leave a Message', maxDistance: 5 } },
         () => {
+          const a = AudioSource.getMutable(mailboxSound)
+          a.currentTime = 0
+          a.playing = true
           showMailboxPopup()
         }
       )
