@@ -1,6 +1,6 @@
 import {
   engine, Transform, pointerEventsSystem, InputAction,
-  MeshRenderer, MeshCollider, Material
+  MeshRenderer, Material
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { showMailboxPopup } from '../ui'
@@ -21,7 +21,7 @@ export function mailboxSystem() {
       if (entity === engine.PlayerEntity || entity === engine.CameraEntity) continue
 
       pointerEventsSystem.onPointerDown(
-        { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Leave Feedback', maxDistance: 5 } },
+        { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Leave a Message', maxDistance: 5 } },
         () => {
           showMailboxPopup()
         }

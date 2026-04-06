@@ -12,16 +12,38 @@ import { clearMushroomShield } from './systems/mushroomSystem'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
-import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType, PointerEvents, type Entity } from '@dcl/sdk/ecs'
+import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType, PointerEvents, executeTask, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 // import { isMobile } from '@dcl/sdk/platform'  // disabled — causes crashes
 import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
-import { openExternalUrl } from '~system/RestrictedActions'
+import { signedFetch } from '~system/SignedFetch'
 
-const COMMUNITY_URL = 'https://decentraland.org/social/communities/f7d69445-4889-49a9-8b50-07100125cbdc?utm_org=dcl&utm_source=explorer&utm_medium=organic&utm_campaign=communities'
+const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
+const SOCIAL_API = `https://social-service.decentraland.org/v1/communities/${COMMUNITY_ID}/members`
+
+function joinCommunity() {
+  executeTask(async () => {
+    try {
+      const res = await signedFetch({
+        url: SOCIAL_API,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        }
+      })
+      if (res.ok) {
+        console.log('[Mailbox] Successfully joined Flagtag community!')
+      } else {
+        console.log('[Mailbox] Community join response:', res.status, res.body)
+      }
+    } catch (err) {
+      console.error('[Mailbox] Failed to join community:', err)
+    }
+  })
+}
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
@@ -111,7 +133,6 @@ let leaderboardScrollOffset = 0
 // ── Round-end splash state ──
 let splashVisible = false
 let splashHideTime = 0
-let prevCountdown = -1
 let trumpetEntity: Entity | null = null
 const SPLASH_DURATION_MS = 5000
 
@@ -121,59 +142,45 @@ interface SplashPlayer {
 }
 
 let splashPlayers: SplashPlayer[] = []
-let splashFromServer = false
+let lastSplashRoundWinnerJson = '' // track the last roundWinnerJson we showed, to avoid re-triggering
 
 function roundEndSplashSystem(dt: number): void {
-  const countdown = getCountdownSeconds()
   const now = Date.now()
 
-  // Detect the moment countdown hits 0 (was positive last frame)
-  if (prevCountdown > 0 && countdown === 0) {
-    splashVisible = true
-    splashHideTime = now + SPLASH_DURATION_MS
-    splashFromServer = false
-    clearMushroomShield()
+  // Watch for server's roundEndTriggered flag with winner data
+  for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
+    if (timer.roundEndTriggered && timer.roundWinnerJson && timer.roundWinnerJson !== lastSplashRoundWinnerJson) {
+      // New round end from server — show splash with authoritative data
+      lastSplashRoundWinnerJson = timer.roundWinnerJson
+      splashVisible = true
+      splashHideTime = now + SPLASH_DURATION_MS
+      clearMushroomShield()
 
-    // Snapshot client-side scoreboard immediately (before CRDT resets arrive)
-    const currentPlayers = getPlayersWithHoldTimes()
-    splashPlayers = currentPlayers
-      .filter(p => p.seconds > 0)
-      .slice(0, 3)
-      .map(p => ({ name: getKnownPlayerName(p.userId) || p.name, seconds: p.seconds }))
-
-    // Play trumpet sound once
-    if (trumpetEntity) {
-      engine.removeEntity(trumpetEntity)
-    }
-    trumpetEntity = engine.addEntity()
-    Transform.create(trumpetEntity, { position: Vector3.Zero() })
-    AudioSource.create(trumpetEntity, {
-      audioClipUrl: 'assets/sounds/trumpets.mp3',
-      playing: true,
-      volume: 0.8,
-      loop: false,
-      global: true
-    })
-  }
-
-  // While splash is showing, upgrade to server-authoritative data as soon as it arrives.
-  // Server data is always correct — client interpolation can drift, so always prefer server.
-  if (splashVisible && !splashFromServer) {
-    for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
-      if (timer.roundWinnerJson) {
-        try {
-          const serverData = JSON.parse(timer.roundWinnerJson) as Array<{ userId?: string; name: string; seconds: number }>
-          if (serverData.length > 0) {
-            splashPlayers = serverData.slice(0, 3).map(p => ({
-              name: (p.userId ? getKnownPlayerName(p.userId) : null) || p.name,
-              seconds: p.seconds
-            }))
-            splashFromServer = true
-          }
-        } catch { /* ignore parse errors */ }
+      try {
+        const serverData = JSON.parse(timer.roundWinnerJson) as Array<{ userId?: string; name: string; seconds: number }>
+        splashPlayers = serverData.slice(0, 3).map(p => ({
+          name: (p.userId ? getKnownPlayerName(p.userId) : null) || p.name,
+          seconds: p.seconds
+        }))
+      } catch {
+        splashPlayers = []
       }
-      break
+
+      // Play trumpet sound once
+      if (trumpetEntity) {
+        engine.removeEntity(trumpetEntity)
+      }
+      trumpetEntity = engine.addEntity()
+      Transform.create(trumpetEntity, { position: Vector3.Zero() })
+      AudioSource.create(trumpetEntity, {
+        audioClipUrl: 'assets/sounds/trumpets.mp3',
+        playing: true,
+        volume: 0.8,
+        loop: false,
+        global: true
+      })
     }
+    break
   }
 
   // Hide splash after duration
@@ -185,8 +192,6 @@ function roundEndSplashSystem(dt: number): void {
       trumpetEntity = null
     }
   }
-
-  prevCountdown = countdown
 }
 
 engine.addSystem(roundEndSplashSystem)
@@ -413,12 +418,12 @@ function PlayerListUi() {
           uiBackground={{ color: Color4.create(0.12, 0.12, 0.15, 0.95) }}
           >
             <Label value="Flagtag Community" fontSize={24} color={Color4.White()} uiTransform={{ margin: { bottom: 8 } }} />
-            <Label value="Join the Flagtag community to leave a review or report any bugs!" fontSize={16} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ margin: { top: 4, bottom: 20 }, width: 360, height: 40 }} textAlign="middle-center" />
+            <Label value="Join the Flagtag community to leave a review or report a bug." fontSize={16} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ margin: { top: 4, bottom: 20 }, width: 360, height: 40 }} textAlign="middle-center" />
             <UiEntity
               uiTransform={{ width: 240, height: 44, margin: { bottom: 10 }, borderRadius: 8 }}
               uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
               onMouseDown={() => {
-                void openExternalUrl({ url: COMMUNITY_URL })
+                joinCommunity()
                 hideMailboxPopup()
               }}
             >
