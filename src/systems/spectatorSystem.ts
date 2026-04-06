@@ -89,6 +89,25 @@ export function setupSpectator() {
     }
   )
 
+  // Fourth scope
+  const spectatorOrb4 = engine.addEntity()
+  Transform.create(spectatorOrb4, {
+    position: Vector3.create(74, 16.6, 79.6),
+    scale: Vector3.create(4.5, 4.5, 4.5),
+    rotation: Quaternion.fromEulerDegrees(0, 0, 0)
+  })
+  GltfContainer.create(spectatorOrb4, {
+    src: 'assets/scene/Models/scope.glb',
+    visibleMeshesCollisionMask: 3,
+    invisibleMeshesCollisionMask: 0
+  })
+  pointerEventsSystem.onPointerDown(
+    { entity: spectatorOrb4, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
+    () => {
+      if (!isSpectating) enterSpectatorMode()
+    }
+  )
+
   // ── Create look-at target (castle center) ──
   const lookTarget = engine.addEntity()
   Transform.create(lookTarget, { position: CASTLE_CENTER })
