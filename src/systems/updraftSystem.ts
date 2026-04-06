@@ -105,8 +105,8 @@ const SMOKE_MATERIAL = {
 // ── Physics lift configuration ──────────────────────────────
 const TRIGGER_RADIUS  = 2.5
 const TRIGGER_HEIGHT  = 30
-const UPDRAFT_FORCE   = Vector3.create(0, 60, 0)
-const UPDRAFT_KICK    = Vector3.create(0, 15, 0)
+const UPDRAFT_FORCE   = Vector3.create(0, 30, 0)
+const UPDRAFT_KICK    = Vector3.create(0, 8, 0)
 
 // ── Transition configuration ────────────────────────────────
 const TRANSITION_DELAY = 5 // seconds to wait after last orb fades
@@ -218,8 +218,30 @@ function deactivateForce(): void {
   PhysicsCombinedForce.deleteFrom(engine.PlayerEntity)
 }
 
+// Track the Y range of active orbs for dynamic trigger bounds
+let orbMinY = 0
+let orbMaxY = 0
+
+function computeOrbBounds(): void {
+  if (activeSmokePuffs.length === 0) {
+    orbMinY = 0
+    orbMaxY = 0
+    return
+  }
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const sp of activeSmokePuffs) {
+    const y = Transform.get(sp.entity).position.y
+    if (y < -100) continue // skip hidden puffs
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  orbMinY = minY === Infinity ? 0 : minY
+  orbMaxY = maxY === -Infinity ? 0 : maxY
+}
+
 function updateLift(): void {
-  if (activeLocationIndex < 0 || !Transform.has(engine.PlayerEntity)) {
+  if (activeLocationIndex < 0 || !Transform.has(engine.PlayerEntity) || orbMaxY <= orbMinY) {
     deactivateForce()
     return
   }
@@ -229,7 +251,7 @@ function updateLift(): void {
   const dx = p.x - loc.x
   const dz = p.z - loc.z
   const inRadius = dx * dx + dz * dz <= TRIGGER_RADIUS * TRIGGER_RADIUS
-  const inHeight = p.y >= loc.y - 2 && p.y <= loc.y + TRIGGER_HEIGHT
+  const inHeight = p.y >= orbMinY - 2 && p.y <= orbMaxY + 2
 
   if (inRadius && inHeight && inputSystem.isPressed(InputAction.IA_JUMP)) {
     activateForce()
@@ -293,6 +315,7 @@ export function setupUpdraftSystem(): void {
 
 export function updraftSystem(dt: number): void {
   animateSmokePuffs()
+  computeOrbBounds()
   updateTransition(dt)
   updateLift()
 
