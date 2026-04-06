@@ -5,6 +5,10 @@ import {
   MeshRenderer,
   Material,
   MaterialTransparencyMode,
+  PhysicsCombinedForce,
+  PhysicsCombinedImpulse,
+  inputSystem,
+  InputAction,
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
@@ -88,7 +92,7 @@ const SMOKE_MATERIAL = {
   transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
   castShadows: false,
 }
-const FADE_START = 0.92  // start fading at 92% of lifetime (very fast fade)
+const FADE_START = 0.98  // start fading at 98% of lifetime (~0.56s fade)
 
 const smokePool: Entity[] = []
 let smokePoolIdx = 0
@@ -174,6 +178,30 @@ function animateSmokePuffs(): void {
 }
 
 // ══════════════════════════════════════════════════════════════
+// Physics lift config
+// ══════════════════════════════════════════════════════════════
+const TRIGGER_RADIUS = 2.5
+const TRIGGER_HEIGHT = 30
+const UPDRAFT_FORCE = Vector3.create(0, 60, 0)
+const UPDRAFT_KICK = Vector3.create(0, 15, 0)
+let forceActive = false
+let impulseEventId = 0
+
+function activateForce() {
+  if (forceActive) return
+  forceActive = true
+  PhysicsCombinedForce.createOrReplace(engine.PlayerEntity, { vector: UPDRAFT_FORCE })
+  impulseEventId++
+  PhysicsCombinedImpulse.createOrReplace(engine.PlayerEntity, { vector: UPDRAFT_KICK, eventId: impulseEventId })
+}
+
+function deactivateForce() {
+  if (!forceActive) return
+  forceActive = false
+  PhysicsCombinedForce.deleteFrom(engine.PlayerEntity)
+}
+
+// ══════════════════════════════════════════════════════════════
 // State
 // ══════════════════════════════════════════════════════════════
 let activeLocationIndex = -1
@@ -242,6 +270,24 @@ export function updraftSystem(dt: number) {
       spawning = true
       console.log(`[Updraft] Active chimney ${activeLocationIndex}`)
     }
+  }
+
+  // Physics lift — proximity check + hold space
+  if (activeLocationIndex >= 0 && Transform.has(engine.PlayerEntity)) {
+    const loc = CHIMNEY_LOCATIONS[activeLocationIndex]
+    const playerPos = Transform.get(engine.PlayerEntity).position
+    const dx = playerPos.x - loc.x
+    const dz = playerPos.z - loc.z
+    const inRadius = dx * dx + dz * dz <= TRIGGER_RADIUS * TRIGGER_RADIUS
+    const inHeight = playerPos.y >= loc.y - 2 && playerPos.y <= loc.y + TRIGGER_HEIGHT
+
+    if (inRadius && inHeight && inputSystem.isPressed(InputAction.IA_JUMP)) {
+      activateForce()
+    } else {
+      deactivateForce()
+    }
+  } else {
+    deactivateForce()
   }
 
   // Spawn new puffs only when active
