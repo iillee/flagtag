@@ -18,6 +18,7 @@ import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditi
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 // import { isMobile } from '@dcl/sdk/platform'  // disabled — causes crashes
+import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
@@ -367,6 +368,26 @@ function PlayerListUi() {
             <Label value="Server Disconnected" fontSize={28} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: 12 }} />
             <Label value="all players please leave scene for 5 minutes while server resets" fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+          </UiEntity>
+        </UiEntity>
+      )}
+      {/* Spectator mode overlay */}
+      {isSpectatorMode() && (
+        <UiEntity uiTransform={{
+          positionType: 'absolute',
+          position: { bottom: 20, left: 0 },
+          width: '100%',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}>
+          <Label value="👁 SPECTATOR MODE" fontSize={28} color={Color4.White()} />
+          <Label value="WASD = Pan  |  E/F = Up/Down  |  1 = Exit" fontSize={14} color={Color4.create(1, 1, 1, 0.8)} />
+          <UiEntity
+            uiTransform={{ width: 160, height: 40, margin: { top: 8 } }}
+            uiBackground={{ color: Color4.create(1, 1, 1, 0.9) }}
+            onMouseDown={() => exitSpectatorMode()}
+          >
+            <Label value="Exit (1)" fontSize={18} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
           </UiEntity>
         </UiEntity>
       )}
