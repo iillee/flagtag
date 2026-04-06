@@ -11,6 +11,7 @@ import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
 import { setupSpectator } from './systems/spectatorSystem'
+import { mailboxSystem } from './systems/mailboxSystem'
 
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
@@ -378,6 +379,9 @@ export async function main() {
 
   // Spectator camera
   setupSpectator()
+
+  // Mailbox — click to leave feedback
+  engine.addSystem(mailboxSystem)
 
 
 

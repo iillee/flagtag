@@ -19,6 +19,9 @@ import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardO
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 // import { isMobile } from '@dcl/sdk/platform'  // disabled — causes crashes
 import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
+import { openExternalUrl } from '~system/RestrictedActions'
+
+const COMMUNITY_URL = 'https://decentraland.org/social/communities/f7d69445-4889-49a9-8b50-07100125cbdc?utm_org=dcl&utm_source=explorer&utm_medium=organic&utm_campaign=communities'
 
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
@@ -41,6 +44,19 @@ export function isAnyOverlayOpen(): boolean {
     || splashVisible
     || serverDownVisible
     || mobileScoreboardOverlayVisible
+    || mailboxPopupVisible
+}
+
+// ── Mailbox popup state ──
+let mailboxPopupVisible = false
+
+export function showMailboxPopup() {
+  mailboxPopupVisible = true
+}
+
+export function hideMailboxPopup() {
+  mailboxPopupVisible = false
+  notifyOverlayClosed()
 }
 
 // ── UI click sound (preloaded) ──
@@ -372,6 +388,49 @@ function PlayerListUi() {
             <Label value="Server Disconnected" fontSize={28} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: 12 }} />
             <Label value="all players please leave scene for 5 minutes while server resets" fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+          </UiEntity>
+        </UiEntity>
+      )}
+      {/* Mailbox popup */}
+      {mailboxPopupVisible && (
+        <UiEntity uiTransform={{
+          positionType: 'absolute',
+          position: { top: 0, left: 0 },
+          width: '100%',
+          height: '100%',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+        uiBackground={{ color: Color4.create(0, 0, 0, 0.5) }}
+        >
+          <UiEntity uiTransform={{
+            width: 420,
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: { top: 24, bottom: 24, left: 24, right: 24 },
+            borderRadius: 16,
+          }}
+          uiBackground={{ color: Color4.create(0.12, 0.12, 0.15, 0.95) }}
+          >
+            <Label value="Flagtag Community" fontSize={24} color={Color4.White()} uiTransform={{ margin: { bottom: 8 } }} />
+            <Label value="Join the Flagtag community to leave a review or report any bugs!" fontSize={16} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ margin: { top: 4, bottom: 20 }, width: 360, height: 40 }} textAlign="middle-center" />
+            <UiEntity
+              uiTransform={{ width: 240, height: 44, margin: { bottom: 10 }, borderRadius: 8 }}
+              uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
+              onMouseDown={() => {
+                void openExternalUrl({ url: COMMUNITY_URL })
+                hideMailboxPopup()
+              }}
+            >
+              <Label value="Join Community" fontSize={18} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} />
+            </UiEntity>
+            <UiEntity
+              uiTransform={{ width: 240, height: 36, borderRadius: 8 }}
+              uiBackground={{ color: Color4.create(0.3, 0.3, 0.3, 0.8) }}
+              onMouseDown={() => hideMailboxPopup()}
+            >
+              <Label value="Dismiss" fontSize={16} color={Color4.create(0.8, 0.8, 0.8, 1)} uiTransform={{ width: '100%', height: '100%' }} />
+            </UiEntity>
           </UiEntity>
         </UiEntity>
       )}
