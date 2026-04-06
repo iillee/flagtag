@@ -24,7 +24,16 @@ export function setupUi() {
 }
 
 /** Returns true if any UI overlay is currently visible (How to Play, Leaderboard, Analytics, Splash, etc.) */
+let overlayClosedAt = 0
+const OVERLAY_CLOSE_GRACE_MS = 150 // ignore clicks for this long after closing an overlay
+
+export function notifyOverlayClosed() {
+  overlayClosedAt = Date.now()
+}
+
 export function isAnyOverlayOpen(): boolean {
+  // Also return true briefly after an overlay was closed, so the same click doesn't trigger an attack
+  if (Date.now() - overlayClosedAt < OVERLAY_CLOSE_GRACE_MS) return true
   return getWinConditionOverlayVisible()
     || getLeaderboardOverlayVisible()
     || getAnalyticsOverlayVisible()
@@ -476,7 +485,7 @@ function DesktopLayout() {
               }}
               onMouseEnter={() => { closeSplashHovered = true }}
               onMouseLeave={() => { closeSplashHovered = false }}
-              onMouseDown={() => { playClickSound(); splashVisible = false; closeSplashHovered = false }}
+              onMouseDown={() => { playClickSound(); splashVisible = false; closeSplashHovered = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={44} color={closeSplashHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -567,7 +576,7 @@ function DesktopLayout() {
               }}
               onMouseEnter={() => { closeWinConditionHovered = true }}
               onMouseLeave={() => { closeWinConditionHovered = false }}
-              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false }}
+              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={44} color={closeWinConditionHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -743,7 +752,7 @@ function DesktopLayout() {
               }}
               onMouseEnter={() => { closeLeaderboardHovered = true }}
               onMouseLeave={() => { closeLeaderboardHovered = false }}
-              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); closeLeaderboardHovered = false }}
+              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); closeLeaderboardHovered = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={44} color={closeLeaderboardHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -911,7 +920,7 @@ function DesktopLayout() {
               }}
               onMouseEnter={() => { closeAnalyticsHovered = true }}
               onMouseLeave={() => { closeAnalyticsHovered = false }}
-              onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false); closeAnalyticsHovered = false }}
+              onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false); closeAnalyticsHovered = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={44} color={closeAnalyticsHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -1192,7 +1201,7 @@ function DesktopLayout() {
               uiTransform={{ width: 28, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               onMouseEnter={() => { squareIconHovered = true }}
               onMouseLeave={() => { squareIconHovered = false }}
-              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
+              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
             >
               <Label value="★" fontSize={ICON_FONT_SQUARE} color={leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE} font="sans-serif" />
             </UiEntity>
@@ -1200,7 +1209,7 @@ function DesktopLayout() {
               uiTransform={{ width: 28, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               onMouseEnter={() => { questionIconHovered = true }}
               onMouseLeave={() => { questionIconHovered = false }}
-              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); toggleWinConditionOverlay() }}
+              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
             >
               <Label value="?" fontSize={ICON_FONT_QUESTION} color={winConditionOverlayVisible || questionIconHovered ? GOLD : WHITE} font="sans-serif" />
             </UiEntity>
@@ -1214,6 +1223,7 @@ function DesktopLayout() {
                 setLeaderboardOverlayVisible(false);
                 visitorScrollOffset = 0;
                 toggleAnalyticsOverlay();
+                notifyOverlayClosed();
               }}
             >
               <Label value="#" fontSize={ICON_FONT_ANALYTICS} color={analyticsOverlayVisible || analyticsIconHovered ? GOLD : WHITE} font="sans-serif" />
@@ -1345,7 +1355,7 @@ function MobileLayout() {
                   margin: { right: 6 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay() }}
+                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="?" fontSize={36} color={winConditionOverlayVisible ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
@@ -1356,7 +1366,7 @@ function MobileLayout() {
                   margin: { right: 6 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay() }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="★" fontSize={34} color={leaderboardOverlayVisible ? GOLD : WHITE} font="sans-serif"
                   uiTransform={{ margin: { bottom: 4 } }}
@@ -1375,6 +1385,7 @@ function MobileLayout() {
                   mobileScoreboardOverlayVisible = false;
                   visitorScrollOffset = 0;
                   toggleAnalyticsOverlay();
+                  notifyOverlayClosed();
                 }}
               >
                 <Label value="#" fontSize={32} color={analyticsOverlayVisible ? GOLD : WHITE} font="sans-serif" />
@@ -1542,7 +1553,7 @@ function MobileLayout() {
                 width: 64, height: 64,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
-              onMouseDown={() => { playClickSound(); mobileScoreboardOverlayVisible = false }}
+              onMouseDown={() => { playClickSound(); mobileScoreboardOverlayVisible = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -1624,7 +1635,7 @@ function MobileLayout() {
                 width: 64, height: 64,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
-              onMouseDown={() => { playClickSound(); splashVisible = false }}
+              onMouseDown={() => { playClickSound(); splashVisible = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -1702,7 +1713,7 @@ function MobileLayout() {
                 width: 64, height: 64,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
-              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false) }}
+              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -1868,7 +1879,7 @@ function MobileLayout() {
                 width: 64, height: 64,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
-              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false) }}
+              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -1974,7 +1985,7 @@ function MobileLayout() {
                 width: 64, height: 64,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
-              onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false) }}
+              onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false); notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>

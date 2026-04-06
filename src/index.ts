@@ -1,5 +1,5 @@
 import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
-import { engine, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType } from '@dcl/sdk/ecs'
+import { engine, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
@@ -10,6 +10,7 @@ import { shellClientSystem } from './systems/shellSystem'
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
+import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
@@ -376,6 +377,10 @@ export async function main() {
   // Proximity lighting
   setupProximityLights()
   engine.addSystem(proximityLightSystem)
+
+  // Updraft smoke stacks
+  setupUpdraftSystem()
+  engine.addSystem(updraftSystem)
 
   // Client systems
   engine.addSystem(flagClientSystem)

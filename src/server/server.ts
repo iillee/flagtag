@@ -520,6 +520,7 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(safeSystem('nameResolverServerSystem', nameResolverServerSystem))
   engine.addSystem(safeSystem('bananaServerSystem', bananaServerSystem))
   engine.addSystem(safeSystem('shellServerSystem', shellServerSystem))
+  engine.addSystem(safeSystem('updraftServerSystem', updraftServerSystem))
 
   // ── Spawn mushrooms ──
   spawnMushrooms()
@@ -779,6 +780,32 @@ function registerHandlers(): void {
       spawnOneMushroom()
     } catch (err) { console.error('[Server] ❌ pickupMushroom handler error:', err) }
   })
+
+  // ── Updraft location request ──
+  room.onMessage('requestUpdraftLocation', (_data, _context) => {
+    try {
+      room.send('updraftLocation', { index: updraftActiveIndex })
+    } catch (err) { console.error('[Server] ❌ requestUpdraftLocation handler error:', err) }
+  })
+}
+
+// ── Updraft state ──
+const UPDRAFT_CHIMNEY_COUNT = 49
+const UPDRAFT_ROTATE_SEC = 60
+let updraftActiveIndex = Math.floor(Math.random() * UPDRAFT_CHIMNEY_COUNT)
+let updraftTimer = 0
+
+function updraftServerSystem(dt: number) {
+  updraftTimer += dt
+  if (updraftTimer >= UPDRAFT_ROTATE_SEC) {
+    updraftTimer = 0
+    // Pick a random chimney that isn't the current one
+    let next = Math.floor(Math.random() * (UPDRAFT_CHIMNEY_COUNT - 1))
+    if (next >= updraftActiveIndex) next++
+    updraftActiveIndex = next
+    room.send('updraftLocation', { index: updraftActiveIndex })
+    console.log('[Server] 💨 Updraft moved to chimney', updraftActiveIndex)
+  }
 }
 
 function handlePickup(playerId: string): void {

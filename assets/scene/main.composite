@@ -496,16 +496,16 @@
               "y": 1.493665337562561,
               "z": 81.77999877929688
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.4343000054359436,
               "z": 0,
               "w": 0.9007999897003174
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -580,16 +580,16 @@
               "y": 1.5027931928634644,
               "z": 108.69000244140625
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.9998000264167786,
               "z": 0,
               "w": 0.02160000056028366
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -643,16 +643,16 @@
               "y": 1.5015919208526611,
               "z": 122.19000244140625
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.9968000054359436,
               "z": 0,
               "w": -0.07980000227689743
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -727,16 +727,16 @@
               "y": 1.4927089214324951,
               "z": 109.45999908447266
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.9994999766349792,
               "z": 0,
               "w": -0.030500000342726707
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -790,16 +790,16 @@
               "y": 1.5099999904632568,
               "z": 124.45999908447266
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.6488999724388123,
               "z": 0,
               "w": -0.7609000205993652
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -853,16 +853,16 @@
               "y": 1.4950538873672485,
               "z": 120.78685760498047
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.7131794691085815,
               "z": 0,
               "w": 0.7010354399681091
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -916,16 +916,16 @@
               "y": 1.4885025024414062,
               "z": 115.7699966430664
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.46000000834465027,
               "z": 0,
               "w": 0.8878999948501587
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -1021,16 +1021,16 @@
               "y": 0,
               "z": 0.5600000023841858
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": -0.7071067690849304,
               "z": 0,
               "w": 0.7071067690849304
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 575
           }
@@ -1042,16 +1042,16 @@
               "y": 0,
               "z": -0.4000000059604645
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": -0.7071067690849304,
               "z": 0,
               "w": 0.7071067690849304
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 575
           }
@@ -1063,16 +1063,37 @@
               "y": 11.530471801757812,
               "z": 147.74755859375
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": -0.5439031720161438,
               "z": 0,
               "w": -0.8391279578208923
             },
+            "parent": 0
+          }
+        },
+        "576": {
+          "json": {
+            "position": {
+              "x": 74.75,
+              "y": -2,
+              "z": 119.5
+            },
             "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
             },
             "parent": 0
           }
@@ -1409,13 +1430,20 @@
         "571": {
           "json": {
             "src": "assets/scene/Models/lights.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
+            "visibleMeshesCollisionMask": 3,
+            "invisibleMeshesCollisionMask": 0
           }
         },
         "575": {
           "json": {
             "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "576": {
+          "json": {
+            "src": "assets/scene/Models/gates.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -1668,6 +1696,11 @@
         "575": {
           "json": {
             "value": "Classic Bench_12"
+          }
+        },
+        "576": {
+          "json": {
+            "value": "gates.glb"
           }
         }
       }
@@ -1983,13 +2016,7 @@
         },
         "serializationType": "map"
       },
-      "data": {
-        "0": {
-          "json": {
-            "gizmo": 1
-          }
-        }
-      }
+      "data": {}
     },
     {
       "name": "inspector::Nodes",
@@ -2067,7 +2094,57 @@
                   569,
                   570,
                   571,
-                  575
+                  575,
+                  576,
+                  512,
+                  541,
+                  542,
+                  543,
+                  544,
+                  549,
+                  550,
+                  551,
+                  552,
+                  553,
+                  554,
+                  564,
+                  565,
+                  566,
+                  572,
+                  577,
+                  578,
+                  579,
+                  580,
+                  581,
+                  582,
+                  583,
+                  584,
+                  585,
+                  586,
+                  587,
+                  588,
+                  589,
+                  590,
+                  591,
+                  592,
+                  593,
+                  594,
+                  595,
+                  596,
+                  597,
+                  598,
+                  599,
+                  600,
+                  601,
+                  602,
+                  603,
+                  604,
+                  605,
+                  606,
+                  607,
+                  608,
+                  609,
+                  610
                 ]
               },
               {
@@ -2289,6 +2366,206 @@
               {
                 "entity": 573,
                 "children": []
+              },
+              {
+                "entity": 576,
+                "children": []
+              },
+              {
+                "entity": 512,
+                "children": []
+              },
+              {
+                "entity": 541,
+                "children": []
+              },
+              {
+                "entity": 542,
+                "children": []
+              },
+              {
+                "entity": 543,
+                "children": []
+              },
+              {
+                "entity": 544,
+                "children": []
+              },
+              {
+                "entity": 549,
+                "children": []
+              },
+              {
+                "entity": 550,
+                "children": []
+              },
+              {
+                "entity": 551,
+                "children": []
+              },
+              {
+                "entity": 552,
+                "children": []
+              },
+              {
+                "entity": 553,
+                "children": []
+              },
+              {
+                "entity": 554,
+                "children": []
+              },
+              {
+                "entity": 564,
+                "children": []
+              },
+              {
+                "entity": 565,
+                "children": []
+              },
+              {
+                "entity": 566,
+                "children": []
+              },
+              {
+                "entity": 572,
+                "children": []
+              },
+              {
+                "entity": 577,
+                "children": []
+              },
+              {
+                "entity": 578,
+                "children": []
+              },
+              {
+                "entity": 579,
+                "children": []
+              },
+              {
+                "entity": 580,
+                "children": []
+              },
+              {
+                "entity": 581,
+                "children": []
+              },
+              {
+                "entity": 582,
+                "children": []
+              },
+              {
+                "entity": 583,
+                "children": []
+              },
+              {
+                "entity": 584,
+                "children": []
+              },
+              {
+                "entity": 585,
+                "children": []
+              },
+              {
+                "entity": 586,
+                "children": []
+              },
+              {
+                "entity": 587,
+                "children": []
+              },
+              {
+                "entity": 588,
+                "children": []
+              },
+              {
+                "entity": 589,
+                "children": []
+              },
+              {
+                "entity": 590,
+                "children": []
+              },
+              {
+                "entity": 591,
+                "children": []
+              },
+              {
+                "entity": 592,
+                "children": []
+              },
+              {
+                "entity": 593,
+                "children": []
+              },
+              {
+                "entity": 594,
+                "children": []
+              },
+              {
+                "entity": 595,
+                "children": []
+              },
+              {
+                "entity": 596,
+                "children": []
+              },
+              {
+                "entity": 597,
+                "children": []
+              },
+              {
+                "entity": 598,
+                "children": []
+              },
+              {
+                "entity": 599,
+                "children": []
+              },
+              {
+                "entity": 600,
+                "children": []
+              },
+              {
+                "entity": 601,
+                "children": []
+              },
+              {
+                "entity": 602,
+                "children": []
+              },
+              {
+                "entity": 603,
+                "children": []
+              },
+              {
+                "entity": 604,
+                "children": []
+              },
+              {
+                "entity": 605,
+                "children": []
+              },
+              {
+                "entity": 606,
+                "children": []
+              },
+              {
+                "entity": 607,
+                "children": []
+              },
+              {
+                "entity": 608,
+                "children": []
+              },
+              {
+                "entity": 609,
+                "children": []
+              },
+              {
+                "entity": 610,
+                "children": []
               }
             ]
           }
@@ -2406,6 +2683,9 @@
           "json": {}
         },
         "575": {
+          "json": {}
+        },
+        "576": {
           "json": {}
         }
       }

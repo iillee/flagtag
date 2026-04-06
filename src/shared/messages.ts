@@ -25,6 +25,10 @@ export const Messages = {
   shellDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, dirX: Schemas.Float, dirZ: Schemas.Float }),
   shellTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
 
+  // Updraft messages
+  requestUpdraftLocation: Schemas.Map({ t: Schemas.Int }),
+  updraftLocation: Schemas.Map({ index: Schemas.Int }),
+
   // Mushroom messages
   requestMushroomPositions: Schemas.Map({ t: Schemas.Int }),
   pickupMushroom: Schemas.Map({ id: Schemas.Int }),
