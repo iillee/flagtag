@@ -1,6 +1,6 @@
 import {
   engine, Transform, inputSystem, InputAction, PointerEventType,
-  GltfContainer,
+  GltfContainer, AudioSource,
   VirtualCamera, MainCamera, InputModifier, pointerEventsSystem
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
@@ -24,6 +24,25 @@ const SCENE_D = 240
 
 let spectatorCamEntity: ReturnType<typeof engine.addEntity>
 let spectatorOrbEntity: ReturnType<typeof engine.addEntity>
+let binocularsSoundEntity: ReturnType<typeof engine.addEntity> | null = null
+
+function playBinocularsSound() {
+  if (!binocularsSoundEntity) {
+    binocularsSoundEntity = engine.addEntity()
+    Transform.create(binocularsSoundEntity, { position: Vector3.create(0, 0, 0) })
+    AudioSource.create(binocularsSoundEntity, {
+      audioClipUrl: 'assets/sounds/binoculars.mp3',
+      playing: false,
+      loop: false,
+      volume: 1.0,
+      global: true
+    })
+  }
+  const a = AudioSource.getMutable(binocularsSoundEntity)
+  a.playing = false
+  a.currentTime = 0
+  a.playing = true
+}
 
 export function isSpectatorMode(): boolean {
   return isSpectating
@@ -47,7 +66,7 @@ export function setupSpectator() {
   pointerEventsSystem.onPointerDown(
     { entity: spectatorOrbEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
     () => {
-      if (!isSpectating) enterSpectatorMode()
+      if (!isSpectating) { playBinocularsSound(); enterSpectatorMode() }
     }
   )
 
@@ -66,7 +85,7 @@ export function setupSpectator() {
   pointerEventsSystem.onPointerDown(
     { entity: spectatorOrb2, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
     () => {
-      if (!isSpectating) enterSpectatorMode()
+      if (!isSpectating) { playBinocularsSound(); enterSpectatorMode() }
     }
   )
 
@@ -85,7 +104,7 @@ export function setupSpectator() {
   pointerEventsSystem.onPointerDown(
     { entity: spectatorOrb3, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
     () => {
-      if (!isSpectating) enterSpectatorMode()
+      if (!isSpectating) { playBinocularsSound(); enterSpectatorMode() }
     }
   )
 
@@ -104,7 +123,7 @@ export function setupSpectator() {
   pointerEventsSystem.onPointerDown(
     { entity: spectatorOrb4, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
     () => {
-      if (!isSpectating) enterSpectatorMode()
+      if (!isSpectating) { playBinocularsSound(); enterSpectatorMode() }
     }
   )
 

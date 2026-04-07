@@ -28,6 +28,7 @@ import { Flag, FlagState } from '../shared/components'
 import { room } from '../shared/messages'
 import { predictAttackLocally } from './combatSystem'
 import { isAnyOverlayOpen } from '../ui'
+import { isSpectatorMode } from './spectatorSystem'
 
 // Visual clone system for smooth flag carrying
 let carryCloneEntity: Entity | null = null
@@ -400,7 +401,7 @@ export function flagClientSystem(dt: number): void {
   }
 
   // Left click — attack only (skip if a UI overlay is open or clicking an interactive object)
-  if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && userId && !isAnyOverlayOpen()) {
+  if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && userId && !isAnyOverlayOpen() && !isSpectatorMode()) {
     const cmd = inputSystem.getInputCommand(InputAction.IA_POINTER, PointerEventType.PET_DOWN)
     const hitEntity = cmd?.hit?.entityId
     // Skip attack if the click landed on an entity with pointer events (bench, scope, etc.)

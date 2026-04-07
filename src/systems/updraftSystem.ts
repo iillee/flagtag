@@ -14,6 +14,7 @@ import {
   MaterialTransparencyMode,
   PhysicsCombinedForce,
   PhysicsCombinedImpulse,
+  AudioSource,
   inputSystem,
   InputAction,
 } from '@dcl/sdk/ecs'
@@ -203,10 +204,32 @@ function animateSmokePuffs(): void {
   }
 }
 
+// ── Swoosh sound ────────────────────────────────────────────
+let swooshSoundEntity: Entity | null = null
+
+function playSwooshSound(): void {
+  if (!swooshSoundEntity) {
+    swooshSoundEntity = engine.addEntity()
+    Transform.create(swooshSoundEntity, { position: Vector3.create(0, 0, 0) })
+    AudioSource.create(swooshSoundEntity, {
+      audioClipUrl: 'assets/sounds/swoosh.mp3',
+      playing: false,
+      loop: false,
+      volume: 1.0,
+      global: true
+    })
+  }
+  const a = AudioSource.getMutable(swooshSoundEntity)
+  a.playing = false
+  a.currentTime = 0
+  a.playing = true
+}
+
 // ── Physics lift ────────────────────────────────────────────
 function activateForce(): void {
   if (forceActive) return
   forceActive = true
+  playSwooshSound()
   PhysicsCombinedForce.createOrReplace(engine.PlayerEntity, { vector: UPDRAFT_FORCE })
   impulseEventId++
   PhysicsCombinedImpulse.createOrReplace(engine.PlayerEntity, { vector: UPDRAFT_KICK, eventId: impulseEventId })

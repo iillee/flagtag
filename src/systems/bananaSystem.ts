@@ -25,6 +25,7 @@ import { Flag, Banana, BANANA_COOLDOWN_SEC, BANANA_LIFETIME_SEC, BANANA_TRIGGER_
 import { room } from '../shared/messages'
 
 import { triggerEmote } from '~system/RestrictedActions'
+import { isSpectatorMode } from './spectatorSystem'
 
 const BANANA_MODEL_SRC = 'assets/scene/Models/banana_scaled.glb'
 const BANANA_SCALE = Vector3.create(1, 1, 1)
@@ -553,8 +554,8 @@ export function bananaClientSystem(dt: number): void {
     updateLocalBananas(dt)
   }
 
-  // F key — drop banana
-  if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN)) {
+  // F key — drop banana (disabled in spectator mode)
+  if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN) && !isSpectatorMode()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

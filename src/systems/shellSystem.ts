@@ -18,6 +18,7 @@ import { Flag, Shell, SHELL_COOLDOWN_SEC, SHELL_LIFETIME_SEC, SHELL_SPEED, SHELL
 
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
+import { isSpectatorMode } from './spectatorSystem'
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from './combatSystem'
 
 const SHELL_MODEL_SRC = 'assets/scene/Models/shell_scaled.glb'
@@ -610,8 +611,8 @@ export function shellClientSystem(dt: number): void {
     updateLocalShells(dt)
   }
 
-  // E key — fire shell
-  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) {
+  // E key — fire shell (disabled in spectator mode)
+  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && !isSpectatorMode()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

@@ -24,32 +24,51 @@ import { signedFetch } from '~system/SignedFetch'
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
 const SOCIAL_API = `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/requests`
 
+let mailboxStatusMessage = ''
+let mailboxStatusTime = 0
+
+function getMailboxStatus(): string {
+  if (Date.now() - mailboxStatusTime > 5000) return ''
+  return mailboxStatusMessage
+}
+
+function setMailboxStatus(msg: string) {
+  mailboxStatusMessage = msg
+  mailboxStatusTime = Date.now()
+}
+
 function joinCommunity() {
   executeTask(async () => {
     try {
       const player = getPlayer()
       if (!player?.userId) {
         console.log('[Mailbox] No player data available')
+        setMailboxStatus('Error: No player data')
         return
       }
+      const addr = player.userId
+      console.log('[Mailbox] Sending community join request for:', addr)
+      setMailboxStatus('Sending request...')
       const res = await signedFetch({
         url: SOCIAL_API,
         init: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            targetedAddress: player.userId,
+            targetedAddress: addr,
             type: 'request_to_join'
           })
         }
       })
+      console.log('[Mailbox] Response status:', res.status, 'body:', res.body)
       if (res.ok) {
-        console.log('[Mailbox] Successfully requested to join Flagtag community!')
+        setMailboxStatus('Request sent! Check your notifications.')
       } else {
-        console.log('[Mailbox] Community request response:', res.status, res.body)
+        setMailboxStatus(`Error ${res.status}: ${res.body?.slice(0, 100) || 'Unknown error'}`)
       }
     } catch (err) {
-      console.error('[Mailbox] Failed to request community join:', err)
+      console.error('[Mailbox] Failed to send community request:', err)
+      setMailboxStatus('Error: ' + String(err))
     }
   })
 }
@@ -115,6 +134,7 @@ let closeSplashHovered = false
 let closeWinConditionHovered = false
 let closeLeaderboardHovered = false
 let closeAnalyticsHovered = false
+let closeMailboxHovered = false
 const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 
 // Attack flicker state — dims the hit icon briefly when E is pressed
@@ -415,36 +435,47 @@ function PlayerListUi() {
           justifyContent: 'center',
           alignItems: 'center',
         }}
-        uiBackground={{ color: Color4.create(0, 0, 0, 0.5) }}
         >
           <UiEntity uiTransform={{
             width: 420,
             flexDirection: 'column',
             alignItems: 'center',
             padding: { top: 24, bottom: 24, left: 24, right: 24 },
-            borderRadius: 16,
+            borderRadius: 20,
           }}
-          uiBackground={{ color: Color4.create(0.12, 0.12, 0.15, 0.95) }}
+          uiBackground={{ color: PANEL_BG }}
           >
-            <Label value="Flagtag Community" fontSize={24} color={Color4.White()} uiTransform={{ margin: { bottom: 8 } }} />
-            <Label value="Join the Flagtag community to leave a review or report a bug." fontSize={16} color={Color4.create(0.85, 0.85, 0.85, 1)} uiTransform={{ margin: { top: 4, bottom: 20 }, width: 360, height: 40 }} textAlign="middle-center" />
             <UiEntity
-              uiTransform={{ width: 240, height: 44, margin: { bottom: 10 }, borderRadius: 8 }}
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 12, right: 12 },
+                width: 56,
+                height: 56,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={() => { closeMailboxHovered = true }}
+              onMouseLeave={() => { closeMailboxHovered = false }}
+              onMouseDown={() => { playClickSound(); hideMailboxPopup(); closeMailboxHovered = false; notifyOverlayClosed() }}
+            >
+              <Label value="×" fontSize={44} color={closeMailboxHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+            <Label value="Leave a Message" fontSize={28} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: 8 } }} />
+            <Label value={"Join the Flagtag community to\nleave a review or report a bug"} fontSize={16} color={LIGHT_GREY} uiTransform={{ margin: { top: 4, bottom: 20 }, width: 360, height: 50 }} textAlign="middle-center" />
+            <UiEntity
+              uiTransform={{ width: 240, height: 44, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
               onMouseDown={() => {
+                playClickSound()
                 joinCommunity()
-                hideMailboxPopup()
               }}
             >
-              <Label value="Join Community" fontSize={18} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} />
+              <Label value="Join Community" fontSize={18} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
             </UiEntity>
-            <UiEntity
-              uiTransform={{ width: 240, height: 36, borderRadius: 8 }}
-              uiBackground={{ color: Color4.create(0.3, 0.3, 0.3, 0.8) }}
-              onMouseDown={() => hideMailboxPopup()}
-            >
-              <Label value="Dismiss" fontSize={16} color={Color4.create(0.8, 0.8, 0.8, 1)} uiTransform={{ width: '100%', height: '100%' }} />
-            </UiEntity>
+            {getMailboxStatus() ? (
+              <Label value={getMailboxStatus()} fontSize={13} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: 12 }, width: 360 }} textAlign="middle-center" />
+            ) : null}
           </UiEntity>
         </UiEntity>
       )}

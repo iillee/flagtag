@@ -15,6 +15,8 @@ import { waterSystem } from './systems/waterSystem'
 import { mailboxSystem } from './systems/mailboxSystem'
 
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
+import { waterBobSystem } from './systems/waterBobSystem'
+import { waterSplashSystem } from './systems/waterSplashSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
@@ -383,6 +385,8 @@ export async function main() {
 
   // Water slowdown — disable running in water
   engine.addSystem(waterSystem)
+  engine.addSystem(waterBobSystem)
+  engine.addSystem(waterSplashSystem)
 
   // Mailbox — click to leave feedback
   engine.addSystem(mailboxSystem)
