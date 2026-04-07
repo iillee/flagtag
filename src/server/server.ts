@@ -300,57 +300,127 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
     const totalVisitors = visitorSessions.size
     const onlineNow = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
 
-    // Build visitor summary sorted by time
+    // Build visitor list sorted by time (all visitors)
     const visitors = Array.from(visitorSessions.entries()).map(([userId, data]) => {
       const isOnline = data.sessionStartMs > 0
       let totalSeconds = data.totalMinutesToday * 60
       if (isOnline) {
         totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
       }
-      return { name: data.name || userId.slice(0, 8), totalSeconds, isOnline }
+      return { userId, name: data.name || userId.slice(0, 8), totalSeconds, isOnline }
     }).sort((a, b) => b.totalSeconds - a.totalSeconds)
 
-    // Get leaderboard data
-    let leaderboardSummary = ''
+    // Get leaderboard data (all entries)
+    let leaderboardEntries: Array<{ userId: string; name: string; roundsWon: number }> = []
     const lb = LeaderboardState.getOrNull(leaderboardEntity)
     if (lb && lb.json) {
       try {
-        const entries = JSON.parse(lb.json) as Array<{ name: string; roundsWon: number }>
-        if (entries.length > 0) {
-          leaderboardSummary = entries
-            .sort((a, b) => b.roundsWon - a.roundsWon)
-            .slice(0, 10)
-            .map((e, i) => `${i + 1}. ${e.name} — ${e.roundsWon} wins`)
-            .join('\n')
-        }
+        leaderboardEntries = JSON.parse(lb.json) as Array<{ userId: string; name: string; roundsWon: number }>
+        leaderboardEntries.sort((a, b) => b.roundsWon - a.roundsWon)
       } catch { /* ignore */ }
     }
 
-    // Format visitor list
-    const visitorList = visitors.slice(0, 20).map((v, i) => {
-      const mins = Math.floor(v.totalSeconds / 60)
-      const secs = v.totalSeconds % 60
+    // Format time helper
+    function fmtTime(totalSeconds: number): string {
+      const h = Math.floor(totalSeconds / 3600)
+      const m = Math.floor((totalSeconds % 3600) / 60)
+      const s = totalSeconds % 60
+      return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`
+    }
+
+    // Discord embeds have a 6000 char limit, so we may need multiple messages
+    // Format visitor list with userId
+    const visitorLines = visitors.map((v, i) => {
       const status = v.isOnline ? '🟢' : '⚫'
-      return `${status} ${v.name} — ${mins}m ${secs}s`
-    }).join('\n')
+      return `${status} **${v.name}** — ${fmtTime(v.totalSeconds)}\n\`${v.userId}\``
+    })
 
-    const embed = {
-      title: `📊 Flagtag Daily Report — ${lastVisitorResetDay}`,
-      color: 0x3498db,
-      fields: [
-        { name: 'Total Unique Visitors', value: `${totalVisitors}`, inline: true },
-        { name: 'Currently Online', value: `${onlineNow}`, inline: true },
-        { name: '\u200b', value: '\u200b', inline: true },
-        { name: 'Visitors (Top 20)', value: visitorList || 'No visitors today', inline: false },
-      ] as Array<{ name: string; value: string; inline: boolean }>,
-      timestamp: new Date().toISOString()
+    // Format leaderboard
+    const leaderboardLines = leaderboardEntries.map((e, i) => {
+      const stars = '★'.repeat(Math.min(e.roundsWon, 10)) + (e.roundsWon > 10 ? ` (${e.roundsWon})` : '')
+      return `${i + 1}. ${stars} **${e.name}**\n\`${e.userId}\``
+    })
+
+    // Split into chunks that fit Discord's field value limit (1024 chars)
+    function chunkLines(lines: string[], maxLen: number): string[] {
+      const chunks: string[] = []
+      let current = ''
+      for (const line of lines) {
+        if (current.length + line.length + 1 > maxLen && current.length > 0) {
+          chunks.push(current)
+          current = ''
+        }
+        current += (current ? '\n' : '') + line
+      }
+      if (current) chunks.push(current)
+      return chunks
     }
 
-    if (leaderboardSummary) {
-      embed.fields.push({ name: 'Leaderboard (Rounds Won)', value: leaderboardSummary, inline: false })
+    const visitorChunks = chunkLines(visitorLines, 1024)
+    const leaderboardChunks = chunkLines(leaderboardLines, 1024)
+
+    // Calculate total time across all visitors
+    const totalTimeSeconds = visitors.reduce((sum, v) => sum + v.totalSeconds, 0)
+
+    const fields: Array<{ name: string; value: string; inline: boolean }> = [
+      { name: 'Total Unique Visitors', value: `${totalVisitors}`, inline: true },
+      { name: 'Currently Online', value: `${onlineNow}`, inline: true },
+      { name: 'Total Time Spent', value: fmtTime(totalTimeSeconds), inline: true },
+    ]
+
+    // Add visitor chunks
+    visitorChunks.forEach((chunk, i) => {
+      fields.push({
+        name: i === 0 ? `📋 Daily Visitors (${visitors.length})` : '📋 Visitors (cont.)',
+        value: chunk || 'No visitors today',
+        inline: false
+      })
+    })
+
+    // Add leaderboard chunks
+    leaderboardChunks.forEach((chunk, i) => {
+      fields.push({
+        name: i === 0 ? `🏆 Leaderboard (${leaderboardEntries.length} players)` : '🏆 Leaderboard (cont.)',
+        value: chunk || 'No rounds won today',
+        inline: false
+      })
+    })
+
+    // Discord embed limit is 6000 chars total, 25 fields max
+    // If too many fields, send multiple embeds
+    const embeds: any[] = []
+    let currentFields: typeof fields = []
+    let currentCharCount = 0
+
+    for (const field of fields) {
+      const fieldChars = field.name.length + field.value.length
+      if (currentCharCount + fieldChars > 5500 && currentFields.length > 0) {
+        embeds.push({
+          color: 0x3498db,
+          fields: currentFields,
+        })
+        currentFields = []
+        currentCharCount = 0
+      }
+      currentFields.push(field)
+      currentCharCount += fieldChars
     }
 
-    const payload = JSON.stringify({ embeds: [embed] })
+    if (currentFields.length > 0) {
+      embeds.push({
+        color: 0x3498db,
+        fields: currentFields,
+      })
+    }
+
+    // Add title to first embed
+    if (embeds.length > 0) {
+      embeds[0].title = `📊 Flagtag Daily Report — ${lastVisitorResetDay}`
+      embeds[embeds.length - 1].timestamp = new Date().toISOString()
+    }
+
+    // Discord allows max 10 embeds per message
+    const payload = JSON.stringify({ embeds: embeds.slice(0, 10) })
 
     const res = await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',

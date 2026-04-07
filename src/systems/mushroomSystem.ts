@@ -37,14 +37,32 @@ const SCENE_MAX_Z = 238
 const RAY_START_Y = 100  // Cast from high above
 const WATER_Y = 0.577    // Y level of water planes
 
-// Water plane bounds (position ± halfSize, base patch = 16m, scaled)
-// Water 1: pos(47.01, z=88.22), scale(3.3, 5.5), rot -60deg
-// Water 2: pos(71.01, z=168.47), scale(4.08, 6.81), no rotation
-// Using generous AABB to cover rotated planes
-const WATER_ZONES = [
-  { cx: 47.01, cz: 88.22, hx: 3.3 * 8 + 8, hz: 5.5 * 8 + 8 },   // Water_2 (rotated, oversized AABB)
-  { cx: 71.01, cz: 168.47, hx: 4.08 * 8, hz: 6.81 * 8 },          // Water
+// Pre-computed world-space corners of each water plane
+type WaterPoly = [number, number][]
+const WATER_POLYGONS: WaterPoly[] = [
+  [[40, 113.9], [40, 168.5], [72.4, 168.5], [72.4, 114.2]],
+  [[47.4, 88], [60.6, 65.5], [98, 87.6], [84.9, 110]],
 ]
+
+function pointInPoly(px: number, pz: number, poly: WaterPoly): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], zi = poly[i][1]
+    const xj = poly[j][0], zj = poly[j][1]
+    if ((zi > pz) !== (zj > pz) &&
+        px < (xj - xi) * (pz - zi) / (zj - zi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+function isInWaterZoneXZ(px: number, pz: number): boolean {
+  for (const poly of WATER_POLYGONS) {
+    if (pointInPoly(px, pz, poly)) return true
+  }
+  return false
+}
 
 // ── Helpers ──
 function isServerConnected(): boolean {
@@ -71,7 +89,7 @@ function playBoostSound(): void {
       audioClipUrl: 'assets/sounds/boost.mp3',
       playing: false,
       loop: false,
-      volume: 1.0,
+      volume: 0.5,
       global: true
     })
   }
@@ -273,9 +291,7 @@ function processMushroomRaycasts(): void {
         hitY = result.hits[0].position!.y
       } else {
         // Check if mushroom is over a water zone
-        const overWater = WATER_ZONES.some(w =>
-          Math.abs(m.x - w.cx) < w.hx && Math.abs(m.z - w.cz) < w.hz
-        )
+        const overWater = isInWaterZoneXZ(m.x, m.z)
         hitY = overWater ? WATER_Y : 0
       }
       const t = Transform.getMutable(m.entity)

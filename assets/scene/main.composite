@@ -5477,9 +5477,9 @@
         "serializationType": "map"
       },
       "data": {
-        "545": {
+        "0": {
           "json": {
-            "gizmo": 1
+            "gizmo": 2
           }
         }
       }
@@ -6318,9 +6318,6 @@
         "543": {
           "json": {}
         },
-        "545": {
-          "json": {}
-        },
         "548": {
           "json": {}
         },
@@ -6458,6 +6455,26 @@
         },
         "675": {
           "json": {}
+        }
+      }
+    },
+    {
+      "name": "inspector::Hide",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "boolean",
+            "serializationType": "boolean"
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "545": {
+          "json": {
+            "value": true
+          }
         }
       }
     },
