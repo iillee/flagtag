@@ -2802,20 +2802,20 @@
         "644": {
           "json": {
             "position": {
-              "x": 50.25,
-              "y": 0,
-              "z": 156
+              "x": 49.88658905029297,
+              "y": -0.26494914293289185,
+              "z": 154.42332458496094
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.258819043636322,
+              "z": 0,
+              "w": 0.9659258127212524
             },
             "scale": {
               "x": 1,
               "y": 1,
               "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
             },
             "parent": 0
           }
@@ -2837,6 +2837,153 @@
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "647": {
+          "json": {
+            "position": {
+              "x": 49.03599548339844,
+              "y": 1.0248585939407349,
+              "z": 147.16683959960938
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.11931130290031433,
+              "z": 0,
+              "w": 0.9928569197654724
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "parent": 0
+          }
+        },
+        "648": {
+          "json": {
+            "position": {
+              "x": 51.5,
+              "y": 1.1299998760223389,
+              "z": 153.80001831054688
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.9239000082015991,
+              "z": 0,
+              "w": 0.38269999623298645
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "parent": 0
+          }
+        },
+        "649": {
+          "json": {
+            "position": {
+              "x": 47.5,
+              "y": 1.1299998760223389,
+              "z": 157.30001831054688
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.25883278250694275,
+              "z": 0,
+              "w": 0.9659482836723328
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "parent": 0
+          }
+        },
+        "650": {
+          "json": {
+            "position": {
+              "x": 47.10009002685547,
+              "y": -0.25,
+              "z": 155.6767578125
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "651": {
+          "json": {
+            "position": {
+              "x": 49.78746032714844,
+              "y": 0.3934404253959656,
+              "z": 146.7933349609375
+            },
+            "rotation": {
+              "x": 0.5880183577537537,
+              "y": 0.20533494651317596,
+              "z": 0.15755905210971832,
+              "w": 0.7663204669952393
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "652": {
+          "json": {
+            "position": {
+              "x": 46.75,
+              "y": 0.25,
+              "z": 145.8075408935547
+            },
+            "rotation": {
+              "x": 0.5880183577537537,
+              "y": 0.20533494651317596,
+              "z": 0.15755905210971832,
+              "w": 0.7663204669952393
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "653": {
+          "json": {
+            "position": {
+              "x": 42.66775894165039,
+              "y": 13.974227905273438,
+              "z": 49.59829330444336
+            },
+            "rotation": {
+              "x": 0.9659258127212524,
+              "y": 0,
+              "z": 0.258819043636322,
+              "w": 0
+            },
+            "scale": {
+              "x": 3,
+              "y": 3,
+              "z": 3
             },
             "parent": 0
           }
@@ -2907,7 +3054,7 @@
         "674": {
           "json": {
             "position": {
-              "x": 54.75,
+              "x": 53.778564453125,
               "y": 0.25,
               "z": 150.75
             },
@@ -3825,6 +3972,55 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "647": {
+          "json": {
+            "src": "assets/scene/Models/whiteflowers.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "648": {
+          "json": {
+            "src": "assets/scene/Models/whiteflowers.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "649": {
+          "json": {
+            "src": "assets/scene/Models/whiteflowers.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "650": {
+          "json": {
+            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "651": {
+          "json": {
+            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "652": {
+          "json": {
+            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "653": {
+          "json": {
+            "src": "assets/asset-packs/skull_chain_02/HWN20_SkullChain_02.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "669": {
           "json": {
             "src": "assets/scene/Models/mound.glb",
@@ -4521,6 +4717,41 @@
         "646": {
           "json": {
             "value": "Balsam Flower"
+          }
+        },
+        "647": {
+          "json": {
+            "value": "whiteflowers.glb"
+          }
+        },
+        "648": {
+          "json": {
+            "value": "whiteflowers.glb_2"
+          }
+        },
+        "649": {
+          "json": {
+            "value": "whiteflowers.glb_3"
+          }
+        },
+        "650": {
+          "json": {
+            "value": "Big Rock_4"
+          }
+        },
+        "651": {
+          "json": {
+            "value": "Big Rock_5"
+          }
+        },
+        "652": {
+          "json": {
+            "value": "Big Rock_6"
+          }
+        },
+        "653": {
+          "json": {
+            "value": "Skull Chain 02"
           }
         },
         "669": {
@@ -5637,7 +5868,7 @@
         "serializationType": "map"
       },
       "data": {
-        "674": {
+        "653": {
           "json": {
             "gizmo": 1
           }
@@ -5757,7 +5988,14 @@
                   674,
                   675,
                   640,
-                  643
+                  643,
+                  647,
+                  648,
+                  649,
+                  650,
+                  651,
+                  652,
+                  653
                 ]
               },
               {
@@ -6413,6 +6651,34 @@
               {
                 "entity": 641,
                 "children": []
+              },
+              {
+                "entity": 647,
+                "children": []
+              },
+              {
+                "entity": 648,
+                "children": []
+              },
+              {
+                "entity": 649,
+                "children": []
+              },
+              {
+                "entity": 650,
+                "children": []
+              },
+              {
+                "entity": 651,
+                "children": []
+              },
+              {
+                "entity": 652,
+                "children": []
+              },
+              {
+                "entity": 653,
+                "children": []
               }
             ]
           }
@@ -6623,6 +6889,27 @@
           "json": {}
         },
         "646": {
+          "json": {}
+        },
+        "647": {
+          "json": {}
+        },
+        "648": {
+          "json": {}
+        },
+        "649": {
+          "json": {}
+        },
+        "650": {
+          "json": {}
+        },
+        "651": {
+          "json": {}
+        },
+        "652": {
+          "json": {}
+        },
+        "653": {
           "json": {}
         },
         "665": {

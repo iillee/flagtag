@@ -53,7 +53,7 @@ export function setupSpectator() {
   // Place it near scene spawn / center-ish, visible and inviting
   spectatorOrbEntity = engine.addEntity()
   Transform.create(spectatorOrbEntity, {
-    position: Vector3.create(39.1, 11.6, 157.3),
+    position: Vector3.create(39.1, 11.1, 157.3),
     scale: Vector3.create(4.5, 4.5, 4.5),
     rotation: Quaternion.fromEulerDegrees(0, 180, 0)
   })
@@ -73,7 +73,7 @@ export function setupSpectator() {
   // Second scope at different location
   const spectatorOrb2 = engine.addEntity()
   Transform.create(spectatorOrb2, {
-    position: Vector3.create(52.7, 16.6, 163.8),
+    position: Vector3.create(52.7, 16.1, 163.8),
     scale: Vector3.create(4.5, 4.5, 4.5),
     rotation: Quaternion.fromEulerDegrees(0, 300, 0)
   })
@@ -92,7 +92,7 @@ export function setupSpectator() {
   // Third scope
   const spectatorOrb3 = engine.addEntity()
   Transform.create(spectatorOrb3, {
-    position: Vector3.create(83.7, 46.6, 167.9),
+    position: Vector3.create(83.7, 46.1, 167.9),
     scale: Vector3.create(4.5, 4.5, 4.5),
     rotation: Quaternion.fromEulerDegrees(0, 0, 0)
   })
@@ -111,7 +111,7 @@ export function setupSpectator() {
   // Fourth scope
   const spectatorOrb4 = engine.addEntity()
   Transform.create(spectatorOrb4, {
-    position: Vector3.create(74, 16.6, 79.6),
+    position: Vector3.create(74, 16.1, 79.6),
     scale: Vector3.create(4.5, 4.5, 4.5),
     rotation: Quaternion.fromEulerDegrees(0, 0, 0)
   })

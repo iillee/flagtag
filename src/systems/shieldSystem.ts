@@ -16,9 +16,9 @@ const SHIELD_COLOR = Color4.create(1.0, 0.82, 0.2, 0.12)
 const SHIELD_EMISSIVE = Color4.create(1.0, 0.75, 0.1, 1.0)
 const SHIELD_EMISSIVE_INTENSITY = 4.0
 const SHIELD_RADIUS = 0.64475
-const SHIELD_Y_OFFSET = 0.9
+const SHIELD_Y_OFFSET = 1.45
 const PLANE_WIDTH = 0.53
-const PLANE_HEIGHT = 2.2
+const PLANE_HEIGHT = 1.1
 const NUM_PLANES = 8
 
 // Pulse animation

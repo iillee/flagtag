@@ -50,6 +50,7 @@ export async function main() {
   setupUi()
   setupBeacon()
 
+
   const local = getPlayer()
   let registeredName = ''
   if (local) {
@@ -280,7 +281,7 @@ export async function main() {
 
   // ── Blue Orb Pair ──
   const blueOrbPositions = [
-    { x: 50, y: 1.3, z: 152 },
+    { x: 48, y: 1.3, z: 152 },
     { x: 88.75, y: 17, z: 84.5 }
   ]
   const BLUE_ORB_COLOR = Color3.create(0.05, 0.3, 1.0) // Blue

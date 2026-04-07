@@ -54,10 +54,7 @@ function joinCommunity() {
         init: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            targetedAddress: addr,
-            type: 'request_to_join'
-          })
+          body: JSON.stringify({})
         }
       })
       console.log('[Mailbox] Response status:', res.status, 'body:', res.body)
@@ -488,8 +485,8 @@ function PlayerListUi() {
           flexDirection: 'column',
           alignItems: 'center',
         }}>
-          <Label value="👁 SPECTATOR MODE" fontSize={28} color={Color4.White()} />
-          <Label value="WASD = Pan  |  E/F = Up/Down  |  1 = Exit" fontSize={14} color={Color4.create(1, 1, 1, 0.8)} />
+          <Label value="SPECTATOR MODE" fontSize={28} color={Color4.White()} />
+          <Label value="WASD = Orbit  |  E/F = Up/Down  |  1 = Exit" fontSize={14} color={Color4.create(1, 1, 1, 0.8)} />
           <UiEntity
             uiTransform={{ width: 160, height: 40, margin: { top: 8 } }}
             uiBackground={{ color: Color4.create(1, 1, 1, 0.9) }}
