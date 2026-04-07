@@ -5,6 +5,10 @@
  * Object containing all entity names in the scene for autocomplete support.
  */
 export enum EntityNames {
+  Balsam_Flower = "Balsam Flower",
+  Big_Rock = "Big Rock",
+  Big_Rock_2 = "Big Rock_2",
+  Big_Rock_3 = "Big Rock_3",
   Caribbean_Water = "Caribbean Water",
   Caribbean_Water_2 = "Caribbean Water_2",
   Classic_Bench = "Classic Bench",
@@ -40,6 +44,9 @@ export enum EntityNames {
   Classic_Bench_5 = "Classic Bench_5",
   Classic_Bench_8 = "Classic Bench_8",
   Classic_Bench_9 = "Classic Bench_9",
+  Classic_Lamp_post = "Classic Lamp post",
+  Clay_Pot = "Clay Pot",
+  Clay_Pot_2 = "Clay Pot_2",
   Flower_Sprouts = "Flower Sprouts",
   Lilypad = "Lilypad",
   Lilypad_10 = "Lilypad_10",
@@ -127,6 +134,7 @@ export enum EntityNames {
   birds_glb = "birds.glb",
   castle_glb = "castle.glb",
   lights_glb = "lights.glb",
+  mound_glb = "mound.glb",
   plants_glb = "plants.glb",
   props_glb = "props.glb",
 } 

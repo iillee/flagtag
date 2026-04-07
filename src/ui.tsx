@@ -22,25 +22,34 @@ import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
 import { signedFetch } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
-const SOCIAL_API = `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`
+const SOCIAL_API = `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/requests`
 
 function joinCommunity() {
   executeTask(async () => {
     try {
+      const player = getPlayer()
+      if (!player?.userId) {
+        console.log('[Mailbox] No player data available')
+        return
+      }
       const res = await signedFetch({
         url: SOCIAL_API,
         init: {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetedAddress: player.userId,
+            type: 'request_to_join'
+          })
         }
       })
       if (res.ok) {
-        console.log('[Mailbox] Successfully joined Flagtag community!')
+        console.log('[Mailbox] Successfully requested to join Flagtag community!')
       } else {
-        console.log('[Mailbox] Community join response:', res.status, res.body)
+        console.log('[Mailbox] Community request response:', res.status, res.body)
       }
     } catch (err) {
-      console.error('[Mailbox] Failed to join community:', err)
+      console.error('[Mailbox] Failed to request community join:', err)
     }
   })
 }
