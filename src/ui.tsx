@@ -17,7 +17,20 @@ import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
+import { musicEntity } from './index'
 // import { isMobile } from '@dcl/sdk/platform'  // disabled — causes crashes
+
+// ── Music mute state ──
+let musicMuted = false
+function toggleMusicMute() {
+  musicMuted = !musicMuted
+  try {
+    const audio = AudioSource.getMutable(musicEntity)
+    audio.volume = musicMuted ? 0 : 0.175
+  } catch (e) {
+    console.error('[UI] Failed to toggle music mute:', e)
+  }
+}
 import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
 import { signedFetch } from '~system/SignedFetch'
 
@@ -49,19 +62,56 @@ function joinCommunity() {
       const addr = player.userId
       console.log('[Mailbox] Sending community join request for:', addr)
       setMailboxStatus('Sending request...')
+      // First check community info + user's current role
+      const infoRes = await signedFetch({
+        url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}`,
+        init: { method: 'GET', headers: {} }
+      })
+      const infoBody = infoRes.body || ''
+      let role = 'unknown'
+      let privacy = 'unknown'
+      try {
+        const info = JSON.parse(infoBody)
+        role = info?.data?.role || 'unknown'
+        privacy = info?.data?.privacy || 'unknown'
+      } catch (_) {}
+
+      if (role === 'member' || role === 'owner' || role === 'moderator') {
+        setMailboxStatus('You are already a member!')
+        return
+      }
+
+      // For public communities, use the members endpoint directly (no request needed)
+      if (privacy === 'public') {
+        const joinRes = await signedFetch({
+          url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
+          init: {
+            method: 'POST',
+            headers: {}
+          }
+        })
+        console.log('[Mailbox] Join (public) status:', joinRes.status, 'body:', joinRes.body?.slice(0, 300))
+        if (joinRes.ok || joinRes.status === 204 || joinRes.status === 201) {
+          setMailboxStatus('Joined! Welcome to the community.')
+        } else {
+          setMailboxStatus(`Error ${joinRes.status}: ${joinRes.body?.slice(0, 200) || 'Unknown error'}`)
+        }
+        return
+      }
+
+      // For private communities, send a join request
       const res = await signedFetch({
         url: SOCIAL_API,
         init: {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
+          headers: {}
         }
       })
-      console.log('[Mailbox] Response status:', res.status, 'body:', res.body)
-      if (res.ok) {
+      console.log('[Mailbox] Response status:', res.status, 'body:', res.body?.slice(0, 300))
+      if (res.ok || res.status === 201) {
         setMailboxStatus('Request sent! Check your notifications.')
       } else {
-        setMailboxStatus(`Error ${res.status}: ${res.body?.slice(0, 100) || 'Unknown error'}`)
+        setMailboxStatus(`Error ${res.status}: ${res.body?.slice(0, 200) || 'Unknown error'}`)
       }
     } catch (err) {
       console.error('[Mailbox] Failed to send community request:', err)
@@ -1073,8 +1123,14 @@ function DesktopLayout() {
               <UiEntity uiTransform={{ width: '18%' }}>
                 <Label value={`Date: ${formatUTCDate()}`} fontSize={13} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '36%' }}>
+              <UiEntity uiTransform={{ width: '26%' }}>
                 <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={13} color={LIGHT_GREY} font="sans-serif" />
+              </UiEntity>
+              <UiEntity
+                uiTransform={{ width: '10%', height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                onMouseDown={() => { playClickSound(); toggleMusicMute() }}
+              >
+                <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={13} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
               </UiEntity>
             </UiEntity>
             
@@ -2125,6 +2181,13 @@ function MobileLayout() {
               <Label value={`Online: ${onlineCount}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
               <UiEntity uiTransform={{ width: 16 }} />
               <Label value={`Server: ${serverConnected}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ width: 16 }} />
+              <UiEntity
+                uiTransform={{ flexDirection: 'row', alignItems: 'center' }}
+                onMouseDown={() => { playClickSound(); toggleMusicMute() }}
+              >
+                <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={18} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
+              </UiEntity>
             </UiEntity>
             <UiEntity uiTransform={{ height: 12 }} />
 

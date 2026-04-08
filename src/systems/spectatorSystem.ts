@@ -185,6 +185,16 @@ function updateCamTransform() {
   camPosZ = Math.max(5, Math.min(SCENE_D - 5, camPosZ))
   camPosY = Math.max(CAM_MIN_Y, Math.min(CAM_MAX_Y, camPosY))
 
+  // Push camera out if too close to the look-at origin
+  const dxC = camPosX - CASTLE_CENTER.x
+  const dzC = camPosZ - CASTLE_CENTER.z
+  const distC = Math.sqrt(dxC * dxC + dzC * dzC)
+  const MIN_CAM_DIST = 5
+  if (distC < MIN_CAM_DIST && distC > 0.01) {
+    camPosX = CASTLE_CENTER.x + (dxC / distC) * MIN_CAM_DIST
+    camPosZ = CASTLE_CENTER.z + (dzC / distC) * MIN_CAM_DIST
+  }
+
   const t = Transform.getMutable(spectatorCamEntity)
   t.position = Vector3.create(camPosX, camPosY, camPosZ)
 }
@@ -216,7 +226,8 @@ function spectatorMovementSystem(dt: number) {
   const strafeSpeed = CAM_MOVE_SPEED * strafeFactor
 
   // W = toward castle, S = away, A/D = strafe around it
-  if (inputSystem.isPressed(InputAction.IA_FORWARD)) {
+  // Only move toward castle if beyond minimum distance
+  if (inputSystem.isPressed(InputAction.IA_FORWARD) && dist > MIN_DIST) {
     camPosX += forwardX * CAM_MOVE_SPEED * dt
     camPosZ += forwardZ * CAM_MOVE_SPEED * dt
   }

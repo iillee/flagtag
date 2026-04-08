@@ -337,34 +337,6 @@ function updateLocalShells(dt: number): void {
       }
     }
 
-    // Check ground raycast result
-    if (shell.groundRayEntity !== null) {
-      const result = RaycastResult.getOrNull(shell.groundRayEntity)
-      if (result) {
-        if (result.hits.length > 0) {
-          shell.groundY = result.hits[0].position!.y
-        }
-        engine.removeEntity(shell.groundRayEntity)
-        shell.groundRayEntity = null
-      }
-    }
-
-    // Fire new ground raycast periodically
-    if (shell.groundRayEntity === null && now - shell.lastGroundRayTime > GROUND_RAY_INTERVAL * 1000) {
-      shell.lastGroundRayTime = now
-      const pos = Transform.get(shell.entity).position
-      shell.groundRayEntity = engine.addEntity()
-      Transform.create(shell.groundRayEntity, {
-        position: Vector3.create(pos.x, pos.y + 2, pos.z)
-      })
-      Raycast.create(shell.groundRayEntity, {
-        direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
-        maxDistance: 200,
-        queryType: RaycastQueryType.RQT_HIT_FIRST,
-        continuous: false
-      })
-    }
-
     // Safety expiry
     if (now - shell.firedAtMs > SHELL_LIFETIME_SEC * 1000) {
       console.log('[Shell] 🐚 LOCAL shell expired')
@@ -383,36 +355,11 @@ function updateLocalShells(dt: number): void {
       continue
     }
 
-    // Apply gravity — shell hovers SHELL_GROUND_OFFSET above ground (matches server)
-    const groundTarget = shell.groundY + SHELL_GROUND_OFFSET
-    if (!shell.onGround) {
-      shell.fallVelocity += SHELL_GRAVITY * clampedDt
-      shell.currentY -= shell.fallVelocity * clampedDt
-      if (shell.currentY <= groundTarget) {
-        shell.currentY = groundTarget
-        shell.fallVelocity = 0
-        shell.onGround = true
-      }
-    } else {
-      // Follow terrain
-      const diff = groundTarget - shell.currentY
-      if (Math.abs(diff) < 0.05) {
-        shell.currentY = groundTarget
-      } else if (diff > 0) {
-        // Ground rising — snap up
-        shell.currentY = groundTarget
-      } else {
-        // Ground dropping — fall again
-        shell.onGround = false
-        shell.fallVelocity = 0
-      }
-    }
-
-    // Update position
+    // No gravity — straight line at spawn height
     const newX = shell.startX + shell.dirX * shell.distanceTraveled
     const newZ = shell.startZ + shell.dirZ * shell.distanceTraveled
     const t = Transform.getMutable(shell.entity)
-    t.position = Vector3.create(newX, shell.currentY, newZ)
+    t.position = Vector3.create(newX, shell.startY, newZ)
   }
 }
 
@@ -507,28 +454,6 @@ function updateMsgShellVisuals(dt: number): void {
       continue
     }
 
-    // Ground raycast result
-    if (vis.groundRayEntity !== null) {
-      const result = RaycastResult.getOrNull(vis.groundRayEntity)
-      if (result) {
-        if (result.hits.length > 0) vis.groundY = result.hits[0].position!.y
-        engine.removeEntity(vis.groundRayEntity)
-        vis.groundRayEntity = null
-      }
-    }
-
-    // Fire ground raycast periodically
-    if (vis.groundRayEntity === null && now - vis.lastGroundRayTime > GROUND_RAY_INTERVAL * 1000) {
-      vis.lastGroundRayTime = now
-      const pos = Transform.get(vis.entity).position
-      vis.groundRayEntity = engine.addEntity()
-      Transform.create(vis.groundRayEntity, { position: Vector3.create(pos.x, pos.y + 2, pos.z) })
-      Raycast.create(vis.groundRayEntity, {
-        direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
-        maxDistance: 200, queryType: RaycastQueryType.RQT_HIT_FIRST, continuous: false
-      })
-    }
-
     // Move forward
     vis.distanceTraveled += SHELL_SPEED * clampedDt
     if (vis.distanceTraveled >= vis.maxDistance) {
@@ -539,21 +464,9 @@ function updateMsgShellVisuals(dt: number): void {
       continue
     }
 
-    // Gravity
-    const groundTarget = vis.groundY + SHELL_GROUND_OFFSET
-    if (!vis.onGround) {
-      vis.fallVelocity += SHELL_GRAVITY * clampedDt
-      vis.currentY -= vis.fallVelocity * clampedDt
-      if (vis.currentY <= groundTarget) { vis.currentY = groundTarget; vis.fallVelocity = 0; vis.onGround = true }
-    } else {
-      const diff = groundTarget - vis.currentY
-      if (Math.abs(diff) < 0.05) vis.currentY = groundTarget
-      else if (diff > 0) vis.currentY = groundTarget
-      else { vis.onGround = false; vis.fallVelocity = 0 }
-    }
-
+    // No gravity — straight line at spawn height
     const t = Transform.getMutable(vis.entity)
-    t.position = Vector3.create(vis.startX + vis.dirX * vis.distanceTraveled, vis.currentY, vis.startZ + vis.dirZ * vis.distanceTraveled)
+    t.position = Vector3.create(vis.startX + vis.dirX * vis.distanceTraveled, vis.startY, vis.startZ + vis.dirZ * vis.distanceTraveled)
   }
 }
 
@@ -604,12 +517,14 @@ export function shellClientSystem(dt: number): void {
     // Continuously report ground Y for moving shells
     updateServerShellGroundRaycasts(dt)
 
-    // Animate message-driven shell visuals (movement, gravity, expiry)
+    // Animate message-driven shell visuals (movement, expiry)
     updateMsgShellVisuals(dt)
   } else {
     // Local test mode
     updateLocalShells(dt)
   }
+
+
 
   // E key — fire shell (disabled in spectator mode)
   if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && !isSpectatorMode()) {

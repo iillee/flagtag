@@ -247,7 +247,26 @@ async function loadVisitorData(): Promise<void> {
         }
         console.log('[Server] Restored visitor data for', currentDay, '- loaded', visitorRecords.length, 'visitors')
       } else {
-        console.log('[Server] Visitor data was from', lastVisitorResetDay, 'but today is', currentDay, '- starting fresh')
+        console.log('[Server] Visitor data was from', lastVisitorResetDay, 'but today is', currentDay, '- sending analytics before reset')
+        // Restore yesterday's data temporarily so we can send the Discord report
+        for (const record of visitorRecords) {
+          const minutes = record.totalSeconds != null
+            ? Math.floor(record.totalSeconds / 60)
+            : (record.totalMinutes || 0)
+          const recordKey = (record.userId || '').toLowerCase()
+          const bestName = (playerNames.has(recordKey) && isRealName(playerNames.get(recordKey)!))
+            ? playerNames.get(recordKey)!
+            : record.name
+          visitorSessions.set(recordKey, {
+            name: bestName,
+            sessionStartMs: 0,
+            totalMinutesToday: minutes
+          })
+        }
+        // Send yesterday's analytics to Discord before clearing
+        await sendDailyAnalyticsToDiscord()
+        // Now clear for the new day
+        visitorSessions.clear()
         lastVisitorResetDay = currentDay
       }
     } catch (e) {
@@ -1339,37 +1358,11 @@ function shellServerSystem(dt: number): void {
       continue
     }
 
-    // Apply gravity — shell falls until it reaches groundY + offset, then rides along the surface
-    const groundTarget = shell.groundY + SHELL_GROUND_OFFSET
-    if (!shell.onGround) {
-      shell.fallVelocity += FLAG_GRAVITY * clampedDt
-      shell.currentY -= shell.fallVelocity * clampedDt
-      if (shell.currentY <= groundTarget) {
-        shell.currentY = groundTarget
-        shell.fallVelocity = 0
-        shell.onGround = true
-      }
-    } else {
-      // On ground — follow terrain height as reported by client
-      // Smoothly adjust to new groundY (terrain may go up or down)
-      const diff = groundTarget - shell.currentY
-      if (Math.abs(diff) < 0.05) {
-        shell.currentY = groundTarget
-      } else if (diff > 0) {
-        // Ground is rising — snap up to stay on surface
-        shell.currentY = groundTarget
-      } else {
-        // Ground is dropping — fall with gravity again
-        shell.onGround = false
-        shell.fallVelocity = 0
-      }
-    }
-
-    // Update position (XZ from trajectory, Y from gravity)
+    // No gravity — shell travels in a straight line at spawn height
     const newX = shell.startX + shell.dirX * shell.distanceTraveled
     const newZ = shell.startZ + shell.dirZ * shell.distanceTraveled
     const t = Transform.getMutable(shell.entity)
-    t.position = Vector3.create(newX, shell.currentY, newZ)
+    t.position = Vector3.create(newX, shell.startY, newZ)
 
     // Update synced component — throttled to avoid CRDT saturation.
     // Client extrapolates locally between updates for smooth motion.

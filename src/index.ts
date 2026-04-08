@@ -27,6 +27,8 @@ import { movePlayerTo } from '~system/RestrictedActions'
 import './shared/components'
 import { room } from './shared/messages'
 
+export let musicEntity: ReturnType<typeof engine.addEntity>
+
 export async function main() {
   if (isServer()) {
     console.log('[Main] ⚙️  SERVER MODE - Starting authoritative server...')
@@ -103,7 +105,7 @@ export async function main() {
   })
 
   // Background music
-  const musicEntity = engine.addEntity()
+  musicEntity = engine.addEntity()
   Transform.create(musicEntity, { position: Vector3.create(0, 0, 0) })
   AudioSource.create(musicEntity, {
     audioClipUrl: 'assets/sounds/Medieval.mp3',
