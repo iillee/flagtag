@@ -106,11 +106,11 @@ const SMOKE_MATERIAL = {
 // ── Physics lift configuration ──────────────────────────────
 const TRIGGER_RADIUS  = 2.5
 const TRIGGER_HEIGHT  = 30
-const UPDRAFT_FORCE   = Vector3.create(0, 30, 0)
-const UPDRAFT_KICK    = Vector3.create(0, 8, 0)
+const UPDRAFT_FORCE   = Vector3.create(0, 40, 0)
+const UPDRAFT_KICK    = Vector3.create(0, 10, 0)
 
 // ── Transition configuration ────────────────────────────────
-const TRANSITION_DELAY = 5 // seconds to wait after last orb fades
+const TRANSITION_DELAY = 1 // seconds to wait after drain completes
 
 // ── Internal state ──────────────────────────────────────────
 interface SmokePuff {
@@ -132,9 +132,34 @@ let smokeBasePos = HIDDEN_POS
 
 let pendingLocationIndex = -1
 let transitionTimer = 0
+let drainStartTime = 0  // when spawning stopped, for top-down fade
 
 let forceActive = false
 let impulseEventId = 0
+
+
+
+// ── Debug cylinder (visible trigger zone) ───────────────────
+let debugCylinder: Entity | null = null
+function ensureDebugCylinder(): Entity {
+  if (debugCylinder == null) {
+    debugCylinder = engine.addEntity()
+    Transform.create(debugCylinder, { position: HIDDEN_POS, scale: Vector3.create(TRIGGER_RADIUS * 2, TRIGGER_HEIGHT, TRIGGER_RADIUS * 2) })
+  }
+  return debugCylinder
+}
+function updateDebugCylinder(): void {
+  const cyl = ensureDebugCylinder()
+  if (activeLocationIndex < 0) {
+    Transform.getMutable(cyl).position = HIDDEN_POS
+    return
+  }
+  const loc = CHIMNEY_LOCATIONS[activeLocationIndex]
+  const t = Transform.getMutable(cyl)
+  // Cylinder mesh is 1m tall centered at origin, so scale Y = height, position Y = base + height/2
+  t.position = Vector3.create(loc.x, loc.y + TRIGGER_HEIGHT / 2, loc.z)
+  t.scale = Vector3.create(TRIGGER_RADIUS * 2, TRIGGER_HEIGHT, TRIGGER_RADIUS * 2)
+}
 
 // ── Smoke pool ──────────────────────────────────────────────
 function initSmokePool(): void {
@@ -177,13 +202,32 @@ function hideSmokePuff(entity: Entity): void {
   t.scale = Vector3.Zero()
 }
 
+// When spawning stops, orbs drain top-down over this duration (ms)
+const DRAIN_DURATION_MS = 12000
+
 function animateSmokePuffs(): void {
   const now = Date.now()
+  const draining = !spawning && drainStartTime > 0
+
   for (let i = activeSmokePuffs.length - 1; i >= 0; i--) {
     const sp = activeSmokePuffs[i]
     const progress = Math.min(1, (now - sp.spawnTime) / SMOKE_LIFETIME_MS)
 
-    if (progress >= 1) {
+    // When draining, kill orbs top-down: higher progress = die sooner
+    let effectiveProgress = progress
+    if (draining) {
+      const drainElapsed = now - drainStartTime
+      // Orbs with high progress (near top) get pushed to 1.0 first
+      // drainT goes 0→1 over DRAIN_DURATION_MS
+      const drainT = Math.min(1, drainElapsed / DRAIN_DURATION_MS)
+      // Threshold rises from 1.0 down to 0.0 — orbs above threshold die
+      const killThreshold = 1.0 - drainT
+      if (progress >= killThreshold) {
+        effectiveProgress = 1.0
+      }
+    }
+
+    if (effectiveProgress >= 1) {
       hideSmokePuff(sp.entity)
       activeSmokePuffs.splice(i, 1)
       continue
@@ -196,9 +240,23 @@ function animateSmokePuffs(): void {
     const scale = sp.startScale + progress * SMOKE_GROW_RATE
     t.scale = Vector3.create(scale, scale, scale)
 
-    // Rapid fade at the top
+    // Rapid fade at the top (normal lifetime) or when draining
+    let alpha = 1.0
+    if (draining) {
+      const drainElapsed = now - drainStartTime
+      const drainT = Math.min(1, drainElapsed / DRAIN_DURATION_MS)
+      const killThreshold = 1.0 - drainT
+      // Fade orbs approaching the kill threshold
+      const fadeZone = 0.15
+      if (progress >= killThreshold - fadeZone) {
+        alpha = Math.max(0, (killThreshold - progress) / fadeZone)
+      }
+    }
     if (progress > FADE_START) {
-      const alpha = 1.0 - (progress - FADE_START) / (1 - FADE_START)
+      alpha = Math.min(alpha, 1.0 - (progress - FADE_START) / (1 - FADE_START))
+    }
+
+    if (alpha < 1.0) {
       Material.setPbrMaterial(sp.entity, { ...SMOKE_MATERIAL, albedoColor: Color4.create(1, 1, 1, alpha) })
     }
   }
@@ -290,6 +348,7 @@ function switchToChimney(idx: number): void {
   smokeBasePos = Vector3.create(loc.x, loc.y + SMOKE_BASE_OFFSET, loc.z)
   smokeSpawnAccum = 0
   spawning = true
+  drainStartTime = 0
   console.log(`[Updraft] Active chimney ${idx}`)
 }
 
@@ -297,7 +356,7 @@ function updateTransition(dt: number): void {
   if (pendingLocationIndex < 0) return
 
   transitionTimer += dt
-  const totalWait = SMOKE_LIFETIME_MS / 1000 + TRANSITION_DELAY
+  const totalWait = DRAIN_DURATION_MS / 1000 + TRANSITION_DELAY
   if (transitionTimer >= totalWait) {
     switchToChimney(pendingLocationIndex)
     pendingLocationIndex = -1
@@ -320,6 +379,7 @@ export function setupUpdraftSystem(): void {
       switchToChimney(idx)
     } else {
       spawning = false
+      drainStartTime = Date.now()
       pendingLocationIndex = idx
       transitionTimer = 0
       console.log(`[Updraft] Transitioning from chimney ${activeLocationIndex} to ${idx}`)
@@ -341,6 +401,7 @@ export function updraftSystem(dt: number): void {
   computeOrbBounds()
   updateTransition(dt)
   updateLift()
+  updateDebugCylinder()
 
   if (spawning) {
     smokeSpawnAccum += dt

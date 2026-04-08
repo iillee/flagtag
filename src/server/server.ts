@@ -95,6 +95,25 @@ function getOrCreateHoldTimeEntity(userKey: string): Entity {
 const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesToday: number }>()
 let lastVisitorResetDay = ''
 
+// ── Concurrent user tracking (hourly peaks) ──
+// 24 entries, index = UTC hour. Each stores the max concurrent users seen that hour.
+let hourlyPeakConcurrent: number[] = new Array(24).fill(0)
+let peakConcurrent = 0
+let peakConcurrentTime = '' // HH:MM UTC when peak occurred
+
+function updateConcurrentTracking(): void {
+  const onlineCount = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
+  const now = new Date()
+  const hour = now.getUTCHours()
+  if (onlineCount > hourlyPeakConcurrent[hour]) {
+    hourlyPeakConcurrent[hour] = onlineCount
+  }
+  if (onlineCount > peakConcurrent) {
+    peakConcurrent = onlineCount
+    peakConcurrentTime = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`
+  }
+}
+
 // ── Banana state ──
 const BANANA_MODEL_SRC = 'assets/scene/Models/banana.glb'
 /** Track last banana drop time per player for cooldown. */
@@ -204,6 +223,11 @@ async function loadPlayerNames(): Promise<void> {
 async function persistVisitorData(visitorDataJson: string): Promise<void> {
   await Storage.set('visitorData', visitorDataJson)
   await Storage.set('lastVisitorResetDay', lastVisitorResetDay)
+  await Storage.set('concurrentData', JSON.stringify({
+    hourlyPeak: hourlyPeakConcurrent,
+    peak: peakConcurrent,
+    peakTime: peakConcurrentTime
+  }))
 }
 
 async function loadVisitorData(): Promise<void> {
@@ -246,6 +270,17 @@ async function loadVisitorData(): Promise<void> {
           }
         }
         console.log('[Server] Restored visitor data for', currentDay, '- loaded', visitorRecords.length, 'visitors')
+        // Restore concurrent tracking data
+        try {
+          const savedConcurrent = await Storage.get<string>('concurrentData')
+          if (savedConcurrent) {
+            const cd = JSON.parse(savedConcurrent)
+            if (cd.hourlyPeak && cd.hourlyPeak.length === 24) hourlyPeakConcurrent = cd.hourlyPeak
+            if (cd.peak != null) peakConcurrent = cd.peak
+            if (cd.peakTime) peakConcurrentTime = cd.peakTime
+            console.log('[Server] Restored concurrent tracking data, peak:', peakConcurrent, 'at', peakConcurrentTime)
+          }
+        } catch { /* ignore */ }
       } else {
         console.log('[Server] Visitor data was from', lastVisitorResetDay, 'but today is', currentDay, '- sending analytics before reset')
         // Restore yesterday's data temporarily so we can send the Discord report
@@ -316,137 +351,89 @@ const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/149080843609767
 async function sendDailyAnalyticsToDiscord(): Promise<void> {
   try {
     const now = Date.now()
-    const totalVisitors = visitorSessions.size
-    const onlineNow = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
 
-    // Build visitor list sorted by time (all visitors)
-    const visitors = Array.from(visitorSessions.entries()).map(([userId, data]) => {
-      const isOnline = data.sessionStartMs > 0
-      let totalSeconds = data.totalMinutesToday * 60
-      if (isOnline) {
-        totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
-      }
-      return { userId, name: data.name || userId.slice(0, 8), totalSeconds, isOnline }
-    }).sort((a, b) => b.totalSeconds - a.totalSeconds)
-
-    // Get leaderboard data (all entries)
-    let leaderboardEntries: Array<{ userId: string; name: string; roundsWon: number }> = []
+    // Build per-user data: address, time spent, stars (wins)
+    const winsMap = new Map<string, number>()
     const lb = LeaderboardState.getOrNull(leaderboardEntity)
     if (lb && lb.json) {
       try {
-        leaderboardEntries = JSON.parse(lb.json) as Array<{ userId: string; name: string; roundsWon: number }>
-        leaderboardEntries.sort((a, b) => b.roundsWon - a.roundsWon)
+        const entries = JSON.parse(lb.json) as Array<{ userId: string; roundsWon: number }>
+        for (const e of entries) winsMap.set(e.userId.toLowerCase(), e.roundsWon)
       } catch { /* ignore */ }
     }
 
-    // Format time helper
-    function fmtTime(totalSeconds: number): string {
-      const h = Math.floor(totalSeconds / 3600)
-      const m = Math.floor((totalSeconds % 3600) / 60)
-      const s = totalSeconds % 60
-      return h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`
+    const users = Array.from(visitorSessions.entries()).map(([userId, data]) => {
+      let totalSeconds = data.totalMinutesToday * 60
+      if (data.sessionStartMs > 0) {
+        totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
+      }
+      return {
+        address: userId,
+        name: data.name || userId.slice(0, 8),
+        time_seconds: totalSeconds,
+        stars: winsMap.get(userId) || 0
+      }
+    }).sort((a, b) => b.time_seconds - a.time_seconds)
+
+    // Build structured JSON report for AI agent consumption
+    const report = {
+      scene: 'flagtag.dcl.eth',
+      date: lastVisitorResetDay,
+      unique_users: users.length,
+      peak_concurrent: { count: peakConcurrent, time: peakConcurrentTime },
+      hourly_peak: hourlyPeakConcurrent,
+      users
     }
 
-    // Discord embeds have a 6000 char limit, so we may need multiple messages
-    // Format visitor list with userId
-    const visitorLines = visitors.map((v, i) => {
-      const status = v.isOnline ? '🟢' : '⚫'
-      return `${status} **${v.name}** — ${fmtTime(v.totalSeconds)}\n\`${v.userId}\``
-    })
+    const jsonBlock = JSON.stringify(report, null, 2)
 
-    // Format leaderboard
-    const leaderboardLines = leaderboardEntries.map((e, i) => {
-      const stars = '★'.repeat(Math.min(e.roundsWon, 10)) + (e.roundsWon > 10 ? ` (${e.roundsWon})` : '')
-      return `${i + 1}. ${stars} **${e.name}**\n\`${e.userId}\``
-    })
+    // Discord has a 2000 char message limit. If the JSON fits in a code block, send inline.
+    // Otherwise, split across multiple messages.
+    const MAX_BLOCK_LEN = 1900 // leave room for ```json wrapper
+    const messages: string[] = []
 
-    // Split into chunks that fit Discord's field value limit (1024 chars)
-    function chunkLines(lines: string[], maxLen: number): string[] {
-      const chunks: string[] = []
-      let current = ''
-      for (const line of lines) {
-        if (current.length + line.length + 1 > maxLen && current.length > 0) {
-          chunks.push(current)
-          current = ''
+    if (jsonBlock.length <= MAX_BLOCK_LEN) {
+      messages.push(`\`\`\`json\n${jsonBlock}\n\`\`\``)
+    } else {
+      // Send header message then chunked user data
+      const header = JSON.stringify({ scene: report.scene, date: report.date, unique_users: report.unique_users, peak_concurrent: report.peak_concurrent, hourly_peak: report.hourly_peak }, null, 2)
+      messages.push(`\`\`\`json\n${header}\n\`\`\``)
+
+      // Chunk users array into messages that fit
+      let chunk: typeof users = []
+      let chunkLen = 0
+      for (const user of users) {
+        const userJson = JSON.stringify(user)
+        if (chunkLen + userJson.length + 5 > MAX_BLOCK_LEN && chunk.length > 0) {
+          messages.push(`\`\`\`json\n${JSON.stringify(chunk, null, 2)}\n\`\`\``)
+          chunk = []
+          chunkLen = 0
         }
-        current += (current ? '\n' : '') + line
+        chunk.push(user)
+        chunkLen += userJson.length + 5
       }
-      if (current) chunks.push(current)
-      return chunks
+      if (chunk.length > 0) {
+        messages.push(`\`\`\`json\n${JSON.stringify(chunk, null, 2)}\n\`\`\``)
+      }
     }
 
-    const visitorChunks = chunkLines(visitorLines, 1024)
-    const leaderboardChunks = chunkLines(leaderboardLines, 1024)
+    // Build multipart form data to attach JSON file + send code block message
+    const filename = `${report.date}_flagtag_analytics.json`
+    const boundary = '----DclAnalytics' + Date.now()
+    const messageContent = messages.join('\n')
 
-    // Calculate total time across all visitors
-    const totalTimeSeconds = visitors.reduce((sum, v) => sum + v.totalSeconds, 0)
-
-    const fields: Array<{ name: string; value: string; inline: boolean }> = [
-      { name: 'Total Unique Visitors', value: `${totalVisitors}`, inline: true },
-      { name: 'Currently Online', value: `${onlineNow}`, inline: true },
-      { name: 'Total Time Spent', value: fmtTime(totalTimeSeconds), inline: true },
+    const bodyParts = [
+      `--${boundary}\r\nContent-Disposition: form-data; name="payload_json"\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ content: messageContent })}`,
+      `--${boundary}\r\nContent-Disposition: form-data; name="files[0]"; filename="${filename}"\r\nContent-Type: application/json\r\n\r\n${jsonBlock}`,
+      `--${boundary}--`
     ]
-
-    // Add visitor chunks
-    visitorChunks.forEach((chunk, i) => {
-      fields.push({
-        name: i === 0 ? `📋 Daily Visitors (${visitors.length})` : '📋 Visitors (cont.)',
-        value: chunk || 'No visitors today',
-        inline: false
-      })
-    })
-
-    // Add leaderboard chunks
-    leaderboardChunks.forEach((chunk, i) => {
-      fields.push({
-        name: i === 0 ? `🏆 Leaderboard (${leaderboardEntries.length} players)` : '🏆 Leaderboard (cont.)',
-        value: chunk || 'No rounds won today',
-        inline: false
-      })
-    })
-
-    // Discord embed limit is 6000 chars total, 25 fields max
-    // If too many fields, send multiple embeds
-    const embeds: any[] = []
-    let currentFields: typeof fields = []
-    let currentCharCount = 0
-
-    for (const field of fields) {
-      const fieldChars = field.name.length + field.value.length
-      if (currentCharCount + fieldChars > 5500 && currentFields.length > 0) {
-        embeds.push({
-          color: 0x3498db,
-          fields: currentFields,
-        })
-        currentFields = []
-        currentCharCount = 0
-      }
-      currentFields.push(field)
-      currentCharCount += fieldChars
-    }
-
-    if (currentFields.length > 0) {
-      embeds.push({
-        color: 0x3498db,
-        fields: currentFields,
-      })
-    }
-
-    // Add title to first embed
-    if (embeds.length > 0) {
-      embeds[0].title = `📊 Flagtag Daily Report — ${lastVisitorResetDay}`
-      embeds[embeds.length - 1].timestamp = new Date().toISOString()
-    }
-
-    // Discord allows max 10 embeds per message
-    const payload = JSON.stringify({ embeds: embeds.slice(0, 10) })
+    const body = bodyParts.join('\r\n')
 
     const res = await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body
     })
-
     console.log('[Server] Discord webhook response:', res.status)
   } catch (err) {
     console.error('[Server] Failed to send Discord webhook:', err)
@@ -467,6 +454,9 @@ async function checkVisitorDailyReset(): Promise<boolean> {
     
     // Clear visitor data for new day
     visitorSessions.clear()
+    hourlyPeakConcurrent = new Array(24).fill(0)
+    peakConcurrent = 0
+    peakConcurrentTime = ''
     
     // Sync empty visitor data
     await syncVisitorAnalytics()
@@ -1638,6 +1628,7 @@ function playerTrackingSystem(): void {
 
   // Immediate sync when players join or leave
   if (changed) {
+    updateConcurrentTracking()
     void syncVisitorAnalytics()
   }
 }

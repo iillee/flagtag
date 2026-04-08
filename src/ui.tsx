@@ -68,13 +68,17 @@ function joinCommunity() {
         init: { method: 'GET', headers: {} }
       })
       const infoBody = infoRes.body || ''
+      console.log('[Mailbox] Community info response:', infoBody.slice(0, 500))
       let role = 'unknown'
       let privacy = 'unknown'
       try {
         const info = JSON.parse(infoBody)
         role = info?.data?.role || 'unknown'
         privacy = info?.data?.privacy || 'unknown'
-      } catch (_) {}
+        console.log('[Mailbox] Role:', role, 'Privacy:', privacy)
+      } catch (_) {
+        console.log('[Mailbox] Failed to parse community info')
+      }
 
       if (role === 'member' || role === 'owner' || role === 'moderator') {
         setMailboxStatus('You are already a member!')
@@ -90,11 +94,21 @@ function joinCommunity() {
             headers: {}
           }
         })
-        console.log('[Mailbox] Join (public) status:', joinRes.status, 'body:', joinRes.body?.slice(0, 300))
-        if (joinRes.ok || joinRes.status === 204 || joinRes.status === 201) {
+        console.log('[Mailbox] Join (public) response:', joinRes.body?.slice(0, 300))
+        // signedFetch doesn't have .status — check body for errors
+        const joinBody = joinRes.body || ''
+        let joinError = false
+        try {
+          const parsed = JSON.parse(joinBody)
+          if (parsed.error) {
+            joinError = true
+            setMailboxStatus(`Error: ${parsed.message || parsed.error}`)
+          }
+        } catch (_) {
+          // Empty body (204) means success
+        }
+        if (!joinError) {
           setMailboxStatus('Joined! Welcome to the community.')
-        } else {
-          setMailboxStatus(`Error ${joinRes.status}: ${joinRes.body?.slice(0, 200) || 'Unknown error'}`)
         }
         return
       }
@@ -104,14 +118,22 @@ function joinCommunity() {
         url: SOCIAL_API,
         init: {
           method: 'POST',
-          headers: {}
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetedAddress: addr, type: 'request_to_join' })
         }
       })
-      console.log('[Mailbox] Response status:', res.status, 'body:', res.body?.slice(0, 300))
-      if (res.ok || res.status === 201) {
+      console.log('[Mailbox] Request response:', res.body?.slice(0, 300))
+      const resBody = res.body || ''
+      let reqError = false
+      try {
+        const parsed = JSON.parse(resBody)
+        if (parsed.error) {
+          reqError = true
+          setMailboxStatus(`Error: ${parsed.message || parsed.error}`)
+        }
+      } catch (_) {}
+      if (!reqError) {
         setMailboxStatus('Request sent! Check your notifications.')
-      } else {
-        setMailboxStatus(`Error ${res.status}: ${res.body?.slice(0, 200) || 'Unknown error'}`)
       }
     } catch (err) {
       console.error('[Mailbox] Failed to send community request:', err)
@@ -314,6 +336,13 @@ function serverDownDetectionSystem(dt: number): void {
 }
 
 engine.addSystem(serverDownDetectionSystem)
+
+// ── Key 2 — toggle music mute ──
+engine.addSystem(() => {
+  if (inputSystem.isTriggered(InputAction.IA_ACTION_4, PointerEventType.PET_DOWN)) {
+    toggleMusicMute()
+  }
+})
 
 // Tie-breaking tracking for stable leaderboard sorting
 const roundWinAchievementTime = new Map<string, number>() // userId -> timestamp when they first achieved current win count
@@ -873,6 +902,18 @@ function DesktopLayout() {
                   </UiEntity>
                   <Label value="to drop flag" fontSize={16} color={MUTED} font="sans-serif" />
                 </UiEntity>
+                <UiEntity uiTransform={{ height: 12 }} />
+
+                {/* 2 — mute music */}
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 34 }}>
+                  <UiEntity
+                    uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
+                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
+                  >
+                    <Label value="2" fontSize={16} color={WHITE} font="sans-serif" />
+                  </UiEntity>
+                  <Label value={musicMuted ? "unmute music" : "mute music"} fontSize={16} color={MUTED} font="sans-serif" />
+                </UiEntity>
               </UiEntity>
             </UiEntity>
           </UiEntity>
@@ -1172,10 +1213,10 @@ function DesktopLayout() {
                             font="sans-serif" 
                           />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '15%', overflow: 'hidden', height: VISITOR_ROW_H }}>
+                        <UiEntity uiTransform={{ width: '22%', overflow: 'hidden', height: VISITOR_ROW_H, maxHeight: VISITOR_ROW_H }}>
                           <Label value={visitor.name} fontSize={12} color={WHITE} font="sans-serif" />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '68%', overflow: 'hidden', height: VISITOR_ROW_H, padding: { left: 16 } }}>
+                        <UiEntity uiTransform={{ width: '61%', overflow: 'hidden', height: VISITOR_ROW_H, maxHeight: VISITOR_ROW_H, padding: { left: 16 } }}>
                           <Label value={visitor.userId} fontSize={11} color={WHITE} font="sans-serif" />
                         </UiEntity>
                         <UiEntity uiTransform={{ width: '12%', flexDirection: 'row', justifyContent: 'flex-end' }}>
@@ -2015,6 +2056,18 @@ function MobileLayout() {
                     <Label value="3" fontSize={22} color={WHITE} font="sans-serif" />
                   </UiEntity>
                   <Label value="to drop flag" fontSize={22} color={MUTED} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ height: 14 }} />
+
+                {/* 2 — mute music */}
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
+                  <UiEntity
+                    uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
+                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
+                  >
+                    <Label value="2" fontSize={22} color={WHITE} font="sans-serif" />
+                  </UiEntity>
+                  <Label value={musicMuted ? "unmute music" : "mute music"} fontSize={22} color={MUTED} font="sans-serif" />
                 </UiEntity>
               </UiEntity>
             </UiEntity>
