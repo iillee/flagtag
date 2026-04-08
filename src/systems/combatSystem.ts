@@ -218,8 +218,7 @@ export function playMissSound(position: Vector3): void {
   a.playing = true
 }
 
-// CONTINUED IN STEP 4b-ii — stagger, message listeners, main system loop
-// (placeholder exports so the file compiles)
+// ── Stagger & message handling ──
 const STAGGER_EMOTE = 'getHit' as const
 const STAGGER_FREEZE_MS = 800   // Reduced from 1500ms - shorter stun duration
 const STAGGER_DELAY_MS = 0      // Reduced from 100ms - instant emote trigger

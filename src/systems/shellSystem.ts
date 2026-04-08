@@ -14,7 +14,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
-import { Flag, Shell, SHELL_COOLDOWN_SEC, SHELL_LIFETIME_SEC, SHELL_SPEED, SHELL_MAX_RANGE, SHELL_HIT_RADIUS } from '../shared/components'
+import { Flag, Shell, SHELL_COOLDOWN_SEC, SHELL_LIFETIME_SEC, SHELL_SPEED, SHELL_MAX_RANGE } from '../shared/components'
 
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'

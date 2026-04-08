@@ -1,4 +1,4 @@
-import { engine, Transform, InputModifier, AudioSource, inputSystem, InputAction } from '@dcl/sdk/ecs'
+import { engine, Transform, InputModifier, AudioSource } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { isSpectatorMode } from './spectatorSystem'
 

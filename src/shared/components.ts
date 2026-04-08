@@ -97,22 +97,9 @@ export const LeaderboardState = engine.defineComponent('ctf-leaderboard-state', 
 
 LeaderboardState.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** Parse the round winner snapshot stored by the server. */
-export function getRoundWinners(): { userId: string; name: string }[] {
-  for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
-    if (!timer.roundEndTriggered || !timer.roundWinnerJson) return []
-    try {
-      return JSON.parse(timer.roundWinnerJson)
-    } catch {
-      return []
-    }
-  }
-  return []
-}
-
 // ── Shared constants ──
 
-export const FLAG_BASE_POSITION = { x: 54, y: 12, z: 122 } // Legacy - kept for compatibility
+export const FLAG_BASE_POSITION = { x: 54, y: 12, z: 122 }
 
 // ── Red Flag Spawn Points ──
 export const FLAG_SPAWN_POINTS = [

@@ -1,6 +1,6 @@
 import {
   engine, Transform, MeshRenderer, Material, Billboard,
-  BillboardMode, MaterialTransparencyMode, PlayerIdentityData, GltfContainer
+  BillboardMode, MaterialTransparencyMode, PlayerIdentityData
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
@@ -21,21 +21,8 @@ const PULSE_RANGE = 0.15 // scale oscillates ±15%
 // Beacon color — gold to match particles
 const BEACON_COLOR = { r: 1, g: 0.84, b: 0 }
 
-// Flag carry offset from our current system
+// Flag carry offset
 const FLAG_CARRY_OFFSET = { x: 0, y: 0.4, z: 0 }
-
-// Track local test flag state (since it doesn't use Flag component)
-let localTestFlagCarried = false
-let localTestFlagEntity: ReturnType<typeof engine.addEntity> | null = null
-
-// Function to be called by local test flag when state changes
-export function setLocalTestFlagState(isCarried: boolean, entity?: ReturnType<typeof engine.addEntity>) {
-  localTestFlagCarried = isCarried
-  if (entity !== undefined) {
-    localTestFlagEntity = entity
-  }
-  console.log('[Beacon] Local test flag state updated - carried:', isCarried)
-}
 
 // ── State ──
 let innerBeacon: ReturnType<typeof engine.addEntity>
@@ -131,32 +118,6 @@ export function beaconClientSystem(dt: number): void {
       worldPos = Transform.get(flagEntity).position
     }
     break // only one flag
-  }
-
-  // If no server flag found, look for local test flag (blue banner)
-  if (!worldPos) {
-    if (localTestFlagCarried) {
-      // Local test flag is carried - use player position + offset
-      if (Transform.has(engine.PlayerEntity)) {
-        const playerPos = Transform.get(engine.PlayerEntity).position
-        worldPos = Vector3.create(
-          playerPos.x + FLAG_CARRY_OFFSET.x,
-          playerPos.y + FLAG_CARRY_OFFSET.y,
-          playerPos.z + FLAG_CARRY_OFFSET.z
-        )
-
-      }
-    } else {
-      // Local test flag not carried - find the visible blue banner
-      for (const [entity, gltf, transform] of engine.getEntitiesWith(GltfContainer, Transform)) {
-        if (gltf.src && gltf.src.includes('Banner_Blue_02')) {
-          if (transform.position.y > -50) { // Make sure it's not hidden
-            worldPos = transform.position
-            break
-          }
-        }
-      }
-    }
   }
 
   if (worldPos) {
