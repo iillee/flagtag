@@ -18,6 +18,7 @@ import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
+import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
@@ -111,7 +112,7 @@ export async function main() {
     audioClipUrl: 'assets/sounds/Medieval.mp3',
     playing: true,
     loop: true,
-    volume: 0.175,
+    volume: 0.0984375,
     global: true
   })
 
@@ -382,6 +383,20 @@ export async function main() {
       }
     })
   }
+
+  // Portal to Genesis Plaza — placed at parcel (8,8) scene-local
+  new Portal({
+    locationId: 'genesis-plaza',
+    position: { x: 49.95, y: 1.15, z: 88.9 },
+    rotation: { x: 0, y: 167, z: 0 },
+    size: 1.85,
+    name: 'Genesis Plaza',
+    callback: () => {
+      void import('~system/RestrictedActions').then(({ teleportTo }) =>
+        teleportTo({ worldCoordinates: { x: 0, y: 0 } })
+      )
+    }
+  })
 
   // Spectator camera
   setupSpectator()
