@@ -25,7 +25,7 @@ const CARRIER_Y_WINDOW_SEC = 2.0 // seconds of carrier Y history to estimate gro
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
 // ── Mushroom constants ──
-const MUSHROOM_COUNT = 1
+const MUSHROOM_COUNT = 2
 // Shield lasts until hit or round end
 const MUSHROOM_SCENE_MIN_X = 2
 const MUSHROOM_SCENE_MAX_X = 158
