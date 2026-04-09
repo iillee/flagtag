@@ -121,7 +121,6 @@ function playShieldBreakSound(): void {
 
 const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
-let messagesRegistered = false
 let positionsRequested = false
 let shieldActive = false
 
@@ -169,13 +168,8 @@ function setupMushroomBeacon(): void {
   console.log('[Mushroom] 🍄 Red beacon created')
 }
 
-// ── Message registration ──
-function registerMushroomMessages(): void {
-  if (messagesRegistered) return
-  messagesRegistered = true
-
-  // Server sends mushroom spawn positions
-  room.onMessage('mushroomPositions', (data) => {
+// ── Message listeners (registered at module scope for reliable delivery) ──
+room.onMessage('mushroomPositions', (data) => {
     const positions: { id: number, x: number, z: number }[] = JSON.parse((data as any).mushroomsJson || '[]')
     console.log('[Mushroom] Received', positions.length, 'mushroom positions from server')
 
@@ -276,7 +270,6 @@ function registerMushroomMessages(): void {
       hideShieldForPlayer(pid)
     }
   })
-}
 
 // ── Process pending raycasts ──
 function processMushroomRaycasts(): void {
@@ -334,7 +327,6 @@ function updateMushroomBeacon(dt: number): void {
 
 // ── Client system (called every frame) ──
 export function mushroomClientSystem(dt: number): void {
-  registerMushroomMessages()
   // Request mushroom positions from server once
   if (!positionsRequested && isServerConnected()) {
     positionsRequested = true

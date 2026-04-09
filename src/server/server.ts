@@ -770,7 +770,7 @@ function updatePlayerName(userId: string, name: string): boolean {
         const json = JSON.stringify(entries)
         const mutable = LeaderboardState.getMutable(leaderboardEntity)
         mutable.json = json
-        persistLeaderboard(json)
+        persistLeaderboard(json).catch(e => console.error('[Server] persistLeaderboard error:', e))
       }
     } catch { /* ignore parse errors */ }
   }
@@ -786,7 +786,7 @@ function registerHandlers(): void {
       const from = context.from.toLowerCase()
       if (updatePlayerName(from, data.name)) {
         console.log('[Server] registerName: updated', from.slice(0, 8), '->', data.name)
-        persistPlayerNames()
+        persistPlayerNames().catch(e => console.error('[Server] persistPlayerNames error:', e))
       }
     } catch (err) { console.error('[Server] ❌ registerName handler error:', err) }
   })
@@ -902,7 +902,7 @@ function registerHandlers(): void {
         flagMutable.dropAnchorY = newTarget
         flagFalling = false
         flagFallVelocity = 0
-        persistFlagState()
+        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       } else if (!flagFalling) {
         flagFalling = true
         flagFallVelocity = 0
@@ -986,7 +986,7 @@ function handlePickup(playerId: string): void {
 
   resetGravityState()
   room.send('pickupSound', { t: 0 })
-  persistFlagState()
+  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 
 function handleDrop(playerId: string): void {
@@ -1022,7 +1022,7 @@ function handleDrop(playerId: string): void {
   computeGravityTarget(dropPos.y)
 
   room.send('dropSound', { t: 0 })
-  persistFlagState()
+  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 
 function handleFlagSteal(victimId: string, attackerId: string): void {
@@ -1040,7 +1040,7 @@ function handleFlagSteal(victimId: string, attackerId: string): void {
   lastStealTime.set(attackerId, Date.now())
   resetGravityState()
   room.send('pickupSound', { t: 0 })
-  persistFlagState()
+  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 
 function handleAttack(attackerId: string): void {
@@ -1457,7 +1457,7 @@ function flagServerSystem(dt: number): void {
       resetCarrierTracking()
       computeGravityTarget(flagPos.y)
       room.send('dropSound', { t: 0 })
-      persistFlagState()
+      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
     }
   } else {
     // Not carried — reset tracking so next pickup starts fresh
@@ -1473,7 +1473,7 @@ function flagServerSystem(dt: number): void {
       newY = flagGravityTargetY
       flagFalling = false
       flagFallVelocity = 0
-      persistFlagState()
+      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
     }
     currentAnchorY = newY
     const flagMutable = Flag.getMutable(flagEntity)
@@ -1516,7 +1516,7 @@ function flagServerSystem(dt: number): void {
       computeGravityTarget(flagPos.y)
 
       room.send('dropSound', { t: 0 })
-      persistFlagState()
+      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
     }
   }
 }
@@ -1629,7 +1629,7 @@ function playerTrackingSystem(): void {
   // Immediate sync when players join or leave
   if (changed) {
     updateConcurrentTracking()
-    void syncVisitorAnalytics()
+    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
   }
 }
 
@@ -1853,10 +1853,10 @@ function visitorTrackingServerSystem(dt: number): void {
     visitorSyncTimer = 0
     
     // Check for daily reset
-    void checkVisitorDailyReset()
+    checkVisitorDailyReset().catch(e => console.error('[Server] checkVisitorDailyReset error:', e))
     
     // Sync current visitor data
-    void syncVisitorAnalytics()
+    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
   }
 }
 
@@ -1895,8 +1895,8 @@ function nameResolverServerSystem(dt: number): void {
   }
 
   if (anyUpdated) {
-    persistPlayerNames()
-    void syncVisitorAnalytics()
+    persistPlayerNames().catch(e => console.error('[Server] persistPlayerNames error:', e))
+    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
   }
 }
 

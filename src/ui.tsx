@@ -91,24 +91,23 @@ function joinCommunity() {
           url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
           init: {
             method: 'POST',
-            headers: {}
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
           }
         })
-        console.log('[Mailbox] Join (public) response:', joinRes.body?.slice(0, 300))
-        // signedFetch doesn't have .status — check body for errors
-        const joinBody = joinRes.body || ''
-        let joinError = false
-        try {
-          const parsed = JSON.parse(joinBody)
-          if (parsed.error) {
-            joinError = true
-            setMailboxStatus(`Error: ${parsed.message || parsed.error}`)
-          }
-        } catch (_) {
-          // Empty body (204) means success
-        }
-        if (!joinError) {
+        console.log('[Mailbox] Join (public) status:', joinRes.status, 'ok:', joinRes.ok, 'body:', joinRes.body?.slice(0, 500))
+        if (joinRes.ok) {
           setMailboxStatus('Joined! Welcome to the community.')
+        } else {
+          const joinBody = joinRes.body || ''
+          let msg = `Error ${joinRes.status}`
+          try {
+            const parsed = JSON.parse(joinBody)
+            if (parsed.message || parsed.error) {
+              msg = parsed.message || parsed.error
+            }
+          } catch (_) {}
+          setMailboxStatus(msg)
         }
         return
       }
@@ -122,18 +121,18 @@ function joinCommunity() {
           body: JSON.stringify({ targetedAddress: addr, type: 'request_to_join' })
         }
       })
-      console.log('[Mailbox] Request response:', res.body?.slice(0, 300))
-      const resBody = res.body || ''
-      let reqError = false
-      try {
-        const parsed = JSON.parse(resBody)
-        if (parsed.error) {
-          reqError = true
-          setMailboxStatus(`Error: ${parsed.message || parsed.error}`)
-        }
-      } catch (_) {}
-      if (!reqError) {
+      console.log('[Mailbox] Request status:', res.status, 'ok:', res.ok, 'body:', res.body?.slice(0, 500))
+      if (res.ok) {
         setMailboxStatus('Request sent! Check your notifications.')
+      } else {
+        let msg = `Error ${res.status}`
+        try {
+          const parsed = JSON.parse(res.body || '')
+          if (parsed.message || parsed.error) {
+            msg = parsed.message || parsed.error
+          }
+        } catch (_) {}
+        setMailboxStatus(msg)
       }
     } catch (err) {
       console.error('[Mailbox] Failed to send community request:', err)

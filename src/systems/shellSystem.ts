@@ -175,46 +175,39 @@ function updateServerShellGroundRaycasts(dt: number): void {
   }
 }
 
-// ── Message listeners ──
-let messagesRegistered = false
+// ── Message listeners (registered at module scope for reliable delivery) ──
+room.onMessage('shellDropped', (data) => {
+  // Create visual from message bus (instant, no CRDT dependency).
+  // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
+  createMsgShellVisual(data.x, data.y, data.z, data.dirX, data.dirZ)
+})
 
-function registerShellMessages(): void {
-  if (messagesRegistered) return
-  messagesRegistered = true
+room.onMessage('shellTriggered', (data) => {
+  const pos = Vector3.create(data.x, data.y, data.z)
+  // Remove the message-driven shell visual closest to the hit position
+  removeMsgShellVisualNear(data.x, data.y, data.z)
 
-  room.onMessage('shellDropped', (data) => {
-    // Create visual from message bus (instant, no CRDT dependency).
-    // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
-    createMsgShellVisual(data.x, data.y, data.z, data.dirX, data.dirZ)
-  })
+  // Hit a player: particles + hit sound + stagger. Hit a wall: miss sound.
+  if (data.victimId && data.victimId !== '') {
+    showHitEffect(pos)
+    playHitSound(pos)
 
-  room.onMessage('shellTriggered', (data) => {
-    const pos = Vector3.create(data.x, data.y, data.z)
-    // Remove the message-driven shell visual closest to the hit position
-    removeMsgShellVisualNear(data.x, data.y, data.z)
-
-    // Hit a player: particles + hit sound + stagger. Hit a wall: miss sound.
-    if (data.victimId && data.victimId !== '') {
-      showHitEffect(pos)
-      playHitSound(pos)
-
-      // Stagger the victim if it's the local player
-      const me = getPlayerData()?.userId?.toLowerCase()
-      if (me && data.victimId === me) {
-        triggerEmote({ predefinedEmote: 'getHit' })
-        InputModifier.createOrReplace(engine.PlayerEntity, {
-          mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
-        })
-        shellStaggerUntil = Date.now() + SHELL_STAGGER_MS
-      }
-    } else {
-      // Shell hit banana or wall — show miss cloud + sound
-      showMissEffect(pos)
-      const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : pos
-      playMissSound(playerPos)
+    // Stagger the victim if it's the local player
+    const me = getPlayerData()?.userId?.toLowerCase()
+    if (me && data.victimId === me) {
+      triggerEmote({ predefinedEmote: 'getHit' })
+      InputModifier.createOrReplace(engine.PlayerEntity, {
+        mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
+      })
+      shellStaggerUntil = Date.now() + SHELL_STAGGER_MS
     }
-  })
-}
+  } else {
+    // Shell hit banana or wall — show miss cloud + sound
+    showMissEffect(pos)
+    const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : pos
+    playMissSound(playerPos)
+  }
+})
 
 // ── Local test mode (no server) ──
 function isServerConnected(): boolean {
@@ -498,8 +491,6 @@ export function triggerShellFromUI(): void {
 
 // ── Main client system ──
 export function shellClientSystem(dt: number): void {
-  registerShellMessages()
-
   const now = Date.now()
   const serverUp = isServerConnected()
 

@@ -222,39 +222,33 @@ const recentBananaDropPositions: { x: number; y: number; z: number; timestamp: n
 const MAX_RECENT_DROPS = 20
 
 // ── Message listeners ──
-let messagesRegistered = false
+// ── Message listeners (registered at module scope for reliable delivery) ──
+room.onMessage('bananaDropped', (data) => {
+  playBananaDropSound(Vector3.create(data.x, data.y, data.z))
+  // Create visual from message bus (instant, no CRDT dependency)
+  createMsgBananaVisual(data.x, data.y, data.z)
+  // Fire ground raycast so server knows where to land this banana
+  fireBananaGroundRaycast(data.x, data.y, data.z)
+})
 
-function registerBananaMessages(): void {
-  if (messagesRegistered) return
-  messagesRegistered = true
+room.onMessage('bananaTriggered', (data) => {
+  const pos = Vector3.create(data.x, data.y, data.z)
 
-  room.onMessage('bananaDropped', (data) => {
-    playBananaDropSound(Vector3.create(data.x, data.y, data.z))
-    // Create visual from message bus (instant, no CRDT dependency)
-    createMsgBananaVisual(data.x, data.y, data.z)
-    // Fire ground raycast so server knows where to land this banana
-    fireBananaGroundRaycast(data.x, data.y, data.z)
-  })
+  // Remove the message-driven banana visual
+  removeMsgBananaVisualNear(data.x, data.y, data.z)
 
-  room.onMessage('bananaTriggered', (data) => {
-    const pos = Vector3.create(data.x, data.y, data.z)
+  playBananaSplatSound(pos)
 
-    // Remove the message-driven banana visual
-    removeMsgBananaVisualNear(data.x, data.y, data.z)
-
-    playBananaSplatSound(pos)
-
-    // Stagger the victim if it's the local player
-    const me = getPlayerData()?.userId
-    if (me && data.victimId === me.toLowerCase()) {
-      triggerEmote({ predefinedEmote: 'getHit' })
-      InputModifier.createOrReplace(engine.PlayerEntity, {
-        mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
-      })
-      bananaStaggerUntil = Date.now() + BANANA_STAGGER_MS
-    }
-  })
-}
+  // Stagger the victim if it's the local player
+  const me = getPlayerData()?.userId
+  if (me && data.victimId === me.toLowerCase()) {
+    triggerEmote({ predefinedEmote: 'getHit' })
+    InputModifier.createOrReplace(engine.PlayerEntity, {
+      mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
+    })
+    bananaStaggerUntil = Date.now() + BANANA_STAGGER_MS
+  }
+})
 
 // ── Local test mode (no server) ──
 function isServerConnected(): boolean {
@@ -518,8 +512,6 @@ export function triggerBananaFromUI(): void {
 
 // ── Main client system ──
 export function bananaClientSystem(dt: number): void {
-  registerBananaMessages()
-
   const now = Date.now()
   const serverUp = isServerConnected()
 
