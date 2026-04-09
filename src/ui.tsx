@@ -35,7 +35,7 @@ import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
 import { signedFetch } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
-const SOCIAL_API = `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/requests`
+// Public community — direct join via POST /members
 
 let mailboxStatusMessage = ''
 let mailboxStatusTime = 0
@@ -59,80 +59,31 @@ function joinCommunity() {
         setMailboxStatus('Error: No player data')
         return
       }
-      const addr = player.userId
-      console.log('[Mailbox] Sending community join request for:', addr)
-      setMailboxStatus('Sending request...')
-      // First check community info + user's current role
-      const infoRes = await signedFetch({
-        url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}`,
-        init: { method: 'GET', headers: {} }
+      console.log('[Mailbox] Joining community for:', player.userId)
+      setMailboxStatus('Joining...')
+
+      const joinRes = await signedFetch({
+        url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
+        init: { method: 'POST', headers: {} }
       })
-      const infoBody = infoRes.body || ''
-      console.log('[Mailbox] Community info response:', infoBody.slice(0, 500))
-      let role = 'unknown'
-      let privacy = 'unknown'
-      try {
-        const info = JSON.parse(infoBody)
-        role = info?.data?.role || 'unknown'
-        privacy = info?.data?.privacy || 'unknown'
-        console.log('[Mailbox] Role:', role, 'Privacy:', privacy)
-      } catch (_) {
-        console.log('[Mailbox] Failed to parse community info')
-      }
+      console.log('[Mailbox] Join status:', joinRes.status, 'body:', joinRes.body)
 
-      if (role === 'member' || role === 'owner' || role === 'moderator') {
-        setMailboxStatus('You are already a member!')
-        return
-      }
-
-      // For public communities, use the members endpoint directly (no request needed)
-      if (privacy === 'public') {
-        const joinRes = await signedFetch({
-          url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
-          init: {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-          }
-        })
-        console.log('[Mailbox] Join (public) status:', joinRes.status, 'ok:', joinRes.ok, 'body:', joinRes.body?.slice(0, 500))
-        if (joinRes.ok) {
-          setMailboxStatus('Joined! Welcome to the community.')
+      if (joinRes.ok) {
+        setMailboxStatus('Joined! Welcome to the community.')
+      } else {
+        const body = joinRes.body || ''
+        let msg = 'Error ' + joinRes.status
+        try {
+          const parsed = JSON.parse(body)
+          msg = parsed.message || parsed.error || body
+        } catch (_) {}
+        // If already a member, treat as success
+        if (body.includes('already') || body.includes('Already')) {
+          setMailboxStatus('You are already a member!')
         } else {
-          const joinBody = joinRes.body || ''
-          let msg = `Error ${joinRes.status}`
-          try {
-            const parsed = JSON.parse(joinBody)
-            if (parsed.message || parsed.error) {
-              msg = parsed.message || parsed.error
-            }
-          } catch (_) {}
+          console.log('[Mailbox] Join error:', body)
           setMailboxStatus(msg)
         }
-        return
-      }
-
-      // For private communities, send a join request
-      const res = await signedFetch({
-        url: SOCIAL_API,
-        init: {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetedAddress: addr, type: 'request_to_join' })
-        }
-      })
-      console.log('[Mailbox] Request status:', res.status, 'ok:', res.ok, 'body:', res.body?.slice(0, 500))
-      if (res.ok) {
-        setMailboxStatus('Request sent! Check your notifications.')
-      } else {
-        let msg = `Error ${res.status}`
-        try {
-          const parsed = JSON.parse(res.body || '')
-          if (parsed.message || parsed.error) {
-            msg = parsed.message || parsed.error
-          }
-        } catch (_) {}
-        setMailboxStatus(msg)
       }
     } catch (err) {
       console.error('[Mailbox] Failed to send community request:', err)

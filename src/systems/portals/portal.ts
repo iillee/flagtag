@@ -311,8 +311,8 @@ export class Portal {
 
     // Audio entities — only ambient loop is used (doors were removed)
     this.audioAmb = this.createAudioEntity('assets/sounds/portals/doorAmb.mp3', true)
-    this.audioOpen = engine.addEntity() // placeholder, no AudioSource
-    this.audioClose = engine.addEntity() // placeholder, no AudioSource
+    this.audioOpen = this.createAudioEntity('assets/sounds/portalload.mp3', false)
+    this.audioClose = this.createAudioEntity('assets/sounds/portalload.mp3', false)
 
     // Double doors
     const dOpts = options.door ?? {}
@@ -457,8 +457,11 @@ export class Portal {
         if (!inRange) {
           inRange = true
           stepTimer = 0
+          const a = AudioSource.getMutable(this.audioOpen)
+          a.playing = false
+          a.playing = true
         }
-        // Stagger-load one layer at a time until all are attached
+        // Stagger-load outer → inner (largest first)
         if (loadedCount < this.layers.length) {
           stepTimer += dt
           while (stepTimer >= LOAD_STEP_DELAY && loadedCount < this.layers.length) {
@@ -471,12 +474,17 @@ export class Portal {
       } else {
         if (inRange) {
           inRange = false
-          // Unload everything at once when the player leaves the range
-          for (const e of this.layers) {
+          stepTimer = 0
+        }
+        // Stagger-unload inner → outer (reverse of load order)
+        if (loadedCount > 0) {
+          stepTimer += dt
+          while (stepTimer >= LOAD_STEP_DELAY && loadedCount > 0) {
+            stepTimer -= LOAD_STEP_DELAY
+            loadedCount--
+            const e = this.layers[loadedCount]
             if (GltfContainer.has(e)) GltfContainer.deleteFrom(e)
           }
-          loadedCount = 0
-          stepTimer = 0
         }
       }
     }

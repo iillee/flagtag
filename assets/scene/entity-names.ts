@@ -141,6 +141,7 @@ export enum EntityNames {
   castle_glb = "castle.glb",
   lights_glb = "lights.glb",
   mound_glb = "mound.glb",
+  normaltest_glb = "normaltest.glb",
   plants_glb = "plants.glb",
   plants2_glb = "plants2.glb",
   props_glb = "props.glb",

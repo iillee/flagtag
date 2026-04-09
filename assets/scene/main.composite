@@ -5868,7 +5868,7 @@
         "serializationType": "map"
       },
       "data": {
-        "653": {
+        "0": {
           "json": {
             "gizmo": 1
           }
