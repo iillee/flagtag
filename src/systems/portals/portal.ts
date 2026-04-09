@@ -457,9 +457,10 @@ export class Portal {
         if (!inRange) {
           inRange = true
           stepTimer = 0
-          const a = AudioSource.getMutable(this.audioOpen)
-          a.playing = false
-          a.playing = true
+          // Portal load sound disabled — too noisy when passing multiple portals
+          // const a = AudioSource.getMutable(this.audioOpen)
+          // a.playing = false
+          // a.playing = true
         }
         // Stagger-load outer → inner (largest first)
         if (loadedCount < this.layers.length) {
