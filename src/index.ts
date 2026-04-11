@@ -18,6 +18,7 @@ import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
+import { setupLadder } from './systems/ladderSystem'
 import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
@@ -52,6 +53,7 @@ export async function main() {
   createAnalyticsOverlayEntity()
   setupUi()
   setupBeacon()
+  setupLadder()
 
 
   const local = getPlayer()
