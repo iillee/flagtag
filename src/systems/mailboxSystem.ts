@@ -6,7 +6,7 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { showMailboxPopup } from '../ui'
 
 // Mailbox position/rotation from composite (entity 512)
-const MAILBOX_POS = Vector3.create(38.54, 11.54, 150.28)
+const MAILBOX_POS = Vector3.create(214.54, 12.54, 286.28)
 const MAILBOX_ROT = { x: 0, y: 0.555660605430603, z: 0, w: 0.831409215927124 }
 const MATCH_DIST = 2
 

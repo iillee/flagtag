@@ -20,7 +20,7 @@ const HOLD_TIME_SYNC_INTERVAL = 0.5  // Sync hold time every 0.5s (was 0.2s) —
 // Bob/spin constants removed — animation is now client-side only
 const SPLASH_DURATION_MS = 3000
 const FLAG_GRAVITY = 15          // m/s² (slightly faster than real gravity for snappy game feel)
-const FLAG_MIN_Y = 0.5           // absolute minimum Y (ground plane)
+const FLAG_MIN_Y = 1.5           // absolute minimum Y (ground plane)
 const CARRIER_Y_WINDOW_SEC = 2.0 // seconds of carrier Y history to estimate ground level
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
@@ -28,15 +28,18 @@ const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red
 const MUSHROOM_COUNT = 2
 // Shield lasts until hit or round end
 const MUSHROOM_SCENE_MIN_X = 2
-const MUSHROOM_SCENE_MAX_X = 158
+const MUSHROOM_SCENE_MAX_X = 510
 const MUSHROOM_SCENE_MIN_Z = 2
-const MUSHROOM_SCENE_MAX_Z = 238
+const MUSHROOM_SCENE_MAX_Z = 510
+
+const MUSHROOM_MAX_REROLLS = 10
 
 interface ServerMushroom {
   id: number
   x: number
   z: number
   pickedUp: boolean
+  rerolls: number
 }
 const activeMushrooms: ServerMushroom[] = []
 let mushroomIdCounter = 0
@@ -935,6 +938,24 @@ function registerHandlers(): void {
       // Spawn a replacement mushroom
       spawnOneMushroom()
     } catch (err) { console.error('[Server] ❌ pickupMushroom handler error:', err) }
+  })
+
+  // ── Mushroom reroll (client detected water landing) ──
+  room.onMessage('rerollMushroom', (data, _context) => {
+    try {
+      const mid = (data as any).id as number
+      const mushroom = activeMushrooms.find(m => m.id === mid && !m.pickedUp)
+      if (!mushroom) return
+      if (mushroom.rerolls >= MUSHROOM_MAX_REROLLS) {
+        console.log('[Server] 🍄 Mushroom', mid, 'hit max rerolls, keeping current position')
+        return
+      }
+      mushroom.rerolls++
+      mushroom.x = MUSHROOM_SCENE_MIN_X + Math.random() * (MUSHROOM_SCENE_MAX_X - MUSHROOM_SCENE_MIN_X)
+      mushroom.z = MUSHROOM_SCENE_MIN_Z + Math.random() * (MUSHROOM_SCENE_MAX_Z - MUSHROOM_SCENE_MIN_Z)
+      console.log('[Server] 🍄 Rerolled mushroom', mid, 'to', mushroom.x.toFixed(1), mushroom.z.toFixed(1), `(attempt ${mushroom.rerolls}/${MUSHROOM_MAX_REROLLS})`)
+      room.send('mushroomPositions', { mushroomsJson: JSON.stringify([{ id: mushroom.id, x: mushroom.x, z: mushroom.z }]) })
+    } catch (err) { console.error('[Server] ❌ rerollMushroom handler error:', err) }
   })
 
   // ── Updraft location request ──
@@ -1904,7 +1925,7 @@ function nameResolverServerSystem(dt: number): void {
 function spawnOneMushroom(): void {
   const x = MUSHROOM_SCENE_MIN_X + Math.random() * (MUSHROOM_SCENE_MAX_X - MUSHROOM_SCENE_MIN_X)
   const z = MUSHROOM_SCENE_MIN_Z + Math.random() * (MUSHROOM_SCENE_MAX_Z - MUSHROOM_SCENE_MIN_Z)
-  const m = { id: mushroomIdCounter++, x, z, pickedUp: false }
+  const m = { id: mushroomIdCounter++, x, z, pickedUp: false, rerolls: 0 }
   activeMushrooms.push(m)
   console.log('[Server] 🍄 Spawned replacement mushroom', m.id, 'at', x.toFixed(1), z.toFixed(1))
   room.send('mushroomPositions', { mushroomsJson: JSON.stringify([{ id: m.id, x: m.x, z: m.z }]) })
@@ -1918,7 +1939,8 @@ function spawnMushrooms(): void {
     activeMushrooms.push({
       id: mushroomIdCounter++,
       x, z,
-      pickedUp: false
+      pickedUp: false,
+      rerolls: 0
     })
   }
   console.log('[Server] 🍄 Spawned', MUSHROOM_COUNT, 'mushrooms')

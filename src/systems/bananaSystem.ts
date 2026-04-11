@@ -256,7 +256,7 @@ function isServerConnected(): boolean {
 }
 
 const LOCAL_GRAVITY = 15 // m/s² — matches server FLAG_GRAVITY
-const LOCAL_MIN_Y = 0  // Bananas sit on the actual ground surface
+const LOCAL_MIN_Y = 1  // Bananas sit on the actual ground surface
 
 interface LocalBanana {
   entity: Entity

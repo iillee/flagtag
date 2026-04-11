@@ -12,33 +12,11 @@ import { Vector3, Color4 } from '@dcl/sdk/math'
 import { isSpectatorMode } from './spectatorSystem'
 
 // Must match waterSystem.ts
-const WATER_SURFACE_Y = 0.58
+const WATER_SURFACE_Y = 1.58
 
-// Water zone polygons (shared with waterSystem)
-type Polygon = [number, number][]
-const WATER_POLYGONS: Polygon[] = [
-  [[40, 113.9], [40, 168.5], [72.4, 168.5], [72.4, 114.2]],
-  [[47.4, 88], [60.6, 65.5], [98, 87.6], [84.9, 110]],
-]
-
-function pointInPolygon(px: number, pz: number, poly: Polygon): boolean {
-  let inside = false
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0], zi = poly[i][1]
-    const xj = poly[j][0], zj = poly[j][1]
-    if ((zi > pz) !== (zj > pz) &&
-        px < (xj - xi) * (pz - zi) / (zj - zi) + xi) {
-      inside = !inside
-    }
-  }
-  return inside
-}
-
+// Water plane now covers the entire scene (160m × 240m)
 function isInWaterZone(px: number, pz: number): boolean {
-  for (const poly of WATER_POLYGONS) {
-    if (pointInPolygon(px, pz, poly)) return true
-  }
-  return false
+  return px >= 0 && px <= 512 && pz >= 0 && pz <= 512
 }
 
 // ── Splash config ──

@@ -31,38 +31,11 @@ const BEACON_COLOR = { r: 1, g: 0.15, b: 0.15 } // Red
 
 // Scene bounds (10×15 parcels = 160×240m)
 const SCENE_MIN_X = 2
-const SCENE_MAX_X = 158
+const SCENE_MAX_X = 510
 const SCENE_MIN_Z = 2
-const SCENE_MAX_Z = 238
+const SCENE_MAX_Z = 510
 const RAY_START_Y = 100  // Cast from high above
-const WATER_Y = 0.577    // Y level of water planes
-
-// Pre-computed world-space corners of each water plane
-type WaterPoly = [number, number][]
-const WATER_POLYGONS: WaterPoly[] = [
-  [[40, 113.9], [40, 168.5], [72.4, 168.5], [72.4, 114.2]],
-  [[47.4, 88], [60.6, 65.5], [98, 87.6], [84.9, 110]],
-]
-
-function pointInPoly(px: number, pz: number, poly: WaterPoly): boolean {
-  let inside = false
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0], zi = poly[i][1]
-    const xj = poly[j][0], zj = poly[j][1]
-    if ((zi > pz) !== (zj > pz) &&
-        px < (xj - xi) * (pz - zi) / (zj - zi) + xi) {
-      inside = !inside
-    }
-  }
-  return inside
-}
-
-function isInWaterZoneXZ(px: number, pz: number): boolean {
-  for (const poly of WATER_POLYGONS) {
-    if (pointInPoly(px, pz, poly)) return true
-  }
-  return false
-}
+const WATER_Y = 1.577    // Y level of water planes
 
 // ── Helpers ──
 function isServerConnected(): boolean {
@@ -273,23 +246,36 @@ room.onMessage('mushroomPositions', (data) => {
 
 // ── Process pending raycasts ──
 function processMushroomRaycasts(): void {
-  for (const m of mushrooms) {
+  for (let i = mushrooms.length - 1; i >= 0; i--) {
+    const m = mushrooms[i]
     if (m.placed || !m.rayEntity) continue
 
     const result = RaycastResult.getOrNull(m.rayEntity)
     if (result) {
-      // Use hit Y if raycast found a surface, otherwise check water zones, then fall back to ground (Y=0)
       let hitY: number
+      let hitSurface = false
       if (result.hits.length > 0) {
         hitY = result.hits[0].position!.y
+        hitSurface = true
       } else {
-        // Check if mushroom is over a water zone
-        const overWater = isInWaterZoneXZ(m.x, m.z)
-        hitY = overWater ? WATER_Y : 0
+        hitY = WATER_Y
       }
+
+      // If landed on or below water level, request a reroll from the server
+      if (hitY <= WATER_Y + 0.1) {
+        console.log('[Mushroom] Mushroom', m.id, 'landed on water at', m.x.toFixed(1), m.z.toFixed(1), '— requesting reroll')
+        engine.removeEntity(m.rayEntity)
+        m.rayEntity = null
+        // Remove this mushroom; server will send new position via mushroomPositions
+        engine.removeEntity(m.entity)
+        mushrooms.splice(i, 1)
+        room.send('rerollMushroom', { id: m.id })
+        continue
+      }
+
       const t = Transform.getMutable(m.entity)
       t.position = Vector3.create(m.x, hitY + MUSHROOM_Y_OFFSET, m.z)
-      console.log('[Mushroom] Placed mushroom', m.id, 'at', m.x.toFixed(1), hitY.toFixed(1), m.z.toFixed(1), result.hits.length > 0 ? '(raycast hit)' : '(ground fallback)')
+      console.log('[Mushroom] Placed mushroom', m.id, 'at', m.x.toFixed(1), hitY.toFixed(1), m.z.toFixed(1), hitSurface ? '(raycast hit)' : '(ground fallback)')
       // Clean up ray entity
       engine.removeEntity(m.rayEntity)
       m.rayEntity = null

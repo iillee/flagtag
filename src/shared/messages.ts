@@ -32,6 +32,7 @@ export const Messages = {
   // Mushroom messages
   requestMushroomPositions: Schemas.Map({ t: Schemas.Int }),
   pickupMushroom: Schemas.Map({ id: Schemas.Int }),
+  rerollMushroom: Schemas.Map({ id: Schemas.Int }),
   mushroomPositions: Schemas.Map({ mushroomsJson: Schemas.String }),   // JSON array of {id, x, z}
   mushroomPickedUp: Schemas.Map({ id: Schemas.Int, playerId: Schemas.String }),
   mushroomShield: Schemas.Map({ durationMs: Schemas.Int, playerId: Schemas.String }),

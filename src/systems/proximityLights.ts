@@ -50,7 +50,7 @@ const RAW_POSITIONS: [number, number, number][] = [
 
 // Convert Blender coords to DCL world coordinates
 const LIGHT_POSITIONS: Vector3[] = RAW_POSITIONS.map(([bx, by, bz]) =>
-  Vector3.create(-bx * 5 + 74.75, bz * 5 - 2, -by * 5 + 119.5)
+  Vector3.create(-bx * 5 + 74.75 + 176, bz * 5 - 2 + 1, -by * 5 + 119.5 + 136)
 )
 
 const MAX_ACTIVE = 8

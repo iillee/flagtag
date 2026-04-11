@@ -3,38 +3,17 @@ import { Vector3 } from '@dcl/sdk/math'
 import { isSpectatorMode } from './spectatorSystem'
 
 // Water surface Y level (both water planes are at y ≈ 0.58)
-const WATER_SURFACE_Y = 0.58
+const WATER_SURFACE_Y = 1.58
 
-// Pre-computed world-space corners of each water plane
-// (from model corners [0,0],[8,0],[8,-8],[0,-8] × scale × rotation + position)
-type Polygon = [number, number][]
-
-const WATER_POLYGONS: Polygon[] = [
-  // Water 1 (large rectangle)
-  [[40, 113.9], [40, 168.5], [72.4, 168.5], [72.4, 114.2]],
-  // Water 2 (rotated diamond)
-  [[47.4, 88], [60.6, 65.5], [98, 87.6], [84.9, 110]],
-]
-
-// Standard ray-casting point-in-polygon test
-function pointInPolygon(px: number, pz: number, poly: Polygon): boolean {
-  let inside = false
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0], zi = poly[i][1]
-    const xj = poly[j][0], zj = poly[j][1]
-    if ((zi > pz) !== (zj > pz) &&
-        px < (xj - xi) * (pz - zi) / (zj - zi) + xi) {
-      inside = !inside
-    }
-  }
-  return inside
-}
+// Scene bounds (10×15 parcels = 160m × 240m)
+const SCENE_MIN_X = 0
+const SCENE_MAX_X = 512
+const SCENE_MIN_Z = 0
+const SCENE_MAX_Z = 512
 
 function isInWaterZone(px: number, pz: number): boolean {
-  for (const poly of WATER_POLYGONS) {
-    if (pointInPolygon(px, pz, poly)) return true
-  }
-  return false
+  // Water plane now covers the entire scene
+  return px >= SCENE_MIN_X && px <= SCENE_MAX_X && pz >= SCENE_MIN_Z && pz <= SCENE_MAX_Z
 }
 
 let wasInWater = false

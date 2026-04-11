@@ -121,16 +121,16 @@ export async function main() {
   // Only AMT_HIDE_AVATARS and AMT_DISABLE_PASSPORTS are available as modifiers.
   // Smart wearables run in a separate context and cannot be disabled by scene code.
   const avatarModArea = engine.addEntity()
-  Transform.create(avatarModArea, { position: Vector3.create(80, 10, 120) })
+  Transform.create(avatarModArea, { position: Vector3.create(256, 11, 256) })
   AvatarModifierArea.create(avatarModArea, {
-    area: Vector3.create(170, 50, 250), // Cover entire scene
+    area: Vector3.create(522, 50, 522), // Cover entire scene
     modifiers: [AvatarModifierType.AMT_DISABLE_PASSPORTS], // Disables passport UI only
     excludeIds: []
   })
 
   // Invisible boundary walls
-  const SCENE_W = 160
-  const SCENE_D = 240
+  const SCENE_W = 512
+  const SCENE_D = 512
   const WALL_H = 30
   const WALL_T = 1
   const walls = [
@@ -150,8 +150,8 @@ export async function main() {
 
   // Glowing orbs at green diamond block locations
   const greenDiamondPositions = [
-    { x: 37, y: 0, z: 218.5 },       // Diamond - Green
-    { x: 100.56, y: 51.25, z: 165.5 } // Diamond - Green_2
+    { x: 213, y: 1, z: 354.5 },       // Diamond - Green
+    { x: 276.56, y: 52.25, z: 301.5 } // Diamond - Green_2
   ]
   const ORB_COLOR = Color3.create(1.0, 0.45, 0.05) // Orange
   const ORB_BASE_SCALE = 1.2
@@ -284,8 +284,8 @@ export async function main() {
 
   // ── Blue Orb Pair ──
   const blueOrbPositions = [
-    { x: 48, y: 1.3, z: 152 },
-    { x: 88.75, y: 17, z: 84.5 }
+    { x: 224, y: 2.3, z: 288 },
+    { x: 264.75, y: 18, z: 220.5 }
   ]
   const BLUE_ORB_COLOR = Color3.create(0.05, 0.3, 1.0) // Blue
   const BLUE_ORB_BASE_SCALE = 1.2
@@ -387,7 +387,7 @@ export async function main() {
   // Portal to Genesis Plaza — placed at parcel (8,8) scene-local
   new Portal({
     locationId: 'genesis-plaza',
-    position: { x: 49.95, y: 1.15, z: 88.9 },
+    position: { x: 225.95, y: 2.15, z: 224.9 },
     rotation: { x: 0, y: 167, z: 0 },
     size: 1.85,
     name: 'Genesis Plaza',

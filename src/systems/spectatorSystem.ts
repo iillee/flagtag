@@ -6,21 +6,21 @@ import {
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 
 // ── Castle center (target for look-at) ──
-const CASTLE_CENTER = Vector3.create(74.75, 10, 119.5)
+const CASTLE_CENTER = Vector3.create(250.75, 11, 255.5)
 
 // ── Spectator State ──
 let isSpectating = false
-let camPosX = 80   // center of 160m scene
+let camPosX = 256  // center of 512m scene
 let camPosY = 80   // high up
-let camPosZ = 120  // center of 240m scene
+let camPosZ = 256  // center of 512m scene
 
 const CAM_MOVE_SPEED = 40  // meters per second
 const CAM_MIN_Y = 10
 const CAM_MAX_Y = 150
 
 // Scene bounds
-const SCENE_W = 160
-const SCENE_D = 240
+const SCENE_W = 512
+const SCENE_D = 512
 
 let spectatorCamEntity: ReturnType<typeof engine.addEntity>
 let spectatorOrbEntity: ReturnType<typeof engine.addEntity>
@@ -53,7 +53,7 @@ export function setupSpectator() {
   // Place it near scene spawn / center-ish, visible and inviting
   spectatorOrbEntity = engine.addEntity()
   Transform.create(spectatorOrbEntity, {
-    position: Vector3.create(39.1, 11.1, 157.3),
+    position: Vector3.create(215.1, 12.1, 293.3),
     scale: Vector3.create(4.5, 4.5, 4.5),
     rotation: Quaternion.fromEulerDegrees(0, 180, 0)
   })
@@ -73,7 +73,7 @@ export function setupSpectator() {
   // Second scope at different location
   const spectatorOrb2 = engine.addEntity()
   Transform.create(spectatorOrb2, {
-    position: Vector3.create(52.7, 16.1, 163.8),
+    position: Vector3.create(228.7, 17.1, 299.8),
     scale: Vector3.create(4.5, 4.5, 4.5),
     rotation: Quaternion.fromEulerDegrees(0, 300, 0)
   })
@@ -92,7 +92,7 @@ export function setupSpectator() {
   // Third scope
   const spectatorOrb3 = engine.addEntity()
   Transform.create(spectatorOrb3, {
-    position: Vector3.create(83.7, 46.1, 167.9),
+    position: Vector3.create(259.7, 47.1, 303.9),
     scale: Vector3.create(4.5, 4.5, 4.5),
     rotation: Quaternion.fromEulerDegrees(0, 0, 0)
   })
@@ -111,7 +111,7 @@ export function setupSpectator() {
   // Fourth scope
   const spectatorOrb4 = engine.addEntity()
   Transform.create(spectatorOrb4, {
-    position: Vector3.create(74, 16.1, 79.6),
+    position: Vector3.create(250, 17.1, 215.6),
     scale: Vector3.create(4.5, 4.5, 4.5),
     rotation: Quaternion.fromEulerDegrees(0, 0, 0)
   })
@@ -149,9 +149,9 @@ function enterSpectatorMode() {
   isSpectating = true
 
   // Reset camera to overview position
-  camPosX = 80
+  camPosX = 256
   camPosY = 80
-  camPosZ = 120
+  camPosZ = 256
 
   updateCamTransform()
 

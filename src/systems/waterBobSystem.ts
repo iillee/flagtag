@@ -39,7 +39,7 @@ export function waterBobSystem(dt: number) {
 
     const t = Transform.get(entity)
     // Only bob entities near water level (y < 2)
-    if (t.position.y > 2) continue
+    if (t.position.y > 3) continue
 
     const baseY = t.position.y
     const upPos = Vector3.create(t.position.x, baseY + BOB_AMOUNT, t.position.z)
