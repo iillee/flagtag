@@ -1,5 +1,5 @@
-import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
-import { engine, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name } from '@dcl/sdk/ecs'
+import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
+import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
@@ -128,24 +128,94 @@ export async function main() {
     excludeIds: []
   })
 
-  // Invisible boundary walls
-  const SCENE_W = 512
-  const SCENE_D = 512
-  const WALL_H = 30
-  const WALL_T = 1
-  const walls = [
-    { position: [WALL_T / 2, WALL_H / 2, SCENE_D / 2], scale: [WALL_T, WALL_H, SCENE_D] },
-    { position: [SCENE_W - WALL_T / 2, WALL_H / 2, SCENE_D / 2], scale: [WALL_T, WALL_H, SCENE_D] },
-    { position: [SCENE_W / 2, WALL_H / 2, WALL_T / 2], scale: [SCENE_W, WALL_H, WALL_T] },
-    { position: [SCENE_W / 2, WALL_H / 2, SCENE_D - WALL_T / 2], scale: [SCENE_W, WALL_H, WALL_T] }
-  ]
-  for (const w of walls) {
-    const e = engine.addEntity()
-    Transform.create(e, {
-      position: Vector3.create(w.position[0], w.position[1], w.position[2]),
-      scale: Vector3.create(w.scale[0], w.scale[1], w.scale[2])
+  // Cylindrical boundary wall centered on castle — faceted planes with gradient fade
+  {
+    const BOUNDARY_CX = 250.75
+    const BOUNDARY_CZ = 255.5
+    const BOUNDARY_RADIUS = 128
+    const BOUNDARY_HEIGHT = 200
+    const BOUNDARY_SEGMENTS = 48
+    const BOUNDARY_SHOW_DIST = 40 // meters — planes fade in when player is this close
+    const angleStep = (Math.PI * 2) / BOUNDARY_SEGMENTS
+    const planeWidth = 2 * BOUNDARY_RADIUS * Math.sin(angleStep / 2) + 0.2
+    const BOUNDARY_TEX = Material.Texture.Common({ src: 'images/boundary-rgba.png' })
+
+    const boundaryPlanes: { entity: Entity; px: number; pz: number; lastAlpha: number }[] = []
+
+    for (let i = 0; i < BOUNDARY_SEGMENTS; i++) {
+      const angle = angleStep * i + angleStep / 2
+      const px = BOUNDARY_CX + Math.cos(angle) * BOUNDARY_RADIUS
+      const pz = BOUNDARY_CZ + Math.sin(angle) * BOUNDARY_RADIUS
+      const rotY = -angle * (180 / Math.PI) + 90
+      const py = BOUNDARY_HEIGHT / 2
+
+      // Invisible collider wall — stacked 10m segments for reliable physics
+      const WALL_SEGMENT_H = 10
+      const WALL_SEGMENTS = Math.ceil(BOUNDARY_HEIGHT / WALL_SEGMENT_H)
+      for (let s = 0; s < WALL_SEGMENTS; s++) {
+        const wall = engine.addEntity()
+        const segY = WALL_SEGMENT_H / 2 + s * WALL_SEGMENT_H
+        Transform.create(wall, {
+          position: Vector3.create(px, segY, pz),
+          scale: Vector3.create(planeWidth, WALL_SEGMENT_H, 4),
+          rotation: Quaternion.fromEulerDegrees(0, rotY, 0)
+        })
+        MeshCollider.setBox(wall, ColliderLayer.CL_PHYSICS)
+      }
+
+      // Visual plane — fades in/out based on proximity
+      const plane = engine.addEntity()
+      Transform.create(plane, {
+        position: Vector3.create(px, py, pz),
+        scale: Vector3.create(planeWidth, BOUNDARY_HEIGHT, 1),
+        rotation: Quaternion.fromEulerDegrees(0, rotY, 0)
+      })
+      MeshRenderer.setPlane(plane)
+      Material.setPbrMaterial(plane, {
+        texture: BOUNDARY_TEX,
+        albedoColor: Color4.White(),
+        emissiveColor: Color3.create(0.6, 0.1, 0.0),
+        emissiveIntensity: 1.5,
+        transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+        castShadows: false
+      })
+      VisibilityComponent.create(plane, { visible: false })
+      boundaryPlanes.push({ entity: plane, px, pz, lastAlpha: 0 })
+    }
+
+    // Fade boundary planes based on player proximity
+    engine.addSystem(() => {
+      const playerPos = Transform.getOrNull(engine.PlayerEntity)
+      if (!playerPos) return
+      const playerX = playerPos.position.x
+      const playerZ = playerPos.position.z
+
+      for (const bp of boundaryPlanes) {
+        const dx = playerX - bp.px
+        const dz = playerZ - bp.pz
+        const dist = Math.sqrt(dx * dx + dz * dz)
+
+        const alpha = dist < BOUNDARY_SHOW_DIST ? 1.0 - (dist / BOUNDARY_SHOW_DIST) : 0
+
+        if (Math.abs(alpha - bp.lastAlpha) < 0.05) continue
+        bp.lastAlpha = alpha
+
+        const vis = VisibilityComponent.getMutable(bp.entity)
+        if (alpha < 0.01) {
+          vis.visible = false
+        } else {
+          vis.visible = true
+          Material.setPbrMaterial(bp.entity, {
+            texture: BOUNDARY_TEX,
+            albedoColor: Color4.create(1, 1, 1, alpha),
+            emissiveColor: Color3.create(0.6, 0.1, 0.0),
+            emissiveIntensity: 1.5,
+            transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+            castShadows: false
+          })
+        }
+      }
     })
-    MeshCollider.setBox(e)
   }
 
   // Glowing orbs at green diamond block locations
@@ -430,5 +500,15 @@ export async function main() {
   engine.addSystem(shieldSystem)
   engine.addSystem(updateHoldTimeInterpolation)
 
+  // Respawn all players at spawn point when round ends
+  room.onMessage('respawnPlayers', () => {
+    // Spawn area from scene.json: x 261.75–264.75, y 47.48, z 296.5–299.5
+    const spawnX = 261.75 + Math.random() * 3
+    const spawnZ = 296.5 + Math.random() * 3
+    void movePlayerTo({
+      newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
+    })
+    console.log('[Client] 📍 Respawned at spawn point for new round')
+  })
 
 }

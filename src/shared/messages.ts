@@ -38,6 +38,9 @@ export const Messages = {
   mushroomShield: Schemas.Map({ durationMs: Schemas.Int, playerId: Schemas.String }),
   shieldConsumed: Schemas.Map({ playerId: Schemas.String }),
   playerShieldActive: Schemas.Map({ playerId: Schemas.String, active: Schemas.Int }),
+
+  // Round end respawn
+  respawnPlayers: Schemas.Map({ t: Schemas.Int }),
 }
 
 export const room = registerMessages(Messages)

@@ -27,10 +27,10 @@ const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red
 // ── Mushroom constants ──
 const MUSHROOM_COUNT = 2
 // Shield lasts until hit or round end
-const MUSHROOM_SCENE_MIN_X = 2
-const MUSHROOM_SCENE_MAX_X = 510
-const MUSHROOM_SCENE_MIN_Z = 2
-const MUSHROOM_SCENE_MAX_Z = 510
+// Mushroom spawn constrained to boundary cylinder
+const MUSHROOM_CX = 250.75
+const MUSHROOM_CZ = 255.5
+const MUSHROOM_RADIUS = 128
 
 const MUSHROOM_MAX_REROLLS = 10
 
@@ -951,8 +951,9 @@ function registerHandlers(): void {
         return
       }
       mushroom.rerolls++
-      mushroom.x = MUSHROOM_SCENE_MIN_X + Math.random() * (MUSHROOM_SCENE_MAX_X - MUSHROOM_SCENE_MIN_X)
-      mushroom.z = MUSHROOM_SCENE_MIN_Z + Math.random() * (MUSHROOM_SCENE_MAX_Z - MUSHROOM_SCENE_MIN_Z)
+      const rerollPos = randomMushroomPos()
+      mushroom.x = rerollPos.x
+      mushroom.z = rerollPos.z
       console.log('[Server] 🍄 Rerolled mushroom', mid, 'to', mushroom.x.toFixed(1), mushroom.z.toFixed(1), `(attempt ${mushroom.rerolls}/${MUSHROOM_MAX_REROLLS})`)
       room.send('mushroomPositions', { mushroomsJson: JSON.stringify([{ id: mushroom.id, x: mushroom.x, z: mushroom.z }]) })
     } catch (err) { console.error('[Server] ❌ rerollMushroom handler error:', err) }
@@ -1501,6 +1502,27 @@ function flagServerSystem(dt: number): void {
     flagMutable.dropAnchorY = newY
   }
 
+  // Water respawn: if flag drops below water level, respawn at a random spawn point
+  const WATER_RESPAWN_Y = 1.58
+  if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y) {
+    const spawn = getRandomSpawnPoint()
+    console.log('[Server] 🌊 Flag fell in water (Y=' + currentAnchorY.toFixed(2) + ') — respawning at', spawn.x, spawn.y, spawn.z)
+    const flagMutable2 = Flag.getMutable(flagEntity)
+    flagMutable2.state = FlagState.AtBase
+    flagMutable2.carrierPlayerId = ''
+    flagMutable2.baseX = spawn.x
+    flagMutable2.baseY = spawn.y
+    flagMutable2.baseZ = spawn.z
+    flagMutable2.dropAnchorX = spawn.x
+    flagMutable2.dropAnchorY = spawn.y
+    flagMutable2.dropAnchorZ = spawn.z
+    const t2 = Transform.getMutable(flagEntity)
+    t2.position = Vector3.create(spawn.x, spawn.y, spawn.z)
+    flagFalling = false
+    flagFallVelocity = 0
+    persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+  }
+
   // Server only writes the raw rest position — no bob/spin animation.
   // Bob and spin are handled client-side to eliminate ~10Hz CRDT writes.
   // Only write Transform when the flag is falling (gravity updates).
@@ -1836,6 +1858,10 @@ async function handleRoundEnd(): Promise<void> {
   t.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
   await persistFlagState()
 
+  // ── 6b. Respawn all players at spawn point ──
+  room.send('respawnPlayers', { t: 0 })
+  console.log('[Server] 📍 Respawning all players at spawn point')
+
   // ── 7. Reset hold times — remove entities for disconnected players to prevent CRDT accumulation ──
   // Connected players keep their entity (reset to 0). Disconnected players' entities are fully removed.
   const connectedNow = new Set<string>()
@@ -1922,9 +1948,14 @@ function nameResolverServerSystem(dt: number): void {
 }
 
 // ── Mushroom spawning ──
+function randomMushroomPos(): { x: number; z: number } {
+  const angle = Math.random() * Math.PI * 2
+  const r = MUSHROOM_RADIUS * Math.sqrt(Math.random())
+  return { x: MUSHROOM_CX + Math.cos(angle) * r, z: MUSHROOM_CZ + Math.sin(angle) * r }
+}
+
 function spawnOneMushroom(): void {
-  const x = MUSHROOM_SCENE_MIN_X + Math.random() * (MUSHROOM_SCENE_MAX_X - MUSHROOM_SCENE_MIN_X)
-  const z = MUSHROOM_SCENE_MIN_Z + Math.random() * (MUSHROOM_SCENE_MAX_Z - MUSHROOM_SCENE_MIN_Z)
+  const { x, z } = randomMushroomPos()
   const m = { id: mushroomIdCounter++, x, z, pickedUp: false, rerolls: 0 }
   activeMushrooms.push(m)
   console.log('[Server] 🍄 Spawned replacement mushroom', m.id, 'at', x.toFixed(1), z.toFixed(1))
@@ -1934,8 +1965,7 @@ function spawnOneMushroom(): void {
 function spawnMushrooms(): void {
   activeMushrooms.length = 0
   for (let i = 0; i < MUSHROOM_COUNT; i++) {
-    const x = MUSHROOM_SCENE_MIN_X + Math.random() * (MUSHROOM_SCENE_MAX_X - MUSHROOM_SCENE_MIN_X)
-    const z = MUSHROOM_SCENE_MIN_Z + Math.random() * (MUSHROOM_SCENE_MAX_Z - MUSHROOM_SCENE_MIN_Z)
+    const { x, z } = randomMushroomPos()
     activeMushrooms.push({
       id: mushroomIdCounter++,
       x, z,
