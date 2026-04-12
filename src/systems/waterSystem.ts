@@ -1,5 +1,5 @@
-import { engine, Transform, InputModifier, AudioSource, MeshRenderer, Material, MaterialTransparencyMode, Billboard, BillboardMode, VisibilityComponent } from '@dcl/sdk/ecs'
-import { Vector3, Color4 } from '@dcl/sdk/math'
+import { engine, Transform, InputModifier, AudioSource } from '@dcl/sdk/ecs'
+import { Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import { isSpectatorMode } from './spectatorSystem'
@@ -8,13 +8,9 @@ import { isSpectatorMode } from './spectatorSystem'
 const WATER_SURFACE_Y = 1.58
 
 // Drowning config
-const DROWN_TIME = 10.0 // seconds in water before death
-const RECHARGE_TIME = 5.0 // seconds to fully recharge on land
+const DROWN_TIME = 5.0 // seconds in water before death
+const RECHARGE_TIME = 5.0 // seconds to fully recharge on land (2x faster)
 const SPAWN_POSITION = Vector3.create(263, 48, 298)
-const BAR_WIDTH = 0.6
-const BAR_HEIGHT = 0.08
-const BAR_OFFSET_Y = 2.8
-
 // Scene bounds
 const SCENE_MIN_X = 0
 const SCENE_MAX_X = 512
@@ -29,52 +25,32 @@ let wasInWater = false
 let waterSoundEntity: ReturnType<typeof engine.addEntity> | null = null
 let lastPlayerPos = Vector3.Zero()
 
-// Drowning state
-let airRemaining = DROWN_TIME // current air in seconds
-let drownBarBg: ReturnType<typeof engine.addEntity> | null = null
-let drownBarFill: ReturnType<typeof engine.addEntity> | null = null
+// Drowning state (exported for UI)
+let airRemaining = DROWN_TIME
 let drownBarVisible = false
 let drownCooldown = 0
 let drownSoundEntity: ReturnType<typeof engine.addEntity> | null = null
 let respawnDelay = 0
+let outOfWaterTimer = 3.0 // time spent out of water (start fully charged so no delay at scene load)
+const RECHARGE_DELAY = 5.0 // seconds out of water before recharge begins
+
+/** Returns 0..1 fraction of air remaining */
+export function getDrownFraction(): number {
+  return Math.max(0, Math.min(1, airRemaining / DROWN_TIME))
+}
+
+/** Returns true if the drown meter should be displayed */
+export function isDrownBarVisible(): boolean {
+  return drownBarVisible
+}
+
+/** Returns seconds remaining until respawn, or 0 if not drowning */
+export function getRespawnCountdown(): number {
+  return respawnDelay
+}
 
 function ensureDrownBar() {
-  if (drownBarBg) return
-
-  // Background bar — parented to PlayerEntity
-  drownBarBg = engine.addEntity()
-  Transform.create(drownBarBg, {
-    parent: engine.PlayerEntity,
-    position: Vector3.create(0, BAR_OFFSET_Y, 0),
-    scale: Vector3.create(BAR_WIDTH, BAR_HEIGHT, 0.01)
-  })
-  MeshRenderer.setPlane(drownBarBg)
-  Material.setPbrMaterial(drownBarBg, {
-    albedoColor: Color4.create(0.0, 0.0, 0.1, 0.7),
-    transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-    castShadows: false
-  })
-  Billboard.create(drownBarBg, { billboardMode: BillboardMode.BM_Y })
-  VisibilityComponent.create(drownBarBg, { visible: false })
-
-  // Fill bar — child of background
-  drownBarFill = engine.addEntity()
-  Transform.create(drownBarFill, {
-    parent: drownBarBg,
-    position: Vector3.create(0, 0, 0.05),
-    scale: Vector3.create(1, 1, 1)
-  })
-  MeshRenderer.setPlane(drownBarFill)
-  Material.setPbrMaterial(drownBarFill, {
-    albedoColor: Color4.create(0.2, 0.5, 1.0, 0.95),
-    emissiveColor: { r: 0.1, g: 0.3, b: 0.8 },
-    emissiveIntensity: 2.0,
-    transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-    castShadows: false
-  })
-  VisibilityComponent.create(drownBarFill, { visible: false })
-
-  // Death sound
+  if (drownSoundEntity) return
   drownSoundEntity = engine.addEntity()
   Transform.create(drownSoundEntity, { position: Vector3.create(0, 0, 0) })
   AudioSource.create(drownSoundEntity, {
@@ -87,24 +63,7 @@ function ensureDrownBar() {
 }
 
 function setBarVisible(show: boolean) {
-  if (show === drownBarVisible) return
   drownBarVisible = show
-  if (drownBarBg) {
-    const v = VisibilityComponent.getMutable(drownBarBg)
-    v.visible = show
-  }
-  if (drownBarFill) {
-    const v = VisibilityComponent.getMutable(drownBarFill)
-    v.visible = show
-  }
-}
-
-function updateDrownBar(fraction: number) {
-  if (!drownBarFill) return
-  const clamped = Math.max(0, Math.min(1, fraction))
-  const fillT = Transform.getMutable(drownBarFill)
-  fillT.scale = Vector3.create(clamped, 1, 1)
-  fillT.position = Vector3.create(-(1 - clamped) / 2, 0, 0.05)
 }
 
 export function waterSystem(dt: number) {
@@ -169,12 +128,14 @@ export function waterSystem(dt: number) {
 
   // Drowning / recharge logic
   if (inWater) {
+    // Reset out-of-water timer
+    outOfWaterTimer = 0
+
     // Drain air
     airRemaining -= dt
     if (airRemaining < 0) airRemaining = 0
 
     setBarVisible(true)
-    updateDrownBar(airRemaining / DROWN_TIME)
 
     // Death
     if (airRemaining <= 0 && respawnDelay <= 0) {
@@ -189,29 +150,40 @@ export function waterSystem(dt: number) {
 
       room.send('requestDrop', { t: 0 })
 
+      if (waterSoundEntity) {
+        const a = AudioSource.getMutable(waterSoundEntity)
+        a.playing = false
+      }
+
       void triggerEmote({ predefinedEmote: 'urn:decentraland:matic:collections-v2:0x7bdc37ff3e8dca2d69f01a3dc34f3ad82e2e1870:0' })
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: true })
       })
 
-      respawnDelay = 2.0
+      respawnDelay = 5.0
     }
   } else {
-    // Recharge air on land
+    // Track time out of water
+    outOfWaterTimer += dt
+
+    // Recharge air on land only after 3 seconds out of water
     if (airRemaining < DROWN_TIME) {
-      airRemaining += (DROWN_TIME / RECHARGE_TIME) * dt
-      if (airRemaining >= DROWN_TIME) {
-        airRemaining = DROWN_TIME
-        setBarVisible(false) // fully recharged — hide bar
+      if (outOfWaterTimer >= RECHARGE_DELAY) {
+        airRemaining += (DROWN_TIME / RECHARGE_TIME) * dt
+        if (airRemaining >= DROWN_TIME) {
+          airRemaining = DROWN_TIME
+          setBarVisible(false)
+        } else {
+          setBarVisible(true)
+        }
       } else {
-        setBarVisible(true)
-        updateDrownBar(airRemaining / DROWN_TIME)
+        setBarVisible(true) // still show bar during delay
       }
     }
   }
 
-  // Water sound — play when moving in water
-  if (inWater && waterSoundEntity) {
+  // Water sound — play when moving in water (but not during respawn)
+  if (inWater && waterSoundEntity && respawnDelay <= 0) {
     const dx = playerPos.x - lastPlayerPos.x
     const dz = playerPos.z - lastPlayerPos.z
     const isMoving = (dx * dx + dz * dz) > 0.0001

@@ -77,6 +77,7 @@ export function showShieldForPlayer(playerId: string): void {
       metallic: 0.0,
       specularIntensity: 0.0,
       transparencyMode: MaterialTransparencyMode.MTM_AUTO,
+      castShadows: false,
     })
     planes.push(plane)
   }
@@ -157,6 +158,7 @@ export function shieldSystem(dt: number): void {
         metallic: 0.0,
         specularIntensity: 0.0,
         transparencyMode: MaterialTransparencyMode.MTM_AUTO,
+        castShadows: false,
       })
     }
   }

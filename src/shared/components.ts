@@ -103,9 +103,9 @@ export const FLAG_BASE_POSITION = { x: 230, y: 13, z: 258 }
 
 // ── Red Flag Spawn Points ──
 export const FLAG_SPAWN_POINTS = [
-  { x: 225, y: 3, z: 210 },      // Spawn Point 1
+  { x: 228.4, y: 2.6, z: 192.5 },      // Spawn Point 1
   { x: 217, y: 8.25, z: 258 },   // Spawn Point 2
-  { x: 267, y: 28.25, z: 328.5 } // Spawn Point 3
+  { x: 211.2, y: 13, z: 305.4 } // Spawn Point 3
 ] as const
 
 /**

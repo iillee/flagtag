@@ -32,6 +32,7 @@ function toggleMusicMute() {
   }
 }
 import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
+import { getDrownFraction, isDrownBarVisible, getRespawnCountdown } from './systems/waterSystem'
 import { signedFetch } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
@@ -64,11 +65,14 @@ function joinCommunity() {
 
       const joinRes = await signedFetch({
         url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
-        init: { method: 'POST', headers: {} }
+        init: { method: 'POST', headers: { 'Accept': 'application/json' } }
       })
-      console.log('[Mailbox] Join status:', joinRes.status, 'body:', joinRes.body)
+      console.log('[Mailbox] Join response - status:', joinRes.status, 'ok:', joinRes.ok, 'body:', joinRes.body)
+      let data: any = {}
+      try { data = JSON.parse(joinRes.body) } catch (_) {}
+      console.log('[Mailbox] Parsed response:', JSON.stringify(data))
 
-      if (joinRes.ok) {
+      if (joinRes.status >= 200 && joinRes.status < 300) {
         setMailboxStatus('Joined! Welcome to the community.')
       } else {
         const body = joinRes.body || ''
@@ -396,6 +400,55 @@ function formatVisitorTime(totalSeconds: number): string {
 // ROOT UI — switches between desktop and mobile
 // ═══════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════
+// DROWN BAR — 2D screen-space air meter
+// ═══════════════════════════════════════════════════════════
+
+const DROWN_BAR_WIDTH = 200
+const DROWN_BAR_HEIGHT = 10
+
+const DROWN_BORDER = 2
+
+function DrownBar() {
+  const fraction = getDrownFraction()
+  const fillColor = fraction < 0.25
+    ? Color4.create(1, 0.3, 0.3, 0.95)
+    : Color4.create(0.2, 0.5, 1.0, 0.95)
+
+  return (
+    <UiEntity
+      uiTransform={{
+        positionType: 'absolute',
+        position: { bottom: 20, left: '50%' },
+        width: DROWN_BAR_WIDTH + DROWN_BORDER * 2,
+        height: DROWN_BAR_HEIGHT + DROWN_BORDER * 2,
+        margin: { left: -(DROWN_BAR_WIDTH + DROWN_BORDER * 2) / 2 },
+        borderRadius: (DROWN_BAR_HEIGHT + DROWN_BORDER * 2) / 2,
+        padding: DROWN_BORDER,
+      }}
+      uiBackground={{ color: Color4.create(1, 1, 1, 0.85) }}
+    >
+      <UiEntity
+        uiTransform={{
+          width: '100%',
+          height: '100%',
+          borderRadius: DROWN_BAR_HEIGHT / 2,
+        }}
+        uiBackground={{ color: Color4.create(0, 0, 0, 0) }}
+      >
+        <UiEntity
+          uiTransform={{
+            width: `${Math.max(0, Math.min(100, fraction * 100))}%`,
+            height: '100%',
+            borderRadius: DROWN_BAR_HEIGHT / 2,
+          }}
+          uiBackground={{ color: fillColor }}
+        />
+      </UiEntity>
+    </UiEntity>
+  )
+}
+
 function PlayerListUi() {
   const mobile = false // isMobile() — disabled
   return (
@@ -505,6 +558,29 @@ function PlayerListUi() {
           </UiEntity>
         </UiEntity>
       )}
+      {/* Drown bar — screen-space, always on top */}
+      {isDrownBarVisible() && <DrownBar />}
+
+      {/* Drown death overlay */}
+      {getRespawnCountdown() > 0 && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: 0, left: 0 },
+            width: '100%',
+            height: '100%',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          uiBackground={{ color: Color4.create(0, 0, 0, 0.5) }}
+        >
+          <Label value="You Drowned!" fontSize={42} color={CORAL_RED} font="sans-serif" />
+          <UiEntity uiTransform={{ height: 12 }} />
+          <Label value={`Respawning in ${Math.ceil(getRespawnCountdown())}...`} fontSize={20} color={LIGHT_GREY} font="sans-serif" />
+        </UiEntity>
+      )}
+
       {/* Spectator mode overlay */}
       {isSpectatorMode() && (
         <UiEntity uiTransform={{

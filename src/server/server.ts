@@ -1858,7 +1858,7 @@ async function handleRoundEnd(): Promise<void> {
   t.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
   await persistFlagState()
 
-  // ── 6b. Respawn all players at spawn point ──
+  // ── 6b. Respawn all players at spawn point immediately ──
   room.send('respawnPlayers', { t: 0 })
   console.log('[Server] 📍 Respawning all players at spawn point')
 

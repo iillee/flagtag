@@ -148,10 +148,10 @@ export function setupSpectator() {
 function enterSpectatorMode() {
   isSpectating = true
 
-  // Reset camera to overview position
+  // Reset camera to overview position – far enough back to see the whole castle
   camPosX = 256
-  camPosY = 80
-  camPosZ = 256
+  camPosY = 120
+  camPosZ = 170
 
   updateCamTransform()
 

@@ -1,5 +1,5 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
@@ -222,7 +222,7 @@ export async function main() {
 
   // Glowing orbs at green diamond block locations
   const greenDiamondPositions = [
-    { x: 213, y: 1, z: 354.5 },       // Diamond - Green
+    { x: 290.5, y: 2.6, z: 254.7 },    // Diamond - Green
     { x: 276.56, y: 52.25, z: 301.5 } // Diamond - Green_2
   ]
   const ORB_COLOR = Color3.create(1.0, 0.45, 0.05) // Orange
@@ -357,7 +357,7 @@ export async function main() {
   // ── Blue Orb Pair ──
   const blueOrbPositions = [
     { x: 224, y: 2.3, z: 288 },
-    { x: 264.75, y: 18, z: 220.5 }
+    { x: 226.3, y: 2.8, z: 211.3 }
   ]
   const BLUE_ORB_COLOR = Color3.create(0.05, 0.3, 1.0) // Blue
   const BLUE_ORB_BASE_SCALE = 1.2
@@ -502,6 +502,38 @@ export async function main() {
   engine.addSystem(shieldSystem)
   engine.addSystem(updateHoldTimeInterpolation)
 
+  // ── Round-end cinematic camera ──
+  // Camera at green cube looking toward red cube
+  const GREEN_CUBE_POS = Vector3.create(258.78, 19.25, 227.81)
+  const RED_CUBE_POS = Vector3.create(265.57, 19.51, 219.65)
+
+  const cinematicCam = engine.addEntity()
+  Transform.create(cinematicCam, {
+    position: GREEN_CUBE_POS,
+  })
+
+  const lookTarget = engine.addEntity()
+  Transform.create(lookTarget, { position: RED_CUBE_POS })
+
+  VirtualCamera.create(cinematicCam, {
+    lookAtEntity: lookTarget,
+    defaultTransition: {
+      transitionMode: VirtualCamera.Transition.Time(0.5)
+    }
+  })
+
+  let cinematicTimer = 0
+
+  engine.addSystem((dt: number) => {
+    if (cinematicTimer <= 0) return
+    cinematicTimer -= dt
+    if (cinematicTimer <= 0) {
+      // Release camera back to player
+      MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
+      console.log('[Client] 🎬 Cinematic camera released')
+    }
+  })
+
   // Respawn all players at spawn point when round ends
   room.onMessage('respawnPlayers', () => {
     // Spawn area from scene.json: x 261.75–264.75, y 47.48, z 296.5–299.5
@@ -510,6 +542,11 @@ export async function main() {
     void movePlayerTo({
       newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
     })
+
+    // Activate cinematic camera for 10 seconds
+    MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
+    cinematicTimer = 10
+    console.log('[Client] 🎬 Cinematic camera activated for 10 seconds')
     console.log('[Client] 📍 Respawned at spawn point for new round')
   })
 
