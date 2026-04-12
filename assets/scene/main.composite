@@ -762,6 +762,27 @@
             "parent": 550
           }
         },
+        "545": {
+          "json": {
+            "position": {
+              "x": 265.5972595214844,
+              "y": 17.5,
+              "z": 219.67013549804688
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.33869999647140503,
+              "z": 0,
+              "w": -0.9409000277519226
+            },
+            "scale": {
+              "x": 3,
+              "y": 2,
+              "z": 3
+            },
+            "parent": 0
+          }
+        },
         "546": {
           "json": {
             "position": {
@@ -1441,16 +1462,16 @@
               "y": 2.4936652183532715,
               "z": 220.90501403808594
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.8125865459442139,
               "z": 0,
               "w": -0.5828895568847656
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -2820,6 +2841,27 @@
             "parent": 0
           }
         },
+        "645": {
+          "json": {
+            "position": {
+              "x": 267.0136413574219,
+              "y": 17.5,
+              "z": 220.8575439453125
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.33869999647140503,
+              "z": 0,
+              "w": -0.9409000277519226
+            },
+            "scale": {
+              "x": 3,
+              "y": 2,
+              "z": 3
+            },
+            "parent": 0
+          }
+        },
         "646": {
           "json": {
             "position": {
@@ -2988,6 +3030,69 @@
             "parent": 0
           }
         },
+        "654": {
+          "json": {
+            "position": {
+              "x": 267.0136413574219,
+              "y": 18.141460418701172,
+              "z": 220.8575439453125
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.33869999647140503,
+              "z": 0,
+              "w": -0.9409000277519226
+            },
+            "scale": {
+              "x": 3,
+              "y": 2,
+              "z": 3
+            },
+            "parent": 0
+          }
+        },
+        "655": {
+          "json": {
+            "position": {
+              "x": 265.5972595214844,
+              "y": 18.141460418701172,
+              "z": 219.67013549804688
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.33869999647140503,
+              "z": 0,
+              "w": -0.9409000277519226
+            },
+            "scale": {
+              "x": 3,
+              "y": 2,
+              "z": 3
+            },
+            "parent": 0
+          }
+        },
+        "656": {
+          "json": {
+            "position": {
+              "x": 265.5972595214844,
+              "y": 18.775997161865234,
+              "z": 219.67013549804688
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.33869999647140503,
+              "z": 0,
+              "w": -0.9409000277519226
+            },
+            "scale": {
+              "x": 3,
+              "y": 2,
+              "z": 3
+            },
+            "parent": 0
+          }
+        },
         "657": {
           "json": {
             "position": {
@@ -3037,16 +3142,16 @@
               "y": -1,
               "z": 255.5
             },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 5,
-              "y": 5,
-              "z": 5
             },
             "parent": 0
           }
@@ -3058,58 +3163,16 @@
               "y": 1.25,
               "z": 333.75
             },
-            "rotation": {
-              "x": 0,
-              "y": 0.9714064002037048,
-              "z": 0,
-              "w": 0.23733001947402954
-            },
             "scale": {
               "x": 0.05000000074505806,
               "y": 0.05999999865889549,
               "z": 0.05000000074505806
             },
-            "parent": 0
-          }
-        },
-        "663": {
-          "json": {
-            "position": {
-              "x": 265.6000061035156,
-              "y": 17.5,
-              "z": 219.66000366210938
-            },
             "rotation": {
               "x": 0,
-              "y": 0.33869999647140503,
+              "y": 0.9714064002037048,
               "z": 0,
-              "w": -0.9409000277519226
-            },
-            "scale": {
-              "x": 3,
-              "y": 6,
-              "z": 3
-            },
-            "parent": 0
-          }
-        },
-        "664": {
-          "json": {
-            "position": {
-              "x": 267.04998779296875,
-              "y": 17.5,
-              "z": 220.8300018310547
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0.33869999647140503,
-              "z": 0,
-              "w": -0.9409000277519226
-            },
-            "scale": {
-              "x": 3,
-              "y": 4,
-              "z": 3
+              "w": 0.23733001947402954
             },
             "parent": 0
           }
@@ -3163,16 +3226,16 @@
               "y": 17.5,
               "z": 218.47000122070312
             },
+            "scale": {
+              "x": 3,
+              "y": 2,
+              "z": 3
+            },
             "rotation": {
               "x": 0,
               "y": 0.33869999647140503,
               "z": 0,
               "w": -0.9409000277519226
-            },
-            "scale": {
-              "x": 3,
-              "y": 2,
-              "z": 3
             },
             "parent": 0
           }
@@ -3184,16 +3247,16 @@
               "y": 19.505868911743164,
               "z": 219.64791870117188
             },
+            "scale": {
+              "x": 0.10000000149011612,
+              "y": 0.10000000149011612,
+              "z": 0.10000000149011612
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 0.10000000149011612,
-              "y": 0.10000000149011612,
-              "z": 0.10000000149011612
             },
             "parent": 0
           }
@@ -3247,16 +3310,16 @@
               "y": 18.847143173217773,
               "z": 220.8729248046875
             },
+            "scale": {
+              "x": 0.10000000149011612,
+              "y": 0.10000000149011612,
+              "z": 0.10000000149011612
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 0.10000000149011612,
-              "y": 0.10000000149011612,
-              "z": 0.10000000149011612
             },
             "parent": 0
           }
@@ -3268,16 +3331,16 @@
               "y": 18.164958953857422,
               "z": 218.56756591796875
             },
+            "scale": {
+              "x": 0.10000000149011612,
+              "y": 0.10000000149011612,
+              "z": 0.10000000149011612
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 0.10000000149011612,
-              "y": 0.10000000149011612,
-              "z": 0.10000000149011612
             },
             "parent": 0
           }
@@ -3289,16 +3352,16 @@
               "y": 19.248859405517578,
               "z": 227.81149291992188
             },
+            "scale": {
+              "x": 0.10000000149011612,
+              "y": 0.10000000149011612,
+              "z": 0.10000000149011612
+            },
             "rotation": {
               "x": 0,
               "y": -0.7615768313407898,
               "z": 0,
               "w": 0.6480746269226074
-            },
-            "scale": {
-              "x": 0.10000000149011612,
-              "y": 0.10000000149011612,
-              "z": 0.10000000149011612
             },
             "parent": 0
           }
@@ -3902,6 +3965,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "545": {
+          "json": {
+            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "548": {
           "json": {
             "src": "assets/asset-packs/classic_bench/Bench_01.glb",
@@ -4175,6 +4245,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "645": {
+          "json": {
+            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "646": {
           "json": {
             "src": "assets/asset-packs/balsam_flower/Plant_02/Plant_02.glb",
@@ -4231,6 +4308,27 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "654": {
+          "json": {
+            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "655": {
+          "json": {
+            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "656": {
+          "json": {
+            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "659": {
           "json": {
             "src": "assets/scene/Models/ladder.glb",
@@ -4249,20 +4347,6 @@
           "json": {
             "src": "assets/scene/Models/ladder.glb",
             "visibleMeshesCollisionMask": 3,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "663": {
-          "json": {
-            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "664": {
-          "json": {
-            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
-            "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
@@ -4502,6 +4586,11 @@
         "544": {
           "json": {
             "value": "Sit Spot 1_14"
+          }
+        },
+        "545": {
+          "json": {
+            "value": "TNT Box Closed_4"
           }
         },
         "546": {
@@ -4994,6 +5083,11 @@
             "value": "Big Rock"
           }
         },
+        "645": {
+          "json": {
+            "value": "TNT Box Closed_5"
+          }
+        },
         "646": {
           "json": {
             "value": "Balsam Flower"
@@ -5034,6 +5128,21 @@
             "value": "Skull Chain 02"
           }
         },
+        "654": {
+          "json": {
+            "value": "TNT Box Closed_6"
+          }
+        },
+        "655": {
+          "json": {
+            "value": "TNT Box Closed_7"
+          }
+        },
+        "656": {
+          "json": {
+            "value": "TNT Box Closed_8"
+          }
+        },
         "659": {
           "json": {
             "value": "ladder.glb"
@@ -5047,16 +5156,6 @@
         "661": {
           "json": {
             "value": "ladder.glb_2"
-          }
-        },
-        "663": {
-          "json": {
-            "value": "TNT Box Closed"
-          }
-        },
-        "664": {
-          "json": {
-            "value": "TNT Box Closed_2"
           }
         },
         "669": {
@@ -6198,7 +6297,7 @@
         "serializationType": "map"
       },
       "data": {
-        "579": {
+        "656": {
           "json": {
             "gizmo": 1
           }
@@ -6329,13 +6428,16 @@
                   659,
                   660,
                   661,
-                  663,
-                  664,
                   671,
                   673,
                   676,
                   677,
-                  678
+                  678,
+                  545,
+                  645,
+                  654,
+                  655,
+                  656
                 ]
               },
               {
@@ -7033,14 +7135,6 @@
                 "children": []
               },
               {
-                "entity": 663,
-                "children": []
-              },
-              {
-                "entity": 664,
-                "children": []
-              },
-              {
                 "entity": 671,
                 "children": []
               },
@@ -7058,6 +7152,26 @@
               },
               {
                 "entity": 678,
+                "children": []
+              },
+              {
+                "entity": 545,
+                "children": []
+              },
+              {
+                "entity": 645,
+                "children": []
+              },
+              {
+                "entity": 654,
+                "children": []
+              },
+              {
+                "entity": 655,
+                "children": []
+              },
+              {
+                "entity": 656,
                 "children": []
               }
             ]
@@ -7149,6 +7263,9 @@
           "json": {}
         },
         "543": {
+          "json": {}
+        },
+        "545": {
           "json": {}
         },
         "548": {
@@ -7271,6 +7388,9 @@
         "644": {
           "json": {}
         },
+        "645": {
+          "json": {}
+        },
         "646": {
           "json": {}
         },
@@ -7295,6 +7415,15 @@
         "653": {
           "json": {}
         },
+        "654": {
+          "json": {}
+        },
+        "655": {
+          "json": {}
+        },
+        "656": {
+          "json": {}
+        },
         "659": {
           "json": {}
         },
@@ -7302,12 +7431,6 @@
           "json": {}
         },
         "661": {
-          "json": {}
-        },
-        "663": {
-          "json": {}
-        },
-        "664": {
           "json": {}
         },
         "665": {

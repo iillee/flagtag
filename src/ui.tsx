@@ -153,7 +153,7 @@ function playClickSound(): void {
 let squareIconHovered = false
 let questionIconHovered = false
 let analyticsIconHovered = false
-let closeSplashHovered = false
+// (closeSplashHovered removed — splash is now 3D TextShape)
 let closeWinConditionHovered = false
 let closeLeaderboardHovered = false
 let closeAnalyticsHovered = false
@@ -186,7 +186,7 @@ let leaderboardScrollOffset = 0
 let splashVisible = false
 let splashHideTime = 0
 let trumpetEntity: Entity | null = null
-const SPLASH_DURATION_MS = 5000
+const SPLASH_DURATION_MS = 10000
 
 interface SplashPlayer {
   name: string
@@ -194,6 +194,7 @@ interface SplashPlayer {
 }
 
 let splashPlayers: SplashPlayer[] = []
+let splashWinnerUserId: string | null = null
 let lastSplashRoundWinnerJson = '' // track the last roundWinnerJson we showed, to avoid re-triggering
 
 function roundEndSplashSystem(dt: number): void {
@@ -214,8 +215,11 @@ function roundEndSplashSystem(dt: number): void {
           name: (p.userId ? getKnownPlayerName(p.userId) : null) || p.name,
           seconds: p.seconds
         }))
+        // Track winner userId for teleport logic
+        splashWinnerUserId = (serverData.length > 0 && serverData[0].userId) ? serverData[0].userId : null
       } catch {
         splashPlayers = []
+        splashWinnerUserId = null
       }
 
       // Play trumpet sound once
@@ -239,6 +243,7 @@ function roundEndSplashSystem(dt: number): void {
   if (splashVisible && now >= splashHideTime) {
     splashVisible = false
     splashPlayers = []
+    splashWinnerUserId = null
     if (trumpetEntity) {
       engine.removeEntity(trumpetEntity)
       trumpetEntity = null
@@ -676,7 +681,7 @@ function DesktopLayout() {
         </UiEntity>
       </UiEntity>
 
-      {/* Round-end splash */}
+      {/* Round-end splash — bottom of screen over cinematic camera */}
       {splashVisible && (
         <UiEntity
           uiTransform={{
@@ -686,9 +691,9 @@ function DesktopLayout() {
             height: '100%',
             flexDirection: 'row',
             justifyContent: 'center',
-            alignItems: 'center',
+            alignItems: 'flex-end',
+            padding: { bottom: 40 },
           }}
-          uiBackground={{ color: Color4.create(0, 0, 0, 0.45) }}
         >
           <UiEntity
             uiTransform={{
@@ -704,23 +709,6 @@ function DesktopLayout() {
             }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <UiEntity
-              uiTransform={{
-                positionType: 'absolute',
-                position: { top: 8, right: 8 },
-                width: 56,
-                height: 56,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              onMouseEnter={() => { closeSplashHovered = true }}
-              onMouseLeave={() => { closeSplashHovered = false }}
-              onMouseDown={() => { playClickSound(); splashVisible = false; closeSplashHovered = false; notifyOverlayClosed() }}
-            >
-              <Label value="×" fontSize={44} color={closeSplashHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
-            </UiEntity>
-
             {splashPlayers.length === 0 ? (
               <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
                 <Label value="Round Over!" fontSize={34} color={GOLD} font="sans-serif" />
@@ -1851,7 +1839,7 @@ function MobileLayout() {
         </UiEntity>
       )}
 
-      {/* ── Round-end splash — centered (safe area) ── */}
+      {/* ── Round-end splash — bottom of screen (safe area) ── */}
       {splashVisible && (
         <UiEntity
           uiTransform={{
@@ -1861,7 +1849,8 @@ function MobileLayout() {
             height: '100%',
             flexDirection: 'row',
             justifyContent: 'center',
-            alignItems: 'center',
+            alignItems: 'flex-end',
+            padding: { bottom: 40 },
           }}
         >
           <UiEntity

@@ -1,5 +1,5 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, GltfContainerLoadingState, LoadingState } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi } from './ui'
@@ -25,8 +25,9 @@ import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
 import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
 import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
 import { createAnalyticsOverlayEntity } from './components/analyticsOverlayState'
-import { movePlayerTo } from '~system/RestrictedActions'
+import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import './shared/components'
+import { CountdownTimer } from './shared/components'
 import { room } from './shared/messages'
 
 export let musicEntity: ReturnType<typeof engine.addEntity>
@@ -473,6 +474,40 @@ export async function main() {
   // Spectator camera
   setupSpectator()
 
+  // ── Hide podium cubes (placed in Creator Hub) ──
+  // NOTE: Keep these entities in the composite! They mark podium positions for 1st/2nd/3rd place.
+  // Red=1st, Gold=2nd, Blue=3rd, Green=camera target. Hidden here to be invisible at runtime.
+  const PODIUM_CUBE_SRCS = new Set([
+    'assets/asset-packs/solid_red/solid_red.glb',
+    'assets/asset-packs/gold/gold.glb',
+    'assets/asset-packs/solid_blue/solid_blue.glb',
+    'assets/asset-packs/solid_green/solid_green.glb',
+  ])
+  const hiddenPodiumCubes = new Set<Entity>()
+
+  engine.addSystem(function hidePodiumCubes() {
+    for (const [entity] of engine.getEntitiesWith(GltfContainer)) {
+      if (hiddenPodiumCubes.has(entity)) continue
+      const gltf = GltfContainer.get(entity)
+      if (PODIUM_CUBE_SRCS.has(gltf.src)) {
+        VisibilityComponent.createOrReplace(entity, { visible: false })
+        // Remove colliders by setting invisible mesh collider layer
+        GltfContainer.createOrReplace(entity, {
+          ...gltf,
+          invisibleMeshesCollisionMask: ColliderLayer.CL_NONE,
+          visibleMeshesCollisionMask: ColliderLayer.CL_NONE,
+        })
+        hiddenPodiumCubes.add(entity)
+        console.log(`[Client] 🎯 Hidden podium cube: ${gltf.src}`)
+      }
+    }
+    // Remove system once all 4 found
+    if (hiddenPodiumCubes.size >= 4) {
+      engine.removeSystem(hidePodiumCubes)
+      console.log('[Client] ✅ All 4 podium cubes hidden')
+    }
+  })
+
   // Water slowdown — disable running in water
   engine.addSystem(waterSystem)
   engine.addSystem(waterBobSystem)
@@ -523,31 +558,104 @@ export async function main() {
   })
 
   let cinematicTimer = 0
+  let isWinnerLocalPlayer = false
+  let isPodiumPlayer = false // true for 1st, 2nd, or 3rd place
 
   engine.addSystem((dt: number) => {
     if (cinematicTimer <= 0) return
     cinematicTimer -= dt
     if (cinematicTimer <= 0) {
-      // Release camera back to player
+      // Release camera and restore movement
       MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
-      console.log('[Client] 🎬 Cinematic camera released')
+      InputModifier.deleteFrom(engine.PlayerEntity)
+      console.log('[Client] 🎬 Cinematic camera released, movement restored')
+
+      // If this player was on the podium (1st/2nd/3rd), teleport them back to spawn
+      if (isPodiumPlayer) {
+        isWinnerLocalPlayer = false
+        isPodiumPlayer = false
+        const spawnX = 261.75 + Math.random() * 3
+        const spawnZ = 296.5 + Math.random() * 3
+        void movePlayerTo({
+          newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
+        })
+        console.log('[Client] 📍 Podium player returned to spawn')
+      }
     }
   })
 
   // Respawn all players at spawn point when round ends
   room.onMessage('respawnPlayers', () => {
-    // Spawn area from scene.json: x 261.75–264.75, y 47.48, z 296.5–299.5
-    const spawnX = 261.75 + Math.random() * 3
-    const spawnZ = 296.5 + Math.random() * 3
-    void movePlayerTo({
-      newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
-    })
+    const localPlayer = getPlayer()
+    const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
 
-    // Activate cinematic camera for 10 seconds
+    // Read top 3 from CountdownTimer CRDT (roundWinnerJson)
+    let topPlayers: Array<{ userId: string; seconds: number }> = []
+    for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
+      if (timer.roundWinnerJson) {
+        try {
+          const data = JSON.parse(timer.roundWinnerJson) as Array<{ userId?: string; seconds: number }>
+          topPlayers = data
+            .filter(d => d.userId && d.seconds > 0)
+            .map(d => ({ userId: d.userId!.toLowerCase(), seconds: d.seconds }))
+        } catch { /* ignore */ }
+      }
+      break
+    }
+
+    const place1 = topPlayers[0]?.userId ?? null
+    const place2 = topPlayers[1]?.userId ?? null
+    const place3 = topPlayers[2]?.userId ?? null
+
+    isWinnerLocalPlayer = !!(place1 && place1 === localUserId)
+    const isSecondPlace = !!(place2 && place2 === localUserId)
+    const isThirdPlace = !!(place3 && place3 === localUserId)
+    isPodiumPlayer = isWinnerLocalPlayer || isSecondPlace || isThirdPlace
+    console.log('[Client] Top 3:', place1, place2, place3, '| Local:', localUserId)
+
+    const GREEN_CUBE = { x: 258.78, y: 19.25, z: 227.81 }
+
+    if (isWinnerLocalPlayer) {
+      // 1st place → red cube, facing green cube
+      void movePlayerTo({
+        newRelativePosition: { x: 265.57, y: 19.51, z: 219.65 },
+        cameraTarget: GREEN_CUBE,
+      })
+      setTimeout(() => { void triggerEmote({ predefinedEmote: 'handsair' }) }, 1000)
+      console.log('[Client] 🏆 1st place teleported to red cube!')
+    } else if (isSecondPlace) {
+      // 2nd place → gold cube, facing green cube
+      void movePlayerTo({
+        newRelativePosition: { x: 266.97, y: 18.85, z: 220.87 },
+        cameraTarget: GREEN_CUBE,
+      })
+      setTimeout(() => { void triggerEmote({ predefinedEmote: 'clap' }) }, 1000)
+      console.log('[Client] 🥈 2nd place teleported to gold cube!')
+    } else if (isThirdPlace) {
+      // 3rd place → blue cube, facing green cube
+      void movePlayerTo({
+        newRelativePosition: { x: 264.25, y: 18.16, z: 218.57 },
+        cameraTarget: GREEN_CUBE,
+      })
+      setTimeout(() => { void triggerEmote({ predefinedEmote: 'clap' }) }, 1000)
+      console.log('[Client] 🥉 3rd place teleported to blue cube!')
+    } else {
+      // Everyone else goes to spawn
+      const spawnX = 261.75 + Math.random() * 3
+      const spawnZ = 296.5 + Math.random() * 3
+      void movePlayerTo({
+        newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
+      })
+    }
+
+    // Activate cinematic camera + freeze movement for 10 seconds
     MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
+    InputModifier.createOrReplace(engine.PlayerEntity, {
+      mode: InputModifier.Mode.Standard({ disableAll: true })
+    })
     cinematicTimer = 10
-    console.log('[Client] 🎬 Cinematic camera activated for 10 seconds')
-    console.log('[Client] 📍 Respawned at spawn point for new round')
+    console.log('[Client] 🎬 Cinematic camera activated for 10 seconds (movement disabled)')
+    console.log('[Client] 📍 Round ended — players repositioned')
   })
 
 }
