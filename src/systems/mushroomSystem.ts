@@ -405,31 +405,8 @@ export function mushroomClientSystem(dt: number): void {
 
   // Shield is removed by shieldConsumed message or round end (no time expiry)
 
-  // Trail particles at feet when shield is active
-  cleanupExpiredTrailPuffs()
-  if (shieldActive && Transform.has(engine.PlayerEntity)) {
-    const playerPos = Transform.get(engine.PlayerEntity).position
-    let isMoving = false
-    if (lastShieldPlayerPos !== null) {
-      const dist = Vector3.distance(playerPos, lastShieldPlayerPos)
-      isMoving = dist > TRAIL_MIN_MOVE_DIST
-    }
-    lastShieldPlayerPos = Vector3.create(playerPos.x, playerPos.y, playerPos.z)
-    if (isMoving) {
-      const groundPos = Vector3.create(playerPos.x, playerPos.y + 0.1, playerPos.z)
-      trailSpawnAccum += dt
-      while (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL) {
-        trailSpawnAccum -= TRAIL_SPAWN_INTERVAL
-        spawnTrailPuff(groundPos)
-      }
-    } else {
-      trailSpawnAccum = 0
-    }
-  } else if (!shieldActive) {
-    // Reset when shield not active
-    lastShieldPlayerPos = null
-    trailSpawnAccum = 0
-  }
+  // Trail particles disabled for now (orb trail didn't clean up on shield break)
+  // TODO: re-enable trail effect once the cleanup bug is fixed
 
   // Check proximity for pickup (send to server)
   if (!Transform.has(engine.PlayerEntity)) return

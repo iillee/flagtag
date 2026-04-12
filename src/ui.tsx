@@ -107,6 +107,17 @@ export function getCinematicFade(): number {
   return cinematicFadeOpacity
 }
 
+// ── Cinematic showing flag (true while cinematic view is revealed) ──
+let cinematicShowing = false
+
+export function setCinematicShowing(showing: boolean) {
+  cinematicShowing = showing
+}
+
+export function getCinematicShowing(): boolean {
+  return cinematicShowing
+}
+
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
 }
@@ -706,7 +717,7 @@ function DesktopLayout() {
       </UiEntity>
 
       {/* Round-end splash — bottom of screen over cinematic camera */}
-      {splashVisible && (
+      {splashVisible && cinematicShowing && (
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
@@ -1864,7 +1875,7 @@ function MobileLayout() {
       )}
 
       {/* ── Round-end splash — bottom of screen (safe area) ── */}
-      {splashVisible && (
+      {splashVisible && cinematicShowing && (
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
