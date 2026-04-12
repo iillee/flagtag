@@ -96,6 +96,17 @@ function joinCommunity() {
   })
 }
 
+// ── Cinematic fade overlay ──
+let cinematicFadeOpacity = 0 // 0 = transparent, 1 = fully black
+
+export function setCinematicFade(opacity: number) {
+  cinematicFadeOpacity = Math.max(0, Math.min(1, opacity))
+}
+
+export function getCinematicFade(): number {
+  return cinematicFadeOpacity
+}
+
 export function setupUi() {
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
 }
@@ -459,6 +470,19 @@ function PlayerListUi() {
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
       {mobile ? <MobileLayout /> : <DesktopLayout />}
+
+      {/* Cinematic fade overlay (black screen for transitions) */}
+      {cinematicFadeOpacity > 0 && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: 0, left: 0 },
+            width: '100%',
+            height: '100%',
+          }}
+          uiBackground={{ color: Color4.create(0, 0, 0, cinematicFadeOpacity) }}
+        />
+      )}
 
       {/* Server-down overlay */}
       {serverDownVisible && (

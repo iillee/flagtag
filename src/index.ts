@@ -2,7 +2,7 @@ import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, GltfContainerLoadingState, LoadingState } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
-import { setupUi } from './ui'
+import { setupUi, setCinematicFade } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
 import { bananaClientSystem } from './systems/bananaSystem'
@@ -553,7 +553,7 @@ export async function main() {
   VirtualCamera.create(cinematicCam, {
     lookAtEntity: lookTarget,
     defaultTransition: {
-      transitionMode: VirtualCamera.Transition.Time(0.5)
+      transitionMode: VirtualCamera.Transition.Time(0.01)
     }
   })
 
@@ -561,26 +561,98 @@ export async function main() {
   let isWinnerLocalPlayer = false
   let isPodiumPlayer = false // true for 1st, 2nd, or 3rd place
 
+  // Fade state machine: 0=idle, 1=fading in (to black), 2=holding black, 3=fading out (reveal), 4=showing, 5=end fade in, 6=end hold black, 7=end fade out
+  let fadePhase = 0
+  let fadeTimer = 0
+  const FADE_IN_DUR = 1.5    // fade to black
+  const FADE_HOLD_DUR = 0.3  // hold black while teleport settles
+  const FADE_OUT_DUR = 1.0   // reveal cinematic
+  const END_FADE_IN_DUR = 0.8  // fade to black at end
+  const END_FADE_HOLD_DUR = 0.3
+  const END_FADE_OUT_DUR = 0.8 // reveal gameplay
+
   engine.addSystem((dt: number) => {
+    // ── Fade overlay system ──
+    if (fadePhase > 0) {
+      fadeTimer -= dt
+      if (fadePhase === 1) {
+        // Fading to black
+        const progress = 1 - Math.max(0, fadeTimer / FADE_IN_DUR)
+        setCinematicFade(progress)
+        if (fadeTimer <= 0) {
+          setCinematicFade(1)
+          fadePhase = 2
+          fadeTimer = FADE_HOLD_DUR
+        }
+      } else if (fadePhase === 2) {
+        // Hold black — camera is already active, teleport already done
+        setCinematicFade(1)
+        if (fadeTimer <= 0) {
+          fadePhase = 3
+          fadeTimer = FADE_OUT_DUR
+        }
+      } else if (fadePhase === 3) {
+        // Fading from black to reveal cinematic
+        const progress = Math.max(0, fadeTimer / FADE_OUT_DUR)
+        setCinematicFade(progress)
+        if (fadeTimer <= 0) {
+          setCinematicFade(0)
+          fadePhase = 4 // now just wait for cinematicTimer to expire
+        }
+      } else if (fadePhase === 4) {
+        // Showing cinematic — wait for cinematicTimer
+        // (handled below)
+      } else if (fadePhase === 5) {
+        // End: fading to black
+        const progress = 1 - Math.max(0, fadeTimer / END_FADE_IN_DUR)
+        setCinematicFade(progress)
+        if (fadeTimer <= 0) {
+          setCinematicFade(1)
+          // Release camera and restore movement while black
+          MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
+          if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
+          console.log('[Client] 🎬 Cinematic camera released, movement restored')
+
+          if (isPodiumPlayer) {
+            isWinnerLocalPlayer = false
+            isPodiumPlayer = false
+            const spawnX = 261.75 + Math.random() * 3
+            const spawnZ = 296.5 + Math.random() * 3
+            void movePlayerTo({
+              newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
+            })
+            console.log('[Client] 📍 Podium player returned to spawn')
+          }
+
+          fadePhase = 6
+          fadeTimer = END_FADE_HOLD_DUR
+        }
+      } else if (fadePhase === 6) {
+        // End: hold black
+        setCinematicFade(1)
+        if (fadeTimer <= 0) {
+          fadePhase = 7
+          fadeTimer = END_FADE_OUT_DUR
+        }
+      } else if (fadePhase === 7) {
+        // End: fade from black to gameplay
+        const progress = Math.max(0, fadeTimer / END_FADE_OUT_DUR)
+        setCinematicFade(progress)
+        if (fadeTimer <= 0) {
+          setCinematicFade(0)
+          fadePhase = 0
+          console.log('[Client] 🎬 Cinematic sequence complete')
+        }
+      }
+    }
+
+    // ── Cinematic timer (how long to show the podium view) ──
     if (cinematicTimer <= 0) return
     cinematicTimer -= dt
-    if (cinematicTimer <= 0) {
-      // Release camera and restore movement
-      MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
-      InputModifier.deleteFrom(engine.PlayerEntity)
-      console.log('[Client] 🎬 Cinematic camera released, movement restored')
-
-      // If this player was on the podium (1st/2nd/3rd), teleport them back to spawn
-      if (isPodiumPlayer) {
-        isWinnerLocalPlayer = false
-        isPodiumPlayer = false
-        const spawnX = 261.75 + Math.random() * 3
-        const spawnZ = 296.5 + Math.random() * 3
-        void movePlayerTo({
-          newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
-        })
-        console.log('[Client] 📍 Podium player returned to spawn')
-      }
+    if (cinematicTimer <= 0 && fadePhase === 4) {
+      // Start end-fade sequence
+      fadePhase = 5
+      fadeTimer = END_FADE_IN_DUR
     }
   })
 
@@ -615,32 +687,40 @@ export async function main() {
 
     const GREEN_CUBE = { x: 258.78, y: 19.25, z: 227.81 }
 
+    // Freeze movement IMMEDIATELY
+    InputModifier.createOrReplace(engine.PlayerEntity, {
+      mode: InputModifier.Mode.Standard({ disableAll: true })
+    })
+
+    // Start fade to black FIRST — then teleport once fully black
+    fadePhase = 1
+    fadeTimer = FADE_IN_DUR
+    cinematicTimer = 10
+
+    // Delay teleport + camera until screen is fully black
+    setTimeout(() => {
     if (isWinnerLocalPlayer) {
-      // 1st place → red cube, facing green cube
       void movePlayerTo({
         newRelativePosition: { x: 265.57, y: 19.51, z: 219.65 },
         cameraTarget: GREEN_CUBE,
       })
-      setTimeout(() => { void triggerEmote({ predefinedEmote: 'handsair' }) }, 1000)
+      setTimeout(() => { void triggerEmote({ predefinedEmote: 'handsair' }) }, 1500)
       console.log('[Client] 🏆 1st place teleported to red cube!')
     } else if (isSecondPlace) {
-      // 2nd place → gold cube, facing green cube
       void movePlayerTo({
         newRelativePosition: { x: 266.97, y: 18.85, z: 220.87 },
         cameraTarget: GREEN_CUBE,
       })
-      setTimeout(() => { void triggerEmote({ predefinedEmote: 'clap' }) }, 1000)
+      setTimeout(() => { void triggerEmote({ predefinedEmote: 'clap' }) }, 1500)
       console.log('[Client] 🥈 2nd place teleported to gold cube!')
     } else if (isThirdPlace) {
-      // 3rd place → blue cube, facing green cube
       void movePlayerTo({
         newRelativePosition: { x: 264.25, y: 18.16, z: 218.57 },
         cameraTarget: GREEN_CUBE,
       })
-      setTimeout(() => { void triggerEmote({ predefinedEmote: 'clap' }) }, 1000)
+      setTimeout(() => { void triggerEmote({ predefinedEmote: 'clap' }) }, 1500)
       console.log('[Client] 🥉 3rd place teleported to blue cube!')
     } else {
-      // Everyone else goes to spawn
       const spawnX = 261.75 + Math.random() * 3
       const spawnZ = 296.5 + Math.random() * 3
       void movePlayerTo({
@@ -648,14 +728,12 @@ export async function main() {
       })
     }
 
-    // Activate cinematic camera + freeze movement for 10 seconds
-    MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
-    InputModifier.createOrReplace(engine.PlayerEntity, {
-      mode: InputModifier.Mode.Standard({ disableAll: true })
-    })
-    cinematicTimer = 10
-    console.log('[Client] 🎬 Cinematic camera activated for 10 seconds (movement disabled)')
-    console.log('[Client] 📍 Round ended — players repositioned')
+      // Activate cinematic camera (screen is fully black now)
+      MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
+      console.log('[Client] 📍 Round ended — players repositioned')
+    }, FADE_IN_DUR * 1000 + 50) // wait for fade to complete + small buffer
+
+    console.log('[Client] 🎬 Cinematic fade sequence started (10 seconds)')
   })
 
 }

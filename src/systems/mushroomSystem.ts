@@ -1,7 +1,8 @@
 import {
   engine, Transform, GltfContainer, Entity, AudioSource,
   Raycast, RaycastResult, RaycastQueryType,
-  MeshRenderer, Material, Billboard, BillboardMode, MaterialTransparencyMode
+  MeshRenderer, Material, Billboard, BillboardMode, MaterialTransparencyMode,
+  Tween, EasingFunction
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
@@ -96,6 +97,86 @@ const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
 let positionsRequested = false
 let shieldActive = false
+
+// ── Trail pool (gold orbs at feet when shield active) ──
+const TRAIL_SPAWN_INTERVAL = 0.08
+const TRAIL_LIFETIME_MS = 600
+const TRAIL_START_SCALE = 0.18
+const TRAIL_POOL_SIZE = 15
+const TRAIL_MIN_MOVE_DIST = 0.05
+const TRAIL_MATERIAL = {
+  albedoColor: Color4.create(1.0, 0.82, 0.2, 0.55),
+  emissiveColor: Color4.create(1.0, 0.75, 0.1, 1),
+  emissiveIntensity: 2.5,
+  roughness: 1.0,
+  metallic: 0.0,
+  specularIntensity: 0.0,
+  transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+}
+const trailPool: Entity[] = []
+let trailPoolIdx = 0
+let trailPoolReady = false
+let trailSpawnAccum = 0
+let lastShieldPlayerPos: Vector3 | null = null
+const activeTrailPuffs: { entity: Entity; expiresAt: number }[] = []
+const TRAIL_HIDDEN_POS = Vector3.create(0, -100, 0)
+
+function initTrailPool(): void {
+  if (trailPoolReady) return
+  trailPoolReady = true
+  for (let i = 0; i < TRAIL_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: TRAIL_HIDDEN_POS, scale: Vector3.Zero() })
+    MeshRenderer.setSphere(e)
+    Material.setPbrMaterial(e, TRAIL_MATERIAL)
+    trailPool.push(e)
+  }
+}
+
+function spawnTrailPuff(position: Vector3): void {
+  initTrailPool()
+  const puff = trailPool[trailPoolIdx % TRAIL_POOL_SIZE]
+  trailPoolIdx++
+  const jitteredPos = Vector3.create(
+    position.x + (Math.random() - 0.5) * 0.25,
+    position.y + (Math.random() - 0.5) * 0.15,
+    position.z + (Math.random() - 0.5) * 0.25,
+  )
+  const s = TRAIL_START_SCALE * (0.8 + Math.random() * 0.4)
+  const t = Transform.getMutable(puff)
+  t.position = jitteredPos
+  t.scale = Vector3.create(s, s, s)
+  Tween.createOrReplace(puff, {
+    mode: Tween.Mode.Scale({ start: Vector3.create(s, s, s), end: Vector3.Zero() }),
+    duration: TRAIL_LIFETIME_MS,
+    easingFunction: EasingFunction.EF_EASEINQUAD,
+  })
+  activeTrailPuffs.push({ entity: puff, expiresAt: Date.now() + TRAIL_LIFETIME_MS + 50 })
+}
+
+function hideTrailPuff(entity: Entity): void {
+  const t = Transform.getMutable(entity)
+  t.position = TRAIL_HIDDEN_POS
+  t.scale = Vector3.Zero()
+  if (Tween.has(entity)) Tween.deleteFrom(entity)
+}
+
+function cleanupExpiredTrailPuffs(): void {
+  const now = Date.now()
+  for (let i = activeTrailPuffs.length - 1; i >= 0; i--) {
+    if (now >= activeTrailPuffs[i].expiresAt) {
+      hideTrailPuff(activeTrailPuffs[i].entity)
+      activeTrailPuffs.splice(i, 1)
+    }
+  }
+}
+
+function hideAllTrailPuffs(): void {
+  for (const p of activeTrailPuffs) hideTrailPuff(p.entity)
+  activeTrailPuffs.length = 0
+  trailSpawnAccum = 0
+  lastShieldPlayerPos = null
+}
 
 // ── Beacon state ──
 let beaconInner: Entity | null = null
@@ -227,6 +308,7 @@ room.onMessage('mushroomPositions', (data) => {
     shieldActive = false
     console.log('[Mushroom] 🛡️ Shield consumed!')
     hideShield()
+    hideAllTrailPuffs()
     playShieldBreakSound()
   })
 
@@ -323,6 +405,32 @@ export function mushroomClientSystem(dt: number): void {
 
   // Shield is removed by shieldConsumed message or round end (no time expiry)
 
+  // Trail particles at feet when shield is active
+  cleanupExpiredTrailPuffs()
+  if (shieldActive && Transform.has(engine.PlayerEntity)) {
+    const playerPos = Transform.get(engine.PlayerEntity).position
+    let isMoving = false
+    if (lastShieldPlayerPos !== null) {
+      const dist = Vector3.distance(playerPos, lastShieldPlayerPos)
+      isMoving = dist > TRAIL_MIN_MOVE_DIST
+    }
+    lastShieldPlayerPos = Vector3.create(playerPos.x, playerPos.y, playerPos.z)
+    if (isMoving) {
+      const groundPos = Vector3.create(playerPos.x, playerPos.y + 0.1, playerPos.z)
+      trailSpawnAccum += dt
+      while (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL) {
+        trailSpawnAccum -= TRAIL_SPAWN_INTERVAL
+        spawnTrailPuff(groundPos)
+      }
+    } else {
+      trailSpawnAccum = 0
+    }
+  } else if (!shieldActive) {
+    // Reset when shield not active
+    lastShieldPlayerPos = null
+    trailSpawnAccum = 0
+  }
+
   // Check proximity for pickup (send to server)
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
@@ -349,5 +457,6 @@ export function hasMushroomShield(): boolean {
 export function clearMushroomShield(): void {
   shieldActive = false
   hideAllShields()
+  hideAllTrailPuffs()
   console.log('[Mushroom] 🛡️ All shields cleared (round end)')
 }

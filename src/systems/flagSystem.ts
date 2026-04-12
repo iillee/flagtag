@@ -9,7 +9,7 @@ import {
   Material,
   MaterialTransparencyMode,
   Tween,
-  EasingFunction,
+
   Raycast,
   RaycastResult,
   RaycastQueryType,
@@ -69,28 +69,7 @@ function createCarryClone(carrierId: string): void {
 }
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 
-// ── Trail pool (horizontal particles when carried) ──
-const TRAIL_SPAWN_INTERVAL = 0.08
-const TRAIL_LIFETIME_MS = 600
-const TRAIL_START_SCALE = 0.18
-const TRAIL_POOL_SIZE = 15
-const TRAIL_MIN_MOVE_DIST = 0.05
-const TRAIL_MATERIAL = {
-  albedoColor: Color4.create(1.0, 0.82, 0.2, 0.55),
-  emissiveColor: Color4.create(1.0, 0.75, 0.1, 1),
-  emissiveIntensity: 2.5,
-  roughness: 1.0,
-  metallic: 0.0,
-  specularIntensity: 0.0,
-  transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-}
-const trailPool: Entity[] = []
-let trailPoolIdx = 0
-let trailPoolReady = false
-let trailSpawnAccum = 0
-let lastCarrierPos: Vector3 | null = null
-const activeTrailPuffs: { entity: Entity; expiresAt: number }[] = []
-const TRAIL_HIDDEN_POS = Vector3.create(0, -100, 0)
+const HIDDEN_POS = Vector3.create(0, -100, 0)
 
 // ── Beacon pool (vertical particles when idle) - upgraded from v1 project ──
 const BEACON_SPAWN_INTERVAL = 0.35
@@ -120,52 +99,12 @@ interface BeaconPuff {
 }
 const activeBeaconPuffs: BeaconPuff[] = []
 
-function initTrailPool(): void {
-  if (trailPoolReady) return
-  trailPoolReady = true
-  for (let i = 0; i < TRAIL_POOL_SIZE; i++) {
-    const e = engine.addEntity()
-    Transform.create(e, { position: TRAIL_HIDDEN_POS, scale: Vector3.Zero() })
-    MeshRenderer.setSphere(e)
-    Material.setPbrMaterial(e, TRAIL_MATERIAL)
-    trailPool.push(e)
-  }
-}
-
-function spawnTrailPuff(position: Vector3): void {
-  initTrailPool()
-  const puff = trailPool[trailPoolIdx % TRAIL_POOL_SIZE]
-  trailPoolIdx++
-  const jitteredPos = Vector3.create(
-    position.x + (Math.random() - 0.5) * 0.25,
-    position.y + (Math.random() - 0.5) * 0.15,
-    position.z + (Math.random() - 0.5) * 0.25,
-  )
-  const s = TRAIL_START_SCALE * (0.8 + Math.random() * 0.4)
-  const t = Transform.getMutable(puff)
-  t.position = jitteredPos
-  t.scale = Vector3.create(s, s, s)
-  Tween.createOrReplace(puff, {
-    mode: Tween.Mode.Scale({ start: Vector3.create(s, s, s), end: Vector3.Zero() }),
-    duration: TRAIL_LIFETIME_MS,
-    easingFunction: EasingFunction.EF_EASEINQUAD,
-  })
-  activeTrailPuffs.push({ entity: puff, expiresAt: Date.now() + TRAIL_LIFETIME_MS + 50 })
-}
-
-function hideTrailPuff(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = TRAIL_HIDDEN_POS
-  t.scale = Vector3.Zero()
-  if (Tween.has(entity)) Tween.deleteFrom(entity)
-}
-
 function initBeaconPool(): void {
   if (beaconPoolReady) return
   beaconPoolReady = true
   for (let i = 0; i < BEACON_POOL_SIZE; i++) {
     const e = engine.addEntity()
-    Transform.create(e, { position: TRAIL_HIDDEN_POS, scale: Vector3.Zero() })
+    Transform.create(e, { position: HIDDEN_POS, scale: Vector3.Zero() })
     MeshRenderer.setSphere(e)
     Material.setPbrMaterial(e, BEACON_MATERIAL)
     beaconPool.push(e)
@@ -196,7 +135,7 @@ function spawnBeaconPuff(position: Vector3): void {
 
 function hideBeaconPuff(entity: Entity): void {
   const t = Transform.getMutable(entity)
-  t.position = TRAIL_HIDDEN_POS
+  t.position = HIDDEN_POS
   t.scale = Vector3.Zero()
 }
 
@@ -535,12 +474,6 @@ export function flagClientSystem(dt: number): void {
 
   // Cleanup expired effects
   const now = Date.now()
-  for (let i = activeTrailPuffs.length - 1; i >= 0; i--) {
-    if (now >= activeTrailPuffs[i].expiresAt) {
-      hideTrailPuff(activeTrailPuffs[i].entity)
-      activeTrailPuffs.splice(i, 1)
-    }
-  }
   for (let i = activeBeaconPuffs.length - 1; i >= 0; i--) {
     const bp = activeBeaconPuffs[i]
     const elapsed = now - bp.spawnTime
@@ -560,39 +493,6 @@ export function flagClientSystem(dt: number): void {
   // Particle effects based on flag state and movement
   for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
     if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
-      // Trail particles at player's feet ONLY when actually moving
-      const carrierEntity = getCarrierEntity(flag.carrierPlayerId)
-      if (carrierEntity && Transform.has(carrierEntity)) {
-        const carrierPos = Transform.get(carrierEntity).position
-        
-        // Check if carrier is actually moving
-        let isCarrierMoving = false
-        if (lastCarrierPos !== null) {
-          const distanceMoved = Vector3.distance(carrierPos, lastCarrierPos)
-          isCarrierMoving = distanceMoved > TRAIL_MIN_MOVE_DIST
-        }
-        
-        // Update position tracking
-        lastCarrierPos = Vector3.create(carrierPos.x, carrierPos.y, carrierPos.z)
-        
-        // Only spawn trail particles if actually moving
-        if (isCarrierMoving) {
-          const groundParticlePos = Vector3.create(carrierPos.x, carrierPos.y + 0.1, carrierPos.z)
-          trailSpawnAccum += clampedDt
-          while (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL) {
-            trailSpawnAccum -= TRAIL_SPAWN_INTERVAL
-            spawnTrailPuff(groundParticlePos)
-          }
-        } else {
-          // Reset trail accumulator when not moving
-          trailSpawnAccum = 0
-        }
-      } else {
-        // Reset position tracking if carrier not found
-        lastCarrierPos = null
-        trailSpawnAccum = 0
-      }
-      
       beaconSpawnAccum = 0 // No beacon particles when carried
       
     } else if (flag.state === FlagState.AtBase || flag.state === FlagState.Dropped) {
@@ -604,14 +504,7 @@ export function flagClientSystem(dt: number): void {
         spawnBeaconPuff(flagPos)
       }
       
-      // Reset carrier tracking when flag not carried
-      lastCarrierPos = null
-      trailSpawnAccum = 0
-      
     } else {
-      // Reset all tracking
-      lastCarrierPos = null
-      trailSpawnAccum = 0
       beaconSpawnAccum = 0
     }
     break
