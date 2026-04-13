@@ -19,6 +19,8 @@ import { Flag, Shell, SHELL_COOLDOWN_SEC, SHELL_LIFETIME_SEC, SHELL_SPEED, SHELL
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
+import { isCinematicActive } from '../cinematicState'
+import { isDrownRespawning } from './waterSystem'
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from './combatSystem'
 
 const SHELL_MODEL_SRC = 'assets/scene/Models/shell_scaled.glb'
@@ -465,6 +467,7 @@ function updateMsgShellVisuals(dt: number): void {
 
 /** Fire a shell from the UI (mobile tap). Same logic as E key press. */
 export function triggerShellFromUI(): void {
+  if (isDrownRespawning()) return
   const now = Date.now()
   const userId = getPlayerData()?.userId
   if (!userId) return
@@ -518,7 +521,7 @@ export function shellClientSystem(dt: number): void {
 
 
   // E key — fire shell (disabled in spectator mode)
-  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && !isSpectatorMode()) {
+  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

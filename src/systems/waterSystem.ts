@@ -31,6 +31,9 @@ let drownBarVisible = false
 let drownCooldown = 0
 let drownSoundEntity: ReturnType<typeof engine.addEntity> | null = null
 let respawnDelay = 0
+const RESPAWN_DURATION = 10.0 // total respawn time
+const DROWN_FADE_IN = 1.5 // seconds to fade to black
+const DROWN_FADE_OUT = 1.5 // seconds to fade back at end
 let outOfWaterTimer = 3.0 // time spent out of water (start fully charged so no delay at scene load)
 const RECHARGE_DELAY = 5.0 // seconds out of water before recharge begins
 
@@ -47,6 +50,29 @@ export function isDrownBarVisible(): boolean {
 /** Returns seconds remaining until respawn, or 0 if not drowning */
 export function getRespawnCountdown(): number {
   return respawnDelay
+}
+
+/** Returns 0..1 opacity for the drown fade overlay */
+export function getDrownFadeOpacity(): number {
+  if (respawnDelay <= 0) return 0
+  const elapsed = RESPAWN_DURATION - respawnDelay
+  // Fade in during first DROWN_FADE_IN seconds
+  if (elapsed < DROWN_FADE_IN) return elapsed / DROWN_FADE_IN
+  // Fade out during last DROWN_FADE_OUT seconds
+  if (respawnDelay < DROWN_FADE_OUT) return respawnDelay / DROWN_FADE_OUT
+  // Fully black in between
+  return 1
+}
+
+/** Returns true if player is in drown respawn period */
+export function isDrownRespawning(): boolean {
+  return respawnDelay > 0
+}
+
+/** Returns true if drown text should be visible (before fade-in starts through hold, hidden during fade-out) */
+export function isDrownTextVisible(): boolean {
+  if (respawnDelay <= 0) return false
+  return respawnDelay >= DROWN_FADE_OUT
 }
 
 function ensureDrownBar() {
@@ -75,9 +101,22 @@ export function waterSystem(dt: number) {
   const playerPos = Transform.get(engine.PlayerEntity).position
   const inWater = playerPos.y <= WATER_SURFACE_Y && isInWaterZone(playerPos.x, playerPos.z)
 
-  // Respawn delay — waiting for death emote to play
+  // Respawn delay — fade to black, teleport, fade back
   if (respawnDelay > 0) {
+    const prevDelay = respawnDelay
     respawnDelay -= dt
+
+    // Teleport once screen is fully black (after fade-in completes)
+    const teleportAt = RESPAWN_DURATION - DROWN_FADE_IN
+    if (prevDelay > teleportAt && respawnDelay <= teleportAt) {
+      void movePlayerTo({ newRelativePosition: SPAWN_POSITION })
+    }
+
+    // Stop emote 1 second before respawn
+    if (prevDelay > 1.0 && respawnDelay <= 1.0) {
+      void triggerEmote({ predefinedEmote: 'wave' })
+    }
+
     if (respawnDelay <= 0) {
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: false })
@@ -85,7 +124,6 @@ export function waterSystem(dt: number) {
       drownCooldown = 2.0
       airRemaining = DROWN_TIME
       setBarVisible(false)
-      void movePlayerTo({ newRelativePosition: SPAWN_POSITION })
     }
     wasInWater = inWater
     lastPlayerPos = playerPos
@@ -160,7 +198,7 @@ export function waterSystem(dt: number) {
         mode: InputModifier.Mode.Standard({ disableAll: true })
       })
 
-      respawnDelay = 5.0
+      respawnDelay = RESPAWN_DURATION
     }
   } else {
     // Track time out of water

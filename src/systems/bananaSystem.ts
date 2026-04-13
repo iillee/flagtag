@@ -26,6 +26,8 @@ import { room } from '../shared/messages'
 
 import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
+import { isCinematicActive } from '../cinematicState'
+import { isDrownRespawning } from './waterSystem'
 
 const BANANA_MODEL_SRC = 'assets/scene/Models/banana_scaled.glb'
 const BANANA_SCALE = Vector3.create(1, 1, 1)
@@ -492,6 +494,7 @@ function updateMsgBananaVisuals(dt: number): void {
 
 /** Drop a banana from the UI (mobile tap). Same logic as F key press. */
 export function triggerBananaFromUI(): void {
+  if (isDrownRespawning()) return
   const now = Date.now()
   const userId = getPlayerData()?.userId
   if (!userId) return
@@ -547,7 +550,7 @@ export function bananaClientSystem(dt: number): void {
   }
 
   // F key — drop banana (disabled in spectator mode)
-  if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN) && !isSpectatorMode()) {
+  if (inputSystem.isTriggered(InputAction.IA_SECONDARY, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

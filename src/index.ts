@@ -2,7 +2,7 @@ import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, GltfContainerLoadingState, LoadingState } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
-import { setupUi, setCinematicFade } from './ui'
+import { setupUi, setCinematicFade, setCinematicShowing } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
 import { bananaClientSystem } from './systems/bananaSystem'
@@ -14,6 +14,7 @@ import { setupSpectator } from './systems/spectatorSystem'
 import { waterSystem } from './systems/waterSystem'
 import { mailboxSystem } from './systems/mailboxSystem'
 
+import { setCinematicActive } from './cinematicState'
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
@@ -588,6 +589,7 @@ export async function main() {
         // Hold black — camera is already active, teleport already done
         setCinematicFade(1)
         if (fadeTimer <= 0) {
+          setCinematicShowing(true)
           fadePhase = 3
           fadeTimer = FADE_OUT_DUR
         }
@@ -608,6 +610,7 @@ export async function main() {
         setCinematicFade(progress)
         if (fadeTimer <= 0) {
           setCinematicFade(1)
+          setCinematicShowing(false)
           // Release camera and restore movement while black
           MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
           if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
@@ -641,6 +644,7 @@ export async function main() {
         if (fadeTimer <= 0) {
           setCinematicFade(0)
           fadePhase = 0
+          setCinematicActive(false)
           console.log('[Client] 🎬 Cinematic sequence complete')
         }
       }
@@ -689,13 +693,22 @@ export async function main() {
 
     // Freeze movement IMMEDIATELY
     InputModifier.createOrReplace(engine.PlayerEntity, {
-      mode: InputModifier.Mode.Standard({ disableAll: true })
+      mode: InputModifier.Mode.Standard({
+        disableWalk: true,
+        disableRun: true,
+        disableJump: true,
+        disableJog: true,
+        disableGliding: true,
+        disableDoubleJump: true,
+        // disableEmote intentionally omitted — allow players to override celebration emotes
+      })
     })
 
     // Start fade to black FIRST — then teleport once fully black
     fadePhase = 1
     fadeTimer = FADE_IN_DUR
     cinematicTimer = 10
+    setCinematicActive(true)
 
     // Delay teleport + camera until screen is fully black
     setTimeout(() => {

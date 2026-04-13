@@ -24,11 +24,13 @@ import {
 import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
 // import { isMobile } from '@dcl/sdk/platform'  // disabled — causes crashes
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
-import { Flag, FlagState } from '../shared/components'
+import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
 import { predictAttackLocally } from './combatSystem'
 import { isAnyOverlayOpen } from '../ui'
+import { isCinematicActive } from '../cinematicState'
 import { isSpectatorMode } from './spectatorSystem'
+import { isDrownRespawning } from './waterSystem'
 
 // Visual clone system for smooth flag carrying
 let carryCloneEntity: Entity | null = null
@@ -339,8 +341,8 @@ export function flagClientSystem(dt: number): void {
     }
   }
 
-  // Left click — attack only (skip if a UI overlay is open or clicking an interactive object)
-  if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && userId && !isAnyOverlayOpen() && !isSpectatorMode()) {
+  // Left click — attack only (skip if a UI overlay is open, clicking an interactive object, or cinematic is active)
+  if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && userId && !isAnyOverlayOpen() && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
     const cmd = inputSystem.getInputCommand(InputAction.IA_POINTER, PointerEventType.PET_DOWN)
     const hitEntity = cmd?.hit?.entityId
     // Skip attack if the click landed on an entity with pointer events (bench, scope, etc.)
@@ -403,9 +405,16 @@ export function flagClientSystem(dt: number): void {
 
     } else if (needsCloneRemove) {
       if (!isFirstFrame) {
+        // Check if this drop is caused by round end (flag forced back from carrier)
+        let isRoundEndDrop = false
+        for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
+          if (timer.roundEndTriggered) { isRoundEndDrop = true }
+          break
+        }
+
         if (skipNextDropSound) {
           skipNextDropSound = false
-        } else {
+        } else if (!isRoundEndDrop) {
           playDropSound()
         }
       }

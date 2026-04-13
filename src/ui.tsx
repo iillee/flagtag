@@ -32,8 +32,8 @@ function toggleMusicMute() {
   }
 }
 import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
-import { getDrownFraction, isDrownBarVisible, getRespawnCountdown } from './systems/waterSystem'
-import { signedFetch } from '~system/SignedFetch'
+import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
+import { signedFetch, getHeaders } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
 // Public community — direct join via POST /members
@@ -63,15 +63,26 @@ function joinCommunity() {
       console.log('[Mailbox] Joining community for:', player.userId)
       setMailboxStatus('Joining...')
 
-      const joinRes = await signedFetch({
-        url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
-        init: { method: 'POST', headers: { 'Accept': 'application/json' } }
+      // Get signed auth headers, then do a regular fetch
+      const { headers: signedHeaders } = await getHeaders({ url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members` })
+      console.log('[Mailbox] Signed headers:', JSON.stringify(signedHeaders))
+      
+      const headerMap: Record<string, string> = { 'Accept': 'application/json' }
+      if (signedHeaders) {
+        for (const [key, value] of Object.entries(signedHeaders)) {
+          headerMap[key] = value
+        }
+      }
+      
+      const fetchRes = await fetch(`https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`, {
+        method: 'POST',
+        headers: headerMap
       })
+      const joinRes = { status: fetchRes.status, ok: fetchRes.ok, body: await fetchRes.text() }
       console.log('[Mailbox] Join response - status:', joinRes.status, 'ok:', joinRes.ok, 'body:', joinRes.body)
       let data: any = {}
       try { data = JSON.parse(joinRes.body) } catch (_) {}
       console.log('[Mailbox] Parsed response:', JSON.stringify(data))
-
       if (joinRes.status >= 200 && joinRes.status < 300) {
         setMailboxStatus('Joined! Welcome to the community.')
       } else {
@@ -261,8 +272,8 @@ function roundEndSplashSystem(dt: number): void {
     break
   }
 
-  // Hide splash after duration
-  if (splashVisible && now >= splashHideTime) {
+  // Hide splash when cinematic ends
+  if (splashVisible && !getCinematicShowing() && now >= splashHideTime) {
     splashVisible = false
     splashPlayers = []
     splashWinnerUserId = null
@@ -613,11 +624,17 @@ function PlayerListUi() {
             justifyContent: 'center',
             alignItems: 'center',
           }}
-          uiBackground={{ color: Color4.create(0, 0, 0, 0.5) }}
+          uiBackground={{ color: Color4.create(0, 0, 0, getDrownFadeOpacity()) }}
         >
-          <Label value="You Drowned!" fontSize={42} color={CORAL_RED} font="sans-serif" />
-          <UiEntity uiTransform={{ height: 12 }} />
-          <Label value={`Respawning in ${Math.ceil(getRespawnCountdown())}...`} fontSize={20} color={LIGHT_GREY} font="sans-serif" />
+          {isDrownTextVisible() && (
+            <Label value="You Drowned!" fontSize={42} color={CORAL_RED} font="sans-serif" />
+          )}
+          {isDrownTextVisible() && (
+            <UiEntity uiTransform={{ height: 12 }} />
+          )}
+          {isDrownTextVisible() && (
+            <Label value={`Respawning in ${Math.ceil(getRespawnCountdown())}...`} fontSize={20} color={LIGHT_GREY} font="sans-serif" />
+          )}
         </UiEntity>
       )}
 
@@ -805,6 +822,7 @@ function DesktopLayout() {
             justifyContent: 'center',
             alignItems: 'center',
           }}
+          onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
         >
           <UiEntity
             uiTransform={{
@@ -816,6 +834,7 @@ function DesktopLayout() {
               padding: { top: 32, bottom: 32, left: 40, right: 40 },
             }}
             uiBackground={{ color: PANEL_BG }}
+            onMouseDown={() => {}}
           >
             {/* Close button */}
             <UiEntity
