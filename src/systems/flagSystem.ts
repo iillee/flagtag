@@ -48,26 +48,26 @@ function createCarryClone(carrierId: string): void {
   carryCloneEntity = engine.addEntity()
   AvatarAttach.create(carryCloneEntity, {
     avatarId: carrierId,
-    anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+    anchorPointId: AvatarAnchorPointType.AAPT_RIGHT_HAND
   })
   Transform.create(carryCloneEntity, {
     position: Vector3.Zero(),
     scale: Vector3.One()
   })
 
-  // Child entity with model — bob/spin animated locally
-  // Offset upward ~0.85m above name tag so the flag doesn't clip into the avatar's head
+  // Child entity with model — attached to right hand
   carryCloneVisual = engine.addEntity()
   Transform.create(carryCloneVisual, {
     parent: carryCloneEntity,
-    position: Vector3.create(0, 0.85, 0)
+    position: Vector3.create(0, 0.1, 0),
+    scale: Vector3.create(0.5, 0.5, 0.5)
   })
   GltfContainer.create(carryCloneVisual, {
     src: BANNER_SRC,
     visibleMeshesCollisionMask: 0,
     invisibleMeshesCollisionMask: 0
   })
-  console.log('[Flag] Clone created (desktop: AAPT_NAME_TAG + bob/spin child)')
+  console.log('[Flag] Clone created (AAPT_RIGHT_HAND)')
 }
 const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
 

@@ -118,7 +118,7 @@ function updateConcurrentTracking(): void {
 }
 
 // ── Banana state ──
-const BANANA_MODEL_SRC = 'assets/scene/Models/banana.glb'
+const BANANA_MODEL_SRC = 'assets/asset-packs/clay_pot/Pot_01/Pot_01.glb'
 /** Track last banana drop time per player for cooldown. */
 const lastBananaDropTime = new Map<string, number>()
 /** Track active banana entities for cleanup, with per-banana gravity state. */
@@ -134,7 +134,7 @@ interface ActiveBanana {
 const activeBananas: ActiveBanana[] = []
 
 // ── Shell state ──
-const SHELL_MODEL_SRC = 'assets/scene/Models/shell.glb'
+const SHELL_MODEL_SRC = 'assets/scene/Models/boomerang.g.glb'
 const SHELL_GROUND_OFFSET = 0.35  // Raise shell above ground so it doesn't clip terrain
 const lastShellFireTime = new Map<string, number>()
 interface ActiveShell {
@@ -156,6 +156,11 @@ interface ActiveShell {
   onGround: boolean      // true once shell has landed on a surface
   // CRDT write throttle — sync distanceTraveled at 10Hz instead of 60fps
   lastSyncedDist: number
+  // Boomerang return
+  returning: boolean
+  returnX: number  // current position during return
+  returnY: number
+  returnZ: number
 }
 const activeShells: ActiveShell[] = []
 const SHELL_SYNC_INTERVAL = 0.1 // seconds between Shell component CRDT writes
@@ -1286,7 +1291,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   // Spawn slightly in front of the player near ground level
   const spawnPos = Vector3.create(
     playerPos.x + nDirX * 1.0,
-    playerPos.y + 0.2,
+    playerPos.y + 0.8,
     playerPos.z + nDirZ * 1.0
   )
 
@@ -1333,6 +1338,10 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     groundY: Math.max(0, playerPos.y - 0.88),  // Approximate ground level from player height (~0.88m avatar offset)
     onGround: false,
     lastSyncedDist: 0,
+    returning: false,
+    returnX: spawnPos.x,
+    returnY: spawnPos.y,
+    returnZ: spawnPos.z,
   })
   lastShellFireTime.set(playerId, now)
 
@@ -1340,7 +1349,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
   console.log('[Server] 🐚 Shell fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 
-/** Server system: move shells forward with gravity, check player hits, and handle expiry. */
+/** Server system: move shells forward (and return), check player hits, and handle expiry. */
 function shellServerSystem(dt: number): void {
   const now = Date.now()
   const clampedDt = Math.min(dt, 0.1)
@@ -1356,28 +1365,63 @@ function shellServerSystem(dt: number): void {
       continue
     }
 
-    // Move shell forward on XZ
     const moveDistance = SHELL_SPEED * clampedDt
-    shell.distanceTraveled += moveDistance
 
-    // Check if shell exceeded max range (wall hit)
-    if (shell.distanceTraveled >= shell.maxDistance) {
-      console.log('[Server] 🐚 Shell hit wall at', shell.distanceTraveled.toFixed(1), 'm')
-      const shellPos = Transform.get(shell.entity).position
-      room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
-      engine.removeEntity(shell.entity)
-      activeShells.splice(i, 1)
-      continue
+    if (!shell.returning) {
+      // ── Outbound flight ──
+      shell.distanceTraveled += moveDistance
+
+      // Check if shell exceeded max range → start returning
+      if (shell.distanceTraveled >= shell.maxDistance) {
+        console.log('[Server] 🐚 Shell reached max range at', shell.distanceTraveled.toFixed(1), 'm — returning')
+        shell.returning = true
+        // Snap position to max range point
+        shell.returnX = shell.startX + shell.dirX * shell.distanceTraveled
+        shell.returnY = shell.startY
+        shell.returnZ = shell.startZ + shell.dirZ * shell.distanceTraveled
+        // Send triggered with no victim so client starts return visual
+        const shellPos = Transform.get(shell.entity).position
+        room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
+      } else {
+        // Straight line forward
+        const newX = shell.startX + shell.dirX * shell.distanceTraveled
+        const newZ = shell.startZ + shell.dirZ * shell.distanceTraveled
+        const t = Transform.getMutable(shell.entity)
+        t.position = Vector3.create(newX, shell.startY, newZ)
+        shell.returnX = newX
+        shell.returnY = shell.startY
+        shell.returnZ = newZ
+      }
+    } else {
+      // ── Return flight — home in on shooter's chest height ──
+      const CHEST_OFFSET = 0.8
+      const shooterPos = getPlayerPosition(shell.firedBy)
+      const rawTarget = shooterPos || Vector3.create(shell.startX, shell.startY, shell.startZ)
+      const targetPos = Vector3.create(rawTarget.x, rawTarget.y + CHEST_OFFSET, rawTarget.z)
+
+      const dx = targetPos.x - shell.returnX
+      const dy = targetPos.y - shell.returnY
+      const dz = targetPos.z - shell.returnZ
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
+      if (dist < SHELL_HIT_RADIUS) {
+        // Returned to shooter — remove silently
+        console.log('[Server] 🐚 Shell returned to shooter')
+        engine.removeEntity(shell.entity)
+        activeShells.splice(i, 1)
+        continue
+      }
+
+      // Move toward shooter
+      const nx = dx / dist, ny = dy / dist, nz = dz / dist
+      shell.returnX += nx * moveDistance
+      shell.returnY += ny * moveDistance
+      shell.returnZ += nz * moveDistance
+      const t = Transform.getMutable(shell.entity)
+      t.position = Vector3.create(shell.returnX, shell.returnY, shell.returnZ)
     }
 
-    // No gravity — shell travels in a straight line at spawn height
-    const newX = shell.startX + shell.dirX * shell.distanceTraveled
-    const newZ = shell.startZ + shell.dirZ * shell.distanceTraveled
-    const t = Transform.getMutable(shell.entity)
-    t.position = Vector3.create(newX, shell.startY, newZ)
-
     // Update synced component — throttled to avoid CRDT saturation.
-    // Client extrapolates locally between updates for smooth motion.
     const distDelta = shell.distanceTraveled - shell.lastSyncedDist
     if (distDelta >= SHELL_SPEED * SHELL_SYNC_INTERVAL) {
       const shellComp = Shell.getMutable(shell.entity)
@@ -1385,12 +1429,13 @@ function shellServerSystem(dt: number): void {
       shell.lastSyncedDist = shell.distanceTraveled
     }
 
-    // Check player hits — any player (except the shooter)
+    // Check player hits — any player (except the shooter on outbound, ALL players on return)
     const shellPos = Transform.get(shell.entity).position
     let shellConsumed = false
 
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       const addr = identity.address.toLowerCase()
+      // Skip the shooter — can't hit yourself with your own boomerang
       if (addr === shell.firedBy) continue
 
       const playerPos = getPlayerPosition(addr)
@@ -1403,7 +1448,7 @@ function shellServerSystem(dt: number): void {
           console.log('[Server] 🐚🛡️ Shell blocked by shield for', addr.slice(0, 8))
           room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
         } else {
-          console.log('[Server] 🐚 Shell hit player', addr.slice(0, 8), 'at distance', shell.distanceTraveled.toFixed(1), 'm')
+          console.log('[Server] 🐚 Shell hit player', addr.slice(0, 8), shell.returning ? '(return)' : '(outbound)')
 
           // Drop the flag if the victim is carrying it
           const flag = Flag.getOrNull(flagEntity)
@@ -1414,28 +1459,49 @@ function shellServerSystem(dt: number): void {
 
           room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: addr })
         }
-        engine.removeEntity(shell.entity)
-        activeShells.splice(i, 1)
-        shellConsumed = true
+
+        if (shell.returning) {
+          // On return: consumed on hit
+          engine.removeEntity(shell.entity)
+          activeShells.splice(i, 1)
+          shellConsumed = true
+        } else {
+          // On outbound: hit triggers return, keep flying back
+          shell.returning = true
+          shell.returnX = shellPos.x
+          shell.returnY = shellPos.y
+          shell.returnZ = shellPos.z
+          console.log('[Server] 🐚 Shell hit on outbound — returning to shooter')
+        }
         break
       }
     }
     if (shellConsumed) continue
 
-    // Check banana collision — shell destroys both itself and the banana
+    // Check banana collision — shell destroys the banana, then returns
     for (let j = activeBananas.length - 1; j >= 0; j--) {
       const banana = activeBananas[j]
       const bananaPos = Transform.get(banana.entity).position
       const dist = Vector3.distance(shellPos, bananaPos)
       if (dist < SHELL_HIT_RADIUS) {
-        console.log('[Server] 🐚🍌 Shell hit banana! Both destroyed.')
+        console.log('[Server] 🐚🍌 Shell hit banana!', shell.returning ? 'Both destroyed.' : 'Banana destroyed, shell returning.')
         room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
         room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: '' })
-        engine.removeEntity(shell.entity)
-        activeShells.splice(i, 1)
         engine.removeEntity(banana.entity)
         activeBananas.splice(j, 1)
-        shellConsumed = true
+
+        if (shell.returning) {
+          // On return: consumed
+          engine.removeEntity(shell.entity)
+          activeShells.splice(i, 1)
+          shellConsumed = true
+        } else {
+          // On outbound: banana destroyed, shell returns
+          shell.returning = true
+          shell.returnX = shellPos.x
+          shell.returnY = shellPos.y
+          shell.returnZ = shellPos.z
+        }
         break
       }
     }

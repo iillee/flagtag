@@ -10,6 +10,8 @@ import {
   Raycast,
   RaycastResult,
   RaycastQueryType,
+  VisibilityComponent,
+  AvatarEmoteCommand,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
@@ -23,10 +25,47 @@ import { isCinematicActive } from '../cinematicState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from './combatSystem'
 
-const SHELL_MODEL_SRC = 'assets/scene/Models/shell_scaled.glb'
-const SHELL_SCALE = Vector3.create(1, 1, 1)
+// Hand boomerang visibility
+let handBoomerangEntity: Entity | null = null
+let emoteActive = false
+let lastPlayerPos: Vector3 | null = null
+const EMOTE_MOVE_THRESHOLD = 0.1 // player must move this far to cancel emote hide
+
+export function setHandBoomerangEntity(e: Entity) {
+  handBoomerangEntity = e
+  // Listen for emotes on the local player
+  AvatarEmoteCommand.onChange(engine.PlayerEntity, (cmd) => {
+    if (cmd) {
+      emoteActive = true
+      // Snapshot position so we detect when player moves to cancel
+      if (Transform.has(engine.PlayerEntity)) {
+        const p = Transform.get(engine.PlayerEntity).position
+        lastPlayerPos = Vector3.create(p.x, p.y, p.z)
+      }
+      updateHandBoomerangVisibility()
+    }
+  })
+}
+
+function updateHandBoomerangVisibility(): void {
+  if (handBoomerangEntity === null) return
+  // Cancel emote hide once player moves
+  if (emoteActive && Transform.has(engine.PlayerEntity) && lastPlayerPos) {
+    const p = Transform.get(engine.PlayerEntity).position
+    if (Vector3.distance(p, lastPlayerPos) > EMOTE_MOVE_THRESHOLD) {
+      emoteActive = false
+    }
+  }
+  const shouldShow = localShells.length === 0 && !emoteActive && !isCinematicActive()
+  VisibilityComponent.createOrReplace(handBoomerangEntity, { visible: shouldShow })
+}
+
+const SHELL_MODEL_SRC = 'assets/scene/Models/boomerang.g.glb'
+const SHELL_SCALE = Vector3.create(2.5, 3, 2.5)
 const SHELL_STAGGER_MS = 800
 const SHELL_GRAVITY = 15  // m/s² — matches server FLAG_GRAVITY
+const SHELL_SPIN_SPEED = 720 // degrees per second
+const SHELL_CHEST_OFFSET = 0.8 // Y offset from player position to chest height
 const SHELL_GROUND_OFFSET = 0.35 // Raise shell above ground so it doesn't clip terrain — matches server
 const GROUND_RAY_INTERVAL = 0.05 // seconds between ground raycasts for moving shells
 
@@ -38,7 +77,7 @@ const SHELL_SOUND_SRC = 'assets/sounds/mk_shell_short.mp3'
 
 /** Attach a looping spatial shell sound directly to a shell entity. */
 function attachShellSound(entity: Entity): void {
-  AudioSource.create(entity, {
+  AudioSource.createOrReplace(entity, {
     audioClipUrl: SHELL_SOUND_SRC,
     playing: true,
     loop: true,
@@ -55,6 +94,25 @@ function stopShellSound(entity: Entity): void {
     a.volume = 0
     a.loop = false
   }
+}
+
+// ── Error sound (cooldown denial) ──
+let errorSoundEntity: Entity | null = null
+function playErrorSound(): void {
+  if (!errorSoundEntity) {
+    errorSoundEntity = engine.addEntity()
+    Transform.create(errorSoundEntity, { position: Vector3.Zero() })
+    AudioSource.create(errorSoundEntity, {
+      audioClipUrl: 'assets/sounds/error.mp3',
+      playing: false,
+      loop: false,
+      volume: 0.6,
+      global: true
+    })
+  }
+  const a = AudioSource.getMutable(errorSoundEntity)
+  a.currentTime = 0
+  a.playing = true
 }
 
 // ── Client cooldown tracking ──
@@ -244,6 +302,9 @@ interface LocalShell {
   onGround: boolean
   groundRayEntity: Entity | null
   lastGroundRayTime: number
+  spinAngle: number
+  returning: boolean
+  returnDistance: number
 }
 const localShells: LocalShell[] = []
 
@@ -254,7 +315,7 @@ function fireShellLocally(): void {
 
   const spawnPos = Vector3.create(
     playerPos.x + dirX * 1.0,
-    playerPos.y + 0.2,
+    playerPos.y + 0.8,
     playerPos.z + dirZ * 1.0
   )
 
@@ -300,8 +361,12 @@ function fireShellLocally(): void {
     onGround: false,
     groundRayEntity: null,
     lastGroundRayTime: 0,
+    spinAngle: 0,
+    returning: false,
+    returnDistance: 0,
   })
   console.log('[Shell] 🐚 LOCAL shell fired dir:', dirX.toFixed(2), dirZ.toFixed(2))
+  updateHandBoomerangVisibility()
 }
 
 function removeLocalShell(index: number): void {
@@ -311,6 +376,7 @@ function removeLocalShell(index: number): void {
   if (shell.groundRayEntity !== null) engine.removeEntity(shell.groundRayEntity)
   engine.removeEntity(shell.entity)
   localShells.splice(index, 1)
+  updateHandBoomerangVisibility()
 }
 
 function updateLocalShells(dt: number): void {
@@ -339,23 +405,94 @@ function updateLocalShells(dt: number): void {
       continue
     }
 
-    // Move forward on XZ
+    // Move forward or return to player's current position
     const moveDistance = SHELL_SPEED * clampedDt
-    shell.distanceTraveled += moveDistance
-
-    // Hit wall
-    if (shell.distanceTraveled >= shell.maxDistance) {
-      console.log('[Shell] 🐚 LOCAL shell hit wall at', shell.distanceTraveled.toFixed(1), 'm')
-      removeLocalShell(i)
-      continue
+    if (!shell.returning) {
+      shell.distanceTraveled += moveDistance
+      if (shell.distanceTraveled >= shell.maxDistance) {
+        shell.returning = true
+        shell.returnDistance = 0
+        console.log('[Shell] 🐚 LOCAL shell reached max range, returning')
+      }
     }
 
-    // No gravity — straight line at spawn height
-    const newX = shell.startX + shell.dirX * shell.distanceTraveled
-    const newZ = shell.startZ + shell.dirZ * shell.distanceTraveled
-    const t = Transform.getMutable(shell.entity)
-    t.position = Vector3.create(newX, shell.startY, newZ)
+    // Spin the boomerang
+    shell.spinAngle += SHELL_SPIN_SPEED * clampedDt
+
+    if (!shell.returning) {
+      // Outbound — straight line from start
+      const headingDeg = Math.atan2(shell.dirX, shell.dirZ) * (180 / Math.PI)
+      const newX = shell.startX + shell.dirX * shell.distanceTraveled
+      const newZ = shell.startZ + shell.dirZ * shell.distanceTraveled
+      const t = Transform.getMutable(shell.entity)
+      t.position = Vector3.create(newX, shell.startY, newZ)
+      t.rotation = Quaternion.fromEulerDegrees(0, headingDeg + shell.spinAngle, 0)
+    } else {
+      // Returning — home in on player's chest height
+      const shellPos = Transform.get(shell.entity).position
+      const rawPlayerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(shell.startX, shell.startY, shell.startZ)
+      const playerPos = Vector3.create(rawPlayerPos.x, rawPlayerPos.y + SHELL_CHEST_OFFSET, rawPlayerPos.z)
+      const dx = playerPos.x - shellPos.x
+      const dy = playerPos.y - shellPos.y
+      const dz = playerPos.z - shellPos.z
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
+      if (dist < 2.0) {
+        console.log('[Shell] 🐚 LOCAL shell returned to player')
+        removeLocalShell(i)
+        continue
+      }
+
+      const nx = dx / dist, ny = dy / dist, nz = dz / dist
+      const headingDeg = Math.atan2(nx, nz) * (180 / Math.PI)
+      const t = Transform.getMutable(shell.entity)
+      t.position = Vector3.create(shellPos.x + nx * moveDistance, shellPos.y + ny * moveDistance, shellPos.z + nz * moveDistance)
+      t.rotation = Quaternion.fromEulerDegrees(0, headingDeg + shell.spinAngle, 0)
+    }
   }
+}
+
+// ── Shell visual entity pool ──
+// Pre-create a fixed pool of entities with GltfContainer already loaded.
+// Show/hide by moving position + scale instead of create/destroy to avoid
+// the Decentraland engine bug where rapid GltfContainer create/destroy
+// causes models to stop rendering.
+const SHELL_POOL_SIZE = 10
+const shellPool: Entity[] = []
+let shellPoolReady = false
+const SHELL_HIDDEN_POS = Vector3.create(0, -200, 0)
+
+function initShellPool(): void {
+  if (shellPoolReady) return
+  shellPoolReady = true
+  for (let i = 0; i < SHELL_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: SHELL_HIDDEN_POS, scale: Vector3.Zero() })
+    GltfContainer.create(e, {
+      src: SHELL_MODEL_SRC,
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0
+    })
+    shellPool.push(e)
+  }
+  console.log('[Shell] 🐚 Pre-created shell visual pool of', SHELL_POOL_SIZE)
+}
+
+function acquireShellFromPool(): Entity | null {
+  initShellPool()
+  for (const e of shellPool) {
+    const t = Transform.get(e)
+    if (t.position.y < -100) return e
+  }
+  console.error('[Shell] 🐚 Pool exhausted! All', SHELL_POOL_SIZE, 'shell visuals in use.')
+  return null
+}
+
+function releaseShellToPool(entity: Entity): void {
+  stopShellSound(entity)
+  const t = Transform.getMutable(entity)
+  t.position = SHELL_HIDDEN_POS
+  t.scale = Vector3.Zero()
 }
 
 // ── Message-driven visual entities for shells ──
@@ -379,21 +516,21 @@ interface MsgShellVisual {
   onGround: boolean
   groundRayEntity: Entity | null
   lastGroundRayTime: number
+  spinAngle: number
+  returning: boolean
+  returnDistance: number
 }
 const msgShellVisuals: MsgShellVisual[] = []
 
 function createMsgShellVisual(x: number, y: number, z: number, dirX: number, dirZ: number): void {
-  const localEntity = engine.addEntity()
-  Transform.create(localEntity, {
-    position: Vector3.create(x, y, z),
-    scale: SHELL_SCALE,
-    rotation: Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
-  })
-  GltfContainer.create(localEntity, {
-    src: SHELL_MODEL_SRC,
-    visibleMeshesCollisionMask: 0,
-    invisibleMeshesCollisionMask: 0
-  })
+  const localEntity = acquireShellFromPool()
+  if (!localEntity) return
+
+  const t = Transform.getMutable(localEntity)
+  t.position = Vector3.create(x, y, z)
+  t.scale = SHELL_SCALE
+  t.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
+
   attachShellSound(localEntity)
 
   msgShellVisuals.push({
@@ -409,27 +546,36 @@ function createMsgShellVisual(x: number, y: number, z: number, dirX: number, dir
     onGround: false,
     groundRayEntity: null,
     lastGroundRayTime: 0,
+    spinAngle: 0,
+    returning: false,
+    returnDistance: 0,
   })
   console.log('[Shell] 🐚 Created message-driven shell visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))
 }
 
 function removeMsgShellVisualNear(x: number, y: number, z: number): void {
+  // Find the closest shell visual
   let closestIdx = -1
-  let closestDist = Infinity  // Always find the closest shell, no distance cap
+  let closestDist = Infinity
   for (let i = 0; i < msgShellVisuals.length; i++) {
     const vis = msgShellVisuals[i]
     const pos = Transform.get(vis.entity).position
     const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-
     if (dist < closestDist) { closestDist = dist; closestIdx = i }
   }
-  if (closestIdx !== -1) {
-    const vis = msgShellVisuals[closestIdx]
-    stopShellSound(vis.entity)
+  if (closestIdx === -1) return
+
+  const vis = msgShellVisuals[closestIdx]
+  if (vis.returning) {
+    // Already returning — this is a hit on the return trip, actually remove it
     if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
-    engine.removeEntity(vis.entity)
+    releaseShellToPool(vis.entity)
     msgShellVisuals.splice(closestIdx, 1)
+  } else {
+    // Outbound hit — start returning
+    vis.returning = true
+    vis.returnDistance = 0
   }
 }
 
@@ -442,26 +588,56 @@ function updateMsgShellVisuals(dt: number): void {
 
     // Safety expiry
     if (now - vis.createdAtMs > SHELL_LIFETIME_SEC * 1000) {
-      stopShellSound(vis.entity)
       if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
-      engine.removeEntity(vis.entity)
+      releaseShellToPool(vis.entity)
       msgShellVisuals.splice(i, 1)
       continue
     }
 
-    // Move forward
-    vis.distanceTraveled += SHELL_SPEED * clampedDt
-    if (vis.distanceTraveled >= vis.maxDistance) {
-      stopShellSound(vis.entity)
-      if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
-      engine.removeEntity(vis.entity)
-      msgShellVisuals.splice(i, 1)
-      continue
+    // Move forward or return to player's CURRENT position
+    const moveDist = SHELL_SPEED * clampedDt
+    if (!vis.returning) {
+      vis.distanceTraveled += moveDist
+      if (vis.distanceTraveled >= vis.maxDistance) {
+        vis.returning = true
+        vis.returnDistance = 0
+      }
     }
 
-    // No gravity — straight line at spawn height
-    const t = Transform.getMutable(vis.entity)
-    t.position = Vector3.create(vis.startX + vis.dirX * vis.distanceTraveled, vis.startY, vis.startZ + vis.dirZ * vis.distanceTraveled)
+    // Spin the boomerang
+    vis.spinAngle += SHELL_SPIN_SPEED * clampedDt
+
+    if (!vis.returning) {
+      // Outbound — straight line from start
+      const headingDeg = Math.atan2(vis.dirX, vis.dirZ) * (180 / Math.PI)
+      const t = Transform.getMutable(vis.entity)
+      t.position = Vector3.create(vis.startX + vis.dirX * vis.distanceTraveled, vis.startY, vis.startZ + vis.dirZ * vis.distanceTraveled)
+      t.rotation = Quaternion.fromEulerDegrees(0, headingDeg + vis.spinAngle, 0)
+    } else {
+      // Returning — lerp toward player's chest height
+      const shellPos = Transform.get(vis.entity).position
+      const rawPlayerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
+      const playerPos = Vector3.create(rawPlayerPos.x, rawPlayerPos.y + SHELL_CHEST_OFFSET, rawPlayerPos.z)
+      const dx = playerPos.x - shellPos.x
+      const dy = playerPos.y - shellPos.y
+      const dz = playerPos.z - shellPos.z
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
+      if (dist < 2.0) {
+        // Close enough — disappear
+        if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+        releaseShellToPool(vis.entity)
+        msgShellVisuals.splice(i, 1)
+        continue
+      }
+
+      // Move toward player at shell speed
+      const nx = dx / dist, ny = dy / dist, nz = dz / dist
+      const headingDeg = Math.atan2(nx, nz) * (180 / Math.PI)
+      const t = Transform.getMutable(vis.entity)
+      t.position = Vector3.create(shellPos.x + nx * moveDist, shellPos.y + ny * moveDist, shellPos.z + nz * moveDist)
+      t.rotation = Quaternion.fromEulerDegrees(0, headingDeg + vis.spinAngle, 0)
+    }
   }
 }
 
@@ -472,7 +648,7 @@ export function triggerShellFromUI(): void {
   const userId = getPlayerData()?.userId
   if (!userId) return
 
-  if (now - lastLocalShellFireTime < SHELL_COOLDOWN_SEC * 1000) return
+  if (now - lastLocalShellFireTime < SHELL_COOLDOWN_SEC * 1000) { playErrorSound(); return }
 
   lastLocalShellFireTime = now
   const { dirX, dirZ } = getPlayerForward()
@@ -483,7 +659,7 @@ export function triggerShellFromUI(): void {
     room.send('requestShell', { dirX, dirZ })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
-      const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.2, playerPos.z + dirZ * 1.0)
+      const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
       fireWallRaycast(spawnPos, dirX, dirZ)
     }
   } else {
@@ -494,6 +670,7 @@ export function triggerShellFromUI(): void {
 
 // ── Main client system ──
 export function shellClientSystem(dt: number): void {
+  updateHandBoomerangVisibility()
   const now = Date.now()
   const serverUp = isServerConnected()
 
@@ -530,6 +707,7 @@ export function shellClientSystem(dt: number): void {
     if (now - lastLocalShellFireTime < shellCd * 1000) {
       const remaining = ((shellCd * 1000 - (now - lastLocalShellFireTime)) / 1000).toFixed(1)
       console.log('[Shell] E pressed but cooldown active —', remaining, 's remaining')
+      playErrorSound()
       return
     }
 
@@ -542,7 +720,7 @@ export function shellClientSystem(dt: number): void {
 
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position
-        const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.2, playerPos.z + dirZ * 1.0)
+        const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
         fireWallRaycast(spawnPos, dirX, dirZ)
       }
     } else {

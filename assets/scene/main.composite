@@ -2694,27 +2694,6 @@
             "parent": 0
           }
         },
-        "638": {
-          "json": {
-            "position": {
-              "x": 221.5,
-              "y": 2,
-              "z": 288
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
         "639": {
           "json": {
             "position": {
@@ -3194,27 +3173,6 @@
               "y": 0.2587999999523163,
               "z": 0,
               "w": 0.9659000039100647
-            },
-            "parent": 0
-          }
-        },
-        "670": {
-          "json": {
-            "position": {
-              "x": 221.36237716674805,
-              "y": 2,
-              "z": 288.5
-            },
-            "scale": {
-              "x": 0.800000011920929,
-              "y": 0.800000011920929,
-              "z": 0.800000011920929
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
             },
             "parent": 0
           }
@@ -4210,13 +4168,6 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "638": {
-          "json": {
-            "src": "assets/asset-packs/clay_pot/Pot_01/Pot_01.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "639": {
           "json": {
             "src": "assets/scene/Models/mound.glb",
@@ -4354,13 +4305,6 @@
           "json": {
             "src": "assets/scene/Models/mound.glb",
             "visibleMeshesCollisionMask": 3,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "670": {
-          "json": {
-            "src": "assets/asset-packs/clay_pot/Pot_01/Pot_01.glb",
-            "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
@@ -5048,11 +4992,6 @@
             "value": "Flower Sprouts"
           }
         },
-        "638": {
-          "json": {
-            "value": "Clay Pot"
-          }
-        },
         "639": {
           "json": {
             "value": "mound.glb_2"
@@ -5161,11 +5100,6 @@
         "669": {
           "json": {
             "value": "mound.glb"
-          }
-        },
-        "670": {
-          "json": {
-            "value": "Clay Pot_2"
           }
         },
         "671": {
@@ -6297,7 +6231,7 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "669": {
           "json": {
             "gizmo": 0
           }
@@ -6406,12 +6340,10 @@
                   633,
                   636,
                   637,
-                  638,
                   644,
                   646,
                   657,
                   669,
-                  670,
                   674,
                   675,
                   640,
@@ -7036,10 +6968,6 @@
                 "children": []
               },
               {
-                "entity": 638,
-                "children": []
-              },
-              {
                 "entity": 644,
                 "children": []
               },
@@ -7053,10 +6981,6 @@
               },
               {
                 "entity": 669,
-                "children": []
-              },
-              {
-                "entity": 670,
                 "children": []
               },
               {
@@ -7373,9 +7297,6 @@
         "637": {
           "json": {}
         },
-        "638": {
-          "json": {}
-        },
         "639": {
           "json": {}
         },
@@ -7446,9 +7367,6 @@
           "json": {}
         },
         "669": {
-          "json": {}
-        },
-        "670": {
           "json": {}
         },
         "671": {

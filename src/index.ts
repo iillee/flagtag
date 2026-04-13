@@ -1,12 +1,12 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, GltfContainerLoadingState, LoadingState } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, GltfContainerLoadingState, LoadingState, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi, setCinematicFade, setCinematicShowing } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
 import { bananaClientSystem } from './systems/bananaSystem'
-import { shellClientSystem } from './systems/shellSystem'
+import { shellClientSystem, setHandBoomerangEntity } from './systems/shellSystem'
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
@@ -57,6 +57,26 @@ export async function main() {
   setupBeacon()
   setupLadder()
 
+
+  // Attach boomerang to local player's right hand (always visible)
+  const boomerangHand = engine.addEntity()
+  AvatarAttach.create(boomerangHand, {
+    anchorPointId: AvatarAnchorPointType.AAPT_RIGHT_HAND
+  })
+  Transform.create(boomerangHand, { position: Vector3.Zero(), scale: Vector3.One() })
+  const boomerangModel = engine.addEntity()
+  Transform.create(boomerangModel, {
+    parent: boomerangHand,
+    position: Vector3.create(0.04, 0.05, 0),
+    scale: Vector3.create(1, 1, 1),
+    rotation: Quaternion.fromEulerDegrees(0, 0, 90)
+  })
+  GltfContainer.create(boomerangModel, {
+    src: 'assets/scene/Models/boomerang.g.glb',
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
+  setHandBoomerangEntity(boomerangModel)
 
   const local = getPlayer()
   let registeredName = ''

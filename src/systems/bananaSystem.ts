@@ -29,7 +29,7 @@ import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../cinematicState'
 import { isDrownRespawning } from './waterSystem'
 
-const BANANA_MODEL_SRC = 'assets/scene/Models/banana_scaled.glb'
+const BANANA_MODEL_SRC = 'assets/asset-packs/clay_pot/Pot_01/Pot_01.glb'
 const BANANA_SCALE = Vector3.create(1, 1, 1)
 const BANANA_STAGGER_MS = 1000 // Duration when hitting own banana
 
@@ -37,6 +37,25 @@ const BANANA_STAGGER_MS = 1000 // Duration when hitting own banana
 let bananaStaggerUntil = 0
 
 // ── Sound ──
+// ── Error sound (cooldown denial) ──
+let errorSoundEntity: Entity | null = null
+function playErrorSound(): void {
+  if (!errorSoundEntity) {
+    errorSoundEntity = engine.addEntity()
+    Transform.create(errorSoundEntity, { position: Vector3.Zero() })
+    AudioSource.create(errorSoundEntity, {
+      audioClipUrl: 'assets/sounds/error.mp3',
+      playing: false,
+      loop: false,
+      volume: 0.6,
+      global: true
+    })
+  }
+  const a = AudioSource.getMutable(errorSoundEntity)
+  a.currentTime = 0
+  a.playing = true
+}
+
 let bananaDropSoundEntity: Entity | null = null
 let bananaSplatSoundEntity: Entity | null = null
 
@@ -389,6 +408,49 @@ function updateLocalBananas(dt: number): void {
 // break the authoritative server in deployed environments.
 //
 // Instead, for each synced Banana entity we create a LOCAL-ONLY visual entity
+// ── Banana visual entity pool ──
+// Pre-create a fixed pool of entities with GltfContainer already loaded.
+// Show/hide by moving position + scale instead of create/destroy to avoid
+// the Decentraland engine bug where rapid GltfContainer create/destroy
+// causes models to stop rendering.
+const BANANA_POOL_SIZE = 10
+const bananaPool: Entity[] = []
+let bananaPoolReady = false
+const BANANA_HIDDEN_POS = Vector3.create(0, -200, 0)
+
+function initBananaPool(): void {
+  if (bananaPoolReady) return
+  bananaPoolReady = true
+  for (let i = 0; i < BANANA_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: BANANA_HIDDEN_POS, scale: Vector3.Zero() })
+    GltfContainer.create(e, {
+      src: BANANA_MODEL_SRC,
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0
+    })
+    bananaPool.push(e)
+  }
+  console.log('[Banana] 🍌 Pre-created banana visual pool of', BANANA_POOL_SIZE)
+}
+
+function acquireBananaFromPool(): Entity | null {
+  initBananaPool()
+  // Find a pool entity that is currently hidden (at hidden pos)
+  for (const e of bananaPool) {
+    const t = Transform.get(e)
+    if (t.position.y < -100) return e
+  }
+  console.error('[Banana] 🍌 Pool exhausted! All', BANANA_POOL_SIZE, 'banana visuals in use.')
+  return null
+}
+
+function releaseBananaToPool(entity: Entity): void {
+  const t = Transform.getMutable(entity)
+  t.position = BANANA_HIDDEN_POS
+  t.scale = Vector3.Zero()
+}
+
 // ── Message-driven visual entities for bananas ──
 // Visuals are created from the 'bananaDropped' message (WebSocket, instant) rather than
 // from CRDT-synced Banana entities. Mobile live CRDT sync is unreliable.
@@ -407,16 +469,12 @@ interface MsgBananaVisual {
 const msgBananaVisuals: MsgBananaVisual[] = []
 
 function createMsgBananaVisual(x: number, y: number, z: number): void {
-  const localEntity = engine.addEntity()
-  Transform.create(localEntity, {
-    position: Vector3.create(x, y, z),
-    scale: BANANA_SCALE
-  })
-  GltfContainer.create(localEntity, {
-    src: BANANA_MODEL_SRC,
-    visibleMeshesCollisionMask: 0,
-    invisibleMeshesCollisionMask: 0
-  })
+  const localEntity = acquireBananaFromPool()
+  if (!localEntity) return
+
+  const t = Transform.getMutable(localEntity)
+  t.position = Vector3.create(x, y, z)
+  t.scale = BANANA_SCALE
 
   // Fire ground raycast for this visual
   const groundRayEntity = engine.addEntity()
@@ -448,7 +506,7 @@ function removeMsgBananaVisualNear(x: number, y: number, z: number): void {
   if (closestIdx !== -1) {
     const vis = msgBananaVisuals[closestIdx]
     if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
-    engine.removeEntity(vis.entity)
+    releaseBananaToPool(vis.entity)
     msgBananaVisuals.splice(closestIdx, 1)
   }
 }
@@ -463,7 +521,7 @@ function updateMsgBananaVisuals(dt: number): void {
     // Safety expiry
     if (now - vis.createdAtMs > BANANA_LIFETIME_SEC * 1000) {
       if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
-      engine.removeEntity(vis.entity)
+      releaseBananaToPool(vis.entity)
       msgBananaVisuals.splice(i, 1)
       continue
     }
@@ -499,7 +557,7 @@ export function triggerBananaFromUI(): void {
   const userId = getPlayerData()?.userId
   if (!userId) return
 
-  if (now - lastLocalBananaDropTime < BANANA_COOLDOWN_SEC * 1000) return
+  if (now - lastLocalBananaDropTime < BANANA_COOLDOWN_SEC * 1000) { playErrorSound(); return }
 
   lastLocalBananaDropTime = now
   const serverUp = isServerConnected()
@@ -559,6 +617,7 @@ export function bananaClientSystem(dt: number): void {
     if (now - lastLocalBananaDropTime < bananaCd * 1000) {
       const remaining = ((bananaCd * 1000 - (now - lastLocalBananaDropTime)) / 1000).toFixed(1)
       console.log('[Banana] F pressed but cooldown active —', remaining, 's remaining')
+      playErrorSound()
       return
     }
 

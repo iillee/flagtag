@@ -208,11 +208,11 @@ export const SHELL_MAX_ACTIVE = 3
 /** Speed of shell projectile (meters per second). */
 export const SHELL_SPEED = 30
 /** Max range if no wall is detected (meters). */
-export const SHELL_MAX_RANGE = 100
+export const SHELL_MAX_RANGE = 50
 /** Radius for shell hitting a player (meters). */
 export const SHELL_HIT_RADIUS = 2.0
 /** Max time a shell can exist (seconds) — safety net. */
-export const SHELL_LIFETIME_SEC = 5
+export const SHELL_LIFETIME_SEC = 8
 
 /**
  * Sync ID range for shells — monotonically increasing, never recycled.
