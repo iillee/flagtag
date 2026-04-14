@@ -465,8 +465,8 @@ export async function main() {
       reloadCheckFrames++
       for (const [, flag] of engine.getEntitiesWith(Flag)) {
         if (flag.state === FlagState.Carried && flag.carrierPlayerId === local.userId) {
-          console.log('[Main] Detected flag carry on scene load (likely /reload) — requesting drop')
-          room.send('requestDrop', { t: 0 })
+          console.log('[Main] Detected flag carry on scene load (likely /reload) — requesting respawn')
+          room.send('requestReloadRespawn', { t: 0 })
         }
         // Flag data found — remove this system regardless
         engine.removeSystem(reloadDropSystem)

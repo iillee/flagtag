@@ -149,6 +149,7 @@ interface ActiveProjectile {
   distanceTraveled: number
   maxDistance: number
   wallDistReported: boolean
+  hitWall: boolean        // true if maxDistance was shortened by a wall
   // Gravity
   currentY: number
   fallVelocity: number
@@ -812,6 +813,26 @@ function registerHandlers(): void {
       handleDrop(from)
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
+  // Reload-respawn: player reloaded scene while carrying flag → respawn at random point
+  room.onMessage('requestReloadRespawn', (_data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      const flag = Flag.getOrNull(flagEntity)
+      if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== from) return
+      console.log('[Server] 🔄 Player', from.slice(0, 8), 'reloaded while carrying flag — respawning flag')
+      const spawn = getRandomSpawnPoint()
+      const mutable = Flag.getMutable(flagEntity)
+      mutable.state = FlagState.AtBase
+      mutable.carrierPlayerId = ''
+      mutable.baseX = spawn.x
+      mutable.baseY = spawn.y
+      mutable.baseZ = spawn.z
+      const t = Transform.getMutable(flagEntity)
+      t.position = Vector3.create(spawn.x, spawn.y, spawn.z)
+      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+    } catch (err) { console.error('[Server] ❌ requestReloadRespawn handler error:', err) }
+  })
   room.onMessage('requestAttack', (_data, context) => {
     try {
       if (!context) return
@@ -839,7 +860,9 @@ function registerHandlers(): void {
       const from = context.from.toLowerCase()
       for (const projectile of activeProjectiles) {
         if (projectile.firedBy === from && !projectile.wallDistReported) {
+          const oldMax = projectile.maxDistance
           projectile.maxDistance = Math.min(projectile.maxDistance, data.maxDist)
+          if (projectile.maxDistance < oldMax) projectile.hitWall = true
           projectile.wallDistReported = true
           console.log('[Server] 🎯 Projectile wall distance updated:', data.maxDist.toFixed(1), 'm')
           break
@@ -1333,6 +1356,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     distanceTraveled: 0,
     maxDistance: PROJECTILE_MAX_RANGE,
     wallDistReported: false,
+    hitWall: false,
     currentY: spawnPos.y,
     fallVelocity: 0,
     groundY: Math.max(0, playerPos.y - 0.88),  // Approximate ground level from player height (~0.88m avatar offset)
@@ -1381,7 +1405,7 @@ function shellServerSystem(dt: number): void {
         projectile.returnZ = projectile.startZ + projectile.dirZ * projectile.distanceTraveled
         // Send triggered with no victim so client starts return visual
         const projectilePos = Transform.get(projectile.entity).position
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', peak: true })
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', peak: !projectile.hitWall })
       } else {
         // Straight line forward
         const newX = projectile.startX + projectile.dirX * projectile.distanceTraveled
