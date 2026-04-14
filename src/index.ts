@@ -20,6 +20,8 @@ import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
+import { setupRemoteBoomerangs, cleanupRemoteBoomerang } from './systems/remoteBoomerangSystem'
+import { getBoomerangColor } from './gameState/boomerangColor'
 import { setupLadder } from './systems/ladderSystem'
 import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
@@ -79,6 +81,11 @@ export async function main() {
   })
   setHandBoomerangEntity(boomerangModel)
 
+  // Set up remote player boomerang hand models (synced via messages)
+  setupRemoteBoomerangs()
+  // Broadcast initial boomerang color so other players see our hand model
+  room.send('colorChanged', { color: getBoomerangColor() })
+
   const local = getPlayer()
   let registeredName = ''
   if (local) {
@@ -128,6 +135,7 @@ export async function main() {
   onLeaveScene((userId) => {
     removePlayer(userId)
     removePlayerSession(userId)
+    cleanupRemoteBoomerang(userId)
   })
 
   // Background music

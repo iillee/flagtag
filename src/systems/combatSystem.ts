@@ -231,7 +231,8 @@ const pendingMissPositions: Vector3[] = []
 // Optimistic attack prediction — skip the next server VFX if we already played it locally
 let skipNextServerVfx = false
 let skipNextServerVfxExpiry = 0
-const HIT_RADIUS_CLIENT = 2.5 // Must match server HIT_RADIUS
+const HIT_RADIUS_CLIENT = 2.0 // Must match server HIT_RADIUS
+const HIT_CONE_HALF_ANGLE_CLIENT = Math.cos(55 * Math.PI / 180) // ~55° half-angle = 110° cone
 
 // Client-side steal immunity tracking (mirrors server STEAL_IMMUNITY_MS)
 const STEAL_IMMUNITY_MS_CLIENT = 3000
@@ -276,7 +277,13 @@ export function predictAttackLocally(): void {
   const myUserId = getPlayerData()?.userId
   if (!myUserId) return
 
-  // Find closest other player (mirror server logic, including steal immunity check)
+  // Attacker's forward direction (horizontal only)
+  const forward = Vector3.rotate(Vector3.Forward(), myRot)
+  const forwardLen = Math.sqrt(forward.x * forward.x + forward.z * forward.z)
+  const fwdX = forwardLen > 0.01 ? forward.x / forwardLen : 0
+  const fwdZ = forwardLen > 0.01 ? forward.z / forwardLen : 1
+
+  // Find closest other player in front cone (mirror server logic, including steal immunity check)
   let closestPos: Vector3 | null = null
   let closestDist = HIT_RADIUS_CLIENT
   const now = Date.now()
@@ -287,10 +294,19 @@ export function predictAttackLocally(): void {
     const stealTime = clientStealImmunity.get(identity.address) ?? 0
     if (now - stealTime < STEAL_IMMUNITY_MS_CLIENT) continue
     const dist = Vector3.distance(myPos, transform.position)
-    if (dist < closestDist) {
-      closestDist = dist
-      closestPos = Vector3.create(transform.position.x, transform.position.y, transform.position.z)
+    if (dist >= closestDist) continue
+
+    // Cone check: is the victim in front of us?
+    const dx = transform.position.x - myPos.x
+    const dz = transform.position.z - myPos.z
+    const horizDist = Math.sqrt(dx * dx + dz * dz)
+    if (horizDist > 0.01) {
+      const dot = (dx / horizDist) * fwdX + (dz / horizDist) * fwdZ
+      if (dot < HIT_CONE_HALF_ANGLE_CLIENT) continue // outside the cone
     }
+
+    closestDist = dist
+    closestPos = Vector3.create(transform.position.x, transform.position.y, transform.position.z)
   }
 
   // Mark to skip the next server echo (within a generous time window)

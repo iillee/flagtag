@@ -13,7 +13,8 @@ import { room } from '../shared/messages'
 
 // ── Constants ──
 const PICKUP_RADIUS = 3
-const HIT_RADIUS = 3.0
+const HIT_RADIUS = 2.0
+const HIT_CONE_HALF_ANGLE = Math.cos(55 * Math.PI / 180) // ~55° half-angle = 110° cone
 const HIT_COOLDOWN_MS = 450       // Attacker cooldown (how soon they can attack again)
 const STEAL_IMMUNITY_MS = 3000    // Immunity for the player who STEALS the flag (time to escape the crowd)
 const HOLD_TIME_SYNC_INTERVAL = 0.5  // Sync hold time every 0.5s (was 0.2s) — reduces CRDT pressure; client interpolates between updates
@@ -96,6 +97,7 @@ function getOrCreateHoldTimeEntity(userKey: string): Entity {
 
 // ── Visitor tracking ──
 const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesToday: number }>()
+const playerBoomerangColors = new Map<string, string>() // playerId -> color ('r','y','b','g')
 let lastVisitorResetDay = ''
 
 // ── Concurrent user tracking (hourly peaks) ──
@@ -797,6 +799,12 @@ function registerHandlers(): void {
         console.log('[Server] registerName: updated', from.slice(0, 8), '->', data.name)
         persistPlayerNames().catch(e => console.error('[Server] persistPlayerNames error:', e))
       }
+      // Send all existing player boomerang colors to the new joiner
+      for (const [playerId, color] of playerBoomerangColors) {
+        if (playerId !== from) {
+          room.send('playerColorChanged', { playerId, color })
+        }
+      }
     } catch (err) { console.error('[Server] ❌ registerName handler error:', err) }
   })
   room.onMessage('requestPickup', (_data, context) => {
@@ -987,6 +995,19 @@ function registerHandlers(): void {
     } catch (err) { console.error('[Server] ❌ rerollMushroom handler error:', err) }
   })
 
+  // ── Boomerang color change ──
+  room.onMessage('colorChanged', (data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      const color = data.color || 'r'
+      playerBoomerangColors.set(from, color)
+      console.log(`[Server] Player ${from} changed boomerang color to ${color}`)
+      // Broadcast to ALL clients (including sender, so they can confirm)
+      room.send('playerColorChanged', { playerId: from, color })
+    } catch (err) { console.error('[Server] ❌ colorChanged handler error:', err) }
+  })
+
   // ── Updraft location request ──
   room.onMessage('requestUpdraftLocation', (_data, _context) => {
     try {
@@ -1102,8 +1123,16 @@ function handleAttack(attackerId: string): void {
 
   const attackerPos = getPlayerPosition(attackerId)
   if (!attackerPos) return
+  const attackerRot = getPlayerRotation(attackerId)
+  if (!attackerRot) return
 
-  // Find closest victim (excluding immune players)
+  // Attacker's forward direction (horizontal only)
+  const forward = Vector3.rotate(Vector3.Forward(), attackerRot)
+  const forwardLen = Math.sqrt(forward.x * forward.x + forward.z * forward.z)
+  const fwdX = forwardLen > 0.01 ? forward.x / forwardLen : 0
+  const fwdZ = forwardLen > 0.01 ? forward.z / forwardLen : 1
+
+  // Find closest victim in front cone (excluding immune players)
   let closestId: string | null = null
   let closestPos: Vector3 | null = null
   let closestDist = HIT_RADIUS
@@ -1119,12 +1148,20 @@ function handleAttack(attackerId: string): void {
     const pos = getPlayerPosition(victimAddr)
     if (!pos) continue
     const dist = Vector3.distance(attackerPos, pos)
-    
-    if (dist < closestDist) {
-      closestDist = dist
-      closestId = victimAddr
-      closestPos = pos
+    if (dist >= closestDist) continue
+
+    // Cone check: is the victim in front of the attacker?
+    const dx = pos.x - attackerPos.x
+    const dz = pos.z - attackerPos.z
+    const horizDist = Math.sqrt(dx * dx + dz * dz)
+    if (horizDist > 0.01) {
+      const dot = (dx / horizDist) * fwdX + (dz / horizDist) * fwdZ
+      if (dot < HIT_CONE_HALF_ANGLE) continue // outside the cone
     }
+    
+    closestDist = dist
+    closestId = victimAddr
+    closestPos = pos
   }
 
   if (closestId && closestPos) {

@@ -39,7 +39,12 @@ export const Messages = {
   shieldConsumed: Schemas.Map({ playerId: Schemas.String }),
   playerShieldActive: Schemas.Map({ playerId: Schemas.String, active: Schemas.Int }),
 
+  // Boomerang color sync
+  colorChanged: Schemas.Map({ color: Schemas.String }),
+  playerColorChanged: Schemas.Map({ playerId: Schemas.String, color: Schemas.String }),
+
   // Round end respawn
+  requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
   respawnPlayers: Schemas.Map({ t: Schemas.Int }),
 }
 
