@@ -32,6 +32,10 @@ let emoteActive = false
 let lastPlayerPos: Vector3 | null = null
 const EMOTE_MOVE_THRESHOLD = 0.1 // player must move this far to cancel emote hide
 
+// Track when the local player has an active throw (hide hand boomerang)
+let localThrowActive = false
+let localThrowSawVisual = false // set true once msgProjectileVisuals was non-empty after throw
+
 export function setHandBoomerangEntity(e: Entity) {
   handBoomerangEntity = e
   // Listen for emotes on the local player
@@ -48,6 +52,8 @@ export function setHandBoomerangEntity(e: Entity) {
   })
 }
 
+const HAND_BOOMERANG_SCALE = Vector3.create(1, 1.5, 1)
+
 function updateHandBoomerangVisibility(): void {
   if (handBoomerangEntity === null) return
   // Cancel emote hide once player moves
@@ -57,8 +63,16 @@ function updateHandBoomerangVisibility(): void {
       emoteActive = false
     }
   }
-  const shouldShow = localProjectiles.length === 0 && msgProjectileVisuals.length === 0 && !emoteActive && !isCinematicActive()
-  VisibilityComponent.createOrReplace(handBoomerangEntity, { visible: shouldShow })
+  const shouldShow = localProjectiles.length === 0 && !localThrowActive && !emoteActive && !isCinematicActive()
+  // Use scale to hide/show — VisibilityComponent doesn't reliably work on AvatarAttach children
+  if (Transform.has(handBoomerangEntity)) {
+    const t = Transform.getMutable(handBoomerangEntity)
+    const currentlyVisible = t.scale.x > 0
+    if (currentlyVisible !== shouldShow) {
+      console.log(`[HandBoomerang] ${shouldShow ? 'SHOW' : 'HIDE'} | localThrowActive=${localThrowActive} localProj=${localProjectiles.length} msgVis=${msgProjectileVisuals.length} emote=${emoteActive} cinematic=${isCinematicActive()}`)
+    }
+    t.scale = shouldShow ? HAND_BOOMERANG_SCALE : Vector3.Zero()
+  }
 }
 
 function getProjectileModelSrc(): string {
@@ -380,6 +394,7 @@ function removeLocalProjectile(index: number): void {
   if (projectile.groundRayEntity !== null) engine.removeEntity(projectile.groundRayEntity)
   engine.removeEntity(projectile.entity)
   localProjectiles.splice(index, 1)
+  if (localProjectiles.length === 0) localThrowActive = false
   updateHandBoomerangVisibility()
 }
 
@@ -685,6 +700,8 @@ export function triggerProjectileFromUI(): void {
 
   if (serverUp) {
     console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
+    localThrowActive = true; localThrowSawVisual = false
+    updateHandBoomerangVisibility()
     room.send('requestShell', { dirX, dirZ, color: getBoomerangColor() })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
@@ -693,6 +710,8 @@ export function triggerProjectileFromUI(): void {
     }
   } else {
     console.log('[Projectile] 🎯 UI tap — firing projectile locally (no server)')
+    localThrowActive = true; localThrowSawVisual = false
+    updateHandBoomerangVisibility()
     fireProjectileLocally()
   }
 }
@@ -719,6 +738,21 @@ export function projectileClientSystem(dt: number): void {
 
     // Animate message-driven projectile visuals (movement, expiry)
     updateMsgProjectileVisuals(dt)
+
+    // Clear local throw flag when projectile visual has appeared and then gone
+    if (localThrowActive) {
+      if (msgProjectileVisuals.length > 0) {
+        localThrowSawVisual = true
+      } else if (localThrowSawVisual) {
+        // Visual existed and is now gone — boomerang returned
+        localThrowActive = false
+        localThrowSawVisual = false
+      } else if (now - lastLocalProjectileFireTime > PROJECTILE_LIFETIME_SEC * 1000) {
+        // Safety: message never arrived
+        localThrowActive = false
+        localThrowSawVisual = false
+      }
+    }
   } else {
     // Local test mode
     updateLocalProjectiles(dt)
@@ -745,6 +779,8 @@ export function projectileClientSystem(dt: number): void {
 
     if (serverUp) {
       console.log('[Projectile] 🎯 E pressed — requesting projectile fire (server)')
+      localThrowActive = true; localThrowSawVisual = false
+      updateHandBoomerangVisibility()
       room.send('requestShell', { dirX, dirZ, color: getBoomerangColor() })
 
       if (Transform.has(engine.PlayerEntity)) {
@@ -754,6 +790,8 @@ export function projectileClientSystem(dt: number): void {
       }
     } else {
       console.log('[Projectile] 🎯 E pressed — firing projectile locally (no server)')
+      localThrowActive = true; localThrowSawVisual = false
+      updateHandBoomerangVisibility()
       fireProjectileLocally()
     }
   }

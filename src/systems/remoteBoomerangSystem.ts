@@ -74,14 +74,14 @@ function removeRemoteBoomerang(playerId: string): void {
 }
 
 export function setupRemoteBoomerangs(): void {
-  const localUserId = getPlayerData()?.userId?.toLowerCase()
-
   // Listen for color changes from other players
   room.onMessage('playerColorChanged', (data) => {
     const playerId = data.playerId?.toLowerCase()
     if (!playerId) return
 
     // Skip local player — their hand boomerang is managed by projectileSystem
+    // Re-fetch each time since getPlayerData() may return null during early setup
+    const localUserId = getPlayerData()?.userId?.toLowerCase()
     if (localUserId && playerId === localUserId) return
 
     const color = (['r', 'y', 'b', 'g'].includes(data.color) ? data.color : 'r') as BoomerangColor
