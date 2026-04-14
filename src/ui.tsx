@@ -551,8 +551,8 @@ function PlayerListUi() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 8, right: 8 },
-                width: 56,
-                height: 56,
+                width: 80,
+                height: 80,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -594,8 +594,8 @@ function PlayerListUi() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 12, right: 12 },
-                width: 56,
-                height: 56,
+                width: 80,
+                height: 80,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -649,8 +649,8 @@ function PlayerListUi() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 12, right: 12 },
-                width: 56,
-                height: 56,
+                width: 80,
+                height: 80,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -925,8 +925,8 @@ function DesktopLayout() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 12, right: 12 },
-                width: 56,
-                height: 56,
+                width: 80,
+                height: 80,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1113,8 +1113,8 @@ function DesktopLayout() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 12, right: 12 },
-                width: 56,
-                height: 56,
+                width: 80,
+                height: 80,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1281,8 +1281,8 @@ function DesktopLayout() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 12, right: 12 },
-                width: 56,
-                height: 56,
+                width: 80,
+                height: 80,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1925,7 +1925,7 @@ function MobileLayout() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 6, right: 6 },
-                width: 64, height: 64,
+                width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
               onMouseDown={() => { playClickSound(); mobileScoreboardOverlayVisible = false; notifyOverlayClosed() }}
@@ -2008,7 +2008,7 @@ function MobileLayout() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 6, right: 6 },
-                width: 64, height: 64,
+                width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
               onMouseDown={() => { playClickSound(); splashVisible = false; notifyOverlayClosed() }}
@@ -2086,7 +2086,7 @@ function MobileLayout() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 6, right: 6 },
-                width: 64, height: 64,
+                width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
               onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
@@ -2264,7 +2264,7 @@ function MobileLayout() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 6, right: 6 },
-                width: 64, height: 64,
+                width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
               onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
@@ -2370,7 +2370,7 @@ function MobileLayout() {
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: 6, right: 6 },
-                width: 64, height: 64,
+                width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
               onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false); notifyOverlayClosed() }}

@@ -2,7 +2,7 @@ import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, GltfContainerLoadingState, LoadingState, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
-import { setupUi, setCinematicFade, setCinematicShowing } from './ui'
+import { setupUi, setCinematicFade, setCinematicShowing, hideMailboxPopup, hideChestPopup } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
 import { trapClientSystem } from './systems/trapSystem'
@@ -10,7 +10,7 @@ import { projectileClientSystem, setHandBoomerangEntity } from './systems/projec
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
-import { setupSpectator } from './systems/spectatorSystem'
+import { setupSpectator, exitSpectatorMode } from './systems/spectatorSystem'
 import { waterSystem } from './systems/waterSystem'
 import { mailboxSystem } from './systems/mailboxSystem'
 import { chestSystem } from './systems/chestSystem'
@@ -24,9 +24,9 @@ import { setupLadder } from './systems/ladderSystem'
 import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
-import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
-import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
-import { createAnalyticsOverlayEntity } from './components/analyticsOverlayState'
+import { createWinConditionOverlayEntity, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
+import { createLeaderboardOverlayEntity, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
+import { createAnalyticsOverlayEntity, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import './shared/components'
 import { CountdownTimer } from './shared/components'
@@ -731,6 +731,14 @@ export async function main() {
     fadeTimer = FADE_IN_DUR
     cinematicTimer = 10
     setCinematicActive(true)
+
+    // Close all open UIs when cinematic begins
+    setWinConditionOverlayVisible(false)
+    setLeaderboardOverlayVisible(false)
+    setAnalyticsOverlayVisible(false)
+    hideMailboxPopup()
+    hideChestPopup()
+    exitSpectatorMode()
 
     // Delay teleport + camera until screen is fully black
     setTimeout(() => {
