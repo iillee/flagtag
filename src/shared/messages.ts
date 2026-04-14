@@ -45,7 +45,7 @@ export const Messages = {
 
   // Lightning (carrier client → all clients)
   lightningWarning: Schemas.Map({ t: Schemas.Int }),
-  lightningStrike: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+  lightningStrike: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
 
   // Round end respawn
   requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),

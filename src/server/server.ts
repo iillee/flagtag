@@ -69,6 +69,30 @@ let visitorAnalyticsEntity: Entity
 let holdTimeAccum = 0
 let holdTimeCarrierKey = '' // Track WHO we're accumulating for
 
+// ── Lightning state ──
+const LIGHTNING_ROLL_INTERVAL = 5 // seconds between probability rolls
+const LIGHTNING_WARNING_DURATION = 3 // seconds warning before strike
+let lightningRollTimer = 0
+let lightningStrikeScheduled = false
+let lightningWarningTimer = 0
+
+function getLightningStrikeChance(points: number): number {
+  if (points < 100) return 0.0
+  if (points < 200) return 0.05 + (points - 100) / 100 * 0.05  // 5–10%
+  if (points < 250) return 0.10 + (points - 200) / 50 * 0.30   // 10–40%
+  if (points < 280) return 0.40 + (points - 250) / 30 * 0.30   // 40–70%
+  return 0.70 + (points - 280) / 20 * 0.25                     // 70–95%
+}
+
+function getCarrierHoldSeconds(): number {
+  const flag = Flag.getOrNull(flagEntity)
+  if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) return 0
+  const key = flag.carrierPlayerId.toLowerCase()
+  const entity = holdTimeEntities.get(key)
+  if (!entity) return 0
+  return (PlayerFlagHoldTime.getOrNull(entity)?.seconds ?? 0) + (holdTimeCarrierKey === key ? holdTimeAccum : 0)
+}
+
 const lastAttackTime = new Map<string, number>()
 const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
 const holdTimeEntities = new Map<string, Entity>()
@@ -708,6 +732,7 @@ export async function setupServer(): Promise<void> {
   }
   engine.addSystem(safeSystem('flagServerSystem', flagServerSystem))
   engine.addSystem(safeSystem('holdTimeServerSystem', holdTimeServerSystem))
+  engine.addSystem(safeSystem('lightningServerSystem', lightningServerSystem))
   engine.addSystem(safeSystem('playerTrackingSystem', playerTrackingSystem))
   engine.addSystem(safeSystem('countdownServerSystem', countdownServerSystem))
   engine.addSystem(safeSystem('visitorTrackingServerSystem', visitorTrackingServerSystem))
@@ -1761,6 +1786,83 @@ function holdTimeServerSystem(dt: number): void {
   holdTimeAccum = 0
 }
 
+function lightningServerSystem(dt: number): void {
+  const flag = Flag.getOrNull(flagEntity)
+  const carried = flag && flag.state === FlagState.Carried && !!flag.carrierPlayerId
+
+  // Handle active warning countdown
+  if (lightningStrikeScheduled) {
+    lightningWarningTimer += dt
+    if (lightningWarningTimer >= LIGHTNING_WARNING_DURATION) {
+      lightningStrikeScheduled = false
+      lightningWarningTimer = 0
+
+      // Fire the strike at the carrier's current position
+      if (carried) {
+        const carrierId = flag!.carrierPlayerId!
+
+        // Shield blocks lightning
+        if (consumeShield(carrierId)) {
+          console.log('[Server] ⚡🛡️ Lightning blocked by shield for', carrierId.slice(0, 8))
+          // Still show the bolt visually, but no death/flag drop
+          let strikePos = { x: 256, y: 5, z: 256 }
+          for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
+            const identity = PlayerIdentityData.get(entity)
+            if (identity.address.toLowerCase() === carrierId.toLowerCase()) {
+              const t = Transform.getOrNull(entity)
+              if (t) strikePos = { x: t.position.x, y: t.position.y, z: t.position.z }
+              break
+            }
+          }
+          room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId: '' })
+        } else {
+          // Find carrier position from PlayerIdentityData transforms
+          let strikePos = { x: 256, y: 5, z: 256 } // fallback center
+          for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
+            const identity = PlayerIdentityData.get(entity)
+            if (identity.address.toLowerCase() === carrierId.toLowerCase()) {
+              const t = Transform.getOrNull(entity)
+              if (t) strikePos = { x: t.position.x, y: t.position.y, z: t.position.z }
+              break
+            }
+          }
+          console.log('[Server] ⚡ Lightning strike at', strikePos.x.toFixed(1), strikePos.y.toFixed(1), strikePos.z.toFixed(1))
+          // Drop the flag AFTER sending strike so CRDT doesn't race
+          room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId: carrierId })
+
+          const mutable = Flag.getMutable(flagEntity)
+          mutable.state = FlagState.Dropped
+          mutable.carrierPlayerId = ''
+          flushHoldTimeAccum()
+          persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+        }
+      }
+    }
+    return // Don't roll while a strike is pending
+  }
+
+  // No rolling if flag isn't carried
+  if (!carried) {
+    lightningRollTimer = 0
+    return
+  }
+
+  lightningRollTimer += dt
+  if (lightningRollTimer >= LIGHTNING_ROLL_INTERVAL) {
+    lightningRollTimer = 0
+    const score = getCarrierHoldSeconds()
+    const chance = getLightningStrikeChance(score)
+    if (chance > 0 && Math.random() < chance) {
+      console.log(`[Server] ⚡ Lightning roll succeeded! Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
+      lightningStrikeScheduled = true
+      lightningWarningTimer = 0
+      room.send('lightningWarning', { t: 0 })
+    } else if (chance > 0) {
+      console.log(`[Server] ⚡ Lightning roll failed. Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
+    }
+  }
+}
+
 // Track which players are currently connected (detected this frame)
 const currentlyConnected = new Set<string>()
 
@@ -1993,6 +2095,11 @@ async function handleRoundEnd(): Promise<void> {
   mushroomShieldActive.clear()
   spawnMushrooms()
   console.log('[Server] 🍄 Mushrooms respawned for new round')
+
+  // ── 5e. Reset lightning state ──
+  lightningRollTimer = 0
+  lightningStrikeScheduled = false
+  lightningWarningTimer = 0
 
   // ── 6. Reset flag to random spawn point ──
   resetGravityState()

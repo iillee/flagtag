@@ -7,10 +7,10 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { triggerEmote, movePlayerTo } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import { setLightningRespawning } from '../gameState/lightningState'
-import { getPlayersWithHoldTimes } from '../gameState/flagHoldTime'
+
 
 // Lightning bolt config
-const ROLL_INTERVAL = 5       // seconds between probability rolls
+// Lightning rolls are now handled server-side
 const FLASH_DURATION = 0.45   // total duration
 const FLICKER_OFF_START = 0.15 // when the single flicker-off begins
 const FLICKER_OFF_END = 0.22   // when it comes back on
@@ -121,32 +121,11 @@ export function isLightningTextVisible(): boolean {
   return lightningRespawnDelay >= LIGHTNING_FADE_OUT
 }
 
-// Probability thresholds (points → strike chance per roll)
-// Points are seconds of flag hold time
-function getStrikeChance(points: number): number {
-  if (points < 100) return 0.0
-  if (points < 200) return 0.05 + (points - 100) / 100 * 0.05  // 5–10%
-  if (points < 250) return 0.10 + (points - 200) / 50 * 0.30   // 10–40%
-  if (points < 280) return 0.40 + (points - 250) / 30 * 0.30   // 40–70%
-  return 0.70 + (points - 280) / 20 * 0.25                     // 70–95%
-}
-
-/** Get the current carrier's score (seconds of hold time) */
-function getCarrierScore(): number {
-  if (!flagSyncedEntity || !Flag.has(flagSyncedEntity)) return 0
-  const flag = Flag.get(flagSyncedEntity)
-  if (flag.state !== FlagState.Carried || !flag.carrierPlayerId) return 0
-  const carrierId = flag.carrierPlayerId.toLowerCase()
-  const players = getPlayersWithHoldTimes()
-  const carrier = players.find(p => p.userId.toLowerCase() === carrierId)
-  return carrier ? carrier.seconds : 0
-}
-
 // State
 const WARNING_LEAD = 3.0  // seconds before strike for visual warning
 const THUNDER_LEAD = 1.5  // seconds before strike for thunder sound
 
-let rollTimer = 0         // time since last probability roll
+
 let strikeScheduled = false  // a strike has been decided, warning phase active
 let warningTimer = 0      // counts up during warning phase
 let soundPlayed = false
@@ -161,7 +140,7 @@ let thunderEntity: Entity | null = null
 let sparkEntities: Entity[] = []
 let sparkAngle = 0
 let sparksActive = false
-let isLocalCarrier = false  // whether this client's player is the carrier
+
 
 let buzzEntity: Entity | null = null
 
@@ -357,8 +336,8 @@ function rebuildBolt() {
   }
   boltEntities = []
 
-  // Main bolt — target the flag's current position
-  const target = getStrikeTarget()
+  // Use the strike target set by the server message, or fall back to live position
+  const target = strikeTarget ?? getStrikeTarget()
   const path = generateBoltPath(target)
 
   // Move flash light to target
@@ -464,7 +443,7 @@ function handleLocalDeath() {
 export function setupLightningMessages() {
   // All clients: start warning phase when carrier's client decides a strike is coming
   room.onMessage('lightningWarning', () => {
-    console.log('[Lightning] ⚠️ Warning received — strike incoming!')
+    console.log('[Lightning] ⚠️ Warning received from server — strike incoming in 3s!')
     if (!strikeScheduled) {
       strikeScheduled = true
       warningTimer = 0
@@ -474,11 +453,14 @@ export function setupLightningMessages() {
 
   // All clients: show the bolt at the strike position
   room.onMessage('lightningStrike', (msg) => {
-    console.log('[Lightning] ⚡ Received strike message at', msg.x, msg.y, msg.z)
+    console.log('[Lightning] ⚡ Strike received at', msg.x.toFixed(1), msg.y.toFixed(1), msg.z.toFixed(1), 'victim:', msg.victimId)
     executeStrike({ x: msg.x, y: msg.y, z: msg.z })
 
-    // If local player is the carrier, handle death
-    if (isLocalPlayerCarrier()) {
+    // If local player is the victim, handle death
+    const localPlayer = getPlayerData()
+    const isVictim = localPlayer && msg.victimId && localPlayer.userId?.toLowerCase() === msg.victimId.toLowerCase()
+    console.log('[Lightning] Local player:', localPlayer?.userId?.slice(0, 8), 'isVictim:', !!isVictim)
+    if (isVictim) {
       handleLocalDeath()
     }
   })
@@ -593,12 +575,7 @@ export function lightningSystem(dt: number) {
       }
       if (buzzEntity) AudioSource.getMutable(buzzEntity).playing = false
 
-      // Carrier's client broadcasts the strike to all players
-      if (isLocalCarrier) {
-        const target = getStrikeTarget()
-        room.send('lightningStrike', { x: target.x, y: target.y, z: target.z })
-      }
-
+      // Strike is now handled server-side — just clean up warning visuals
       strikeScheduled = false
       warningTimer = 0
       soundPlayed = false
@@ -607,39 +584,14 @@ export function lightningSystem(dt: number) {
     return
   }
 
-  // === Probability roll logic (only carrier's client decides) ===
+  // Clean up sparks if flag is no longer carried
   if (!isFlagCarried()) {
-    rollTimer = 0
-    isLocalCarrier = false
-    // Clean up any lingering visuals
     if (sparksActive) {
       sparksActive = false
       for (const s of sparkEntities) {
         VisibilityComponent.getMutable(s).visible = false
       }
       if (buzzEntity) AudioSource.getMutable(buzzEntity).playing = false
-    }
-    return
-  }
-
-  isLocalCarrier = isLocalPlayerCarrier()
-
-  // Only the carrier's client rolls
-  if (!isLocalCarrier) return
-
-  rollTimer += dt
-  if (rollTimer >= ROLL_INTERVAL) {
-    rollTimer = 0
-
-    const score = getCarrierScore()
-    const chance = getStrikeChance(score)
-
-    if (chance > 0 && Math.random() < chance) {
-      console.log(`[Lightning] 🎲 Strike roll succeeded! Score: ${score}, Chance: ${(chance * 100).toFixed(1)}%`)
-      // Broadcast warning to all clients (including self)
-      room.send('lightningWarning', { t: 0 })
-    } else {
-      console.log(`[Lightning] 🎲 Strike roll failed. Score: ${score}, Chance: ${(chance * 100).toFixed(1)}%`)
     }
   }
 }
