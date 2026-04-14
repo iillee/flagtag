@@ -391,8 +391,9 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
       scene: 'flagtag.dcl.eth',
       date: lastVisitorResetDay,
       unique_users: users.length,
+      total_time_seconds: users.reduce((sum, u) => sum + u.time_seconds, 0),
       peak_concurrent: { count: peakConcurrent, time: peakConcurrentTime },
-      hourly_peak: hourlyPeakConcurrent,
+      hourly_peak: hourlyPeakConcurrent.map((count, hour) => `${hour}:00 - ${count}`),
       users
     }
 
@@ -451,6 +452,28 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
   }
 }
 
+// ── Pre-midnight Discord report ──
+// Send the daily report 5 minutes BEFORE midnight UTC so all data is still intact.
+// The actual reset still happens at midnight UTC.
+let dailyReportSentForDay = ''
+
+async function checkPreMidnightReport(): Promise<void> {
+  const now = new Date()
+  const currentDay = now.toISOString().slice(0, 10)
+  
+  // Already sent today's report
+  if (dailyReportSentForDay === currentDay) return
+  
+  // Send at 23:55 UTC (5 min before midnight = 7:55 PM Eastern EDT)
+  const hour = now.getUTCHours()
+  const minute = now.getUTCMinutes()
+  if (hour === 23 && minute >= 55) {
+    console.log('[Server] 📊 Sending pre-midnight daily analytics report for', currentDay)
+    dailyReportSentForDay = currentDay
+    await sendDailyAnalyticsToDiscord()
+  }
+}
+
 // Check and perform daily visitor reset at 12:00 AM UTC (midnight)
 async function checkVisitorDailyReset(): Promise<boolean> {
   const currentDay = getTodayDateString()
@@ -458,8 +481,12 @@ async function checkVisitorDailyReset(): Promise<boolean> {
   if (lastVisitorResetDay !== currentDay) {
     console.log('[Server] Daily visitor reset at midnight UTC for new day:', currentDay)
     
-    // Send analytics to Discord BEFORE clearing data
-    await sendDailyAnalyticsToDiscord()
+    // Send analytics to Discord as a fallback if the pre-midnight report didn't fire
+    // (e.g. server was down at 23:55 UTC)
+    if (dailyReportSentForDay !== lastVisitorResetDay) {
+      console.log('[Server] Pre-midnight report was missed, sending now before reset')
+      await sendDailyAnalyticsToDiscord()
+    }
     
     lastVisitorResetDay = currentDay
     
@@ -2026,7 +2053,10 @@ function visitorTrackingServerSystem(dt: number): void {
   if (visitorSyncTimer >= 10.0) {
     visitorSyncTimer = 0
     
-    // Check for daily reset
+    // Check if it's time to send the pre-midnight report (23:55 UTC)
+    checkPreMidnightReport().catch(e => console.error('[Server] checkPreMidnightReport error:', e))
+    
+    // Check for daily reset (midnight UTC)
     checkVisitorDailyReset().catch(e => console.error('[Server] checkVisitorDailyReset error:', e))
     
     // Sync current visitor data
