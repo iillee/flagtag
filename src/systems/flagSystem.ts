@@ -44,30 +44,30 @@ let carryCloneVisual: Entity | null = null  // Child entity with model + bob/spi
 function createCarryClone(carrierId: string): void {
   cleanupClone()
 
-  // Anchor entity attached to player's name tag
+  // Anchor entity attached to player's name tag (flag floats above head)
   carryCloneEntity = engine.addEntity()
   AvatarAttach.create(carryCloneEntity, {
     avatarId: carrierId,
-    anchorPointId: AvatarAnchorPointType.AAPT_RIGHT_HAND
+    anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
   })
   Transform.create(carryCloneEntity, {
     position: Vector3.Zero(),
     scale: Vector3.One()
   })
 
-  // Child entity with model — attached to right hand
+  // Child entity with model — bob/spin animated locally
+  // Offset upward ~0.85m above name tag so the flag doesn't clip into the avatar's head
   carryCloneVisual = engine.addEntity()
   Transform.create(carryCloneVisual, {
     parent: carryCloneEntity,
-    position: Vector3.create(0, 0.1, 0),
-    scale: Vector3.create(0.5, 0.5, 0.5)
+    position: Vector3.create(0, 0.85, 0)
   })
   GltfContainer.create(carryCloneVisual, {
     src: BANNER_SRC,
     visibleMeshesCollisionMask: 0,
     invisibleMeshesCollisionMask: 0
   })
-  console.log('[Flag] Clone created (AAPT_RIGHT_HAND)')
+  console.log('[Flag] Clone created (AAPT_NAME_TAG)')
 }
 const BANNER_SRC = 'models/Banner_Red_02/Banner_Red_02.glb'
 

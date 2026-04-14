@@ -1088,5 +1088,6 @@
     "name": "flagtag.dcl.eth"
   },
   "rating": "T",
-  "authoritativeMultiplayer": true
+  "authoritativeMultiplayer": true,
+  "opendcl": true
 }
