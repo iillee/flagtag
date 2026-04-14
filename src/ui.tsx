@@ -1000,9 +1000,9 @@ function DesktopLayout() {
                 <UiEntity uiTransform={{ height: 12 }} />
                 <Label value="•  Walk into the flag to pick it up" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Get close to the carrier to steal the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Attack the carrier to steal the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
                 <Label value="•  Throw boomerang & banana traps to stun your rivals" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
@@ -1018,25 +1018,6 @@ function DesktopLayout() {
                 }}
               >
                 <Label value="Controls" fontSize={24} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: 12 }} />
-
-                {/* LMB — attack/steal */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 34 }}>
-                  <UiEntity
-                    uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <UiEntity
-                      uiTransform={{ width: 29, height: 29 }}
-                      uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/cursor2.png' }, color: WHITE }}
-                    />
-                  </UiEntity>
-                  <Label value="to attack/steal flag" fontSize={16} color={MUTED} font="sans-serif" />
-                  <UiEntity
-                    uiTransform={{ width: 43, height: 43, margin: { left: 8 } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/hit-color.png' }, color: Color4.White() }}
-                  />
-                </UiEntity>
                 <UiEntity uiTransform={{ height: 12 }} />
 
                 {/* E — throw boomerang */}
@@ -1497,33 +1478,6 @@ function DesktopLayout() {
             margin: { bottom: 6 },
           }}
         >
-          {/* Attack (Left Click) */}
-          <UiEntity
-            uiTransform={{
-              width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
-              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              borderRadius: { topLeft: 0, topRight: 38, bottomLeft: 38, bottomRight: 38 },
-            }}
-            uiBackground={{ color: PANEL_BG_SEMI }}
-          >
-            <UiEntity
-              uiTransform={{ positionType: 'absolute', position: { top: 4, left: 1 }, width: 32, height: 32 }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: 'assets/images/cursor2.png' },
-                color: LIGHT_GREY
-              }}
-            />
-            <UiEntity
-              uiTransform={{ width: ABILITY_ICON_SIZE, height: ABILITY_ICON_SIZE, margin: { top: 6 } }}
-              uiBackground={{
-                textureMode: 'stretch',
-                texture: { src: 'assets/images/hit-color.png' },
-                color: isAttackFlickering() ? Color4.create(1, 1, 1, 0.25) : Color4.White()
-              }}
-            />
-          </UiEntity>
-
           {/* Projectile (E) */}
           <UiEntity
             uiTransform={{
@@ -1544,7 +1498,7 @@ function DesktopLayout() {
                 color: isProjectileOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
               }}
             />
-            {isProjectileOnCooldown() && (
+            {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && (
               <Label value={`${getProjectileCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
                 uiTransform={{ positionType: 'absolute' }}
               />
@@ -1896,29 +1850,13 @@ function MobileLayout() {
                     color: isProjectileOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
                   }}
                 />
-                {isProjectileOnCooldown() && (
+                {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && (
                   <Label value={`${getProjectileCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
                     uiTransform={{ positionType: 'absolute' }}
                   />
                 )}
               </UiEntity>
 
-              <UiEntity
-                uiTransform={{
-                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              >
-                <UiEntity
-                  uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
-                  uiBackground={{
-                    textureMode: 'stretch',
-                    texture: { src: 'assets/images/hit-color.png' },
-                    color: isAttackFlickering() ? Color4.create(1, 1, 1, 0.25) : Color4.White()
-                  }}
-                />
-              </UiEntity>
             </UiEntity>
           </UiEntity>
         )
@@ -2155,9 +2093,9 @@ function MobileLayout() {
                 <UiEntity uiTransform={{ height: 14 }} />
                 <Label value="•  Walk into the flag to pick it up" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Get close to the carrier to steal the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Attack the carrier to steal the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
                 <Label value="•  Throw boomerang & banana traps to stun your rivals" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
@@ -2173,25 +2111,6 @@ function MobileLayout() {
                 }}
               >
                 <Label value="Controls" fontSize={30} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: 14 }} />
-
-                {/* LMB — attack/steal */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
-                  <UiEntity
-                    uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <UiEntity
-                      uiTransform={{ width: 34, height: 34 }}
-                      uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/cursor2.png' }, color: WHITE }}
-                    />
-                  </UiEntity>
-                  <Label value="to attack/steal flag" fontSize={22} color={MUTED} font="sans-serif" />
-                  <UiEntity
-                    uiTransform={{ width: 55, height: 55, margin: { left: 8 } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/hit-color.png' }, color: Color4.White() }}
-                  />
-                </UiEntity>
                 <UiEntity uiTransform={{ height: 14 }} />
 
                 {/* E — throw boomerang */}

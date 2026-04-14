@@ -135,15 +135,24 @@ function playErrorSound(): void {
 // ── Client cooldown tracking ──
 let lastLocalProjectileFireTime = 0
 
-/** Returns true if projectile is on cooldown (for UI). */
+/** Returns true if a boomerang is currently in flight (local or server-driven). */
+export function isProjectileInFlight(): boolean {
+  return localProjectiles.length > 0 || localThrowActive
+}
+
+/** Returns true if projectile is unavailable — either on cooldown or in flight (for UI). */
 export function isProjectileOnCooldown(): boolean {
+  // In flight = unavailable
+  if (isProjectileInFlight()) return true
+  // Time-based cooldown (if any)
   if (lastLocalProjectileFireTime === 0) return false
   const cooldown = PROJECTILE_COOLDOWN_SEC
   return (Date.now() - lastLocalProjectileFireTime) < cooldown * 1000
 }
 
-/** Returns cooldown remaining in seconds (0 if ready). */
+/** Returns cooldown remaining in seconds (0 if ready). -1 if boomerang is in flight. */
 export function getProjectileCooldownRemaining(): number {
+  if (isProjectileInFlight()) return -1
   if (lastLocalProjectileFireTime === 0) return 0
   const cooldown = PROJECTILE_COOLDOWN_SEC
   const elapsed = Date.now() - lastLocalProjectileFireTime

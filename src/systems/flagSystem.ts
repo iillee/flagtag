@@ -18,7 +18,6 @@ import {
   VisibilityComponent,
   GltfContainer,
   AudioSource,
-  PointerEvents,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
@@ -26,7 +25,7 @@ import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
-import { predictAttackLocally } from './combatSystem'
+// predictAttackLocally removed — melee attack replaced by proximity steal
 import { isAnyOverlayOpen } from '../ui'
 import { isLightningRespawning } from '../gameState/lightningState'
 import { isCinematicActive } from '../cinematicState'
@@ -342,16 +341,7 @@ export function flagClientSystem(dt: number): void {
     }
   }
 
-  // Left click — attack only (skip if a UI overlay is open, clicking an interactive object, or cinematic is active)
-  if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && userId && !isAnyOverlayOpen() && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
-    const cmd = inputSystem.getInputCommand(InputAction.IA_POINTER, PointerEventType.PET_DOWN)
-    const hitEntity = cmd?.hit?.entityId
-    // Skip attack if the click landed on an entity with pointer events (bench, scope, etc.)
-    if (!hitEntity || !PointerEvents.has(hitEntity as Entity)) {
-      predictAttackLocally()
-      room.send('requestAttack', { t: 0 })
-    }
-  }
+  // Left click — melee attack removed (proximity steal replaces it)
 
   // ── Manual drop (3 key) ──
   if (inputSystem.isTriggered(InputAction.IA_ACTION_5, PointerEventType.PET_DOWN) && userId) {

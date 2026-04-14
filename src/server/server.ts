@@ -13,9 +13,7 @@ import { room } from '../shared/messages'
 
 // ── Constants ──
 const PICKUP_RADIUS = 3
-const HIT_RADIUS = 2.0
-const HIT_CONE_HALF_ANGLE = Math.cos(55 * Math.PI / 180) // ~55° half-angle = 110° cone
-const HIT_COOLDOWN_MS = 450       // Attacker cooldown (how soon they can attack again)
+const PROXIMITY_STEAL_RADIUS = 2.0  // Auto-steal flag when within this distance of carrier
 const STEAL_IMMUNITY_MS = 3000    // Immunity for the player who STEALS the flag (time to escape the crowd)
 const HOLD_TIME_SYNC_INTERVAL = 0.5  // Sync hold time every 0.5s (was 0.2s) — reduces CRDT pressure; client interpolates between updates
 // Bob/spin constants removed — animation is now client-side only
@@ -44,21 +42,7 @@ interface ServerMushroom {
 }
 const activeMushrooms: ServerMushroom[] = []
 let mushroomIdCounter = 0
-const mushroomShieldActive = new Set<string>()  // playerIds with active shields
-
-function hasServerShield(playerId: string): boolean {
-  return mushroomShieldActive.has(playerId)
-}
-
-/** Consume the shield — returns true if player had an active shield */
-function consumeShield(playerId: string): boolean {
-  if (!mushroomShieldActive.has(playerId)) return false
-  mushroomShieldActive.delete(playerId)
-  console.log('[Server] 🛡️ Shield consumed for', playerId.slice(0, 8))
-  room.send('shieldConsumed', { playerId })
-  room.send('playerShieldActive', { playerId, active: 0 })
-  return true
-}
+// mushroomShieldActive removed — mushrooms no longer block hits
 
 // ── Server state ──
 let flagEntity: Entity
@@ -93,7 +77,7 @@ function getCarrierHoldSeconds(): number {
   return (PlayerFlagHoldTime.getOrNull(entity)?.seconds ?? 0) + (holdTimeCarrierKey === key ? holdTimeAccum : 0)
 }
 
-const lastAttackTime = new Map<string, number>()
+// lastAttackTime removed — melee attack replaced by proximity steal
 const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
 const holdTimeEntities = new Map<string, Entity>()
 const knownPlayers = new Set<string>()
@@ -737,6 +721,7 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(safeSystem('countdownServerSystem', countdownServerSystem))
   engine.addSystem(safeSystem('visitorTrackingServerSystem', visitorTrackingServerSystem))
   engine.addSystem(safeSystem('nameResolverServerSystem', nameResolverServerSystem))
+  engine.addSystem(safeSystem('proximityStealSystem', checkProximitySteal))
   engine.addSystem(safeSystem('bananaServerSystem', bananaServerSystem))
   engine.addSystem(safeSystem('shellServerSystem', shellServerSystem))
   engine.addSystem(safeSystem('updraftServerSystem', updraftServerSystem))
@@ -893,13 +878,6 @@ function registerHandlers(): void {
       persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
     } catch (err) { console.error('[Server] ❌ requestReloadRespawn handler error:', err) }
   })
-  room.onMessage('requestAttack', (_data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      handleAttack(from)
-    } catch (err) { console.error('[Server] ❌ requestAttack handler error:', err) }
-  })
   room.onMessage('requestBanana', (_data, context) => {
     try {
       if (!context) return
@@ -1019,10 +997,7 @@ function registerHandlers(): void {
       if (!mushroom || mushroom.pickedUp) return
       mushroom.pickedUp = true
       console.log('[Server] 🍄 Mushroom', mid, 'picked up by', from.slice(0, 8))
-      mushroomShieldActive.add(from)
       room.send('mushroomPickedUp', { id: mid, playerId: from })
-      room.send('mushroomShield', { durationMs: 0, playerId: from })
-      room.send('playerShieldActive', { playerId: from, active: 1 })
       // Spawn a replacement mushroom
       spawnOneMushroom()
     } catch (err) { console.error('[Server] ❌ pickupMushroom handler error:', err) }
@@ -1108,6 +1083,8 @@ function handlePickup(playerId: string): void {
   mutable.carrierPlayerId = playerId
 
   resetGravityState()
+  lastStealTime.set(playerId, Date.now()) // Grant immunity on pickup too
+  room.send('flagImmunity', { playerId, durationMs: STEAL_IMMUNITY_MS })
   room.send('pickupSound', { t: 0 })
   persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
@@ -1162,80 +1139,44 @@ function handleFlagSteal(victimId: string, attackerId: string): void {
 
   lastStealTime.set(attackerId, Date.now())
   resetGravityState()
+  room.send('flagImmunity', { playerId: attackerId, durationMs: STEAL_IMMUNITY_MS })
   room.send('pickupSound', { t: 0 })
   persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 
-function handleAttack(attackerId: string): void {
+/** Proximity steal — called every server tick to check if any player is close enough to steal the flag. */
+function checkProximitySteal(): void {
+  const flag = Flag.getOrNull(flagEntity)
+  if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) return
+
+  const carrierId = flag.carrierPlayerId
+  const carrierPos = getPlayerPosition(carrierId)
+  if (!carrierPos) return
+
   const now = Date.now()
-  
-  const lastAttack = lastAttackTime.get(attackerId) ?? 0
-  if (now - lastAttack < HIT_COOLDOWN_MS) return
-  lastAttackTime.set(attackerId, now)
+  // Carrier has steal immunity — nobody can take it from them yet
+  const carrierStealTime = lastStealTime.get(carrierId) ?? 0
+  if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
 
-  const attackerPos = getPlayerPosition(attackerId)
-  if (!attackerPos) return
-  const attackerRot = getPlayerRotation(attackerId)
-  if (!attackerRot) return
-
-  // Attacker's forward direction (horizontal only)
-  const forward = Vector3.rotate(Vector3.Forward(), attackerRot)
-  const forwardLen = Math.sqrt(forward.x * forward.x + forward.z * forward.z)
-  const fwdX = forwardLen > 0.01 ? forward.x / forwardLen : 0
-  const fwdZ = forwardLen > 0.01 ? forward.z / forwardLen : 1
-
-  // Find closest victim in front cone (excluding immune players)
   let closestId: string | null = null
-  let closestPos: Vector3 | null = null
-  let closestDist = HIT_RADIUS
+  let closestDist = PROXIMITY_STEAL_RADIUS
 
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    const victimAddr = identity.address.toLowerCase()
-    if (victimAddr === attackerId) continue
-    
-    // Check steal immunity (player who just stole the flag gets 3s protection to escape)
-    const stealTime = lastStealTime.get(victimAddr) ?? 0
-    if (now - stealTime < STEAL_IMMUNITY_MS) continue
-    
-    const pos = getPlayerPosition(victimAddr)
-    if (!pos) continue
-    const dist = Vector3.distance(attackerPos, pos)
-    if (dist >= closestDist) continue
+    const addr = identity.address.toLowerCase()
+    if (addr === carrierId) continue
 
-    // Cone check: is the victim in front of the attacker?
-    const dx = pos.x - attackerPos.x
-    const dz = pos.z - attackerPos.z
-    const horizDist = Math.sqrt(dx * dx + dz * dz)
-    if (horizDist > 0.01) {
-      const dot = (dx / horizDist) * fwdX + (dz / horizDist) * fwdZ
-      if (dot < HIT_CONE_HALF_ANGLE) continue // outside the cone
+    const pos = getPlayerPosition(addr)
+    if (!pos) continue
+    const dist = Vector3.distance(carrierPos, pos)
+    if (dist < closestDist) {
+      closestDist = dist
+      closestId = addr
     }
-    
-    closestDist = dist
-    closestId = victimAddr
-    closestPos = pos
   }
 
-  if (closestId && closestPos) {
-    // Shield blocks melee
-    if (consumeShield(closestId)) {
-      console.log('[Server] ⚔️🛡️ Melee blocked by shield for', closestId.slice(0, 8))
-      room.send('missVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
-      return
-    }
-
-    room.send('hitVfx', { x: closestPos.x, y: closestPos.y, z: closestPos.z })
-    room.send('stagger', { victimId: closestId })
-
-    // STEAL flag if victim was carrying
-    const flag = Flag.getOrNull(flagEntity)
-    if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === closestId) {
-      console.log('[Server] ⚔️ Flag stolen:', attackerId.slice(0, 8), '<-', closestId.slice(0, 8))
-      handleFlagSteal(closestId, attackerId)
-    }
-  } else {
-    // Miss — send attacker position, client computes forward offset locally
-    room.send('missVfx', { x: attackerPos.x, y: attackerPos.y, z: attackerPos.z })
+  if (closestId) {
+    console.log('[Server] 🚩 Proximity steal:', closestId.slice(0, 8), '<-', carrierId.slice(0, 8))
+    handleFlagSteal(carrierId, closestId)
   }
 }
 
@@ -1340,22 +1281,16 @@ function bananaServerSystem(dt: number): void {
 
       const dist = Vector3.distance(playerPos, trapPos)
       if (dist < TRAP_TRIGGER_RADIUS) {
-        // Shield blocks the hit — trap is consumed but no stagger/drop
-        if (consumeShield(addr)) {
-          console.log('[Server] 🪤🛡️ Trap blocked by shield for', addr.slice(0, 8))
-          room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
-        } else {
-          console.log('[Server] 🪤 Trap triggered by', addr.slice(0, 8), '! Staggering...')
+        console.log('[Server] 🪤 Trap triggered by', addr.slice(0, 8), '! Staggering...')
 
-          // Drop the flag if the victim is carrying it
-          const flag = Flag.getOrNull(flagEntity)
-          if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-            console.log('[Server] 🪤 Victim was carrying flag — forcing drop!')
-            handleDrop(addr)
-          }
-
-          room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
+        // Drop the flag if the victim is carrying it
+        const flag = Flag.getOrNull(flagEntity)
+        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
+          console.log('[Server] 🪤 Victim was carrying flag — forcing drop!')
+          handleDrop(addr)
         }
+
+        room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
 
         // Remove the trap
         engine.removeEntity(trap.entity)
@@ -1556,22 +1491,16 @@ function shellServerSystem(dt: number): void {
 
       const dist = Vector3.distance(playerPos, projectilePos)
       if (dist < PROJECTILE_HIT_RADIUS) {
-        // Shield blocks the hit — projectile is consumed but no stagger/drop
-        if (consumeShield(addr)) {
-          console.log('[Server] 🎯🛡️ Projectile blocked by shield for', addr.slice(0, 8))
-          room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '' })
-        } else {
-          console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)')
+        console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)')
 
-          // Drop the flag if the victim is carrying it
-          const flag = Flag.getOrNull(flagEntity)
-          if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-            console.log('[Server] 🎯 Victim was carrying flag — forcing drop!')
-            handleDrop(addr)
-          }
-
-          room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr })
+        // Drop the flag if the victim is carrying it
+        const flag = Flag.getOrNull(flagEntity)
+        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
+          console.log('[Server] 🎯 Victim was carrying flag — forcing drop!')
+          handleDrop(addr)
         }
+
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr })
 
         if (projectile.returning) {
           // On return: consumed on hit
@@ -1801,41 +1730,24 @@ function lightningServerSystem(dt: number): void {
       if (carried) {
         const carrierId = flag!.carrierPlayerId!
 
-        // Shield blocks lightning
-        if (consumeShield(carrierId)) {
-          console.log('[Server] ⚡🛡️ Lightning blocked by shield for', carrierId.slice(0, 8))
-          // Still show the bolt visually, but no death/flag drop
-          let strikePos = { x: 256, y: 5, z: 256 }
-          for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
-            const identity = PlayerIdentityData.get(entity)
-            if (identity.address.toLowerCase() === carrierId.toLowerCase()) {
-              const t = Transform.getOrNull(entity)
-              if (t) strikePos = { x: t.position.x, y: t.position.y, z: t.position.z }
-              break
-            }
+        // Find carrier position from PlayerIdentityData transforms
+        let strikePos = { x: 256, y: 5, z: 256 } // fallback center
+        for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
+          const identity = PlayerIdentityData.get(entity)
+          if (identity.address.toLowerCase() === carrierId.toLowerCase()) {
+            const t = Transform.getOrNull(entity)
+            if (t) strikePos = { x: t.position.x, y: t.position.y, z: t.position.z }
+            break
           }
-          room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId: '' })
-        } else {
-          // Find carrier position from PlayerIdentityData transforms
-          let strikePos = { x: 256, y: 5, z: 256 } // fallback center
-          for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
-            const identity = PlayerIdentityData.get(entity)
-            if (identity.address.toLowerCase() === carrierId.toLowerCase()) {
-              const t = Transform.getOrNull(entity)
-              if (t) strikePos = { x: t.position.x, y: t.position.y, z: t.position.z }
-              break
-            }
-          }
-          console.log('[Server] ⚡ Lightning strike at', strikePos.x.toFixed(1), strikePos.y.toFixed(1), strikePos.z.toFixed(1))
-          // Drop the flag AFTER sending strike so CRDT doesn't race
-          room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId: carrierId })
-
-          const mutable = Flag.getMutable(flagEntity)
-          mutable.state = FlagState.Dropped
-          mutable.carrierPlayerId = ''
-          flushHoldTimeAccum()
-          persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
         }
+        console.log('[Server] ⚡ Lightning strike at', strikePos.x.toFixed(1), strikePos.y.toFixed(1), strikePos.z.toFixed(1))
+        room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId: carrierId })
+
+        const mutable = Flag.getMutable(flagEntity)
+        mutable.state = FlagState.Dropped
+        mutable.carrierPlayerId = ''
+        flushHoldTimeAccum()
+        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       }
     }
     return // Don't roll while a strike is pending
@@ -2102,14 +2014,9 @@ async function handleRoundEnd(): Promise<void> {
   console.log('[Server] 🎯 All projectiles cleared for new round')
 
   // ── 5c. Clear combat cooldown maps to prevent memory growth ──
-  lastAttackTime.clear()
   lastStealTime.clear()
 
   // ── 5d. Respawn mushrooms ──
-  for (const pid of mushroomShieldActive) {
-    room.send('playerShieldActive', { playerId: pid, active: 0 })
-  }
-  mushroomShieldActive.clear()
   spawnMushrooms()
   console.log('[Server] 🍄 Mushrooms respawned for new round')
 

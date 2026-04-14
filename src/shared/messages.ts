@@ -37,6 +37,7 @@ export const Messages = {
   mushroomPickedUp: Schemas.Map({ id: Schemas.Int, playerId: Schemas.String }),
   mushroomShield: Schemas.Map({ durationMs: Schemas.Int, playerId: Schemas.String }),
   shieldConsumed: Schemas.Map({ playerId: Schemas.String }),
+  flagImmunity: Schemas.Map({ playerId: Schemas.String, durationMs: Schemas.Int }),
   playerShieldActive: Schemas.Map({ playerId: Schemas.String, active: Schemas.Int }),
 
   // Boomerang color sync

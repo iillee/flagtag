@@ -202,9 +202,9 @@ export const Projectile = engine.defineComponent('ctf-shell', {
 Projectile.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
 /** Cooldown between projectile fires (seconds). */
-export const PROJECTILE_COOLDOWN_SEC = 10
+export const PROJECTILE_COOLDOWN_SEC = 0
 /** Max projectiles one player can have in flight at once. */
-export const PROJECTILE_MAX_ACTIVE = 3
+export const PROJECTILE_MAX_ACTIVE = 1
 /** Speed of projectile (meters per second). */
 export const PROJECTILE_SPEED = 30
 /** Max range if no wall is detected (meters). */

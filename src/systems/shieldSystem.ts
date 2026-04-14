@@ -38,6 +38,7 @@ interface PlayerShield {
   planes: Entity[]
   pulseTime: number
   rotationAngle: number
+  alphaMultiplier: number  // 0–1, used for fade-out
 }
 
 const activeShields = new Map<string, PlayerShield>()
@@ -82,7 +83,7 @@ export function showShieldForPlayer(playerId: string): void {
     planes.push(plane)
   }
 
-  activeShields.set(playerId, { anchor, planes, pulseTime: 0, rotationAngle: 0 })
+  activeShields.set(playerId, { anchor, planes, pulseTime: 0, rotationAngle: 0, alphaMultiplier: 1.0 })
   console.log('[Shield] Forcefield shown for', playerId.slice(0, 8))
 }
 
@@ -115,6 +116,12 @@ export function hideAllShields(): void {
   }
 }
 
+/** Set the alpha multiplier (0–1) for a player's shield, used for fade-out. */
+export function setShieldAlpha(playerId: string, alpha: number): void {
+  const shield = activeShields.get(playerId)
+  if (shield) shield.alphaMultiplier = Math.max(0, Math.min(1, alpha))
+}
+
 export function isShieldVisible(): boolean {
   return activeShields.size > 0
 }
@@ -128,7 +135,7 @@ export function shieldSystem(dt: number): void {
     shield.rotationAngle += ROTATE_SPEED_DEG * dt
 
     const t = (Math.sin(shield.pulseTime * PULSE_SPEED * Math.PI * 2) + 1) / 2
-    const alpha = PULSE_ALPHA_MIN + t * (PULSE_ALPHA_MAX - PULSE_ALPHA_MIN)
+    const alpha = (PULSE_ALPHA_MIN + t * (PULSE_ALPHA_MAX - PULSE_ALPHA_MIN)) * shield.alphaMultiplier
     const scaleMul = PULSE_SCALE_MIN + t * (PULSE_SCALE_MAX - PULSE_SCALE_MIN)
 
     for (let i = 0; i < shield.planes.length; i++) {
@@ -153,7 +160,7 @@ export function shieldSystem(dt: number): void {
         texture: SHIELD_GRADIENT_TEXTURE,
         alphaTexture: SHIELD_GRADIENT_TEXTURE,
         emissiveColor: SHIELD_EMISSIVE,
-        emissiveIntensity: SHIELD_EMISSIVE_INTENSITY,
+        emissiveIntensity: SHIELD_EMISSIVE_INTENSITY * shield.alphaMultiplier,
         roughness: 1.0,
         metallic: 0.0,
         specularIntensity: 0.0,

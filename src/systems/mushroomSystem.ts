@@ -8,7 +8,7 @@ import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
 import { Flag } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
-import { showShield, hideShield, showShieldForPlayer, hideShieldForPlayer, hideAllShields } from './shieldSystem'
+import { showShieldForPlayer, hideShieldForPlayer, hideAllShields, setShieldAlpha } from './shieldSystem'
 
 // ── Constants ──
 const MUSHROOM_MODEL = 'models/mushroom_03.glb'
@@ -96,7 +96,7 @@ function playShieldBreakSound(): void {
 const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
 let positionsRequested = false
-let shieldActive = false
+// shieldActive removed — mushrooms no longer block hits
 
 // ── Trail pool (gold orbs at feet when shield active) ──
 const TRAIL_SPAWN_INTERVAL = 0.08
@@ -290,39 +290,36 @@ room.onMessage('mushroomPositions', (data) => {
     }
   })
 
-  // Server grants shield to a player
-  room.onMessage('mushroomShield', (data) => {
+  // Legacy shield messages — no-op (mushrooms no longer block hits)
+  room.onMessage('mushroomShield', () => {})
+  room.onMessage('shieldConsumed', () => {})
+  room.onMessage('playerShieldActive', () => {})
+
+  // Flag immunity: show shield for duration on flag pickup/steal, fade out over last 1s
+  const FADE_DURATION = 1.0 // seconds
+  const flagImmunityTimers = new Map<string, number>()
+
+  room.onMessage('flagImmunity', (data) => {
     const pid = (data as any).playerId as string
-    const me = getPlayer()
-    if (!me?.userId || me.userId.toLowerCase() !== pid?.toLowerCase()) return
-    shieldActive = true
-    console.log('[Mushroom] 🍄🛡️ Shield active until hit or round end')
-    showShield()
+    const durationMs = (data as any).durationMs as number
+    showShieldForPlayer(pid)
+    setShieldAlpha(pid, 1.0)
+    flagImmunityTimers.set(pid, durationMs / 1000)
   })
 
-  // Server says shield was consumed (blocked a hit)
-  room.onMessage('shieldConsumed', (data) => {
-    const pid = (data as any).playerId as string
-    const me = getPlayer()
-    if (!me?.userId || me.userId.toLowerCase() !== pid?.toLowerCase()) return
-    shieldActive = false
-    console.log('[Mushroom] 🛡️ Shield consumed!')
-    hideShield()
-    hideAllTrailPuffs()
-    playShieldBreakSound()
-  })
-
-  // Broadcast: show/hide shield on any player (including self for other clients)
-  room.onMessage('playerShieldActive', (data) => {
-    const pid = (data as any).playerId as string
-    const active = (data as any).active as number
-    // Skip local player — already handled by mushroomShield/shieldConsumed
-    const me = getPlayer()
-    if (me?.userId?.toLowerCase() === pid.toLowerCase()) return
-    if (active) {
-      showShieldForPlayer(pid)
-    } else {
-      hideShieldForPlayer(pid)
+  engine.addSystem((dt: number) => {
+    for (const [pid, remaining] of flagImmunityTimers) {
+      const next = remaining - dt
+      if (next <= 0) {
+        flagImmunityTimers.delete(pid)
+        hideShieldForPlayer(pid)
+      } else {
+        flagImmunityTimers.set(pid, next)
+        // Fade out during the last FADE_DURATION seconds
+        if (next < FADE_DURATION) {
+          setShieldAlpha(pid, next / FADE_DURATION)
+        }
+      }
     }
   })
 
@@ -425,15 +422,14 @@ export function mushroomClientSystem(dt: number): void {
   }
 }
 
-/** Returns true if the local player currently has a mushroom shield. */
+/** Returns false — mushrooms no longer block hits. */
 export function hasMushroomShield(): boolean {
-  return shieldActive
+  return false
 }
 
-/** Clear shield on round end */
+/** Clear effects on round end */
 export function clearMushroomShield(): void {
-  shieldActive = false
   hideAllShields()
   hideAllTrailPuffs()
-  console.log('[Mushroom] 🛡️ All shields cleared (round end)')
+  console.log('[Mushroom] Effects cleared (round end)')
 }
