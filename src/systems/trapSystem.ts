@@ -418,7 +418,7 @@ const trapPool: Entity[] = []
 let trapPoolReady = false
 const TRAP_HIDDEN_POS = Vector3.create(0, -200, 0)
 
-function initTrapPool(): void {
+export function initTrapPool(): void {
   if (trapPoolReady) return
   trapPoolReady = true
   for (let i = 0; i < TRAP_POOL_SIZE; i++) {

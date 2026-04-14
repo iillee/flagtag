@@ -481,7 +481,7 @@ const projectilePool: Entity[] = []
 let projectilePoolReady = false
 const PROJECTILE_HIDDEN_POS = Vector3.create(0, -200, 0)
 
-function initProjectilePool(): void {
+export function initProjectilePool(): void {
   if (projectilePoolReady) return
   projectilePoolReady = true
   for (let i = 0; i < PROJECTILE_POOL_SIZE; i++) {

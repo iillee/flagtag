@@ -72,7 +72,7 @@ let poolsReady = false
 const HIDDEN_POS = Vector3.create(0, -100, 0)
 const activeVfx: { entity: Entity; expiresAt: number }[] = []
 
-function initPools(): void {
+export function initPools(): void {
   if (poolsReady) return
   poolsReady = true
   for (let i = 0; i < HIT_POOL_SIZE; i++) {

@@ -4,9 +4,9 @@ import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi, setCinematicFade, setCinematicShowing, hideMailboxPopup, hideChestPopup } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
-import { combatClientSystem } from './systems/combatSystem'
-import { trapClientSystem } from './systems/trapSystem'
-import { projectileClientSystem, setHandBoomerangEntity } from './systems/projectileSystem'
+import { combatClientSystem, initPools as initCombatPools } from './systems/combatSystem'
+import { trapClientSystem, initTrapPool } from './systems/trapSystem'
+import { projectileClientSystem, setHandBoomerangEntity, initProjectilePool } from './systems/projectileSystem'
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
@@ -54,6 +54,12 @@ export async function main() {
   console.log('[Main] 🎮 CLIENT MODE - Starting client...')
 
   // ── Client setup ──
+  // Pre-initialize entity pools so GLB models are loaded before first use
+  // (fixes first boomerang/banana being invisible on fresh load)
+  initProjectilePool()
+  initTrapPool()
+  initCombatPools()
+
   createWinConditionOverlayEntity()
   createLeaderboardOverlayEntity()
   createAnalyticsOverlayEntity()
