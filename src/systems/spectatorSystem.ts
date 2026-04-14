@@ -58,7 +58,7 @@ export function setupSpectator() {
     rotation: Quaternion.fromEulerDegrees(0, 180, 0)
   })
   GltfContainer.create(spectatorOrbEntity, {
-    src: 'assets/scene/Models/scope.glb',
+    src: 'models/scope.glb',
     visibleMeshesCollisionMask: 3,
     invisibleMeshesCollisionMask: 0
   })
@@ -78,7 +78,7 @@ export function setupSpectator() {
     rotation: Quaternion.fromEulerDegrees(0, 300, 0)
   })
   GltfContainer.create(spectatorOrb2, {
-    src: 'assets/scene/Models/scope.glb',
+    src: 'models/scope.glb',
     visibleMeshesCollisionMask: 3,
     invisibleMeshesCollisionMask: 0
   })
@@ -97,7 +97,7 @@ export function setupSpectator() {
     rotation: Quaternion.fromEulerDegrees(0, 0, 0)
   })
   GltfContainer.create(spectatorOrb3, {
-    src: 'assets/scene/Models/scope.glb',
+    src: 'models/scope.glb',
     visibleMeshesCollisionMask: 3,
     invisibleMeshesCollisionMask: 0
   })
@@ -116,7 +116,7 @@ export function setupSpectator() {
     rotation: Quaternion.fromEulerDegrees(0, 0, 0)
   })
   GltfContainer.create(spectatorOrb4, {
-    src: 'assets/scene/Models/scope.glb',
+    src: 'models/scope.glb',
     visibleMeshesCollisionMask: 3,
     invisibleMeshesCollisionMask: 0
   })

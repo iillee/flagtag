@@ -295,7 +295,7 @@ export class Portal {
       scale: Vector3.One(),
       parent: this.portalBody,
     })
-    GltfContainer.create(this.frame, { src: 'assets/models/portals/portalFrame.glb' })
+    GltfContainer.create(this.frame, { src: 'models/portalFrame.glb' })
 
     // Orange point light — sits between doors and first layer
     this.portalLight = engine.addEntity()
@@ -468,7 +468,7 @@ export class Portal {
           while (stepTimer >= LOAD_STEP_DELAY && loadedCount < this.layers.length) {
             stepTimer -= LOAD_STEP_DELAY
             const e = this.layers[loadedCount]
-            GltfContainer.createOrReplace(e, { src: 'assets/models/portals/portalLayer2.glb' })
+            GltfContainer.createOrReplace(e, { src: 'models/portalLayer2.glb' })
             loadedCount++
           }
         }

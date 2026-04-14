@@ -4,9 +4,9 @@ import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, VisitorAnalytics,
-  Banana, BANANA_LIFETIME_SEC, BANANA_COOLDOWN_SEC, BANANA_MAX_ACTIVE, BANANA_TRIGGER_RADIUS,
-  Shell, SHELL_LIFETIME_SEC, SHELL_COOLDOWN_SEC, SHELL_MAX_ACTIVE, SHELL_SPEED, SHELL_MAX_RANGE, SHELL_HIT_RADIUS,
-  getHoldTimeEntityEnumId, getNextRoundEndTimeMs, getNextBananaSyncId, getNextShellSyncId,
+  Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
+  Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
+  getHoldTimeEntityEnumId, getNextRoundEndTimeMs, getNextTrapSyncId, getNextProjectileSyncId,
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString
 } from '../shared/components'
 import { room } from '../shared/messages'
@@ -22,7 +22,7 @@ const SPLASH_DURATION_MS = 3000
 const FLAG_GRAVITY = 15          // m/s² (slightly faster than real gravity for snappy game feel)
 const FLAG_MIN_Y = 1.5           // absolute minimum Y (ground plane)
 const CARRIER_Y_WINDOW_SEC = 2.0 // seconds of carrier Y history to estimate ground level
-const BANNER_SRC = 'assets/asset-packs/small_red_banner/Banner_Red_02/Banner_Red_02.glb'
+const BANNER_SRC = 'models/Banner_Red_02/Banner_Red_02.glb'
 
 // ── Mushroom constants ──
 const MUSHROOM_COUNT = 2
@@ -117,12 +117,12 @@ function updateConcurrentTracking(): void {
   }
 }
 
-// ── Banana state ──
-const BANANA_MODEL_SRC = 'assets/asset-packs/clay_pot/Pot_01/Pot_01.glb'
-/** Track last banana drop time per player for cooldown. */
-const lastBananaDropTime = new Map<string, number>()
-/** Track active banana entities for cleanup, with per-banana gravity state. */
-interface ActiveBanana {
+// ── Trap state ──
+const TRAP_MODEL_SRC = 'models/banana_scaled.glb'
+/** Track last trap drop time per player for cooldown. */
+const lastTrapDropTime = new Map<string, number>()
+/** Track active trap entities for cleanup, with per-trap gravity state. */
+interface ActiveTrap {
   entity: Entity
   droppedBy: string
   droppedAtMs: number
@@ -131,13 +131,13 @@ interface ActiveBanana {
   targetY: number          // ground Y estimated by client raycast
   groundResolved: boolean  // true once client raycast has reported ground
 }
-const activeBananas: ActiveBanana[] = []
+const activeTraps: ActiveTrap[] = []
 
-// ── Shell state ──
-const SHELL_MODEL_SRC = 'assets/scene/Models/boomerang.g.glb'
-const SHELL_GROUND_OFFSET = 0.35  // Raise shell above ground so it doesn't clip terrain
-const lastShellFireTime = new Map<string, number>()
-interface ActiveShell {
+// ── Projectile state ──
+const PROJECTILE_MODEL_SRC = 'models/boomerang.r.glb'
+const PROJECTILE_GROUND_OFFSET = 0.35  // Raise projectile above ground so it doesn't clip terrain
+const lastProjectileFireTime = new Map<string, number>()
+interface ActiveProjectile {
   entity: Entity
   firedBy: string
   firedAtMs: number
@@ -153,7 +153,7 @@ interface ActiveShell {
   currentY: number
   fallVelocity: number
   groundY: number        // latest ground height reported by client
-  onGround: boolean      // true once shell has landed on a surface
+  onGround: boolean      // true once projectile has landed on a surface
   // CRDT write throttle — sync distanceTraveled at 10Hz instead of 60fps
   lastSyncedDist: number
   // Boomerang return
@@ -162,8 +162,8 @@ interface ActiveShell {
   returnY: number
   returnZ: number
 }
-const activeShells: ActiveShell[] = []
-const SHELL_SYNC_INTERVAL = 0.1 // seconds between Shell component CRDT writes
+const activeProjectiles: ActiveProjectile[] = []
+const PROJECTILE_SYNC_INTERVAL = 0.1 // seconds between Projectile component CRDT writes
 
 // Gravity state for dropped flag
 let flagFalling = false
@@ -823,25 +823,25 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      handleBananaDrop(from)
+      handleTrapDrop(from)
     } catch (err) { console.error('[Server] ❌ requestBanana handler error:', err) }
   })
   room.onMessage('requestShell', (data, context) => {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      handleShellFire(from, data.dirX, data.dirZ)
+      handleProjectileFire(from, data.dirX, data.dirZ)
     } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
   room.onMessage('reportShellWallDist', (data, context) => {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      for (const shell of activeShells) {
-        if (shell.firedBy === from && !shell.wallDistReported) {
-          shell.maxDistance = Math.min(shell.maxDistance, data.maxDist)
-          shell.wallDistReported = true
-          console.log('[Server] 🐚 Shell wall distance updated:', data.maxDist.toFixed(1), 'm')
+      for (const projectile of activeProjectiles) {
+        if (projectile.firedBy === from && !projectile.wallDistReported) {
+          projectile.maxDistance = Math.min(projectile.maxDistance, data.maxDist)
+          projectile.wallDistReported = true
+          console.log('[Server] 🎯 Projectile wall distance updated:', data.maxDist.toFixed(1), 'm')
           break
         }
       }
@@ -850,16 +850,16 @@ function registerHandlers(): void {
   room.onMessage('reportShellGroundY', (data, context) => {
     try {
       if (!context) return
-      let closest: ActiveShell | null = null
+      let closest: ActiveProjectile | null = null
       let closestDist = 5
-      for (const shell of activeShells) {
-        const pos = Transform.get(shell.entity).position
+      for (const projectile of activeProjectiles) {
+        const pos = Transform.get(projectile.entity).position
         const dx = pos.x - data.shellX
         const dz = pos.z - data.shellZ
         const dist = Math.sqrt(dx * dx + dz * dz)
         if (dist < closestDist) {
           closestDist = dist
-          closest = shell
+          closest = projectile
         }
       }
       if (closest) {
@@ -870,16 +870,16 @@ function registerHandlers(): void {
   room.onMessage('reportBananaGroundY', (data, context) => {
     try {
       if (!context) return
-      let closest: ActiveBanana | null = null
+      let closest: ActiveTrap | null = null
       let closestDist = 3
-      for (const banana of activeBananas) {
-        const pos = Transform.get(banana.entity).position
+      for (const trap of activeTraps) {
+        const pos = Transform.get(trap.entity).position
         const dx = pos.x - data.bananaX
         const dz = pos.z - data.bananaZ
         const dist = Math.sqrt(dx * dx + dz * dz)
         if (dist < closestDist) {
           closestDist = dist
-          closest = banana
+          closest = trap
         }
       }
       if (closest && !closest.groundResolved) {
@@ -1127,162 +1127,162 @@ function handleAttack(attackerId: string): void {
   }
 }
 
-function handleBananaDrop(playerId: string): void {
+function handleTrapDrop(playerId: string): void {
   const now = Date.now()
 
   // Cooldown check
-  const lastDrop = lastBananaDropTime.get(playerId) ?? 0
-  const bananaCd = BANANA_COOLDOWN_SEC
+  const lastDrop = lastTrapDropTime.get(playerId) ?? 0
+  const bananaCd = TRAP_COOLDOWN_SEC
   if (now - lastDrop < bananaCd * 1000) {
-    console.log('[Server] Banana denied: cooldown active, wait', ((bananaCd * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
+    console.log('[Server] Trap denied: cooldown active, wait', ((bananaCd * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
     return
   }
 
-  // Max active banana check
-  const playerBananas = activeBananas.filter(b => b.droppedBy === playerId)
-  if (playerBananas.length >= BANANA_MAX_ACTIVE) {
-    console.log('[Server] Banana denied: max active bananas reached (', BANANA_MAX_ACTIVE, ')')
+  // Max active trap check
+  const playerTraps = activeTraps.filter(b => b.droppedBy === playerId)
+  if (playerTraps.length >= TRAP_MAX_ACTIVE) {
+    console.log('[Server] Trap denied: max active traps reached (', TRAP_MAX_ACTIVE, ')')
     return
   }
 
   // Get player position
   const playerPos = getPlayerPosition(playerId)
   if (!playerPos) {
-    console.log('[Server] Banana denied: player position not found')
+    console.log('[Server] Trap denied: player position not found')
     return
   }
 
-  // Drop banana slightly behind the player (at their feet)
+  // Drop trap slightly behind the player (at their feet)
   const dropPos = Vector3.create(playerPos.x, playerPos.y - 0.2, playerPos.z)
 
-  // Create synced banana entity
-  const bananaEntity = engine.addEntity()
-  Transform.create(bananaEntity, {
+  // Create synced trap entity
+  const trapEntity = engine.addEntity()
+  Transform.create(trapEntity, {
     position: dropPos,
     scale: Vector3.create(1, 1, 1)
   })
   // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
-  Banana.create(bananaEntity, {
+  Trap.create(trapEntity, {
     droppedByPlayerId: playerId,
     droppedAtMs: now,
   })
-  syncEntity(bananaEntity, [Transform.componentId, Banana.componentId], getNextBananaSyncId())
+  syncEntity(trapEntity, [Transform.componentId, Trap.componentId], getNextTrapSyncId())
 
-  activeBananas.push({
-    entity: bananaEntity,
+  activeTraps.push({
+    entity: trapEntity,
     droppedBy: playerId,
     droppedAtMs: now,
     falling: true,
     fallVelocity: 0,
-    targetY: 0,                 // default floor until client reports ground (bananas sit on actual surface)
+    targetY: 0,                 // default floor until client reports ground (traps sit on actual surface)
     groundResolved: false,
   })
-  lastBananaDropTime.set(playerId, now)
+  lastTrapDropTime.set(playerId, now)
 
   // Notify clients for sound/VFX + ground raycast
   room.send('bananaDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z })
 
-  console.log('[Server] 🍌 Banana dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1), '— active bananas:', activeBananas.length)
+  console.log('[Server] 🪤 Trap dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1), '— active traps:', activeTraps.length)
 }
 
-/** Server system: check banana gravity, triggers (player proximity), and expiry. */
+/** Server system: check trap gravity, triggers (player proximity), and expiry. */
 function bananaServerSystem(dt: number): void {
   const now = Date.now()
   const clampedDt = Math.min(dt, 0.1)
 
-  for (let i = activeBananas.length - 1; i >= 0; i--) {
-    const banana = activeBananas[i]
+  for (let i = activeTraps.length - 1; i >= 0; i--) {
+    const trap = activeTraps[i]
 
-    // Gravity — pull banana down to ground
-    if (banana.falling) {
-      banana.fallVelocity += FLAG_GRAVITY * clampedDt
-      const pos = Transform.get(banana.entity).position
-      let newY = pos.y - banana.fallVelocity * clampedDt
-      if (newY <= banana.targetY) {
-        newY = banana.targetY
-        banana.falling = false
-        banana.fallVelocity = 0
+    // Gravity — pull trap down to ground
+    if (trap.falling) {
+      trap.fallVelocity += FLAG_GRAVITY * clampedDt
+      const pos = Transform.get(trap.entity).position
+      let newY = pos.y - trap.fallVelocity * clampedDt
+      if (newY <= trap.targetY) {
+        newY = trap.targetY
+        trap.falling = false
+        trap.fallVelocity = 0
       }
-      const t = Transform.getMutable(banana.entity)
+      const t = Transform.getMutable(trap.entity)
       t.position = Vector3.create(pos.x, newY, pos.z)
     }
 
     // Expiry check
-    const ageMs = now - banana.droppedAtMs
-    if (ageMs > BANANA_LIFETIME_SEC * 1000) {
-      console.log('[Server] 🍌 Banana expired, removing')
-      engine.removeEntity(banana.entity)
-      activeBananas.splice(i, 1)
+    const ageMs = now - trap.droppedAtMs
+    if (ageMs > TRAP_LIFETIME_SEC * 1000) {
+      console.log('[Server] 🪤 Trap expired, removing')
+      engine.removeEntity(trap.entity)
+      activeTraps.splice(i, 1)
       continue
     }
 
     // Trigger check — any player (except the dropper) walks over it
-    const bananaPos = Transform.get(banana.entity).position
+    const trapPos = Transform.get(trap.entity).position
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       const addr = identity.address.toLowerCase()
       // Self-hit: immune for 2 seconds after dropping, then fair game
-      if (addr === banana.droppedBy && (now - banana.droppedAtMs) < 2000) continue
+      if (addr === trap.droppedBy && (now - trap.droppedAtMs) < 2000) continue
 
       const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
 
-      const dist = Vector3.distance(playerPos, bananaPos)
-      if (dist < BANANA_TRIGGER_RADIUS) {
-        // Shield blocks the hit — banana is consumed but no stagger/drop
+      const dist = Vector3.distance(playerPos, trapPos)
+      if (dist < TRAP_TRIGGER_RADIUS) {
+        // Shield blocks the hit — trap is consumed but no stagger/drop
         if (consumeShield(addr)) {
-          console.log('[Server] 🍌🛡️ Banana blocked by shield for', addr.slice(0, 8))
-          room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: '' })
+          console.log('[Server] 🪤🛡️ Trap blocked by shield for', addr.slice(0, 8))
+          room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
         } else {
-          console.log('[Server] 🍌 Banana triggered by', addr.slice(0, 8), '! Staggering...')
+          console.log('[Server] 🪤 Trap triggered by', addr.slice(0, 8), '! Staggering...')
 
           // Drop the flag if the victim is carrying it
           const flag = Flag.getOrNull(flagEntity)
           if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-            console.log('[Server] 🍌 Victim was carrying flag — forcing drop!')
+            console.log('[Server] 🪤 Victim was carrying flag — forcing drop!')
             handleDrop(addr)
           }
 
-          room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: addr })
+          room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
         }
 
-        // Remove the banana
-        engine.removeEntity(banana.entity)
-        activeBananas.splice(i, 1)
-        break // This banana is consumed
+        // Remove the trap
+        engine.removeEntity(trap.entity)
+        activeTraps.splice(i, 1)
+        break // This trap is consumed
       }
     }
   }
 }
 
-function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
+function handleProjectileFire(playerId: string, dirX: number, dirZ: number): void {
   const now = Date.now()
 
   // Cooldown check
-  const lastFire = lastShellFireTime.get(playerId) ?? 0
-  const shellCd = SHELL_COOLDOWN_SEC
+  const lastFire = lastProjectileFireTime.get(playerId) ?? 0
+  const shellCd = PROJECTILE_COOLDOWN_SEC
   if (now - lastFire < shellCd * 1000) {
-    console.log('[Server] Shell denied: cooldown active')
+    console.log('[Server] Projectile denied: cooldown active')
     return
   }
 
   // Max active check
-  const playerShells = activeShells.filter(s => s.firedBy === playerId)
-  if (playerShells.length >= SHELL_MAX_ACTIVE) {
-    console.log('[Server] Shell denied: max active shells reached')
+  const playerProjectiles = activeProjectiles.filter(s => s.firedBy === playerId)
+  if (playerProjectiles.length >= PROJECTILE_MAX_ACTIVE) {
+    console.log('[Server] Projectile denied: max active projectiles reached')
     return
   }
 
   // Get player position
   const playerPos = getPlayerPosition(playerId)
   if (!playerPos) {
-    console.log('[Server] Shell denied: player position not found')
+    console.log('[Server] Projectile denied: player position not found')
     return
   }
 
   // Normalize direction on XZ plane
   const len = Math.sqrt(dirX * dirX + dirZ * dirZ)
   if (len < 0.01) {
-    console.log('[Server] Shell denied: invalid direction')
+    console.log('[Server] Projectile denied: invalid direction')
     return
   }
   const nDirX = dirX / len
@@ -1295,15 +1295,15 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     playerPos.z + nDirZ * 1.0
   )
 
-  // Create synced shell entity
-  const shellEntity = engine.addEntity()
-  Transform.create(shellEntity, {
+  // Create synced projectile entity
+  const projectileEntity = engine.addEntity()
+  Transform.create(projectileEntity, {
     position: spawnPos,
     scale: Vector3.create(1, 1, 1),
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
   })
   // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
-  Shell.create(shellEntity, {
+  Projectile.create(projectileEntity, {
     firedByPlayerId: playerId,
     firedAtMs: now,
     startX: spawnPos.x,
@@ -1312,17 +1312,17 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     dirX: nDirX,
     dirZ: nDirZ,
     distanceTraveled: 0,
-    maxDistance: SHELL_MAX_RANGE,
+    maxDistance: PROJECTILE_MAX_RANGE,
     active: true,
   })
-  // NOTE: Transform is intentionally NOT synced for shells.
-  // Syncing Transform at 60fps per shell saturates the CRDT buffer and freezes
+  // NOTE: Transform is intentionally NOT synced for projectiles.
+  // Syncing Transform at 60fps per projectile saturates the CRDT buffer and freezes
   // ALL synced components (including the scoreboard). Clients use local visual
-  // entities positioned via Shell component data (startX/Y/Z + direction + distanceTraveled).
-  syncEntity(shellEntity, [Shell.componentId], getNextShellSyncId())
+  // entities positioned via Projectile component data (startX/Y/Z + direction + distanceTraveled).
+  syncEntity(projectileEntity, [Projectile.componentId], getNextProjectileSyncId())
 
-  activeShells.push({
-    entity: shellEntity,
+  activeProjectiles.push({
+    entity: projectileEntity,
     firedBy: playerId,
     firedAtMs: now,
     startX: spawnPos.x,
@@ -1331,7 +1331,7 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     dirX: nDirX,
     dirZ: nDirZ,
     distanceTraveled: 0,
-    maxDistance: SHELL_MAX_RANGE,
+    maxDistance: PROJECTILE_MAX_RANGE,
     wallDistReported: false,
     currentY: spawnPos.y,
     fallVelocity: 0,
@@ -1343,164 +1343,164 @@ function handleShellFire(playerId: string, dirX: number, dirZ: number): void {
     returnY: spawnPos.y,
     returnZ: spawnPos.z,
   })
-  lastShellFireTime.set(playerId, now)
+  lastProjectileFireTime.set(playerId, now)
 
   room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ })
-  console.log('[Server] 🐚 Shell fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
+  console.log('[Server] 🎯 Projectile fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 
-/** Server system: move shells forward (and return), check player hits, and handle expiry. */
+/** Server system: move projectiles forward (and return), check player hits, and handle expiry. */
 function shellServerSystem(dt: number): void {
   const now = Date.now()
   const clampedDt = Math.min(dt, 0.1)
 
-  for (let i = activeShells.length - 1; i >= 0; i--) {
-    const shell = activeShells[i]
+  for (let i = activeProjectiles.length - 1; i >= 0; i--) {
+    const projectile = activeProjectiles[i]
 
     // Safety expiry (time-based)
-    if (now - shell.firedAtMs > SHELL_LIFETIME_SEC * 1000) {
-      console.log('[Server] 🐚 Shell expired (timeout)')
-      engine.removeEntity(shell.entity)
-      activeShells.splice(i, 1)
+    if (now - projectile.firedAtMs > PROJECTILE_LIFETIME_SEC * 1000) {
+      console.log('[Server] 🎯 Projectile expired (timeout)')
+      engine.removeEntity(projectile.entity)
+      activeProjectiles.splice(i, 1)
       continue
     }
 
-    const moveDistance = SHELL_SPEED * clampedDt
+    const moveDistance = PROJECTILE_SPEED * clampedDt
 
-    if (!shell.returning) {
+    if (!projectile.returning) {
       // ── Outbound flight ──
-      shell.distanceTraveled += moveDistance
+      projectile.distanceTraveled += moveDistance
 
-      // Check if shell exceeded max range → start returning
-      if (shell.distanceTraveled >= shell.maxDistance) {
-        console.log('[Server] 🐚 Shell reached max range at', shell.distanceTraveled.toFixed(1), 'm — returning')
-        shell.returning = true
+      // Check if projectile exceeded max range → start returning
+      if (projectile.distanceTraveled >= projectile.maxDistance) {
+        console.log('[Server] 🎯 Projectile reached max range at', projectile.distanceTraveled.toFixed(1), 'm — returning')
+        projectile.returning = true
         // Snap position to max range point
-        shell.returnX = shell.startX + shell.dirX * shell.distanceTraveled
-        shell.returnY = shell.startY
-        shell.returnZ = shell.startZ + shell.dirZ * shell.distanceTraveled
+        projectile.returnX = projectile.startX + projectile.dirX * projectile.distanceTraveled
+        projectile.returnY = projectile.startY
+        projectile.returnZ = projectile.startZ + projectile.dirZ * projectile.distanceTraveled
         // Send triggered with no victim so client starts return visual
-        const shellPos = Transform.get(shell.entity).position
-        room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
+        const projectilePos = Transform.get(projectile.entity).position
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', peak: true })
       } else {
         // Straight line forward
-        const newX = shell.startX + shell.dirX * shell.distanceTraveled
-        const newZ = shell.startZ + shell.dirZ * shell.distanceTraveled
-        const t = Transform.getMutable(shell.entity)
-        t.position = Vector3.create(newX, shell.startY, newZ)
-        shell.returnX = newX
-        shell.returnY = shell.startY
-        shell.returnZ = newZ
+        const newX = projectile.startX + projectile.dirX * projectile.distanceTraveled
+        const newZ = projectile.startZ + projectile.dirZ * projectile.distanceTraveled
+        const t = Transform.getMutable(projectile.entity)
+        t.position = Vector3.create(newX, projectile.startY, newZ)
+        projectile.returnX = newX
+        projectile.returnY = projectile.startY
+        projectile.returnZ = newZ
       }
     } else {
       // ── Return flight — home in on shooter's chest height ──
       const CHEST_OFFSET = 0.8
-      const shooterPos = getPlayerPosition(shell.firedBy)
-      const rawTarget = shooterPos || Vector3.create(shell.startX, shell.startY, shell.startZ)
+      const shooterPos = getPlayerPosition(projectile.firedBy)
+      const rawTarget = shooterPos || Vector3.create(projectile.startX, projectile.startY, projectile.startZ)
       const targetPos = Vector3.create(rawTarget.x, rawTarget.y + CHEST_OFFSET, rawTarget.z)
 
-      const dx = targetPos.x - shell.returnX
-      const dy = targetPos.y - shell.returnY
-      const dz = targetPos.z - shell.returnZ
+      const dx = targetPos.x - projectile.returnX
+      const dy = targetPos.y - projectile.returnY
+      const dz = targetPos.z - projectile.returnZ
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
 
-      if (dist < SHELL_HIT_RADIUS) {
+      if (dist < PROJECTILE_HIT_RADIUS) {
         // Returned to shooter — remove silently
-        console.log('[Server] 🐚 Shell returned to shooter')
-        engine.removeEntity(shell.entity)
-        activeShells.splice(i, 1)
+        console.log('[Server] 🎯 Projectile returned to shooter')
+        engine.removeEntity(projectile.entity)
+        activeProjectiles.splice(i, 1)
         continue
       }
 
       // Move toward shooter
       const nx = dx / dist, ny = dy / dist, nz = dz / dist
-      shell.returnX += nx * moveDistance
-      shell.returnY += ny * moveDistance
-      shell.returnZ += nz * moveDistance
-      const t = Transform.getMutable(shell.entity)
-      t.position = Vector3.create(shell.returnX, shell.returnY, shell.returnZ)
+      projectile.returnX += nx * moveDistance
+      projectile.returnY += ny * moveDistance
+      projectile.returnZ += nz * moveDistance
+      const t = Transform.getMutable(projectile.entity)
+      t.position = Vector3.create(projectile.returnX, projectile.returnY, projectile.returnZ)
     }
 
     // Update synced component — throttled to avoid CRDT saturation.
-    const distDelta = shell.distanceTraveled - shell.lastSyncedDist
-    if (distDelta >= SHELL_SPEED * SHELL_SYNC_INTERVAL) {
-      const shellComp = Shell.getMutable(shell.entity)
-      shellComp.distanceTraveled = shell.distanceTraveled
-      shell.lastSyncedDist = shell.distanceTraveled
+    const distDelta = projectile.distanceTraveled - projectile.lastSyncedDist
+    if (distDelta >= PROJECTILE_SPEED * PROJECTILE_SYNC_INTERVAL) {
+      const shellComp = Projectile.getMutable(projectile.entity)
+      shellComp.distanceTraveled = projectile.distanceTraveled
+      projectile.lastSyncedDist = projectile.distanceTraveled
     }
 
     // Check player hits — any player (except the shooter on outbound, ALL players on return)
-    const shellPos = Transform.get(shell.entity).position
+    const projectilePos = Transform.get(projectile.entity).position
     let shellConsumed = false
 
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       const addr = identity.address.toLowerCase()
       // Skip the shooter — can't hit yourself with your own boomerang
-      if (addr === shell.firedBy) continue
+      if (addr === projectile.firedBy) continue
 
       const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
 
-      const dist = Vector3.distance(playerPos, shellPos)
-      if (dist < SHELL_HIT_RADIUS) {
-        // Shield blocks the hit — shell is consumed but no stagger/drop
+      const dist = Vector3.distance(playerPos, projectilePos)
+      if (dist < PROJECTILE_HIT_RADIUS) {
+        // Shield blocks the hit — projectile is consumed but no stagger/drop
         if (consumeShield(addr)) {
-          console.log('[Server] 🐚🛡️ Shell blocked by shield for', addr.slice(0, 8))
-          room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
+          console.log('[Server] 🎯🛡️ Projectile blocked by shield for', addr.slice(0, 8))
+          room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '' })
         } else {
-          console.log('[Server] 🐚 Shell hit player', addr.slice(0, 8), shell.returning ? '(return)' : '(outbound)')
+          console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)')
 
           // Drop the flag if the victim is carrying it
           const flag = Flag.getOrNull(flagEntity)
           if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-            console.log('[Server] 🐚 Victim was carrying flag — forcing drop!')
+            console.log('[Server] 🎯 Victim was carrying flag — forcing drop!')
             handleDrop(addr)
           }
 
-          room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: addr })
+          room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr })
         }
 
-        if (shell.returning) {
+        if (projectile.returning) {
           // On return: consumed on hit
-          engine.removeEntity(shell.entity)
-          activeShells.splice(i, 1)
+          engine.removeEntity(projectile.entity)
+          activeProjectiles.splice(i, 1)
           shellConsumed = true
         } else {
           // On outbound: hit triggers return, keep flying back
-          shell.returning = true
-          shell.returnX = shellPos.x
-          shell.returnY = shellPos.y
-          shell.returnZ = shellPos.z
-          console.log('[Server] 🐚 Shell hit on outbound — returning to shooter')
+          projectile.returning = true
+          projectile.returnX = projectilePos.x
+          projectile.returnY = projectilePos.y
+          projectile.returnZ = projectilePos.z
+          console.log('[Server] 🎯 Projectile hit on outbound — returning to shooter')
         }
         break
       }
     }
     if (shellConsumed) continue
 
-    // Check banana collision — shell destroys the banana, then returns
-    for (let j = activeBananas.length - 1; j >= 0; j--) {
-      const banana = activeBananas[j]
-      const bananaPos = Transform.get(banana.entity).position
-      const dist = Vector3.distance(shellPos, bananaPos)
-      if (dist < SHELL_HIT_RADIUS) {
-        console.log('[Server] 🐚🍌 Shell hit banana!', shell.returning ? 'Both destroyed.' : 'Banana destroyed, shell returning.')
-        room.send('shellTriggered', { x: shellPos.x, y: shellPos.y, z: shellPos.z, victimId: '' })
-        room.send('bananaTriggered', { x: bananaPos.x, y: bananaPos.y, z: bananaPos.z, victimId: '' })
-        engine.removeEntity(banana.entity)
-        activeBananas.splice(j, 1)
+    // Check trap collision — projectile destroys the trap, then returns
+    for (let j = activeTraps.length - 1; j >= 0; j--) {
+      const trap = activeTraps[j]
+      const trapPos = Transform.get(trap.entity).position
+      const dist = Vector3.distance(projectilePos, trapPos)
+      if (dist < PROJECTILE_HIT_RADIUS) {
+        console.log('[Server] 🎯🪤 Projectile hit trap!', projectile.returning ? 'Both destroyed.' : 'Trap destroyed, projectile returning.')
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '' })
+        room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
+        engine.removeEntity(trap.entity)
+        activeTraps.splice(j, 1)
 
-        if (shell.returning) {
+        if (projectile.returning) {
           // On return: consumed
-          engine.removeEntity(shell.entity)
-          activeShells.splice(i, 1)
+          engine.removeEntity(projectile.entity)
+          activeProjectiles.splice(i, 1)
           shellConsumed = true
         } else {
-          // On outbound: banana destroyed, shell returns
-          shell.returning = true
-          shell.returnX = shellPos.x
-          shell.returnY = shellPos.y
-          shell.returnZ = shellPos.z
+          // On outbound: trap destroyed, projectile returns
+          projectile.returning = true
+          projectile.returnX = projectilePos.x
+          projectile.returnY = projectilePos.y
+          projectile.returnZ = projectilePos.z
         }
         break
       }
@@ -1878,21 +1878,21 @@ async function handleRoundEnd(): Promise<void> {
     await persistLeaderboard(json)
   }
 
-  // ── 5. Remove all active bananas ──
-  for (const banana of activeBananas) {
-    engine.removeEntity(banana.entity)
+  // ── 5. Remove all active traps ──
+  for (const trap of activeTraps) {
+    engine.removeEntity(trap.entity)
   }
-  activeBananas.length = 0
-  lastBananaDropTime.clear()
-  console.log('[Server] 🍌 All bananas cleared for new round')
+  activeTraps.length = 0
+  lastTrapDropTime.clear()
+  console.log('[Server] 🪤 All traps cleared for new round')
 
-  // ── 5b. Remove all active shells ──
-  for (const shell of activeShells) {
-    engine.removeEntity(shell.entity)
+  // ── 5b. Remove all active projectiles ──
+  for (const projectile of activeProjectiles) {
+    engine.removeEntity(projectile.entity)
   }
-  activeShells.length = 0
-  lastShellFireTime.clear()
-  console.log('[Server] 🐚 All shells cleared for new round')
+  activeProjectiles.length = 0
+  lastProjectileFireTime.clear()
+  console.log('[Server] 🎯 All projectiles cleared for new round')
 
   // ── 5c. Clear combat cooldown maps to prevent memory growth ──
   lastAttackTime.clear()

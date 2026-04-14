@@ -6,8 +6,8 @@ import {
   getCurrentFlagCarrierUserId,
   getKnownPlayerName
 } from './gameState/flagHoldTime'
-import { isBananaOnCooldown, getBananaCooldownRemaining } from './systems/bananaSystem'
-import { isShellOnCooldown, getShellCooldownRemaining } from './systems/shellSystem'
+import { isTrapOnCooldown, getTrapCooldownRemaining } from './systems/trapSystem'
+import { isProjectileOnCooldown, getProjectileCooldownRemaining } from './systems/projectileSystem'
 import { clearMushroomShield } from './systems/mushroomSystem'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries } from './gameState/roundsWon'
@@ -893,7 +893,7 @@ function DesktopLayout() {
                 <UiEntity uiTransform={{ height: 12 }} />
                 <Label value="•  Attack the carrier to steal the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Deploy shells and banana traps to stun your rivals" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Throw boomerang & banana traps to stun your rivals" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 12 }} />
                 <Label value="•  The player with the most points after 5 min. wins!" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
               </UiEntity>
@@ -928,7 +928,7 @@ function DesktopLayout() {
                 </UiEntity>
                 <UiEntity uiTransform={{ height: 12 }} />
 
-                {/* E — fire shell */}
+                {/* E — throw boomerang */}
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 34 }}>
                   <UiEntity
                     uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
@@ -936,10 +936,10 @@ function DesktopLayout() {
                   >
                     <Label value="E" fontSize={16} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="to fire shell" fontSize={16} color={MUTED} font="sans-serif" />
+                  <Label value="to throw boomerang" fontSize={16} color={MUTED} font="sans-serif" />
                   <UiEntity
                     uiTransform={{ width: 41, height: 41, margin: { left: 8 } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/shell-color.png' }, color: Color4.White() }}
+                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/boomerang.r.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
                 <UiEntity uiTransform={{ height: 12 }} />
@@ -1412,7 +1412,7 @@ function DesktopLayout() {
             />
           </UiEntity>
 
-          {/* Shell (E) */}
+          {/* Projectile (E) */}
           <UiEntity
             uiTransform={{
               width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
@@ -1425,21 +1425,21 @@ function DesktopLayout() {
               uiTransform={{ positionType: 'absolute', position: { top: -2, left: 5 } }}
             />
             <UiEntity
-              uiTransform={{ width: ABILITY_ICON_SIZE - 6, height: ABILITY_ICON_SIZE - 6, margin: { top: 6 } }}
+              uiTransform={{ width: (ABILITY_ICON_SIZE - 6) * 1.5, height: (ABILITY_ICON_SIZE - 6) * 1.5, margin: { top: -2 } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png' },
-                color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : 'assets/images/boomerang.r.png' },
+                color: isProjectileOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
               }}
             />
-            {isShellOnCooldown() && (
-              <Label value={`${getShellCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+            {isProjectileOnCooldown() && (
+              <Label value={`${getProjectileCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
                 uiTransform={{ positionType: 'absolute' }}
               />
             )}
           </UiEntity>
 
-          {/* Banana (F) */}
+          {/* Trap (F) */}
           <UiEntity
             uiTransform={{
               width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
@@ -1455,12 +1455,12 @@ function DesktopLayout() {
               uiTransform={{ width: ABILITY_ICON_SIZE, height: ABILITY_ICON_SIZE, margin: { top: 6 } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
-                color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                texture: { src: isTrapOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
+                color: isTrapOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
               }}
             />
-            {isBananaOnCooldown() && (
-              <Label value={`${getBananaCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+            {isTrapOnCooldown() && (
+              <Label value={`${getTrapCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
                 uiTransform={{ positionType: 'absolute' }}
               />
             )}
@@ -1759,12 +1759,12 @@ function MobileLayout() {
                   uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
                   uiBackground={{
                     textureMode: 'stretch',
-                    texture: { src: isBananaOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
-                    color: isBananaOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                    texture: { src: isTrapOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
+                    color: isTrapOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
                   }}
                 />
-                {isBananaOnCooldown() && (
-                  <Label value={`${getBananaCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+                {isTrapOnCooldown() && (
+                  <Label value={`${getTrapCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
                     uiTransform={{ positionType: 'absolute' }}
                   />
                 )}
@@ -1779,15 +1779,15 @@ function MobileLayout() {
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               >
                 <UiEntity
-                  uiTransform={{ width: M_ICON_SIZE - 4, height: M_ICON_SIZE - 4 }}
+                  uiTransform={{ width: (M_ICON_SIZE - 4) * 1.5, height: (M_ICON_SIZE - 4) * 1.5 }}
                   uiBackground={{
                     textureMode: 'stretch',
-                    texture: { src: isShellOnCooldown() ? 'assets/images/shell-bw.png' : 'assets/images/shell-color.png' },
-                    color: isShellOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                    texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : 'assets/images/boomerang.r.png' },
+                    color: isProjectileOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
                   }}
                 />
-                {isShellOnCooldown() && (
-                  <Label value={`${getShellCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+                {isProjectileOnCooldown() && (
+                  <Label value={`${getProjectileCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
                     uiTransform={{ positionType: 'absolute' }}
                   />
                 )}
@@ -2049,7 +2049,7 @@ function MobileLayout() {
                 <UiEntity uiTransform={{ height: 14 }} />
                 <Label value="•  Attack the carrier to steal the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Deploy shells and banana traps to stun your rivals" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="•  Throw boomerang & banana traps to stun your rivals" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
                 <UiEntity uiTransform={{ height: 14 }} />
                 <Label value="•  The player with the most points after 5 min. wins!" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
               </UiEntity>
@@ -2084,7 +2084,7 @@ function MobileLayout() {
                 </UiEntity>
                 <UiEntity uiTransform={{ height: 14 }} />
 
-                {/* E — fire shell */}
+                {/* E — throw boomerang */}
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
                   <UiEntity
                     uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
@@ -2092,10 +2092,10 @@ function MobileLayout() {
                   >
                     <Label value="E" fontSize={22} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="to fire shell" fontSize={22} color={MUTED} font="sans-serif" />
+                  <Label value="to throw boomerang" fontSize={22} color={MUTED} font="sans-serif" />
                   <UiEntity
                     uiTransform={{ width: 52, height: 52, margin: { left: 8 } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/shell-color.png' }, color: Color4.White() }}
+                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/boomerang.r.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
                 <UiEntity uiTransform={{ height: 14 }} />

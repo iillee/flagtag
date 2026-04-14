@@ -5,8 +5,8 @@ import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi, setCinematicFade, setCinematicShowing } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem } from './systems/combatSystem'
-import { bananaClientSystem } from './systems/bananaSystem'
-import { shellClientSystem, setHandBoomerangEntity } from './systems/shellSystem'
+import { trapClientSystem } from './systems/trapSystem'
+import { projectileClientSystem, setHandBoomerangEntity } from './systems/projectileSystem'
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
@@ -67,12 +67,12 @@ export async function main() {
   const boomerangModel = engine.addEntity()
   Transform.create(boomerangModel, {
     parent: boomerangHand,
-    position: Vector3.create(0.04, 0.05, 0),
-    scale: Vector3.create(1, 1, 1),
+    position: Vector3.create(0.04, 0.15, 0.1),
+    scale: Vector3.create(1, 1.5, 1),
     rotation: Quaternion.fromEulerDegrees(0, 0, 90)
   })
   GltfContainer.create(boomerangModel, {
-    src: 'assets/scene/Models/boomerang.g.glb',
+    src: 'models/boomerang.r.glb',
     visibleMeshesCollisionMask: 0,
     invisibleMeshesCollisionMask: 0
   })
@@ -499,10 +499,10 @@ export async function main() {
   // NOTE: Keep these entities in the composite! They mark podium positions for 1st/2nd/3rd place.
   // Red=1st, Gold=2nd, Blue=3rd, Green=camera target. Hidden here to be invisible at runtime.
   const PODIUM_CUBE_SRCS = new Set([
-    'assets/asset-packs/solid_red/solid_red.glb',
-    'assets/asset-packs/gold/gold.glb',
-    'assets/asset-packs/solid_blue/solid_blue.glb',
-    'assets/asset-packs/solid_green/solid_green.glb',
+    'models/solid_red.glb',
+    'models/gold.glb',
+    'models/solid_blue.glb',
+    'models/solid_green.glb',
   ])
   const hiddenPodiumCubes = new Set<Entity>()
 
@@ -552,8 +552,8 @@ export async function main() {
   engine.addSystem(combatClientSystem)
   engine.addSystem(beaconClientSystem)
   engine.addSystem(nameResolverSystem)
-  engine.addSystem(bananaClientSystem)
-  engine.addSystem(shellClientSystem)
+  engine.addSystem(trapClientSystem)
+  engine.addSystem(projectileClientSystem)
   engine.addSystem(mushroomClientSystem)
   engine.addSystem(shieldSystem)
   engine.addSystem(updateHoldTimeInterpolation)

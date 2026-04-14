@@ -3764,595 +3764,595 @@
       "data": {
         "512": {
           "json": {
-            "src": "assets/asset-packs/street_mailbox/MailPost_01/MailPost_01.glb",
+            "src": "models/MailPost_01/MailPost_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "514": {
           "json": {
-            "src": "assets/scene/Models/volcano.glb",
+            "src": "models/volcano.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "515": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "516": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "517": {
           "json": {
-            "src": "assets/asset-packs/caribbean_water/WaterPatchFull_01/WaterPatchFull_01.glb",
+            "src": "models/WaterPatchFull_01/WaterPatchFull_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "518": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "519": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "520": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "521": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "522": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "523": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "524": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "525": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "526": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "527": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "528": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "529": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "530": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "531": {
           "json": {
-            "src": "assets/asset-packs/lilypad/LilyPad_01/LilyPad_01.glb",
+            "src": "models/LilyPad_01/LilyPad_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "533": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "537": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "540": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "543": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "545": {
           "json": {
-            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "src": "models/TNT Box Closed.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "548": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "550": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "553": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "557": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "560": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "563": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "565": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "567": {
           "json": {
-            "src": "assets/scene/Models/props.glb",
+            "src": "models/props.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "569": {
           "json": {
-            "src": "assets/scene/Models/plants.glb",
+            "src": "models/plants.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "570": {
           "json": {
-            "src": "assets/scene/Models/birds.glb",
+            "src": "models/birds.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "571": {
           "json": {
-            "src": "assets/scene/Models/lights.glb",
+            "src": "models/lights.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 0
           }
         },
         "575": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "576": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "579": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "582": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "585": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "588": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "591": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "594": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "597": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "600": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "603": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "606": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "609": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "612": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "615": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "618": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "621": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "624": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "627": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "630": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "633": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "636": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "637": {
           "json": {
-            "src": "assets/asset-packs/flower_sprouts/Plant_03/Plant_03.glb",
+            "src": "models/Plant_03/Plant_03.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "639": {
           "json": {
-            "src": "assets/scene/Models/mound.glb",
+            "src": "models/mound.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "640": {
           "json": {
-            "src": "assets/scene/Models/plants2.glb",
+            "src": "models/plants2.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "643": {
           "json": {
-            "src": "assets/asset-packs/classic_bench/Bench_01.glb",
+            "src": "models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "644": {
           "json": {
-            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "src": "models/RockLarge_01/RockLarge_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "645": {
           "json": {
-            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "src": "models/TNT Box Closed.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "646": {
           "json": {
-            "src": "assets/asset-packs/balsam_flower/Plant_02/Plant_02.glb",
+            "src": "models/Plant_02/Plant_02.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "647": {
           "json": {
-            "src": "assets/scene/Models/whiteflowers.glb",
+            "src": "models/whiteflowers.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "648": {
           "json": {
-            "src": "assets/scene/Models/whiteflowers.glb",
+            "src": "models/whiteflowers.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "649": {
           "json": {
-            "src": "assets/scene/Models/whiteflowers.glb",
+            "src": "models/whiteflowers.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "650": {
           "json": {
-            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "src": "models/RockLarge_01/RockLarge_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "651": {
           "json": {
-            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "src": "models/RockLarge_01/RockLarge_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "652": {
           "json": {
-            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "src": "models/RockLarge_01/RockLarge_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "653": {
           "json": {
-            "src": "assets/asset-packs/skull_chain_02/HWN20_SkullChain_02.glb",
+            "src": "models/HWN20_SkullChain_02.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "654": {
           "json": {
-            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "src": "models/TNT Box Closed.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "655": {
           "json": {
-            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "src": "models/TNT Box Closed.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "656": {
           "json": {
-            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "src": "models/TNT Box Closed.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "659": {
           "json": {
-            "src": "assets/scene/Models/ladder.glb",
+            "src": "models/ladder.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "660": {
           "json": {
-            "src": "assets/scene/Models/castle.glb",
+            "src": "models/castle.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "661": {
           "json": {
-            "src": "assets/scene/Models/ladder.glb",
+            "src": "models/ladder.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "669": {
           "json": {
-            "src": "assets/scene/Models/mound.glb",
+            "src": "models/mound.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "671": {
           "json": {
-            "src": "assets/asset-packs/tnt_box_closed/TNT Box Closed.glb",
+            "src": "models/TNT Box Closed.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "673": {
           "json": {
-            "src": "assets/asset-packs/solid_red/solid_red.glb",
+            "src": "models/solid_red.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "674": {
           "json": {
-            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "src": "models/RockLarge_01/RockLarge_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "675": {
           "json": {
-            "src": "assets/asset-packs/big_rock/RockLarge_01/RockLarge_01.glb",
+            "src": "models/RockLarge_01/RockLarge_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "676": {
           "json": {
-            "src": "assets/asset-packs/gold/gold.glb",
+            "src": "models/gold.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "677": {
           "json": {
-            "src": "assets/asset-packs/solid_blue/solid_blue.glb",
+            "src": "models/solid_blue.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
         "678": {
           "json": {
-            "src": "assets/asset-packs/solid_green/solid_green.glb",
+            "src": "models/solid_green.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }

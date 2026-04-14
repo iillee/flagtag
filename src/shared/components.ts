@@ -140,9 +140,9 @@ export const VisitorAnalytics = engine.defineComponent('ctf-visitor-analytics', 
 
 VisitorAnalytics.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-// ── Banana (powerup) ──
+// ── Trap (powerup) ──
 
-export const Banana = engine.defineComponent('ctf-banana', {
+export const Trap = engine.defineComponent('ctf-banana', {
   droppedByPlayerId: Schemas.String,
   droppedAtMs: Schemas.Number,       // Date.now() when dropped — used for expiry (server-side only)
 }, {
@@ -150,32 +150,32 @@ export const Banana = engine.defineComponent('ctf-banana', {
   droppedAtMs: 0,
 })
 
-Banana.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+Trap.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** How long a banana stays on the ground before despawning (seconds). */
-export const BANANA_LIFETIME_SEC = 15
-/** Cooldown between banana drops (seconds). */
-export const BANANA_COOLDOWN_SEC = 5
-/** Max bananas one player can have on the ground at once. */
-export const BANANA_MAX_ACTIVE = 3
-/** Radius for banana trigger (meters). */
-export const BANANA_TRIGGER_RADIUS = 2.0
+/** How long a trap stays on the ground before despawning (seconds). */
+export const TRAP_LIFETIME_SEC = 15
+/** Cooldown between trap drops (seconds). */
+export const TRAP_COOLDOWN_SEC = 5
+/** Max traps one player can have on the ground at once. */
+export const TRAP_MAX_ACTIVE = 3
+/** Radius for trap trigger (meters). */
+export const TRAP_TRIGGER_RADIUS = 2.0
 
 /**
- * Sync ID range for bananas — monotonically increasing, never recycled.
- * Each new banana gets a unique sync ID for the lifetime of the server process.
+ * Sync ID range for traps — monotonically increasing, never recycled.
+ * Each new trap gets a unique sync ID for the lifetime of the server process.
  * The entityEnumId space is a 32-bit integer, so we have billions of IDs available.
  * Base starts at 1000000 to avoid collisions with hold-time entities (10000–109999).
  */
-const BANANA_SYNC_ID_BASE = 1000000
-let bananaIdCounter = 0
-export function getNextBananaSyncId(): number {
-  return BANANA_SYNC_ID_BASE + (bananaIdCounter++)
+const TRAP_SYNC_ID_BASE = 1000000
+let trapIdCounter = 0
+export function getNextTrapSyncId(): number {
+  return TRAP_SYNC_ID_BASE + (trapIdCounter++)
 }
 
-// ── Shell (powerup) ──
+// ── Projectile (powerup) ──
 
-export const Shell = engine.defineComponent('ctf-shell', {
+export const Projectile = engine.defineComponent('ctf-shell', {
   firedByPlayerId: Schemas.String,
   firedAtMs: Schemas.Number,
   startX: Schemas.Float,          // spawn position — client uses these for local movement prediction
@@ -199,31 +199,31 @@ export const Shell = engine.defineComponent('ctf-shell', {
   active: true,
 })
 
-Shell.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+Projectile.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** Cooldown between shell fires (seconds). */
-export const SHELL_COOLDOWN_SEC = 10
-/** Max shells one player can have in flight at once. */
-export const SHELL_MAX_ACTIVE = 3
-/** Speed of shell projectile (meters per second). */
-export const SHELL_SPEED = 30
+/** Cooldown between projectile fires (seconds). */
+export const PROJECTILE_COOLDOWN_SEC = 10
+/** Max projectiles one player can have in flight at once. */
+export const PROJECTILE_MAX_ACTIVE = 3
+/** Speed of projectile (meters per second). */
+export const PROJECTILE_SPEED = 30
 /** Max range if no wall is detected (meters). */
-export const SHELL_MAX_RANGE = 50
-/** Radius for shell hitting a player (meters). */
-export const SHELL_HIT_RADIUS = 2.0
-/** Max time a shell can exist (seconds) — safety net. */
-export const SHELL_LIFETIME_SEC = 8
+export const PROJECTILE_MAX_RANGE = 50
+/** Radius for projectile hitting a player (meters). */
+export const PROJECTILE_HIT_RADIUS = 2.0
+/** Max time a projectile can exist (seconds) — safety net. */
+export const PROJECTILE_LIFETIME_SEC = 8
 
 /**
- * Sync ID range for shells — monotonically increasing, never recycled.
- * Each new shell gets a unique sync ID for the lifetime of the server process.
+ * Sync ID range for projectiles — monotonically increasing, never recycled.
+ * Each new projectile gets a unique sync ID for the lifetime of the server process.
  * The entityEnumId space is a 32-bit integer, so we have billions of IDs available.
- * Base starts at 2000000 to guarantee no overlap with bananas or hold-time entities.
+ * Base starts at 2000000 to guarantee no overlap with traps or hold-time entities.
  */
-const SHELL_SYNC_ID_BASE = 2000000
-let shellIdCounter = 0
-export function getNextShellSyncId(): number {
-  return SHELL_SYNC_ID_BASE + (shellIdCounter++)
+const PROJECTILE_SYNC_ID_BASE = 2000000
+let projectileIdCounter = 0
+export function getNextProjectileSyncId(): number {
+  return PROJECTILE_SYNC_ID_BASE + (projectileIdCounter++)
 }
 
 export enum SyncIds {
