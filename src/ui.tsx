@@ -1028,7 +1028,7 @@ function DesktopLayout() {
                   >
                     <Label value="E" fontSize={16} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="to throw boomerang" fontSize={16} color={MUTED} font="sans-serif" />
+                  <Label value="throw boomerang" fontSize={16} color={MUTED} font="sans-serif" />
                   <UiEntity
                     uiTransform={{ width: 41, height: 41, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
@@ -1044,7 +1044,7 @@ function DesktopLayout() {
                   >
                     <Label value="F" fontSize={16} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="to drop banana" fontSize={16} color={MUTED} font="sans-serif" />
+                  <Label value="drop banana" fontSize={16} color={MUTED} font="sans-serif" />
                   <UiEntity
                     uiTransform={{ width: 43, height: 43, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
@@ -1060,7 +1060,7 @@ function DesktopLayout() {
                   >
                     <Label value="3" fontSize={16} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="to drop flag" fontSize={16} color={MUTED} font="sans-serif" />
+                  <Label value="drop flag" fontSize={16} color={MUTED} font="sans-serif" />
                 </UiEntity>
                 <UiEntity uiTransform={{ height: 12 }} />
 
@@ -1459,8 +1459,8 @@ function DesktopLayout() {
         )
       })()}
 
-      {/* ── Ability icons — bottom center ── */}
-      <UiEntity
+      {/* ── Ability icons — bottom center (hidden during cinematic) ── */}
+      {!cinematicShowing && <UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { bottom: 24 },
@@ -1531,7 +1531,7 @@ function DesktopLayout() {
             )}
           </UiEntity>
         </UiEntity>
-      </UiEntity>
+      </UiEntity>}
 
       {/* ── Right-side container: scoreboard stacked vertically ── */}
       <UiEntity
@@ -1962,7 +1962,7 @@ function MobileLayout() {
             flexDirection: 'row',
             justifyContent: 'center',
             alignItems: 'flex-end',
-            padding: { bottom: 40 },
+            padding: { bottom: 114 },
           }}
         >
           <UiEntity
@@ -2131,7 +2131,7 @@ function MobileLayout() {
                   >
                     <Label value="E" fontSize={22} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="to throw boomerang" fontSize={22} color={MUTED} font="sans-serif" />
+                  <Label value="throw boomerang" fontSize={22} color={MUTED} font="sans-serif" />
                   <UiEntity
                     uiTransform={{ width: 52, height: 52, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
@@ -2147,7 +2147,7 @@ function MobileLayout() {
                   >
                     <Label value="F" fontSize={22} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="to drop banana" fontSize={22} color={MUTED} font="sans-serif" />
+                  <Label value="drop banana" fontSize={22} color={MUTED} font="sans-serif" />
                   <UiEntity
                     uiTransform={{ width: 55, height: 55, margin: { left: 8 } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
@@ -2163,7 +2163,7 @@ function MobileLayout() {
                   >
                     <Label value="3" fontSize={22} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="to drop flag" fontSize={22} color={MUTED} font="sans-serif" />
+                  <Label value="drop flag" fontSize={22} color={MUTED} font="sans-serif" />
                 </UiEntity>
                 <UiEntity uiTransform={{ height: 14 }} />
 

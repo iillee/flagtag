@@ -22,8 +22,9 @@ export const Messages = {
   dropSound: Schemas.Map({ t: Schemas.Int }),
   bananaDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   bananaTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
-  shellDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, dirX: Schemas.Float, dirZ: Schemas.Float, color: Schemas.String }),
+  shellDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, dirX: Schemas.Float, dirZ: Schemas.Float, color: Schemas.String, firedBy: Schemas.String }),
   shellTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String, peak: Schemas.Optional(Schemas.Boolean) }),
+  shellReturnPos: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, firedBy: Schemas.String }),
 
   // Updraft messages
   requestUpdraftLocation: Schemas.Map({ t: Schemas.Int }),

@@ -265,7 +265,21 @@ function updateServerProjectileGroundRaycasts(dt: number): void {
 room.onMessage('shellDropped', (data) => {
   // Create visual from message bus (instant, no CRDT dependency).
   // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
-  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color)
+  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy)
+})
+
+// Listen for return position updates from the server
+room.onMessage('shellReturnPos', (data) => {
+  const firedBy = (data.firedBy || '').toLowerCase()
+  // Find the returning projectile from this player
+  for (const vis of msgProjectileVisuals) {
+    if (vis.returning && vis.firedBy === firedBy) {
+      vis.returnTargetX = data.x
+      vis.returnTargetY = data.y
+      vis.returnTargetZ = data.z
+      break
+    }
+  }
 })
 
 room.onMessage('shellTriggered', (data) => {
@@ -548,6 +562,7 @@ function releaseProjectileToPool(entity: Entity): void {
 // 'shellTriggered' message or time-based safety expiry removes the visual.
 interface MsgProjectileVisual {
   entity: Entity
+  firedBy: string  // userId of the thrower
   startX: number
   startY: number
   startZ: number
@@ -565,10 +580,14 @@ interface MsgProjectileVisual {
   spinAngle: number
   returning: boolean
   returnDistance: number
+  // Server-driven return target (updated via shellReturnPos messages)
+  returnTargetX: number
+  returnTargetY: number
+  returnTargetZ: number
 }
 const msgProjectileVisuals: MsgProjectileVisual[] = []
 
-function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string): void {
+function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string): void {
   const localEntity = acquireProjectileFromPool()
   if (!localEntity) return
 
@@ -588,6 +607,7 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
 
   msgProjectileVisuals.push({
     entity: localEntity,
+    firedBy: firedBy?.toLowerCase() || '',
     startX: x, startY: y, startZ: z,
     dirX, dirZ,
     createdAtMs: Date.now(),
@@ -602,6 +622,9 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
     spinAngle: 0,
     returning: false,
     returnDistance: 0,
+    returnTargetX: x,
+    returnTargetY: y,
+    returnTargetZ: z,
   })
   console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))
 }
@@ -667,13 +690,24 @@ function updateMsgProjectileVisuals(dt: number): void {
       t.position = Vector3.create(vis.startX + vis.dirX * vis.distanceTraveled, vis.startY, vis.startZ + vis.dirZ * vis.distanceTraveled)
       t.rotation = Quaternion.fromEulerDegrees(0, headingDeg + vis.spinAngle, 0)
     } else {
-      // Returning — lerp toward player's chest height
+      // Returning — use server-broadcast position for remote throwers, local PlayerEntity for self
       const shellPos = Transform.get(vis.entity).position
-      const rawPlayerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
-      const playerPos = Vector3.create(rawPlayerPos.x, rawPlayerPos.y + PROJECTILE_CHEST_OFFSET, rawPlayerPos.z)
-      const dx = playerPos.x - shellPos.x
-      const dy = playerPos.y - shellPos.y
-      const dz = playerPos.z - shellPos.z
+      const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+      const isLocalThrower = vis.firedBy === localUserId || vis.firedBy === ''
+
+      let targetPos: Vector3
+      if (isLocalThrower) {
+        // Local player's boomerang — use own position (accurate, no lag)
+        const rawPlayerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
+        targetPos = Vector3.create(rawPlayerPos.x, rawPlayerPos.y + PROJECTILE_CHEST_OFFSET, rawPlayerPos.z)
+      } else {
+        // Remote player's boomerang — use server-provided return target
+        targetPos = Vector3.create(vis.returnTargetX, vis.returnTargetY, vis.returnTargetZ)
+      }
+
+      const dx = targetPos.x - shellPos.x
+      const dy = targetPos.y - shellPos.y
+      const dz = targetPos.z - shellPos.z
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
 
       if (dist < 2.0) {
@@ -684,7 +718,7 @@ function updateMsgProjectileVisuals(dt: number): void {
         continue
       }
 
-      // Move toward player at projectile speed
+      // Move toward target at projectile speed
       const nx = dx / dist, ny = dy / dist, nz = dz / dist
       const headingDeg = Math.atan2(nx, nz) * (180 / Math.PI)
       const t = Transform.getMutable(vis.entity)
