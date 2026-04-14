@@ -1981,6 +1981,23 @@ function countdownServerSystem(): void {
     
     handleRoundEnd().catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
+      // Emergency recovery: ensure flag is reset and players are respawned
+      // even if something in the handler crashed
+      try {
+        const flag = Flag.getOrNull(flagEntity)
+        if (flag && flag.state === FlagState.Carried) {
+          const mutable = Flag.getMutable(flagEntity)
+          mutable.state = FlagState.AtBase
+          mutable.carrierPlayerId = ''
+        }
+        lightningRollTimer = 0
+        lightningStrikeScheduled = false
+        lightningWarningTimer = 0
+        room.send('respawnPlayers', { t: 0 })
+        console.log('[Server] ⚠️ Emergency round-end recovery executed')
+      } catch (recoveryErr) {
+        console.error('[Server.ERROR] Emergency recovery also failed:', recoveryErr)
+      }
     })
   }
   

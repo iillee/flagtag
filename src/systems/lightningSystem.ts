@@ -1,8 +1,7 @@
-import { engine, Entity, Transform, MeshRenderer, Material, MaterialTransparencyMode, VisibilityComponent, LightSource, AudioSource, InputModifier } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, MeshRenderer, Material, VisibilityComponent, LightSource, AudioSource, InputModifier, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { flagSyncedEntity } from './flagSystem'
 import { Flag, FlagState } from '../shared/components'
-import { PlayerIdentityData } from '@dcl/sdk/ecs'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { triggerEmote, movePlayerTo } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
@@ -392,14 +391,6 @@ function hideBolt() {
 function isFlagCarried(): boolean {
   if (!flagSyncedEntity || !Flag.has(flagSyncedEntity)) return false
   return Flag.get(flagSyncedEntity).state === FlagState.Carried
-}
-
-function isLocalPlayerCarrier(): boolean {
-  const localPlayer = getPlayerData()
-  if (!localPlayer || !flagSyncedEntity || !Flag.has(flagSyncedEntity)) return false
-  const flag = Flag.get(flagSyncedEntity)
-  const localId = localPlayer.userId?.toLowerCase()
-  return flag.state === FlagState.Carried && flag.carrierPlayerId?.toLowerCase() === localId
 }
 
 /** Execute the visual bolt strike at a position (called by all clients) */

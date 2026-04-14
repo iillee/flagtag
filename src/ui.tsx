@@ -1,4 +1,4 @@
-import { Color4 } from '@dcl/sdk/math'
+import { Color4, Vector3 } from '@dcl/sdk/math'
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import {
@@ -13,7 +13,6 @@ import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './g
 import { getLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
 import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType, PointerEvents, executeTask, type Entity } from '@dcl/sdk/ecs'
-import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getBoomerangColor, setBoomerangColor, type BoomerangColor } from './gameState/boomerangColor'
@@ -116,7 +115,8 @@ export function setCinematicFade(opacity: number) {
   cinematicFadeOpacity = Math.max(0, Math.min(1, opacity))
 }
 
-export function getCinematicFade(): number {
+/** @deprecated Currently unused — kept for potential future use */
+function getCinematicFade(): number {
   return cinematicFadeOpacity
 }
 
