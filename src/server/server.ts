@@ -830,7 +830,7 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      handleProjectileFire(from, data.dirX, data.dirZ)
+      handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r')
     } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
   room.onMessage('reportShellWallDist', (data, context) => {
@@ -1254,7 +1254,7 @@ function bananaServerSystem(dt: number): void {
   }
 }
 
-function handleProjectileFire(playerId: string, dirX: number, dirZ: number): void {
+function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r'): void {
   const now = Date.now()
 
   // Cooldown check
@@ -1345,7 +1345,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number): voi
   })
   lastProjectileFireTime.set(playerId, now)
 
-  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ })
+  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ, color })
   console.log('[Server] 🎯 Projectile fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 

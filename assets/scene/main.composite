@@ -2694,6 +2694,27 @@
             "parent": 0
           }
         },
+        "638": {
+          "json": {
+            "position": {
+              "x": 265.75,
+              "y": 12.467744827270508,
+              "z": 280.75
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.34214073419570923,
+              "z": 0,
+              "w": 0.9396486878395081
+            },
+            "parent": 0
+          }
+        },
         "639": {
           "json": {
             "position": {
@@ -3089,6 +3110,27 @@
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "658": {
+          "json": {
+            "position": {
+              "x": 240.5,
+              "y": 2.454143524169922,
+              "z": 192.9005126953125
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.03848147392272949,
+              "z": 0,
+              "w": 0.9992592930793762
             },
             "parent": 0
           }
@@ -4168,6 +4210,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "638": {
+          "json": {
+            "src": "assets/scene/Models/drawer/drawer.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "639": {
           "json": {
             "src": "models/mound.glb",
@@ -4276,6 +4325,13 @@
         "656": {
           "json": {
             "src": "models/TNT Box Closed.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "658": {
+          "json": {
+            "src": "assets/scene/Models/drawer/drawer.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -4992,6 +5048,11 @@
             "value": "Flower Sprouts"
           }
         },
+        "638": {
+          "json": {
+            "value": "drawer.glb"
+          }
+        },
         "639": {
           "json": {
             "value": "mound.glb_2"
@@ -5080,6 +5141,11 @@
         "656": {
           "json": {
             "value": "TNT Box Closed_8"
+          }
+        },
+        "658": {
+          "json": {
+            "value": "drawer.glb_2"
           }
         },
         "659": {
@@ -6231,7 +6297,7 @@
         "serializationType": "map"
       },
       "data": {
-        "669": {
+        "0": {
           "json": {
             "gizmo": 0
           }
@@ -6369,7 +6435,9 @@
                   645,
                   654,
                   655,
-                  656
+                  656,
+                  638,
+                  658
                 ]
               },
               {
@@ -7097,6 +7165,14 @@
               {
                 "entity": 656,
                 "children": []
+              },
+              {
+                "entity": 638,
+                "children": []
+              },
+              {
+                "entity": 658,
+                "children": []
               }
             ]
           }
@@ -7297,6 +7373,9 @@
         "637": {
           "json": {}
         },
+        "638": {
+          "json": {}
+        },
         "639": {
           "json": {}
         },
@@ -7343,6 +7422,9 @@
           "json": {}
         },
         "656": {
+          "json": {}
+        },
+        "658": {
           "json": {}
         },
         "659": {

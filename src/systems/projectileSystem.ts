@@ -24,6 +24,7 @@ import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../cinematicState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from './combatSystem'
+import { getBoomerangModelSrc, getBoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
 
 // Hand boomerang visibility
 let handBoomerangEntity: Entity | null = null
@@ -60,7 +61,9 @@ function updateHandBoomerangVisibility(): void {
   VisibilityComponent.createOrReplace(handBoomerangEntity, { visible: shouldShow })
 }
 
-const PROJECTILE_MODEL_SRC = 'models/boomerang.r.glb'
+function getProjectileModelSrc(): string {
+  return getBoomerangModelSrc()
+}
 const PROJECTILE_SCALE = Vector3.create(2.5, 4.5, 2.5)
 const PROJECTILE_STAGGER_MS = 800
 const PROJECTILE_GRAVITY = 15  // m/s² — matches server FLAG_GRAVITY
@@ -239,7 +242,7 @@ function updateServerProjectileGroundRaycasts(dt: number): void {
 room.onMessage('shellDropped', (data) => {
   // Create visual from message bus (instant, no CRDT dependency).
   // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
-  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ)
+  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color)
 })
 
 room.onMessage('shellTriggered', (data) => {
@@ -327,7 +330,7 @@ function fireProjectileLocally(): void {
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
   })
   GltfContainer.create(shellEntity, {
-    src: PROJECTILE_MODEL_SRC,
+    src: getProjectileModelSrc(),
     visibleMeshesCollisionMask: 0,
     invisibleMeshesCollisionMask: 0
   })
@@ -470,7 +473,7 @@ function initProjectilePool(): void {
     const e = engine.addEntity()
     Transform.create(e, { position: PROJECTILE_HIDDEN_POS, scale: Vector3.Zero() })
     GltfContainer.create(e, {
-      src: PROJECTILE_MODEL_SRC,
+      src: getProjectileModelSrc(),
       visibleMeshesCollisionMask: 0,
       invisibleMeshesCollisionMask: 0
     })
@@ -478,6 +481,24 @@ function initProjectilePool(): void {
   }
   console.log('[Projectile] 🎯 Pre-created projectile visual pool of', PROJECTILE_POOL_SIZE)
 }
+
+// Update pool + hand boomerang when color changes
+onBoomerangColorChange((color) => {
+  const newSrc = getProjectileModelSrc()
+  // Update all pooled entities
+  for (const e of projectilePool) {
+    if (GltfContainer.has(e)) {
+      const gltf = GltfContainer.getMutable(e)
+      gltf.src = newSrc
+    }
+  }
+  // Update hand boomerang
+  if (handBoomerangEntity !== null && GltfContainer.has(handBoomerangEntity)) {
+    const gltf = GltfContainer.getMutable(handBoomerangEntity)
+    gltf.src = newSrc
+  }
+  console.log('[Projectile] Updated pool + hand model to', newSrc)
+})
 
 function acquireProjectileFromPool(): Entity | null {
   initProjectilePool()
@@ -523,7 +544,7 @@ interface MsgProjectileVisual {
 }
 const msgProjectileVisuals: MsgProjectileVisual[] = []
 
-function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number): void {
+function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string): void {
   const localEntity = acquireProjectileFromPool()
   if (!localEntity) return
 
@@ -531,6 +552,13 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
   t.position = Vector3.create(x, y, z)
   t.scale = PROJECTILE_SCALE
   t.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
+
+  // Set the correct color model for this projectile
+  if (color && GltfContainer.has(localEntity)) {
+    const validColors = ['r', 'y', 'b', 'g']
+    const c = validColors.includes(color) ? color : 'r'
+    GltfContainer.getMutable(localEntity).src = `models/boomerang.${c}.glb`
+  }
 
   attachProjectileSound(localEntity)
 
@@ -657,7 +685,7 @@ export function triggerProjectileFromUI(): void {
 
   if (serverUp) {
     console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
-    room.send('requestShell', { dirX, dirZ })
+    room.send('requestShell', { dirX, dirZ, color: getBoomerangColor() })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
@@ -717,7 +745,7 @@ export function projectileClientSystem(dt: number): void {
 
     if (serverUp) {
       console.log('[Projectile] 🎯 E pressed — requesting projectile fire (server)')
-      room.send('requestShell', { dirX, dirZ })
+      room.send('requestShell', { dirX, dirZ, color: getBoomerangColor() })
 
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position

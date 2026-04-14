@@ -16,6 +16,7 @@ import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventT
 import { Vector3 } from '@dcl/sdk/math'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
+import { getBoomerangColor, setBoomerangColor, type BoomerangColor } from './gameState/boomerangColor'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 import { musicEntity } from './index'
 // import { isMobile } from '@dcl/sdk/platform'  // disabled — causes crashes
@@ -151,6 +152,19 @@ export function isAnyOverlayOpen(): boolean {
     || serverDownVisible
     || mobileScoreboardOverlayVisible
     || mailboxPopupVisible
+    || chestPopupVisible
+}
+
+// ── Chest popup state ──
+let chestPopupVisible = false
+
+export function showChestPopup() {
+  chestPopupVisible = true
+}
+
+export function hideChestPopup() {
+  chestPopupVisible = false
+  notifyOverlayClosed()
 }
 
 // ── Mailbox popup state ──
@@ -191,6 +205,7 @@ let closeWinConditionHovered = false
 let closeLeaderboardHovered = false
 let closeAnalyticsHovered = false
 let closeMailboxHovered = false
+let closeChestHovered = false
 const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 
 // Attack flicker state — dims the hit icon briefly when E is pressed
@@ -609,6 +624,75 @@ function PlayerListUi() {
           </UiEntity>
         </UiEntity>
       )}
+      {/* Chest popup */}
+      {chestPopupVisible && (
+        <UiEntity uiTransform={{
+          positionType: 'absolute',
+          position: { top: 0, left: 0 },
+          width: '100%',
+          height: '100%',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+        onMouseDown={() => {}}
+        >
+          <UiEntity uiTransform={{
+            width: 420,
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: { top: 24, bottom: 24, left: 24, right: 24 },
+            borderRadius: 20,
+          }}
+          uiBackground={{ color: PANEL_BG }}
+          >
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: 12, right: 12 },
+                width: 56,
+                height: 56,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={() => { closeChestHovered = true }}
+              onMouseLeave={() => { closeChestHovered = false }}
+              onMouseDown={() => { playClickSound(); hideChestPopup(); closeChestHovered = false }}
+            >
+              <Label value="×" fontSize={44} color={closeChestHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+            <Label value="Chest" fontSize={28} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 4 } }} />
+            <Label value="Choose your boomerang color" fontSize={16} color={LIGHT_GREY} uiTransform={{ margin: { top: 4, bottom: 28 }, width: 360 }} textAlign="middle-center" />
+            <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+              {(['r', 'y', 'b', 'g'] as BoomerangColor[]).map((color) => {
+                const selected = getBoomerangColor() === color
+                const borderColor = selected ? GOLD : Color4.create(0.3, 0.3, 0.35, 1)
+                return (
+                  <UiEntity
+                    key={`boom-${color}`}
+                    uiTransform={{
+                      width: 80,
+                      height: 80,
+                      margin: { left: 6, right: 6 },
+                      padding: 4,
+                      borderRadius: 12,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                    uiBackground={{ color: selected ? Color4.create(0.45, 0.38, 0.1, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
+                    onMouseDown={() => { playClickSound(); setBoomerangColor(color) }}
+                  >
+                    <UiEntity
+                      uiTransform={{ width: 60, height: 60 }}
+                      uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${color}.png` } }}
+                    />
+                  </UiEntity>
+                )
+              })}
+            </UiEntity>
+          </UiEntity>
+        </UiEntity>
+      )}
       {/* Drown bar — screen-space, always on top */}
       {isDrownBarVisible() && <DrownBar />}
 
@@ -939,7 +1023,7 @@ function DesktopLayout() {
                   <Label value="to throw boomerang" fontSize={16} color={MUTED} font="sans-serif" />
                   <UiEntity
                     uiTransform={{ width: 41, height: 41, margin: { left: 8 } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/boomerang.r.png' }, color: Color4.White() }}
+                    uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
                   />
                 </UiEntity>
                 <UiEntity uiTransform={{ height: 12 }} />
@@ -1428,7 +1512,7 @@ function DesktopLayout() {
               uiTransform={{ width: (ABILITY_ICON_SIZE - 6) * 1.5, height: (ABILITY_ICON_SIZE - 6) * 1.5, margin: { top: -2 } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : 'assets/images/boomerang.r.png' },
+                texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : `assets/images/boomerang.${getBoomerangColor()}.png` },
                 color: isProjectileOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
               }}
             />
@@ -1782,7 +1866,7 @@ function MobileLayout() {
                   uiTransform={{ width: (M_ICON_SIZE - 4) * 1.5, height: (M_ICON_SIZE - 4) * 1.5 }}
                   uiBackground={{
                     textureMode: 'stretch',
-                    texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : 'assets/images/boomerang.r.png' },
+                    texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : `assets/images/boomerang.${getBoomerangColor()}.png` },
                     color: isProjectileOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
                   }}
                 />
@@ -2095,7 +2179,7 @@ function MobileLayout() {
                   <Label value="to throw boomerang" fontSize={22} color={MUTED} font="sans-serif" />
                   <UiEntity
                     uiTransform={{ width: 52, height: 52, margin: { left: 8 } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/boomerang.r.png' }, color: Color4.White() }}
+                    uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
                   />
                 </UiEntity>
                 <UiEntity uiTransform={{ height: 14 }} />
