@@ -473,7 +473,7 @@ function DrownBar() {
     <UiEntity
       uiTransform={{
         positionType: 'absolute',
-        position: { bottom: 20, left: '50%' },
+        position: { bottom: 110, left: '50%' },
         width: DROWN_BAR_WIDTH + DROWN_BORDER * 2,
         height: DROWN_BAR_HEIGHT + DROWN_BORDER * 2,
         margin: { left: -(DROWN_BAR_WIDTH + DROWN_BORDER * 2) / 2 },
@@ -1459,23 +1459,20 @@ function DesktopLayout() {
         )
       })()}
 
-      {/* ── Right-side container: ability icons row + scoreboard stacked vertically ── */}
+      {/* ── Ability icons — bottom center ── */}
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
-          position: { right: 16, top: 14 },
-          width: PANEL_WIDTH,
-          flexDirection: 'column',
-          alignItems: 'stretch',
+          position: { bottom: 24 },
+          width: '100%',
+          flexDirection: 'row',
+          justifyContent: 'center',
         }}
       >
-        {/* Ability icons row */}
         <UiEntity
           uiTransform={{
-            width: PANEL_WIDTH,
             flexDirection: 'row',
-            justifyContent: 'space-between',
-            margin: { bottom: 6 },
+            alignItems: 'center',
           }}
         >
           {/* Projectile (E) */}
@@ -1484,6 +1481,7 @@ function DesktopLayout() {
               width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
               flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               borderRadius: { topLeft: 0, topRight: 38, bottomLeft: 38, bottomRight: 38 },
+              margin: { right: 8 },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
@@ -1511,6 +1509,7 @@ function DesktopLayout() {
               width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
               flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               borderRadius: { topLeft: 0, topRight: 38, bottomLeft: 38, bottomRight: 38 },
+              margin: { left: 8 },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
@@ -1532,7 +1531,18 @@ function DesktopLayout() {
             )}
           </UiEntity>
         </UiEntity>
+      </UiEntity>
 
+      {/* ── Right-side container: scoreboard stacked vertically ── */}
+      <UiEntity
+        uiTransform={{
+          positionType: 'absolute',
+          position: { right: 16, top: 14 },
+          width: PANEL_WIDTH,
+          flexDirection: 'column',
+          alignItems: 'stretch',
+        }}
+      >
         {/* Scoreboard panel */}
         <UiEntity
           uiTransform={{
