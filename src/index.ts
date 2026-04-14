@@ -11,7 +11,7 @@ import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
 import { setupSpectator, exitSpectatorMode } from './systems/spectatorSystem'
-import { waterSystem } from './systems/waterSystem'
+import { waterSystem, cancelDrownRespawn } from './systems/waterSystem'
 import { mailboxSystem } from './systems/mailboxSystem'
 import { chestSystem } from './systems/chestSystem'
 
@@ -19,6 +19,7 @@ import { setCinematicActive } from './cinematicState'
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
+import { setupLightning, lightningSystem, setupLightningMessages, cancelLightningRespawn } from './systems/lightningSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { setupRemoteBoomerangs, cleanupRemoteBoomerang } from './systems/remoteBoomerangSystem'
 import { getBoomerangColor } from './gameState/boomerangColor'
@@ -59,6 +60,7 @@ export async function main() {
   setupUi()
   setupBeacon()
   setupLadder()
+
 
 
   // Attach boomerang to local player's right hand (always visible)
@@ -543,6 +545,11 @@ export async function main() {
   engine.addSystem(waterBobSystem)
   engine.addSystem(waterSplashSystem)
 
+  // Lightning bolt system (probability-based, synced via messages)
+  setupLightning()
+  setupLightningMessages()
+  engine.addSystem(lightningSystem)
+
   // Mailbox — click to leave feedback
   engine.addSystem(mailboxSystem)
   engine.addSystem(chestSystem)
@@ -733,6 +740,10 @@ export async function main() {
         // disableEmote intentionally omitted — allow players to override celebration emotes
       })
     })
+
+    // Cancel any active death respawns so cinematic can take over
+    cancelDrownRespawn()
+    cancelLightningRespawn()
 
     // Start fade to black FIRST — then teleport once fully black
     fadePhase = 1

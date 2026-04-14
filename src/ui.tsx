@@ -34,6 +34,7 @@ function toggleMusicMute() {
 }
 import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
+import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
 import { signedFetch, getHeaders } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
@@ -722,6 +723,32 @@ function PlayerListUi() {
         </UiEntity>
       )}
 
+      {/* Lightning death overlay */}
+      {isLightningRespawning() && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: 0, left: 0 },
+            width: '100%',
+            height: '100%',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          uiBackground={{ color: Color4.create(0, 0, 0, getLightningFadeOpacity()) }}
+        >
+          {isLightningTextVisible() && (
+            <Label value="You were struck by lightning!" fontSize={42} color={CORAL_RED} font="sans-serif" />
+          )}
+          {isLightningTextVisible() && (
+            <UiEntity uiTransform={{ height: 12 }} />
+          )}
+          {isLightningTextVisible() && (
+            <Label value={`Respawning in ${Math.ceil(getLightningRespawnCountdown())}...`} fontSize={20} color={LIGHT_GREY} font="sans-serif" />
+          )}
+        </UiEntity>
+      )}
+
       {/* Spectator mode overlay */}
       {isSpectatorMode() && (
         <UiEntity uiTransform={{
@@ -1149,8 +1176,6 @@ function DesktopLayout() {
                   visibleEntries.map((entry, i) => {
                     const isSelf = localUserId !== null && entry.userId === localUserId
                     const nameColor = isSelf ? WHITE : GREY
-                    const crowns = '★'.repeat(entry.roundsWon)
-                    
                     return (
                       <UiEntity
                         key={`leaderboard-${entry.userId}-${leaderboardScrollOffset}-${i}`}
@@ -1161,7 +1186,10 @@ function DesktopLayout() {
                           justifyContent: 'flex-start',
                         }}
                       >
-                        <Label value={crowns ? crowns + ' ' : ''} fontSize={ROW_FONT} color={GOLD} font="sans-serif" />
+                        {Array.from({ length: entry.roundsWon }, (_, ri) => (
+                          <UiEntity key={`rw-${ri}`} uiTransform={{ width: 14, height: 14, margin: { right: 2 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                        ))}
+                        {entry.roundsWon > 0 && <UiEntity uiTransform={{ width: 4 }} />}
                         <Label value={entry.name} fontSize={ROW_FONT} color={nameColor} font="sans-serif" />
                       </UiEntity>
                     )
@@ -1578,7 +1606,7 @@ function DesktopLayout() {
               onMouseLeave={() => { squareIconHovered = false }}
               onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
             >
-              <Label value="★" fontSize={ICON_FONT_SQUARE} color={leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE} font="sans-serif" />
+              <UiEntity uiTransform={{ width: 16, height: 16 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
             </UiEntity>
             <UiEntity
               uiTransform={{ width: 28, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
@@ -1634,7 +1662,7 @@ function DesktopLayout() {
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
                   {isCarrier ? (
                     <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Label value="★ " fontSize={ROW_FONT} color={GOLD} font="sans-serif" />
+                      <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
                       <Label value={p.name} fontSize={ROW_FONT} color={nameColor} font="sans-serif" />
                     </UiEntity>
                   ) : (
@@ -1743,9 +1771,7 @@ function MobileLayout() {
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
-                <Label value="★" fontSize={34} color={leaderboardOverlayVisible ? GOLD : WHITE} font="sans-serif"
-                  uiTransform={{ margin: { bottom: 4 } }}
-                />
+                <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: leaderboardOverlayVisible ? GOLD : WHITE }} />
               </UiEntity>
               <UiEntity
                 uiTransform={{
@@ -1819,7 +1845,7 @@ function MobileLayout() {
                 <UiEntity uiTransform={{ width: 6 }} />
                 <Label value={`${myScore}`} fontSize={32} color={scoreColor} font="sans-serif" />
                 {hasFlag && (
-                  <Label value=" ★" fontSize={32} color={GOLD} font="sans-serif" />
+                  <UiEntity uiTransform={{ width: 22, height: 22, margin: { left: 6 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
                 )}
               </UiEntity>
             </UiEntity>
@@ -1963,7 +1989,7 @@ function MobileLayout() {
                     >
                       <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
                         {isCarrier && (
-                          <Label value="★ " fontSize={22} color={GOLD} font="sans-serif" />
+                          <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
                         )}
                         <Label value={p.name} fontSize={22} color={nameColor} font="sans-serif" />
                       </UiEntity>
@@ -2294,7 +2320,6 @@ function MobileLayout() {
                 visibleEntries.map((entry, i) => {
                   const isSelf = localUserId !== null && entry.userId === localUserId
                   const nameColor = isSelf ? WHITE : GREY
-                  const crowns = '★'.repeat(entry.roundsWon)
                   return (
                     <UiEntity
                       key={`m-lb-${entry.userId}-${leaderboardScrollOffset}-${i}`}
@@ -2303,7 +2328,10 @@ function MobileLayout() {
                         flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start',
                       }}
                     >
-                      <Label value={crowns ? crowns + ' ' : ''} fontSize={22} color={GOLD} font="sans-serif" />
+                      {Array.from({ length: entry.roundsWon }, (_, ri) => (
+                        <UiEntity key={`m-rw-${ri}`} uiTransform={{ width: 16, height: 16, margin: { right: 2 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                      ))}
+                      {entry.roundsWon > 0 && <UiEntity uiTransform={{ width: 4 }} />}
                       <Label value={entry.name} fontSize={22} color={nameColor} font="sans-serif" />
                     </UiEntity>
                   )

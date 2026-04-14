@@ -69,6 +69,16 @@ export function isDrownRespawning(): boolean {
   return respawnDelay > 0
 }
 
+/** Cancel drown respawn (e.g., round end cinematic interrupts) */
+export function cancelDrownRespawn(): void {
+  if (respawnDelay <= 0) return
+  respawnDelay = 0
+  drownCooldown = 0
+  airRemaining = DROWN_TIME
+  drownBarVisible = false
+  console.log('[Water] Drown respawn cancelled (round end)')
+}
+
 /** Returns true if drown text should be visible (before fade-in starts through hold, hidden during fade-out) */
 export function isDrownTextVisible(): boolean {
   if (respawnDelay <= 0) return false

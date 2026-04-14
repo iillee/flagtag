@@ -28,6 +28,7 @@ import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
 import { predictAttackLocally } from './combatSystem'
 import { isAnyOverlayOpen } from '../ui'
+import { isLightningRespawning } from '../gameState/lightningState'
 import { isCinematicActive } from '../cinematicState'
 import { isSpectatorMode } from './spectatorSystem'
 import { isDrownRespawning } from './waterSystem'
@@ -247,7 +248,7 @@ const IDLE_BOB_AMPLITUDE = 0.15
 const IDLE_BOB_SPEED = 2
 const IDLE_ROT_SPEED_DEG_PER_SEC = 25
 let flagVisualEntity: Entity | null = null
-let flagSyncedEntity: Entity | null = null
+export let flagSyncedEntity: Entity | null = null
 let flagBobTime = 0
 let flagModelAttached = false
 
@@ -325,7 +326,7 @@ export function flagClientSystem(dt: number): void {
       }
     }
 
-    if (!amCarrying && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS) {
+    if (!amCarrying && !isLightningRespawning() && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS) {
       const myPos = Transform.get(engine.PlayerEntity).position
       for (const [flagEnt, flag] of engine.getEntitiesWith(Flag, Transform)) {
         if (flag.state === FlagState.Carried) continue

@@ -43,6 +43,10 @@ export const Messages = {
   colorChanged: Schemas.Map({ color: Schemas.String }),
   playerColorChanged: Schemas.Map({ playerId: Schemas.String, color: Schemas.String }),
 
+  // Lightning (carrier client → all clients)
+  lightningWarning: Schemas.Map({ t: Schemas.Int }),
+  lightningStrike: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+
   // Round end respawn
   requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
   respawnPlayers: Schemas.Map({ t: Schemas.Int }),
