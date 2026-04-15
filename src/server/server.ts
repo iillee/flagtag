@@ -463,7 +463,7 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
 }
 
 // ── Pre-midnight Discord report ──
-// Send the daily report 5 minutes BEFORE midnight UTC so all data is still intact.
+// Send the daily report during the last hour (23:00–23:59 UTC) so all data is intact.
 // The actual reset still happens at midnight UTC.
 let dailyReportSentForDay = ''
 
@@ -474,10 +474,10 @@ async function checkPreMidnightReport(): Promise<void> {
   // Already sent today's report
   if (dailyReportSentForDay === currentDay) return
   
-  // Send at 23:55 UTC (5 min before midnight = 7:55 PM Eastern EDT)
+  // Send anytime during the last hour of the UTC day (23:00–23:59)
+  // Wider window = much less likely to miss if server has brief downtime
   const hour = now.getUTCHours()
-  const minute = now.getUTCMinutes()
-  if (hour === 23 && minute >= 55) {
+  if (hour === 23) {
     console.log('[Server] 📊 Sending pre-midnight daily analytics report for', currentDay)
     dailyReportSentForDay = currentDay
     await sendDailyAnalyticsToDiscord()

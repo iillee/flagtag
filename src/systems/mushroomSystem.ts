@@ -96,6 +96,8 @@ function playShieldBreakSound(): void {
 
 const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
+const rerollCounts = new Map<number, number>()  // Track rerolls by mushroom id (persists across entity recreation)
+const MAX_CLIENT_REROLLS = 5  // Stop sending reroll requests after this many
 let positionsRequested = false
 // shieldActive removed — mushrooms no longer block hits
 
@@ -241,6 +243,7 @@ room.onMessage('mushroomPositions', (data) => {
       }
       mushrooms.length = 0
       pickedUpIds.clear()
+      rerollCounts.clear()
     } else {
       // Incremental update — only remove mushrooms whose id matches incoming (reroll/replacement)
       for (const pos of positions) {
@@ -367,20 +370,21 @@ function processMushroomRaycasts(): void {
 
       // If landed on or below water level, request a reroll from the server
       if (hitY <= WATER_Y + 0.1) {
-        // Track rerolls client-side to avoid infinite reroll loops
-        if (!m.rerolls) m.rerolls = 0
-        m.rerolls++
-        if (m.rerolls >= 10) {
+        // Track rerolls by mushroom id (persists across entity recreation)
+        const rerolls = (rerollCounts.get(m.id) || 0) + 1
+        rerollCounts.set(m.id, rerolls)
+        if (rerolls >= MAX_CLIENT_REROLLS) {
           // Max rerolls — just place it at water level
-          console.log('[Mushroom] Mushroom', m.id, 'max rerolls reached, placing at water level')
+          console.log('[Mushroom] Mushroom', m.id, 'max rerolls reached (' + rerolls + '), placing at water level')
           const t = Transform.getMutable(m.entity)
           t.position = Vector3.create(m.x, WATER_Y + 0.2, m.z)
           engine.removeEntity(m.rayEntity)
           m.rayEntity = null
           m.placed = true
+          rerollCounts.delete(m.id)
           continue
         }
-        console.log('[Mushroom] Mushroom', m.id, 'landed on water at', m.x.toFixed(1), m.z.toFixed(1), '— requesting reroll')
+        console.log('[Mushroom] Mushroom', m.id, 'landed on water at', m.x.toFixed(1), m.z.toFixed(1), '— requesting reroll (' + rerolls + '/' + MAX_CLIENT_REROLLS + ')')
         engine.removeEntity(m.rayEntity)
         m.rayEntity = null
         // Remove this mushroom; server will send new position via mushroomPositions

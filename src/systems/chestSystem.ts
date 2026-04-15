@@ -12,7 +12,7 @@ AudioSource.create(chestSoundEntity, {
   audioClipUrl: 'assets/sounds/chest.mp3',
   playing: false,
   loop: false,
-  volume: 1,
+  volume: 0.5,
   global: true
 })
 

@@ -185,6 +185,11 @@ let dropSoundEntity: Entity | null = null
 let skipNextPickupSound = false
 let skipNextDropSound = false
 
+// Optimistic prediction — create clone immediately on pickup request, before server confirms
+let optimisticCarrierId: string | null = null   // Who we optimistically predicted as carrier
+let optimisticTimestamp: number = 0              // When we made the prediction
+const OPTIMISTIC_ROLLBACK_MS = 1500             // If server hasn't confirmed in 1.5s, roll back
+
 // Cleanup function to prevent clone duplication
 function cleanupClone(): void {
   if (carryCloneVisual !== null) {
@@ -333,6 +338,13 @@ export function flagClientSystem(dt: number): void {
         if (dist <= AUTO_PICKUP_RADIUS) {
           playPickupSound()
           skipNextPickupSound = true
+          
+          // Optimistic prediction: immediately show clone above our head
+          if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+          createCarryClone(userId)
+          optimisticCarrierId = userId
+          optimisticTimestamp = now
+          
           room.send('requestPickup', { t: 0 })
           lastAutoPickupRequestMs = now
           break
@@ -388,11 +400,18 @@ export function flagClientSystem(dt: number): void {
         }
       }
       
-      // Hide flag visual (don't move synced entity — avoids CRDT conflicts)
-      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-      
-      // Create platform-specific clone
-      createCarryClone(flag.carrierPlayerId)
+      // If optimistic prediction already created the clone for the correct carrier, just confirm it
+      if (optimisticCarrierId && optimisticCarrierId === flag.carrierPlayerId && carryCloneEntity !== null) {
+        // Prediction was correct — just clear the optimistic state
+        optimisticCarrierId = null
+        optimisticTimestamp = 0
+      } else {
+        // Different carrier or no prediction — create clone normally
+        if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+        createCarryClone(flag.carrierPlayerId)
+        optimisticCarrierId = null
+        optimisticTimestamp = 0
+      }
 
     } else if (needsCloneRemove) {
       if (!isFirstFrame) {
@@ -415,7 +434,9 @@ export function flagClientSystem(dt: number): void {
         lastDropTimeMs = Date.now()
       }
 
-      // Clean up all clones
+      // Clean up all clones + clear optimistic state
+      optimisticCarrierId = null
+      optimisticTimestamp = 0
       cleanupClone()
       
       // Restore flag visual visibility (server controls position via CRDT)
@@ -424,6 +445,23 @@ export function flagClientSystem(dt: number): void {
       if (flag.state === FlagState.Dropped) {
         fireGroundRaycastForServer(Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ))
       }
+    }
+
+    // Optimistic rollback: if we predicted a pickup but server never confirmed, undo it
+    if (optimisticCarrierId && flag.state !== FlagState.Carried && Date.now() - optimisticTimestamp > OPTIMISTIC_ROLLBACK_MS) {
+      console.log('[Flag] ⏪ Optimistic prediction rolled back (server rejected)')
+      cleanupClone()
+      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
+      optimisticCarrierId = null
+      optimisticTimestamp = 0
+    }
+    // Also roll back immediately if server says someone ELSE is carrying (steal denied, etc.)
+    if (optimisticCarrierId && flag.state === FlagState.Carried && flag.carrierPlayerId !== optimisticCarrierId) {
+      cleanupClone()
+      createCarryClone(flag.carrierPlayerId)
+      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+      optimisticCarrierId = null
+      optimisticTimestamp = 0
     }
 
     // Safety nets
@@ -436,8 +474,8 @@ export function flagClientSystem(dt: number): void {
       createCarryClone(flag.carrierPlayerId)
     }
     
-    // 2. Flag is NOT carried — ensure flag visual is visible
-    if (flag.state !== FlagState.Carried && flagVisualEntity) {
+    // 2. Flag is NOT carried — ensure flag visual is visible (skip if optimistic pickup is pending)
+    if (flag.state !== FlagState.Carried && flagVisualEntity && !optimisticCarrierId) {
       if (!VisibilityComponent.has(flagVisualEntity)) {
         VisibilityComponent.create(flagVisualEntity, { visible: true })
       } else if (!VisibilityComponent.get(flagVisualEntity).visible) {

@@ -1,6 +1,7 @@
 import { Color4, Vector3 } from '@dcl/sdk/math'
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
+import { UiCanvasInformation } from '@dcl/sdk/ecs'
 import {
   getPlayersWithHoldTimes,
   getCurrentFlagCarrierUserId,
@@ -389,18 +390,7 @@ engine.addSystem(() => {
   }
 })
 
-// ── Key 1 — cycle UI scale (also spectator exit in spectatorSystem) ──
-let uiScaleFlashUntil = 0
-function getUIScaleFlash(): boolean { return Date.now() < uiScaleFlashUntil }
-
-engine.addSystem(() => {
-  if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN)) {
-    if (!isSpectatorMode()) {
-      cycleUIScale()
-      uiScaleFlashUntil = Date.now() + 2000
-    }
-  }
-})
+// (Key 1 is now only used for spectator exit — UI scale is auto-detected)
 
 // ── Key 4 — close any open overlay ──
 engine.addSystem(() => {
@@ -477,23 +467,34 @@ const PANEL_BG = Color4.create(0.1, 0.1, 0.1, 0.92)
 const PANEL_BG_SEMI = Color4.create(0.08, 0.08, 0.1, 0.87)
 
 // ═══════════════════════════════════════════════════════════
-// UI SCALE — adjust this single value to resize all desktop UI
-// 1.0 = default, 1.25 = 25% bigger, 0.8 = 20% smaller
+// UI SCALE — auto-detects from screen size, press 1 to fine-tune
+// Base scale = screenWidth / 1920 (clamped 0.6–1.6)
+// Manual adjustment adds -15% / 0% / +20% on top
 // ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// UI SCALE — press 4 to cycle: Small → Medium → Large
-// ═══════════════════════════════════════════════════════════
-const UI_SCALE_PRESETS = [
-  { label: 'Small',  scale: 0.85 },
-  { label: 'Medium', scale: 1.0  },
-  { label: 'Large',  scale: 1.2  },
+const UI_ADJUST_PRESETS = [
+  { label: 'Small',  mult: 0.85 },
+  { label: 'Medium', mult: 1.0  },
+  { label: 'Large',  mult: 1.2  },
 ]
-let uiScaleIndex = 1 // default Medium
+let uiAdjustIndex = 1 // default Medium
 
-function getUIScale(): number { return UI_SCALE_PRESETS[uiScaleIndex].scale }
-function getUIScaleLabel(): string { return UI_SCALE_PRESETS[uiScaleIndex].label }
+let autoBaseScale = 1.0 // updated each frame from canvas info
+
+// System that reads screen size and computes auto base scale
+engine.addSystem(() => {
+  const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
+  if (canvas && canvas.width > 0) {
+    // Use logical width (accounting for device pixel ratio)
+    const logicalWidth = canvas.width
+    const raw = logicalWidth / 1920
+    autoBaseScale = Math.max(0.6, Math.min(1.6, raw))
+  }
+})
+
+function getUIScale(): number { return autoBaseScale * UI_ADJUST_PRESETS[uiAdjustIndex].mult }
+function getUIScaleLabel(): string { return UI_ADJUST_PRESETS[uiAdjustIndex].label }
 function cycleUIScale() {
-  uiScaleIndex = (uiScaleIndex + 1) % UI_SCALE_PRESETS.length
+  uiAdjustIndex = (uiAdjustIndex + 1) % UI_ADJUST_PRESETS.length
 }
 
 /** Scale a pixel value by current UI scale. Use for all desktop sizes/fonts/margins. */
@@ -800,25 +801,7 @@ function PlayerListUi() {
       {/* Drown bar — screen-space, always on top */}
       {isDrownBarVisible() && <DrownBar />}
 
-      {/* UI Scale toast */}
-      {getUIScaleFlash() && (
-        <UiEntity
-          uiTransform={{
-            positionType: 'absolute',
-            position: { bottom: S(140), left: '50%' },
-            margin: { left: S(-80) },
-            width: S(160),
-            height: S(32),
-            flexDirection: 'row',
-            justifyContent: 'center',
-            alignItems: 'center',
-            borderRadius: S(8),
-          }}
-          uiBackground={{ color: PANEL_BG }}
-        >
-          <Label value={`UI: ${getUIScaleLabel()}`} fontSize={S(16)} color={WHITE} font="sans-serif" />
-        </UiEntity>
-      )}
+
 
       {/* Drown death overlay */}
       {getRespawnCountdown() > 0 && (
@@ -1215,16 +1198,7 @@ function DesktopLayout() {
                 </UiEntity>
                 <UiEntity uiTransform={{ height: S(12) }} />
 
-                {/* 1 — UI scale */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
-                  <UiEntity
-                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="1" fontSize={S(16)} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value={`UI size (${getUIScaleLabel()})`} fontSize={S(16)} color={MUTED} font="sans-serif" />
-                </UiEntity>
+
 
               </UiEntity>
             </UiEntity>
