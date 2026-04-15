@@ -59,6 +59,7 @@ const LIGHTNING_WARNING_DURATION = 3 // seconds warning before strike
 let lightningRollTimer = 0
 let lightningStrikeScheduled = false
 let lightningWarningTimer = 0
+let lightningOriginalCarrierId = '' // carrier when warning started — strike completes even if dropped
 
 function getLightningStrikeChance(points: number): number {
   if (points < 100) return 0.0
@@ -1738,29 +1739,40 @@ function lightningServerSystem(dt: number): void {
       lightningStrikeScheduled = false
       lightningWarningTimer = 0
 
-      // Fire the strike at the carrier's current position
-      if (carried) {
-        const carrierId = flag!.carrierPlayerId!
+      // If someone is carrying the flag, they get zapped.
+      // If the flag was dropped, strike the flag's position with no victim.
+      const victimId = carried ? flag!.carrierPlayerId! : ''
 
-        // Find carrier position from PlayerIdentityData transforms
-        let strikePos = { x: 256, y: 5, z: 256 } // fallback center
+      // Determine strike position: carrier's position if carried, flag position if dropped
+      let strikePos = { x: 256, y: 5, z: 256 } // fallback center
+      if (carried && victimId) {
         for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
           const identity = PlayerIdentityData.get(entity)
-          if (identity.address.toLowerCase() === carrierId.toLowerCase()) {
+          if (identity.address.toLowerCase() === victimId.toLowerCase()) {
             const t = Transform.getOrNull(entity)
             if (t) strikePos = { x: t.position.x, y: t.position.y, z: t.position.z }
             break
           }
         }
-        console.log('[Server] ⚡ Lightning strike at', strikePos.x.toFixed(1), strikePos.y.toFixed(1), strikePos.z.toFixed(1))
-        room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId: carrierId })
+      } else {
+        // Flag is on the ground — strike the flag's position
+        const flagT = Transform.getOrNull(flagEntity)
+        if (flagT) strikePos = { x: flagT.position.x, y: flagT.position.y, z: flagT.position.z }
+      }
 
+      console.log('[Server] ⚡ Lightning strike at', strikePos.x.toFixed(1), strikePos.y.toFixed(1), strikePos.z.toFixed(1), 'victim:', victimId || '(none - flag only)')
+      room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId })
+
+      // Drop the flag if it's still being carried
+      if (carried) {
         const mutable = Flag.getMutable(flagEntity)
         mutable.state = FlagState.Dropped
         mutable.carrierPlayerId = ''
         flushHoldTimeAccum()
         persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       }
+
+      lightningOriginalCarrierId = ''
     }
     return // Don't roll while a strike is pending
   }
@@ -1780,6 +1792,7 @@ function lightningServerSystem(dt: number): void {
       console.log(`[Server] ⚡ Lightning roll succeeded! Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
       lightningStrikeScheduled = true
       lightningWarningTimer = 0
+      lightningOriginalCarrierId = flag!.carrierPlayerId!
       room.send('lightningWarning', { t: 0 })
     } else if (chance > 0) {
       console.log(`[Server] ⚡ Lightning roll failed. Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
@@ -1917,6 +1930,7 @@ function countdownServerSystem(): void {
         lightningRollTimer = 0
         lightningStrikeScheduled = false
         lightningWarningTimer = 0
+        lightningOriginalCarrierId = ''
         room.send('respawnPlayers', { t: 0 })
         console.log('[Server] ⚠️ Emergency round-end recovery executed')
       } catch (recoveryErr) {
@@ -2036,6 +2050,7 @@ async function handleRoundEnd(): Promise<void> {
   lightningRollTimer = 0
   lightningStrikeScheduled = false
   lightningWarningTimer = 0
+  lightningOriginalCarrierId = ''
 
   // ── 6. Reset flag to random spawn point ──
   resetGravityState()

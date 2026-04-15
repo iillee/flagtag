@@ -763,6 +763,9 @@ export async function main() {
       })
     })
 
+    // Force-cancel gliding by triggering a brief emote (clears active glide state)
+    void triggerEmote({ predefinedEmote: 'wave' }).catch(() => {})
+
     // Cancel any active death respawns so cinematic can take over
     cancelDrownRespawn()
     cancelLightningRespawn()

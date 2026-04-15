@@ -585,8 +585,8 @@ export function lightningSystem(dt: number) {
     return
   }
 
-  // Clean up sparks if flag is no longer carried
-  if (!isFlagCarried()) {
+  // Clean up sparks if flag is no longer carried AND no strike is pending
+  if (!isFlagCarried() && !strikeScheduled) {
     if (sparksActive) {
       sparksActive = false
       for (const s of sparkEntities) {
