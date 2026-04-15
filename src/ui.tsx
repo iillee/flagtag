@@ -409,7 +409,7 @@ engine.addSystem(() => {
     if (getWinConditionOverlayVisible()) { setWinConditionOverlayVisible(false); closed = true }
     if (getLeaderboardOverlayVisible()) { setLeaderboardOverlayVisible(false); closed = true }
     if (getAnalyticsOverlayVisible()) { setAnalyticsOverlayVisible(false); closed = true }
-    if (closed) notifyOverlayClosed()
+    if (closed) { playClickSound(); notifyOverlayClosed() }
   }
 })
 
