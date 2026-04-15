@@ -389,6 +389,30 @@ engine.addSystem(() => {
   }
 })
 
+// ── Key 1 — cycle UI scale (also spectator exit in spectatorSystem) ──
+let uiScaleFlashUntil = 0
+function getUIScaleFlash(): boolean { return Date.now() < uiScaleFlashUntil }
+
+engine.addSystem(() => {
+  if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN)) {
+    if (!isSpectatorMode()) {
+      cycleUIScale()
+      uiScaleFlashUntil = Date.now() + 2000
+    }
+  }
+})
+
+// ── Key 4 — close any open overlay ──
+engine.addSystem(() => {
+  if (inputSystem.isTriggered(InputAction.IA_ACTION_6, PointerEventType.PET_DOWN)) {
+    let closed = false
+    if (getWinConditionOverlayVisible()) { setWinConditionOverlayVisible(false); closed = true }
+    if (getLeaderboardOverlayVisible()) { setLeaderboardOverlayVisible(false); closed = true }
+    if (getAnalyticsOverlayVisible()) { setAnalyticsOverlayVisible(false); closed = true }
+    if (closed) notifyOverlayClosed()
+  }
+})
+
 // Tie-breaking tracking for stable leaderboard sorting
 const roundWinAchievementTime = new Map<string, number>() // userId -> timestamp when they first achieved current win count
 let lastKnownWins = new Map<string, number>() // userId -> last known round wins
@@ -452,6 +476,31 @@ const CORAL_RED = Color4.create(1, 0.5, 0.45, 1)
 const PANEL_BG = Color4.create(0.1, 0.1, 0.1, 0.92)
 const PANEL_BG_SEMI = Color4.create(0.08, 0.08, 0.1, 0.87)
 
+// ═══════════════════════════════════════════════════════════
+// UI SCALE — adjust this single value to resize all desktop UI
+// 1.0 = default, 1.25 = 25% bigger, 0.8 = 20% smaller
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// UI SCALE — press 4 to cycle: Small → Medium → Large
+// ═══════════════════════════════════════════════════════════
+const UI_SCALE_PRESETS = [
+  { label: 'Small',  scale: 0.85 },
+  { label: 'Medium', scale: 1.0  },
+  { label: 'Large',  scale: 1.2  },
+]
+let uiScaleIndex = 1 // default Medium
+
+function getUIScale(): number { return UI_SCALE_PRESETS[uiScaleIndex].scale }
+function getUIScaleLabel(): string { return UI_SCALE_PRESETS[uiScaleIndex].label }
+function cycleUIScale() {
+  uiScaleIndex = (uiScaleIndex + 1) % UI_SCALE_PRESETS.length
+}
+
+/** Scale a pixel value by current UI scale. Use for all desktop sizes/fonts/margins. */
+function S(px: number): number {
+  return Math.round(px * getUIScale())
+}
+
 function getServerConnectionStatus(): 'Y' | 'N' {
   const flagCount = [...engine.getEntitiesWith(Flag)].length
   return flagCount > 0 ? 'Y' : 'N'
@@ -495,35 +544,38 @@ function formatVisitorTime(totalSeconds: number): string {
 // DROWN BAR — 2D screen-space air meter
 // ═══════════════════════════════════════════════════════════
 
-const DROWN_BAR_WIDTH = 200
-const DROWN_BAR_HEIGHT = 10
-
-const DROWN_BORDER = 2
+// Drown bar dimensions (computed at render time via S())
+const DROWN_BAR_WIDTH_BASE = 160
+const DROWN_BAR_HEIGHT_BASE = 10
+const DROWN_BORDER_BASE = 2
 
 function DrownBar() {
   const fraction = getDrownFraction()
   const fillColor = fraction < 0.25
     ? Color4.create(1, 0.3, 0.3, 0.95)
     : Color4.create(0.2, 0.5, 1.0, 0.95)
+  const barW = S(DROWN_BAR_WIDTH_BASE)
+  const barH = S(DROWN_BAR_HEIGHT_BASE)
+  const border = S(DROWN_BORDER_BASE)
 
   return (
     <UiEntity
       uiTransform={{
         positionType: 'absolute',
-        position: { bottom: 110, left: '50%' },
-        width: DROWN_BAR_WIDTH + DROWN_BORDER * 2,
-        height: DROWN_BAR_HEIGHT + DROWN_BORDER * 2,
-        margin: { left: -(DROWN_BAR_WIDTH + DROWN_BORDER * 2) / 2 },
-        borderRadius: (DROWN_BAR_HEIGHT + DROWN_BORDER * 2) / 2,
-        padding: DROWN_BORDER,
+        position: { bottom: S(110), left: '50%' },
+        width: barW + border * 2,
+        height: barH + border * 2,
+        margin: { left: -(barW + border * 2) / 2 },
+        borderRadius: (barH + border * 2) / 2,
+        padding: border,
       }}
-      uiBackground={{ color: Color4.create(1, 1, 1, 0.85) }}
+      uiBackground={{ color: PANEL_BG_SEMI }}
     >
       <UiEntity
         uiTransform={{
           width: '100%',
           height: '100%',
-          borderRadius: DROWN_BAR_HEIGHT / 2,
+          borderRadius: barH / 2,
         }}
         uiBackground={{ color: Color4.create(0, 0, 0, 0) }}
       >
@@ -531,7 +583,7 @@ function DrownBar() {
           uiTransform={{
             width: `${Math.max(0, Math.min(100, fraction * 100))}%`,
             height: '100%',
-            borderRadius: DROWN_BAR_HEIGHT / 2,
+            borderRadius: barH / 2,
           }}
           uiBackground={{ color: fillColor }}
         />
@@ -551,7 +603,7 @@ function PlayerListUi() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { top: 0, left: 0 },
+            position: { top: S(0), left: S(0) },
             width: '100%',
             height: '100%',
             flexDirection: 'column',
@@ -562,13 +614,13 @@ function PlayerListUi() {
         >
           {/* No scorers: show centered text on black screen */}
           {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
-            <Label value="Round Over" fontSize={42} color={GOLD} font="sans-serif" />
+            <Label value="Round Over" fontSize={S(42)} color={GOLD} font="sans-serif" />
           )}
           {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
-            <UiEntity uiTransform={{ height: 16 }} />
+            <UiEntity uiTransform={{ height: S(16) }} />
           )}
           {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
-            <Label value="Next round starting..." fontSize={20} color={LIGHT_GREY} font="sans-serif" />
+            <Label value="Next round starting..." fontSize={S(20)} color={LIGHT_GREY} font="sans-serif" />
           )}
         </UiEntity>
       )}
@@ -578,7 +630,7 @@ function PlayerListUi() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { top: 0, left: 0 },
+            position: { top: S(0), left: S(0) },
             width: '100%',
             height: '100%',
             flexDirection: 'row',
@@ -589,12 +641,12 @@ function PlayerListUi() {
         >
           <UiEntity
             uiTransform={{
-              width: 460,
+              width: S(460),
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: 16,
-              padding: { top: 36, bottom: 32, left: 40, right: 40 },
+              borderRadius: S(16),
+              padding: { top: S(36), bottom: S(32), left: S(40), right: S(40) },
             }}
             uiBackground={{ color: PANEL_BG }}
           >
@@ -602,9 +654,9 @@ function PlayerListUi() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 8, right: 8 },
-                width: 80,
-                height: 80,
+                position: { top: S(8), right: S(8) },
+                width: S(80),
+                height: S(80),
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -613,12 +665,12 @@ function PlayerListUi() {
               onMouseLeave={() => { closeServerDownHovered = false }}
               onMouseDown={() => { playClickSound(); serverDownDismissedAt = Date.now(); serverDownVisible = false; closeServerDownHovered = false }}
             >
-              <Label value="×" fontSize={44} color={closeServerDownHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={S(44)} color={closeServerDownHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
 
-            <Label value="Server Disconnected" fontSize={28} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: 12 }} />
-            <Label value="all players please leave scene for 5 minutes while server resets" fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+            <Label value="Server Disconnected" fontSize={S(28)} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ height: S(12) }} />
+            <Label value="all players please leave scene for 5 minutes while server resets" fontSize={S(18)} color={LIGHT_GREY} font="sans-serif" />
           </UiEntity>
         </UiEntity>
       )}
@@ -626,7 +678,7 @@ function PlayerListUi() {
       {mailboxPopupVisible && (
         <UiEntity uiTransform={{
           positionType: 'absolute',
-          position: { top: 0, left: 0 },
+          position: { top: S(0), left: S(0) },
           width: '100%',
           height: '100%',
           justifyContent: 'center',
@@ -634,20 +686,20 @@ function PlayerListUi() {
         }}
         >
           <UiEntity uiTransform={{
-            width: 420,
+            width: S(420),
             flexDirection: 'column',
             alignItems: 'center',
-            padding: { top: 24, bottom: 24, left: 24, right: 24 },
-            borderRadius: 20,
+            padding: { top: S(24), bottom: S(24), left: S(24), right: S(24) },
+            borderRadius: S(20),
           }}
           uiBackground={{ color: PANEL_BG }}
           >
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 12, right: 12 },
-                width: 80,
-                height: 80,
+                position: { top: S(12), right: S(12) },
+                width: S(80),
+                height: S(80),
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -656,22 +708,22 @@ function PlayerListUi() {
               onMouseLeave={() => { closeMailboxHovered = false }}
               onMouseDown={() => { playClickSound(); hideMailboxPopup(); closeMailboxHovered = false; notifyOverlayClosed() }}
             >
-              <Label value="×" fontSize={44} color={closeMailboxHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={S(44)} color={closeMailboxHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value="Leave a Message" fontSize={28} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: 8 } }} />
-            <Label value={"Join the Flagtag community to\nleave a review or report a bug"} fontSize={16} color={LIGHT_GREY} uiTransform={{ margin: { top: 4, bottom: 20 }, width: 360, height: 50 }} textAlign="middle-center" />
+            <Label value="Leave a Message" fontSize={S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: S(8) } }} />
+            <Label value={"Join the Flagtag community to\nleave a review or report a bug"} fontSize={S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: S(4), bottom: S(20) }, width: S(360), height: S(50) }} textAlign="middle-center" />
             <UiEntity
-              uiTransform={{ width: 240, height: 44, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}
+              uiTransform={{ width: S(240), height: S(44), borderRadius: S(8), justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
               onMouseDown={() => {
                 playClickSound()
                 joinCommunity()
               }}
             >
-              <Label value="Join Community" fontSize={18} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
+              <Label value="Join Community" fontSize={S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
             </UiEntity>
             {getMailboxStatus() ? (
-              <Label value={getMailboxStatus()} fontSize={13} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: 12 }, width: 360 }} textAlign="middle-center" />
+              <Label value={getMailboxStatus()} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: S(12) }, width: S(360) }} textAlign="middle-center" />
             ) : null}
           </UiEntity>
         </UiEntity>
@@ -680,7 +732,7 @@ function PlayerListUi() {
       {chestPopupVisible && (
         <UiEntity uiTransform={{
           positionType: 'absolute',
-          position: { top: 0, left: 0 },
+          position: { top: S(0), left: S(0) },
           width: '100%',
           height: '100%',
           justifyContent: 'center',
@@ -689,20 +741,20 @@ function PlayerListUi() {
         onMouseDown={() => {}}
         >
           <UiEntity uiTransform={{
-            width: 420,
+            width: S(420),
             flexDirection: 'column',
             alignItems: 'center',
-            padding: { top: 24, bottom: 24, left: 24, right: 24 },
-            borderRadius: 20,
+            padding: { top: S(24), bottom: S(24), left: S(24), right: S(24) },
+            borderRadius: S(20),
           }}
           uiBackground={{ color: PANEL_BG }}
           >
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 12, right: 12 },
-                width: 80,
-                height: 80,
+                position: { top: S(12), right: S(12) },
+                width: S(80),
+                height: S(80),
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -711,10 +763,10 @@ function PlayerListUi() {
               onMouseLeave={() => { closeChestHovered = false }}
               onMouseDown={() => { playClickSound(); hideChestPopup(); closeChestHovered = false }}
             >
-              <Label value="×" fontSize={44} color={closeChestHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={S(44)} color={closeChestHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value="Chest" fontSize={28} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 4 } }} />
-            <Label value="Choose your boomerang color" fontSize={16} color={LIGHT_GREY} uiTransform={{ margin: { top: 4, bottom: 28 }, width: 360 }} textAlign="middle-center" />
+            <Label value="Chest" fontSize={S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(4) } }} />
+            <Label value="Choose your boomerang color" fontSize={S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: S(4), bottom: S(28) }, width: S(360) }} textAlign="middle-center" />
             <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
               {(['r', 'y', 'b', 'g'] as BoomerangColor[]).map((color) => {
                 const selected = getBoomerangColor() === color
@@ -723,11 +775,11 @@ function PlayerListUi() {
                   <UiEntity
                     key={`boom-${color}`}
                     uiTransform={{
-                      width: 80,
-                      height: 80,
-                      margin: { left: 6, right: 6 },
-                      padding: 4,
-                      borderRadius: 12,
+                      width: S(80),
+                      height: S(80),
+                      margin: { left: S(6), right: S(6) },
+                      padding: S(4),
+                      borderRadius: S(12),
                       justifyContent: 'center',
                       alignItems: 'center',
                     }}
@@ -735,7 +787,7 @@ function PlayerListUi() {
                     onMouseDown={() => { playClickSound(); setBoomerangColor(color) }}
                   >
                     <UiEntity
-                      uiTransform={{ width: 60, height: 60 }}
+                      uiTransform={{ width: S(60), height: S(60) }}
                       uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${color}.png` } }}
                     />
                   </UiEntity>
@@ -748,12 +800,32 @@ function PlayerListUi() {
       {/* Drown bar — screen-space, always on top */}
       {isDrownBarVisible() && <DrownBar />}
 
+      {/* UI Scale toast */}
+      {getUIScaleFlash() && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { bottom: S(140), left: '50%' },
+            margin: { left: S(-80) },
+            width: S(160),
+            height: S(32),
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderRadius: S(8),
+          }}
+          uiBackground={{ color: PANEL_BG }}
+        >
+          <Label value={`UI: ${getUIScaleLabel()}`} fontSize={S(16)} color={WHITE} font="sans-serif" />
+        </UiEntity>
+      )}
+
       {/* Drown death overlay */}
       {getRespawnCountdown() > 0 && (
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { top: 0, left: 0 },
+            position: { top: S(0), left: S(0) },
             width: '100%',
             height: '100%',
             flexDirection: 'column',
@@ -763,13 +835,13 @@ function PlayerListUi() {
           uiBackground={{ color: Color4.create(0, 0, 0, getDrownFadeOpacity()) }}
         >
           {isDrownTextVisible() && (
-            <Label value="You Drowned!" fontSize={42} color={CORAL_RED} font="sans-serif" />
+            <Label value="You Drowned!" fontSize={S(42)} color={CORAL_RED} font="sans-serif" />
           )}
           {isDrownTextVisible() && (
-            <UiEntity uiTransform={{ height: 12 }} />
+            <UiEntity uiTransform={{ height: S(12) }} />
           )}
           {isDrownTextVisible() && (
-            <Label value={`Respawning in ${Math.ceil(getRespawnCountdown())}...`} fontSize={20} color={LIGHT_GREY} font="sans-serif" />
+            <Label value={`Respawning in ${Math.ceil(getRespawnCountdown())}...`} fontSize={S(20)} color={LIGHT_GREY} font="sans-serif" />
           )}
         </UiEntity>
       )}
@@ -779,7 +851,7 @@ function PlayerListUi() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { top: 0, left: 0 },
+            position: { top: S(0), left: S(0) },
             width: '100%',
             height: '100%',
             flexDirection: 'column',
@@ -789,13 +861,13 @@ function PlayerListUi() {
           uiBackground={{ color: Color4.create(0, 0, 0, getLightningFadeOpacity()) }}
         >
           {isLightningTextVisible() && (
-            <Label value="You were struck by lightning!" fontSize={42} color={CORAL_RED} font="sans-serif" />
+            <Label value="You were struck by lightning!" fontSize={S(42)} color={CORAL_RED} font="sans-serif" />
           )}
           {isLightningTextVisible() && (
-            <UiEntity uiTransform={{ height: 12 }} />
+            <UiEntity uiTransform={{ height: S(12) }} />
           )}
           {isLightningTextVisible() && (
-            <Label value={`Respawning in ${Math.ceil(getLightningRespawnCountdown())}...`} fontSize={20} color={LIGHT_GREY} font="sans-serif" />
+            <Label value={`Respawning in ${Math.ceil(getLightningRespawnCountdown())}...`} fontSize={S(20)} color={LIGHT_GREY} font="sans-serif" />
           )}
         </UiEntity>
       )}
@@ -804,7 +876,7 @@ function PlayerListUi() {
       {isSpectatorMode() && (
         <UiEntity uiTransform={{
           positionType: 'absolute',
-          position: { bottom: 20, left: 0 },
+          position: { bottom: S(20), left: S(0) },
           width: '100%',
           flexDirection: 'column',
           alignItems: 'center',
@@ -812,24 +884,24 @@ function PlayerListUi() {
           <UiEntity uiTransform={{
             flexDirection: 'column',
             alignItems: 'center',
-            padding: { top: 14, bottom: 14, left: 24, right: 24 },
-            borderRadius: 18,
+            padding: { top: S(14), bottom: S(14), left: S(24), right: S(24) },
+            borderRadius: S(18),
           }}
             uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 0.92) }}
           >
-            <Label value="SPECTATOR MODE" fontSize={28} color={Color4.White()} />
-            <Label value="WASD = Orbit  |  E/F = Up/Down" fontSize={14} color={Color4.create(1, 1, 1, 0.8)} />
+            <Label value="SPECTATOR MODE" fontSize={S(28)} color={Color4.White()} />
+            <Label value="WASD = Orbit  |  E/F = Up/Down" fontSize={S(14)} color={Color4.create(1, 1, 1, 0.8)} />
             <UiEntity
-              uiTransform={{ width: 160, height: 40, margin: { top: 8 }, borderRadius: 10 }}
+              uiTransform={{ width: S(160), height: S(40), margin: { top: S(8) }, borderRadius: S(10) }}
               uiBackground={{ color: spectatorExitBlink ? Color4.create(0.5, 0.5, 0.5, 0.9) : Color4.create(1, 1, 1, 0.9) }}
               onMouseDown={() => {
                 playClickSound()
                 spectatorExitBlink = true
-                executeTask(async () => { await new Promise(r => setTimeout(r, 120)); spectatorExitBlink = false })
+                executeTask(async () => { await new Promise<void>(r => setTimeout(r, 120)); spectatorExitBlink = false })
                 exitSpectatorMode()
               }}
             >
-              <Label value="Exit (1)" fontSize={18} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
+              <Label value="Exit (1)" fontSize={S(18)} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
             </UiEntity>
           </UiEntity>
         </UiEntity>
@@ -842,22 +914,22 @@ function PlayerListUi() {
 // DESKTOP LAYOUT (unchanged from original)
 // ═══════════════════════════════════════════════════════════
 
-const PANEL_WIDTH = 240
-const ROW_HEIGHT = 32
+// Desktop layout base values (scaled at render time via S())
+const _PANEL_WIDTH = 240
+const _ROW_HEIGHT = 32
 const VISITORS_PER_PAGE = 10
-const VISITOR_ROW_H = ROW_HEIGHT + 4
 const LEADERBOARD_PER_PAGE = 12
-const TITLE_FONT = 20
-const ROW_FONT = 15
-const PADDING = 14
-const BORDER_RADIUS = 18
-const ICON_FONT_SQUARE = 20
-const ICON_FONT_QUESTION = 22
-const ICON_FONT_ANALYTICS = 20
-const ABILITY_BTN_SIZE = 74
-const ABILITY_ICON_SIZE = 54
-const OVERLAY_PANEL_WIDTH = 680
-const OVERLAY_PANEL_HEIGHT = 520
+const _TITLE_FONT = 20
+const _ROW_FONT = 15
+const _PADDING = 14
+const _BORDER_RADIUS = 18
+const _ICON_FONT_SQUARE = 20
+const _ICON_FONT_QUESTION = 22
+const _ICON_FONT_ANALYTICS = 20
+const _ABILITY_BTN_SIZE = 74
+const _ABILITY_ICON_SIZE = 54
+const _OVERLAY_PANEL_WIDTH = 680
+const _OVERLAY_PANEL_HEIGHT = 520
 
 function DesktopLayout() {
   const rawPlayers = getPlayersWithHoldTimes()
@@ -897,7 +969,7 @@ function DesktopLayout() {
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
-          position: { top: 14, left: 0 },
+          position: { top: S(14), left: S(0) },
           width: '100%',
           flexDirection: 'row',
           justifyContent: 'center',
@@ -908,14 +980,14 @@ function DesktopLayout() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            height: 2 * ROW_HEIGHT + 2 * PADDING,
-            padding: { left: 20, right: 20 },
-            borderRadius: BORDER_RADIUS,
+            height: S(2) * S(_ROW_HEIGHT) + 2 * S(_PADDING),
+            padding: { left: S(20), right: S(20) },
+            borderRadius: S(_BORDER_RADIUS),
           }}
           uiBackground={{ color: PANEL_BG }}
         >
-          <Label value="Round ends in:" fontSize={16} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { bottom: -6 } }} />
-          <Label value={formatCountdown(countdownSeconds)} fontSize={40} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: -6 } }} />
+          <Label value="Round ends in:" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { bottom: S(-6) } }} />
+          <Label value={formatCountdown(countdownSeconds)} fontSize={S(40)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: S(-6) } }} />
         </UiEntity>
       </UiEntity>
 
@@ -924,25 +996,25 @@ function DesktopLayout() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { top: 0, left: 0 },
+            position: { top: S(0), left: S(0) },
             width: '100%',
             height: '100%',
             flexDirection: 'row',
             justifyContent: 'center',
             alignItems: 'flex-end',
-            padding: { bottom: 40 },
+            padding: { bottom: S(40) },
           }}
         >
           <UiEntity
             uiTransform={{
               positionType: 'relative',
-              width: 440,
-              minHeight: 280,
+              width: S(440),
+              minHeight: S(280),
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: 16,
-              padding: { top: 36, bottom: 28, left: 40, right: 40 },
+              borderRadius: S(16),
+              padding: { top: S(36), bottom: S(28), left: S(40), right: S(40) },
               overflow: 'hidden',
             }}
             uiBackground={{ color: PANEL_BG }}
@@ -952,11 +1024,11 @@ function DesktopLayout() {
                 value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
                   ? `${splashPlayers[0].name} Wins!`
                   : 'Round Over!'}
-                fontSize={34}
+                fontSize={S(34)}
                 color={GOLD}
                 font="sans-serif"
               />
-              <UiEntity uiTransform={{ height: 28 }} />
+              <UiEntity uiTransform={{ height: S(28) }} />
               {splashPlayers.map((p, i) => {
                 const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
                 const scoreColor = LIGHT_GREY
@@ -965,24 +1037,24 @@ function DesktopLayout() {
                     key={`splash-${i}`}
                     uiTransform={{
                       width: '100%',
-                      height: 34,
+                      height: S(34),
                       flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: { left: 4, right: 4 },
+                      padding: { left: S(4), right: S(4) },
                     }}
                   >
                     <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Label value={`#${i + 1}`} fontSize={18} color={rankColor} font="sans-serif" />
-                      <UiEntity uiTransform={{ width: 10 }} />
-                      <Label value={p.name} fontSize={18} color={rankColor} font="sans-serif" />
+                      <Label value={`#${i + 1}`} fontSize={S(18)} color={rankColor} font="sans-serif" />
+                      <UiEntity uiTransform={{ width: S(10) }} />
+                      <Label value={p.name} fontSize={S(18)} color={rankColor} font="sans-serif" />
                     </UiEntity>
-                    <Label value={`${p.seconds}`} fontSize={18} color={scoreColor} font="sans-serif" />
+                    <Label value={`${p.seconds}`} fontSize={S(18)} color={scoreColor} font="sans-serif" />
                   </UiEntity>
                 )
               })}
-              <UiEntity uiTransform={{ height: 24 }} />
-              <Label value="Next round starting..." fontSize={15} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ height: S(24) }} />
+              <Label value="Next round starting..." fontSize={S(15)} color={LIGHT_GREY} font="sans-serif" />
             </UiEntity>
           </UiEntity>
         </UiEntity>
@@ -993,7 +1065,7 @@ function DesktopLayout() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { left: 0, top: 0 },
+            position: { left: S(0), top: S(0) },
             width: '100%',
             height: '100%',
             flexDirection: 'row',
@@ -1005,11 +1077,11 @@ function DesktopLayout() {
           <UiEntity
             uiTransform={{
               positionType: 'relative',
-              width: 780,
+              width: S(780),
               flexDirection: 'column',
               alignItems: 'center',
-              borderRadius: 20,
-              padding: { top: 32, bottom: 32, left: 40, right: 40 },
+              borderRadius: S(20),
+              padding: { top: S(32), bottom: S(32), left: S(40), right: S(40) },
             }}
             uiBackground={{ color: PANEL_BG }}
             onMouseDown={() => {}}
@@ -1018,9 +1090,9 @@ function DesktopLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 12, right: 12 },
-                width: 80,
-                height: 80,
+                position: { top: S(12), right: S(12) },
+                width: S(80),
+                height: S(80),
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1029,22 +1101,22 @@ function DesktopLayout() {
               onMouseLeave={() => { closeWinConditionHovered = false }}
               onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false; notifyOverlayClosed() }}
             >
-              <Label value="×" fontSize={44} color={closeWinConditionHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={S(44)} color={closeWinConditionHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
 
             {/* Title */}
-            <Label value="Flag Tag!" fontSize={56} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: 0 }} />
+            <Label value="Flag Tag!" fontSize={S(56)} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ height: S(0) }} />
 
             {/* Subtitle */}
             <Label
               value="A multiplayer keep away game running 24/7"
-              fontSize={17}
+              fontSize={S(17)}
               color={MUTED}
               font="sans-serif"
               textAlign="top-center"
             />
-            <UiEntity uiTransform={{ height: 12 }} />
+            <UiEntity uiTransform={{ height: S(12) }} />
 
             {/* Two-column layout: How to Play | Controls */}
             <UiEntity
@@ -1063,17 +1135,17 @@ function DesktopLayout() {
                   alignItems: 'flex-start',
                 }}
               >
-                <Label value="How to Play" fontSize={24} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Walk into the flag to pick it up" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Get close to the carrier to steal the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  Throw boomerang & banana traps to stun your rivals" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 12 }} />
-                <Label value="•  The player with the most points after 5 min. wins!" fontSize={16} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="How to Play" fontSize={S(24)} color={GOLD} font="sans-serif" />
+                <UiEntity uiTransform={{ height: S(12) }} />
+                <Label value="•  Walk into the flag to pick it up" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <UiEntity uiTransform={{ height: S(12) }} />
+                <Label value="•  Get close to the carrier to steal the flag" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <UiEntity uiTransform={{ height: S(12) }} />
+                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <UiEntity uiTransform={{ height: S(12) }} />
+                <Label value="•  Throw boomerang & banana traps to stun your rivals" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <UiEntity uiTransform={{ height: S(12) }} />
+                <Label value="•  The player with the most points after 5 min. wins!" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
               </UiEntity>
 
               {/* Right column — Controls */}
@@ -1084,63 +1156,76 @@ function DesktopLayout() {
                   alignItems: 'flex-start',
                 }}
               >
-                <Label value="Controls" fontSize={24} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: 12 }} />
+                <Label value="Controls" fontSize={S(24)} color={GOLD} font="sans-serif" />
+                <UiEntity uiTransform={{ height: S(12) }} />
 
                 {/* E — throw boomerang */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 34 }}>
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
                   <UiEntity
-                    uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
+                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
                     uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
                   >
-                    <Label value="E" fontSize={16} color={WHITE} font="sans-serif" />
+                    <Label value="E" fontSize={S(16)} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="throw boomerang" fontSize={16} color={MUTED} font="sans-serif" />
+                  <Label value="throw boomerang" fontSize={S(16)} color={MUTED} font="sans-serif" />
                   <UiEntity
-                    uiTransform={{ width: 41, height: 41, margin: { left: 8 } }}
+                    uiTransform={{ width: S(41), height: S(41), margin: { left: S(8) } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
                   />
                 </UiEntity>
-                <UiEntity uiTransform={{ height: 12 }} />
+                <UiEntity uiTransform={{ height: S(12) }} />
 
                 {/* F — drop banana */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 34 }}>
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
                   <UiEntity
-                    uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
+                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
                     uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
                   >
-                    <Label value="F" fontSize={16} color={WHITE} font="sans-serif" />
+                    <Label value="F" fontSize={S(16)} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="drop banana" fontSize={16} color={MUTED} font="sans-serif" />
+                  <Label value="drop banana" fontSize={S(16)} color={MUTED} font="sans-serif" />
                   <UiEntity
-                    uiTransform={{ width: 43, height: 43, margin: { left: 8 } }}
+                    uiTransform={{ width: S(43), height: S(43), margin: { left: S(8) } }}
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
                   />
                 </UiEntity>
-                <UiEntity uiTransform={{ height: 12 }} />
+                <UiEntity uiTransform={{ height: S(12) }} />
 
                 {/* 3 — drop flag */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 34 }}>
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
                   <UiEntity
-                    uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
+                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
                     uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
                   >
-                    <Label value="3" fontSize={16} color={WHITE} font="sans-serif" />
+                    <Label value="3" fontSize={S(16)} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value="drop flag" fontSize={16} color={MUTED} font="sans-serif" />
+                  <Label value="drop flag" fontSize={S(16)} color={MUTED} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ height: 12 }} />
+                <UiEntity uiTransform={{ height: S(12) }} />
 
                 {/* 2 — mute music */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 34 }}>
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
                   <UiEntity
-                    uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
+                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
                     uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
                   >
-                    <Label value="2" fontSize={16} color={WHITE} font="sans-serif" />
+                    <Label value="2" fontSize={S(16)} color={WHITE} font="sans-serif" />
                   </UiEntity>
-                  <Label value={musicMuted ? "unmute music" : "mute music"} fontSize={16} color={MUTED} font="sans-serif" />
+                  <Label value={musicMuted ? "unmute music" : "mute music"} fontSize={S(16)} color={MUTED} font="sans-serif" />
                 </UiEntity>
+                <UiEntity uiTransform={{ height: S(12) }} />
+
+                {/* 1 — UI scale */}
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
+                  <UiEntity
+                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
+                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
+                  >
+                    <Label value="1" fontSize={S(16)} color={WHITE} font="sans-serif" />
+                  </UiEntity>
+                  <Label value={`UI size (${getUIScaleLabel()})`} fontSize={S(16)} color={MUTED} font="sans-serif" />
+                </UiEntity>
+
               </UiEntity>
             </UiEntity>
           </UiEntity>
@@ -1163,7 +1248,7 @@ function DesktopLayout() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { left: 0, top: 0 },
+            position: { left: S(0), top: S(0) },
             width: '100%',
             height: '100%',
             flexDirection: 'row',
@@ -1174,12 +1259,12 @@ function DesktopLayout() {
           <UiEntity
             uiTransform={{
               positionType: 'relative',
-              width: OVERLAY_PANEL_WIDTH,
-              height: OVERLAY_PANEL_HEIGHT,
+              width: S(_OVERLAY_PANEL_WIDTH),
+              height: S(_OVERLAY_PANEL_HEIGHT),
               flexDirection: 'column',
               alignItems: 'stretch',
-              borderRadius: 20,
-              padding: 24,
+              borderRadius: S(20),
+              padding: S(24),
               overflow: 'hidden',
             }}
             uiBackground={{ color: PANEL_BG }}
@@ -1187,9 +1272,9 @@ function DesktopLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 12, right: 12 },
-                width: 80,
-                height: 80,
+                position: { top: S(12), right: S(12) },
+                width: S(80),
+                height: S(80),
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1198,10 +1283,10 @@ function DesktopLayout() {
               onMouseLeave={() => { closeLeaderboardHovered = false }}
               onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); closeLeaderboardHovered = false; notifyOverlayClosed() }}
             >
-              <Label value="×" fontSize={44} color={closeLeaderboardHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={S(44)} color={closeLeaderboardHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value="Today's Leaderboard" fontSize={28} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: 12 }} />
+            <Label value="Today's Leaderboard" fontSize={S(28)} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ height: S(12) }} />
 
             <UiEntity
               uiTransform={{
@@ -1217,8 +1302,8 @@ function DesktopLayout() {
                 }}
               >
                 {totalEntries === 0 ? (
-                  <UiEntity uiTransform={{ height: ROW_HEIGHT * 2, justifyContent: 'center', alignItems: 'center' }}>
-                    <Label value="No champions yet..." fontSize={ROW_FONT} color={MUTED} font="sans-serif" />
+                  <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>
+                    <Label value="No champions yet..." fontSize={S(_ROW_FONT)} color={MUTED} font="sans-serif" />
                   </UiEntity>
                 ) : (
                   visibleEntries.map((entry, i) => {
@@ -1228,17 +1313,17 @@ function DesktopLayout() {
                       <UiEntity
                         key={`leaderboard-${entry.userId}-${leaderboardScrollOffset}-${i}`}
                         uiTransform={{
-                          height: ROW_HEIGHT,
+                          height: S(_ROW_HEIGHT),
                           flexDirection: 'row',
                           alignItems: 'center',
                           justifyContent: 'flex-start',
                         }}
                       >
                         {Array.from({ length: entry.roundsWon }, (_, ri) => (
-                          <UiEntity key={`rw-${ri}`} uiTransform={{ width: 14, height: 14, margin: { right: 2 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                          <UiEntity key={`rw-${ri}`} uiTransform={{ width: S(14), height: S(14), margin: { right: S(2) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
                         ))}
-                        {entry.roundsWon > 0 && <UiEntity uiTransform={{ width: 4 }} />}
-                        <Label value={entry.name} fontSize={ROW_FONT} color={nameColor} font="sans-serif" />
+                        {entry.roundsWon > 0 && <UiEntity uiTransform={{ width: S(4) }} />}
+                        <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" />
                       </UiEntity>
                     )
                   })
@@ -1248,28 +1333,28 @@ function DesktopLayout() {
               {lbNeedsScroll && (
                 <UiEntity
                   uiTransform={{
-                    width: 24,
+                    width: S(24),
                     flexDirection: 'column',
                     alignItems: 'center',
-                    margin: { left: 4 },
+                    margin: { left: S(4) },
                   }}
                 >
                   <UiEntity
                     uiTransform={{
-                      width: 24, height: 28,
+                      width: S(24), height: S(28),
                       flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-                      borderRadius: 4,
+                      borderRadius: S(4),
                     }}
                     uiBackground={{ color: lbCanScrollUp ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                     onMouseDown={() => { if (lbCanScrollUp) leaderboardScrollOffset -= 1 }}
                   >
-                    <Label value="▲" fontSize={14} color={lbCanScrollUp ? WHITE : CLOSE_GREY} font="sans-serif" />
+                    <Label value="▲" fontSize={S(14)} color={lbCanScrollUp ? WHITE : CLOSE_GREY} font="sans-serif" />
                   </UiEntity>
 
                   <UiEntity
                     uiTransform={{
-                      width: 10, flexGrow: 1, flexDirection: 'column',
-                      borderRadius: 0, margin: { top: 2, bottom: 2 },
+                      width: S(10), flexGrow: 1, flexDirection: 'column',
+                      borderRadius: S(0), margin: { top: S(2), bottom: S(2) },
                     }}
                     uiBackground={{ color: Color4.create(0.18, 0.18, 0.2, 1) }}
                   >
@@ -1287,7 +1372,7 @@ function DesktopLayout() {
                         segments.push(
                           <UiEntity
                             key={`lb-track-seg-${s}`}
-                            uiTransform={{ width: 10, flexGrow: 1, borderRadius: 0 }}
+                            uiTransform={{ width: S(10), flexGrow: 1, borderRadius: S(0) }}
                             uiBackground={{ color: isThumb ? Color4.create(0.45, 0.45, 0.5, 1) : Color4.create(0, 0, 0, 0) }}
                             onMouseDown={() => { leaderboardScrollOffset = segTarget }}
                           />
@@ -1299,14 +1384,14 @@ function DesktopLayout() {
 
                   <UiEntity
                     uiTransform={{
-                      width: 24, height: 28,
+                      width: S(24), height: S(28),
                       flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-                      borderRadius: 4,
+                      borderRadius: S(4),
                     }}
                     uiBackground={{ color: lbCanScrollDown ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                     onMouseDown={() => { if (lbCanScrollDown) leaderboardScrollOffset += 1 }}
                   >
-                    <Label value="▼" fontSize={14} color={lbCanScrollDown ? WHITE : CLOSE_GREY} font="sans-serif" />
+                    <Label value="▼" fontSize={S(14)} color={lbCanScrollDown ? WHITE : CLOSE_GREY} font="sans-serif" />
                   </UiEntity>
                 </UiEntity>
               )}
@@ -1333,7 +1418,7 @@ function DesktopLayout() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { left: 0, top: 0 },
+            position: { left: S(0), top: S(0) },
             width: '100%',
             height: '100%',
             flexDirection: 'row',
@@ -1344,21 +1429,21 @@ function DesktopLayout() {
           <UiEntity
             uiTransform={{
               positionType: 'relative',
-              width: OVERLAY_PANEL_WIDTH,
-              height: OVERLAY_PANEL_HEIGHT,
+              width: S(_OVERLAY_PANEL_WIDTH),
+              height: S(_OVERLAY_PANEL_HEIGHT),
               flexDirection: 'column',
               alignItems: 'flex-start',
-              borderRadius: 20,
-              padding: 24,
+              borderRadius: S(20),
+              padding: S(24),
             }}
             uiBackground={{ color: PANEL_BG }}
           >
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 12, right: 12 },
-                width: 80,
-                height: 80,
+                position: { top: S(12), right: S(12) },
+                width: S(80),
+                height: S(80),
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1367,43 +1452,43 @@ function DesktopLayout() {
               onMouseLeave={() => { closeAnalyticsHovered = false }}
               onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false); closeAnalyticsHovered = false; notifyOverlayClosed() }}
             >
-              <Label value="×" fontSize={44} color={closeAnalyticsHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={S(44)} color={closeAnalyticsHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value="Daily Visitors" fontSize={28} color={GOLD} font="sans-serif" textAlign="top-left" />
-            <UiEntity uiTransform={{ height: 16 }} />
+            <Label value="Daily Visitors" fontSize={S(28)} color={GOLD} font="sans-serif" textAlign="top-left" />
+            <UiEntity uiTransform={{ height: S(16) }} />
             
             <UiEntity
               uiTransform={{
                 width: '100%',
-                height: ROW_HEIGHT,
+                height: S(_ROW_HEIGHT),
                 flexDirection: 'row',
                 alignItems: 'center',
               }}
             >
               <UiEntity uiTransform={{ width: '20%' }}>
-                <Label value={`Unique Users: ${visitorCount}`} fontSize={13} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`Unique Users: ${visitorCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: '14%' }}>
-                <Label value={`Online: ${onlineCount}`} fontSize={13} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`Online: ${onlineCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: '12%' }}>
-                <Label value={`Server: ${serverConnected}`} fontSize={13} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: '18%' }}>
-                <Label value={`Date: ${formatUTCDate()}`} fontSize={13} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: '26%' }}>
-                <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={13} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
               <UiEntity
-                uiTransform={{ width: '10%', height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                uiTransform={{ width: '10%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
                 onMouseDown={() => { playClickSound(); toggleMusicMute() }}
               >
-                <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={13} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
+                <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
               </UiEntity>
             </UiEntity>
             
-            <UiEntity uiTransform={{ height: 20 }} />
+            <UiEntity uiTransform={{ height: S(20) }} />
             
             <UiEntity
               uiTransform={{
@@ -1418,8 +1503,8 @@ function DesktopLayout() {
                 }}
               >
                 {totalVisitors === 0 ? (
-                  <UiEntity uiTransform={{ height: ROW_HEIGHT * 2, justifyContent: 'center', alignItems: 'center' }}>
-                    <Label value="No visitors today" fontSize={ROW_FONT} color={MUTED} font="sans-serif" />
+                  <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>
+                    <Label value="No visitors today" fontSize={S(_ROW_FONT)} color={MUTED} font="sans-serif" />
                   </UiEntity>
                 ) : (
                   visibleVisitors.map((visitor, i) => (
@@ -1427,28 +1512,28 @@ function DesktopLayout() {
                         key={`visitor-${visitor.userId}-${visitorScrollOffset}-${i}`}
                         uiTransform={{
                           width: '100%',
-                          height: VISITOR_ROW_H,
+                          height: (S(_ROW_HEIGHT) + S(4)),
                           flexDirection: 'row',
                           alignItems: 'center',
-                          padding: { left: 0, right: 8, top: 2, bottom: 2 },
+                          padding: { left: S(0), right: S(8), top: S(2), bottom: S(2) },
                         }}
                       >
                         <UiEntity uiTransform={{ width: '5%', flexDirection: 'row', alignItems: 'center' }}>
                           <Label 
                             value={visitor.isOnline ? "●" : "○"} 
-                            fontSize={14} 
+                            fontSize={S(14)} 
                             color={visitor.isOnline ? WHITE : GREY} 
                             font="sans-serif" 
                           />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '22%', overflow: 'hidden', height: VISITOR_ROW_H, maxHeight: VISITOR_ROW_H }}>
-                          <Label value={visitor.name} fontSize={12} color={WHITE} font="sans-serif" />
+                        <UiEntity uiTransform={{ width: '22%', overflow: 'hidden', height: (S(_ROW_HEIGHT) + S(4)), maxHeight: (S(_ROW_HEIGHT) + S(4)) }}>
+                          <Label value={visitor.name} fontSize={S(12)} color={WHITE} font="sans-serif" />
                         </UiEntity>
-                        <UiEntity uiTransform={{ width: '61%', overflow: 'hidden', height: VISITOR_ROW_H, maxHeight: VISITOR_ROW_H, padding: { left: 16 } }}>
-                          <Label value={visitor.userId} fontSize={11} color={WHITE} font="sans-serif" />
+                        <UiEntity uiTransform={{ width: '61%', overflow: 'hidden', height: (S(_ROW_HEIGHT) + S(4)), maxHeight: (S(_ROW_HEIGHT) + S(4)), padding: { left: S(16) } }}>
+                          <Label value={visitor.userId} fontSize={S(11)} color={WHITE} font="sans-serif" />
                         </UiEntity>
                         <UiEntity uiTransform={{ width: '12%', flexDirection: 'row', justifyContent: 'flex-end' }}>
-                          <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={12} color={WHITE} font="sans-serif" />
+                          <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={S(12)} color={WHITE} font="sans-serif" />
                         </UiEntity>
                       </UiEntity>
                     ))
@@ -1458,28 +1543,28 @@ function DesktopLayout() {
               {needsScroll && (
                 <UiEntity
                   uiTransform={{
-                    width: 24,
+                    width: S(24),
                     flexDirection: 'column',
                     alignItems: 'center',
-                    margin: { left: 4 },
+                    margin: { left: S(4) },
                   }}
                 >
                   <UiEntity
                     uiTransform={{
-                      width: 24, height: 28,
+                      width: S(24), height: S(28),
                       flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-                      borderRadius: 4,
+                      borderRadius: S(4),
                     }}
                     uiBackground={{ color: canScrollUp ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                     onMouseDown={() => { if (canScrollUp) visitorScrollOffset -= 1 }}
                   >
-                    <Label value="▲" fontSize={14} color={canScrollUp ? WHITE : CLOSE_GREY} font="sans-serif" />
+                    <Label value="▲" fontSize={S(14)} color={canScrollUp ? WHITE : CLOSE_GREY} font="sans-serif" />
                   </UiEntity>
 
                   <UiEntity
                     uiTransform={{
-                      width: 10, flexGrow: 1, flexDirection: 'column',
-                      borderRadius: 0, margin: { top: 2, bottom: 2 },
+                      width: S(10), flexGrow: 1, flexDirection: 'column',
+                      borderRadius: S(0), margin: { top: S(2), bottom: S(2) },
                     }}
                     uiBackground={{ color: Color4.create(0.18, 0.18, 0.2, 1) }}
                   >
@@ -1497,7 +1582,7 @@ function DesktopLayout() {
                         segments.push(
                           <UiEntity
                             key={`track-seg-${s}`}
-                            uiTransform={{ width: 10, flexGrow: 1, borderRadius: 0 }}
+                            uiTransform={{ width: S(10), flexGrow: 1, borderRadius: S(0) }}
                             uiBackground={{ color: isThumb ? Color4.create(0.45, 0.45, 0.5, 1) : Color4.create(0, 0, 0, 0) }}
                             onMouseDown={() => { visitorScrollOffset = segTarget }}
                           />
@@ -1509,14 +1594,14 @@ function DesktopLayout() {
 
                   <UiEntity
                     uiTransform={{
-                      width: 24, height: 28,
+                      width: S(24), height: S(28),
                       flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-                      borderRadius: 4,
+                      borderRadius: S(4),
                     }}
                     uiBackground={{ color: canScrollDown ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                     onMouseDown={() => { if (canScrollDown) visitorScrollOffset += 1 }}
                   >
-                    <Label value="▼" fontSize={14} color={canScrollDown ? WHITE : CLOSE_GREY} font="sans-serif" />
+                    <Label value="▼" fontSize={S(14)} color={canScrollDown ? WHITE : CLOSE_GREY} font="sans-serif" />
                   </UiEntity>
                 </UiEntity>
               )}
@@ -1530,7 +1615,7 @@ function DesktopLayout() {
       {!cinematicShowing && !isSpectatorMode() && !isSpectatorTransitioning() && <UiEntity
         uiTransform={{
           positionType: 'absolute',
-          position: { bottom: 24 },
+          position: { bottom: S(24) },
           width: '100%',
           flexDirection: 'row',
           justifyContent: 'center',
@@ -1545,18 +1630,18 @@ function DesktopLayout() {
           {/* Projectile (E) */}
           <UiEntity
             uiTransform={{
-              width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
+              width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE),
               flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              borderRadius: { topLeft: 0, topRight: 38, bottomLeft: 38, bottomRight: 38 },
-              margin: { right: 8 },
+              borderRadius: { topLeft: S(0), topRight: S(38), bottomLeft: S(38), bottomRight: S(38) },
+              margin: { right: S(8) },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
-            <Label value="E" fontSize={16} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 5 } }}
+            <Label value="E" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif"
+              uiTransform={{ positionType: 'absolute', position: { top: S(-2), left: S(5) } }}
             />
             <UiEntity
-              uiTransform={{ width: (ABILITY_ICON_SIZE - 6) * 1.5, height: (ABILITY_ICON_SIZE - 6) * 1.5, margin: { top: -2 } }}
+              uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, margin: { top: S(-2) } }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : `assets/images/boomerang.${getBoomerangColor()}.png` },
@@ -1564,7 +1649,7 @@ function DesktopLayout() {
               }}
             />
             {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && (
-              <Label value={`${getProjectileCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+              <Label value={`${getProjectileCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif"
                 uiTransform={{ positionType: 'absolute' }}
               />
             )}
@@ -1573,18 +1658,18 @@ function DesktopLayout() {
           {/* Trap (F) */}
           <UiEntity
             uiTransform={{
-              width: ABILITY_BTN_SIZE, height: ABILITY_BTN_SIZE,
+              width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE),
               flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              borderRadius: { topLeft: 0, topRight: 38, bottomLeft: 38, bottomRight: 38 },
-              margin: { left: 8 },
+              borderRadius: { topLeft: S(0), topRight: S(38), bottomLeft: S(38), bottomRight: S(38) },
+              margin: { left: S(8) },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
-            <Label value="F" fontSize={16} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: -2, left: 5 } }}
+            <Label value="F" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif"
+              uiTransform={{ positionType: 'absolute', position: { top: S(-2), left: S(5) } }}
             />
             <UiEntity
-              uiTransform={{ width: ABILITY_ICON_SIZE, height: ABILITY_ICON_SIZE, margin: { top: 6 } }}
+              uiTransform={{ width: S(_ABILITY_ICON_SIZE), height: S(_ABILITY_ICON_SIZE), margin: { top: S(6) } }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: isTrapOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
@@ -1592,7 +1677,7 @@ function DesktopLayout() {
               }}
             />
             {isTrapOnCooldown() && (
-              <Label value={`${getTrapCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+              <Label value={`${getTrapCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif"
                 uiTransform={{ positionType: 'absolute' }}
               />
             )}
@@ -1604,8 +1689,8 @@ function DesktopLayout() {
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
-          position: { right: 16, top: 14 },
-          width: PANEL_WIDTH,
+          position: { right: S(16), top: S(14) },
+          width: S(_PANEL_WIDTH),
           flexDirection: 'column',
           alignItems: 'stretch',
         }}
@@ -1613,42 +1698,42 @@ function DesktopLayout() {
         {/* Scoreboard panel */}
         <UiEntity
           uiTransform={{
-            width: PANEL_WIDTH,
+            width: S(_PANEL_WIDTH),
             flexDirection: 'column',
             alignItems: 'stretch',
-            borderRadius: BORDER_RADIUS,
-            padding: PADDING,
+            borderRadius: S(_BORDER_RADIUS),
+            padding: S(_PADDING),
           }}
           uiBackground={{ color: PANEL_BG }}
         >
         <UiEntity
           uiTransform={{
-            height: ROW_HEIGHT,
+            height: S(_ROW_HEIGHT),
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
           }}
         >
-          <Label value="Scoreboard" fontSize={TITLE_FONT} color={MUTED} font="sans-serif" />
+          <Label value="Scoreboard" fontSize={S(_TITLE_FONT)} color={MUTED} font="sans-serif" />
           <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
             <UiEntity
-              uiTransform={{ width: 28, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+              uiTransform={{ width: S(28), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               onMouseEnter={() => { squareIconHovered = true }}
               onMouseLeave={() => { squareIconHovered = false }}
               onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
             >
-              <UiEntity uiTransform={{ width: 16, height: 16 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
+              <UiEntity uiTransform={{ width: S(16), height: S(16) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
             </UiEntity>
             <UiEntity
-              uiTransform={{ width: 28, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+              uiTransform={{ width: S(28), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               onMouseEnter={() => { questionIconHovered = true }}
               onMouseLeave={() => { questionIconHovered = false }}
               onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
             >
-              <Label value="?" fontSize={ICON_FONT_QUESTION} color={winConditionOverlayVisible || questionIconHovered ? GOLD : WHITE} font="sans-serif" />
+              <Label value="?" fontSize={S(_ICON_FONT_QUESTION)} color={winConditionOverlayVisible || questionIconHovered ? GOLD : WHITE} font="sans-serif" />
             </UiEntity>
             <UiEntity
-              uiTransform={{ width: 28, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+              uiTransform={{ width: S(28), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               onMouseEnter={() => { analyticsIconHovered = true }}
               onMouseLeave={() => { analyticsIconHovered = false }}
               onMouseDown={() => {
@@ -1660,13 +1745,13 @@ function DesktopLayout() {
                 notifyOverlayClosed();
               }}
             >
-              <Label value="#" fontSize={ICON_FONT_ANALYTICS} color={analyticsOverlayVisible || analyticsIconHovered ? GOLD : WHITE} font="sans-serif" />
+              <Label value="#" fontSize={S(_ICON_FONT_ANALYTICS)} color={analyticsOverlayVisible || analyticsIconHovered ? GOLD : WHITE} font="sans-serif" />
             </UiEntity>
           </UiEntity>
         </UiEntity>
         {players.length === 0 ? (
-          <UiEntity uiTransform={{ height: ROW_HEIGHT * 2, justifyContent: 'center', alignItems: 'center' }}>
-            <Label value="Waiting for players..." fontSize={ROW_FONT} color={MUTED} font="sans-serif" />
+          <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>
+            <Label value="Waiting for players..." fontSize={S(_ROW_FONT)} color={MUTED} font="sans-serif" />
           </UiEntity>
         ) : (
           players.map((p, i) => {
@@ -1681,26 +1766,26 @@ function DesktopLayout() {
               <UiEntity
                 key={`${p.userId}-${i}`}
                 uiTransform={{
-                  height: ROW_HEIGHT,
+                  height: S(_ROW_HEIGHT),
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: { left: 8, right: 8, top: 2, bottom: 2 },
-                  borderRadius: 6
+                  padding: { left: S(8), right: S(8), top: S(2), bottom: S(2) },
+                  borderRadius: S(6)
                 }}
                 uiBackground={{ color: rowBg }}
               >
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
                   {isCarrier ? (
                     <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
-                      <Label value={p.name} fontSize={ROW_FONT} color={nameColor} font="sans-serif" />
+                      <UiEntity uiTransform={{ width: S(16), height: S(16), margin: { right: S(4) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                      <Label value={p.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" />
                     </UiEntity>
                   ) : (
-                    <Label value={p.name} fontSize={ROW_FONT} color={nameColor} font="sans-serif" />
+                    <Label value={p.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" />
                   )}
                 </UiEntity>
-                <Label value={`${p.seconds}`} fontSize={ROW_FONT} color={timeColor} font="sans-serif" />
+                <Label value={`${p.seconds}`} fontSize={S(_ROW_FONT)} color={timeColor} font="sans-serif" />
               </UiEntity>
             )
           })
