@@ -34,7 +34,7 @@ let drownSoundEntity: ReturnType<typeof engine.addEntity> | null = null
 let respawnDelay = 0
 const RESPAWN_DURATION = 10.0 // total respawn time
 const DROWN_FADE_IN = 1.5 // seconds to fade to black
-const DROWN_FADE_OUT = 1.5 // seconds to fade back at end
+const DROWN_FADE_OUT = 0.8 // seconds to fade back at end (starts after countdown reaches 1)
 let outOfWaterTimer = 3.0 // time spent out of water (start fully charged so no delay at scene load)
 const RECHARGE_DELAY = 5.0 // seconds out of water before recharge begins
 

@@ -429,10 +429,32 @@ export function mushroomClientSystem(dt: number): void {
 
   processMushroomRaycasts()
 
-  // Shield is removed by shieldConsumed message or round end (no time expiry)
+  // ── Orb trail while local player has flag immunity shield ──
+  cleanupExpiredTrailPuffs()
+  const localPlayer = getPlayer()
+  const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
+  const hasShield = localUserId !== '' && flagImmunityTimers.has(localUserId)
 
-  // Trail particles disabled for now (orb trail didn't clean up on shield break)
-  // TODO: re-enable trail effect once the cleanup bug is fixed
+  if (hasShield && Transform.has(engine.PlayerEntity)) {
+    const pos = Transform.get(engine.PlayerEntity).position
+    if (lastShieldPlayerPos === null) {
+      lastShieldPlayerPos = Vector3.create(pos.x, pos.y, pos.z)
+    }
+    const dx2 = pos.x - lastShieldPlayerPos.x
+    const dz2 = pos.z - lastShieldPlayerPos.z
+    const moved = Math.sqrt(dx2 * dx2 + dz2 * dz2)
+    trailSpawnAccum += dt
+    if (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL && moved >= TRAIL_MIN_MOVE_DIST) {
+      spawnTrailPuff(Vector3.create(pos.x, pos.y + 0.15, pos.z))
+      trailSpawnAccum = 0
+      lastShieldPlayerPos = Vector3.create(pos.x, pos.y, pos.z)
+    }
+  } else {
+    if (lastShieldPlayerPos !== null) {
+      // Shield just ended — clean up any remaining puffs
+      hideAllTrailPuffs()
+    }
+  }
 
   // Check proximity for pickup (send to server)
   if (!Transform.has(engine.PlayerEntity)) return

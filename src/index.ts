@@ -604,6 +604,7 @@ export async function main() {
   let cinematicTimer = 0
   let isWinnerLocalPlayer = false
   let isPodiumPlayer = false // true for 1st, 2nd, or 3rd place
+  let noScorersRound = false // true when no one scored — short fade, no cinematic camera
 
   // Fade state machine: 0=idle, 1=fading in (to black), 2=holding black, 3=fading out (reveal), 4=showing, 5=end fade in, 6=end hold black, 7=end fade out
   let fadePhase = 0
@@ -633,8 +634,13 @@ export async function main() {
         setCinematicFade(1)
         if (fadeTimer <= 0) {
           setCinematicShowing(true)
-          fadePhase = 3
-          fadeTimer = FADE_OUT_DUR
+          if (noScorersRound) {
+            // No scorers: stay on black screen, skip fade-out reveal
+            fadePhase = 4
+          } else {
+            fadePhase = 3
+            fadeTimer = FADE_OUT_DUR
+          }
         }
       } else if (fadePhase === 3) {
         // Fading from black to reveal cinematic
@@ -697,6 +703,15 @@ export async function main() {
     if (cinematicTimer <= 0) return
     cinematicTimer -= dt
     if (cinematicTimer <= 0 && fadePhase === 4) {
+      if (noScorersRound) {
+        // No scorers: screen is already black — skip end-fade, go straight to fade-out reveal
+        setCinematicShowing(false)
+        if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
+        fadePhase = 7
+        fadeTimer = END_FADE_OUT_DUR
+        console.log('[Client] 🎬 No scorers — skipping to fade-out')
+        return
+      }
       // Start end-fade sequence
       fadePhase = 5
       fadeTimer = END_FADE_IN_DUR
@@ -730,7 +745,8 @@ export async function main() {
     const isSecondPlace = !!(place2 && place2 === localUserId)
     const isThirdPlace = !!(place3 && place3 === localUserId)
     isPodiumPlayer = isWinnerLocalPlayer || isSecondPlace || isThirdPlace
-    console.log('[Client] Top 3:', place1, place2, place3, '| Local:', localUserId)
+    noScorersRound = topPlayers.length === 0
+    console.log('[Client] Top 3:', place1, place2, place3, '| Local:', localUserId, '| noScorers:', noScorersRound)
 
     const GREEN_CUBE = { x: 258.78, y: 19.25, z: 227.81 }
 
@@ -754,8 +770,11 @@ export async function main() {
     // Start fade to black FIRST — then teleport once fully black
     fadePhase = 1
     fadeTimer = FADE_IN_DUR
-    cinematicTimer = 10
     setCinematicActive(true)
+
+    // No scorers: short 3-second interstitial, no cinematic camera
+    // With scorers: full 10-second podium cinematic
+    cinematicTimer = noScorersRound ? 3 : 10
 
     // Close all open UIs when cinematic begins
     setWinConditionOverlayVisible(false)
@@ -767,7 +786,16 @@ export async function main() {
 
     // Delay teleport + camera until screen is fully black
     setTimeout(() => {
-    if (isWinnerLocalPlayer) {
+    if (noScorersRound) {
+      // No scorers — just respawn at spawn, no cinematic camera
+      const spawnX = 261.75 + Math.random() * 3
+      const spawnZ = 296.5 + Math.random() * 3
+      void movePlayerTo({
+        newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
+      })
+      // No cinematic camera — just show the black overlay with "Round Over" text
+      console.log('[Client] 📍 No scorers — skipping podium cinematic')
+    } else if (isWinnerLocalPlayer) {
       void movePlayerTo({
         newRelativePosition: { x: 265.57, y: 19.51, z: 219.65 },
         cameraTarget: GREEN_CUBE,
@@ -796,12 +824,14 @@ export async function main() {
       })
     }
 
-      // Activate cinematic camera (screen is fully black now)
-      MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
+      // Activate cinematic camera only if there are scorers
+      if (!noScorersRound) {
+        MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
+      }
       console.log('[Client] 📍 Round ended — players repositioned')
     }, FADE_IN_DUR * 1000 + 50) // wait for fade to complete + small buffer
 
-    console.log('[Client] 🎬 Cinematic fade sequence started (10 seconds)')
+    console.log(`[Client] 🎬 Cinematic fade sequence started (${noScorersRound ? 3 : 10} seconds)`)
   })
 
 }

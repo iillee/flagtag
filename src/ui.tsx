@@ -206,6 +206,32 @@ function playClickSound(): void {
   a.playing = true
 }
 
+// ── Countdown tick sound (last 30 seconds) ──
+const tickSoundEntity = engine.addEntity()
+Transform.create(tickSoundEntity, { position: Vector3.Zero() })
+AudioSource.create(tickSoundEntity, {
+  audioClipUrl: 'assets/sounds/click.wav',
+  playing: false,
+  loop: false,
+  volume: 0.0,
+  global: true
+})
+
+let lastTickSecond = -1
+engine.addSystem(() => {
+  const seconds = getCountdownSeconds()
+  if (seconds > 0 && seconds <= 10 && seconds !== lastTickSecond) {
+    lastTickSecond = seconds
+    const a = AudioSource.getMutable(tickSoundEntity)
+    a.volume = 0.25
+    a.currentTime = 0
+    a.playing = true
+  }
+  if (seconds > 30) {
+    lastTickSecond = -1
+  }
+})
+
 let squareIconHovered = false
 let questionIconHovered = false
 let analyticsIconHovered = false
@@ -279,19 +305,21 @@ function roundEndSplashSystem(dt: number): void {
         splashWinnerUserId = null
       }
 
-      // Play trumpet sound once
-      if (trumpetEntity) {
-        engine.removeEntity(trumpetEntity)
+      // Play trumpet sound once (only if someone scored)
+      if (splashPlayers.length > 0) {
+        if (trumpetEntity) {
+          engine.removeEntity(trumpetEntity)
+        }
+        trumpetEntity = engine.addEntity()
+        Transform.create(trumpetEntity, { position: Vector3.Zero() })
+        AudioSource.create(trumpetEntity, {
+          audioClipUrl: 'assets/sounds/trumpets.mp3',
+          playing: true,
+          volume: 0.8,
+          loop: false,
+          global: true
+        })
       }
-      trumpetEntity = engine.addEntity()
-      Transform.create(trumpetEntity, { position: Vector3.Zero() })
-      AudioSource.create(trumpetEntity, {
-        audioClipUrl: 'assets/sounds/trumpets.mp3',
-        playing: true,
-        volume: 0.8,
-        loop: false,
-        global: true
-      })
     }
     break
   }
@@ -525,9 +553,23 @@ function PlayerListUi() {
             position: { top: 0, left: 0 },
             width: '100%',
             height: '100%',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
           uiBackground={{ color: Color4.create(0, 0, 0, cinematicFadeOpacity) }}
-        />
+        >
+          {/* No scorers: show centered text on black screen */}
+          {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
+            <Label value="Round Over" fontSize={42} color={GOLD} font="sans-serif" />
+          )}
+          {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
+            <UiEntity uiTransform={{ height: 16 }} />
+          )}
+          {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
+            <Label value="Next round starting..." fontSize={20} color={LIGHT_GREY} font="sans-serif" />
+          )}
+        </UiEntity>
       )}
 
       {/* Server-down overlay */}
@@ -840,20 +882,30 @@ function DesktopLayout() {
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
-          position: { top: 24, left: 0 },
+          position: { top: 14, left: 0 },
           width: '100%',
           flexDirection: 'row',
           justifyContent: 'center',
         }}
       >
-        <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
-          <Label value="Round ends in:" fontSize={16} color={WHITE} font="sans-serif" />
-          <Label value={formatCountdown(countdownSeconds)} fontSize={40} color={WHITE} font="sans-serif" />
+        <UiEntity
+          uiTransform={{
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 2 * ROW_HEIGHT + 2 * PADDING,
+            padding: { left: 20, right: 20 },
+            borderRadius: BORDER_RADIUS,
+          }}
+          uiBackground={{ color: PANEL_BG }}
+        >
+          <Label value="Round ends in:" fontSize={16} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { bottom: -6 } }} />
+          <Label value={formatCountdown(countdownSeconds)} fontSize={40} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: -6 } }} />
         </UiEntity>
       </UiEntity>
 
-      {/* Round-end splash — bottom of screen over cinematic camera */}
-      {splashVisible && cinematicShowing && (
+      {/* Round-end splash — bottom of screen over cinematic camera (only when there are scorers) */}
+      {splashVisible && cinematicShowing && splashPlayers.length > 0 && (
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
@@ -880,51 +932,43 @@ function DesktopLayout() {
             }}
             uiBackground={{ color: PANEL_BG }}
           >
-            {splashPlayers.length === 0 ? (
-              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                <Label value="Round Over!" fontSize={34} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: 24 }} />
-                <Label value="Next round starting..." fontSize={15} color={LIGHT_GREY} font="sans-serif" />
-              </UiEntity>
-            ) : (
-              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                <Label
-                  value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
-                    ? `${splashPlayers[0].name} Wins!`
-                    : 'Round Over!'}
-                  fontSize={34}
-                  color={GOLD}
-                  font="sans-serif"
-                />
-                <UiEntity uiTransform={{ height: 28 }} />
-                {splashPlayers.map((p, i) => {
-                  const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
-                  const scoreColor = LIGHT_GREY
-                  return (
-                    <UiEntity
-                      key={`splash-${i}`}
-                      uiTransform={{
-                        width: '100%',
-                        height: 34,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: { left: 4, right: 4 },
-                      }}
-                    >
-                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Label value={`#${i + 1}`} fontSize={18} color={rankColor} font="sans-serif" />
-                        <UiEntity uiTransform={{ width: 10 }} />
-                        <Label value={p.name} fontSize={18} color={rankColor} font="sans-serif" />
-                      </UiEntity>
-                      <Label value={`${p.seconds}`} fontSize={18} color={scoreColor} font="sans-serif" />
+            <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+              <Label
+                value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
+                  ? `${splashPlayers[0].name} Wins!`
+                  : 'Round Over!'}
+                fontSize={34}
+                color={GOLD}
+                font="sans-serif"
+              />
+              <UiEntity uiTransform={{ height: 28 }} />
+              {splashPlayers.map((p, i) => {
+                const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
+                const scoreColor = LIGHT_GREY
+                return (
+                  <UiEntity
+                    key={`splash-${i}`}
+                    uiTransform={{
+                      width: '100%',
+                      height: 34,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: { left: 4, right: 4 },
+                    }}
+                  >
+                    <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Label value={`#${i + 1}`} fontSize={18} color={rankColor} font="sans-serif" />
+                      <UiEntity uiTransform={{ width: 10 }} />
+                      <Label value={p.name} fontSize={18} color={rankColor} font="sans-serif" />
                     </UiEntity>
-                  )
-                })}
-                <UiEntity uiTransform={{ height: 24 }} />
-                <Label value="Next round starting..." fontSize={15} color={LIGHT_GREY} font="sans-serif" />
-              </UiEntity>
-            )}
+                    <Label value={`${p.seconds}`} fontSize={18} color={scoreColor} font="sans-serif" />
+                  </UiEntity>
+                )
+              })}
+              <UiEntity uiTransform={{ height: 24 }} />
+              <Label value="Next round starting..." fontSize={15} color={LIGHT_GREY} font="sans-serif" />
+            </UiEntity>
           </UiEntity>
         </UiEntity>
       )}
@@ -1960,7 +2004,7 @@ function MobileLayout() {
       )}
 
       {/* ── Round-end splash — bottom of screen (safe area) ── */}
-      {splashVisible && cinematicShowing && (
+      {splashVisible && cinematicShowing && splashPlayers.length > 0 && (
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
@@ -1998,47 +2042,39 @@ function MobileLayout() {
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
 
-            {splashPlayers.length === 0 ? (
-              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                <Label value="Round Over!" fontSize={42} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: 20 }} />
-                <Label value="Next round starting..." fontSize={22} color={LIGHT_GREY} font="sans-serif" />
-              </UiEntity>
-            ) : (
-              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                <Label
-                  value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
-                    ? `${splashPlayers[0].name} Wins!`
-                    : 'Round Over!'}
-                  fontSize={42}
-                  color={GOLD}
-                  font="sans-serif"
-                />
-                <UiEntity uiTransform={{ height: 24 }} />
-                {splashPlayers.map((p, i) => {
-                  const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
-                  return (
-                    <UiEntity
-                      key={`m-splash-${i}`}
-                      uiTransform={{
-                        width: '100%', height: 42,
-                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                        padding: { left: 8, right: 8 },
-                      }}
-                    >
-                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Label value={`#${i + 1}`} fontSize={26} color={rankColor} font="sans-serif" />
-                        <UiEntity uiTransform={{ width: 10 }} />
-                        <Label value={p.name} fontSize={26} color={rankColor} font="sans-serif" />
-                      </UiEntity>
-                      <Label value={`${p.seconds}`} fontSize={26} color={LIGHT_GREY} font="sans-serif" />
+            <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+              <Label
+                value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
+                  ? `${splashPlayers[0].name} Wins!`
+                  : 'Round Over!'}
+                fontSize={42}
+                color={GOLD}
+                font="sans-serif"
+              />
+              <UiEntity uiTransform={{ height: 24 }} />
+              {splashPlayers.map((p, i) => {
+                const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
+                return (
+                  <UiEntity
+                    key={`m-splash-${i}`}
+                    uiTransform={{
+                      width: '100%', height: 42,
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                      padding: { left: 8, right: 8 },
+                    }}
+                  >
+                    <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Label value={`#${i + 1}`} fontSize={26} color={rankColor} font="sans-serif" />
+                      <UiEntity uiTransform={{ width: 10 }} />
+                      <Label value={p.name} fontSize={26} color={rankColor} font="sans-serif" />
                     </UiEntity>
-                  )
-                })}
-                <UiEntity uiTransform={{ height: 20 }} />
-                <Label value="Next round starting..." fontSize={22} color={LIGHT_GREY} font="sans-serif" />
-              </UiEntity>
-            )}
+                    <Label value={`${p.seconds}`} fontSize={26} color={LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                )
+              })}
+              <UiEntity uiTransform={{ height: 20 }} />
+              <Label value="Next round starting..." fontSize={22} color={LIGHT_GREY} font="sans-serif" />
+            </UiEntity>
           </UiEntity>
         </UiEntity>
       )}
