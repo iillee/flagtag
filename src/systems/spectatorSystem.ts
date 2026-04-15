@@ -44,8 +44,14 @@ function playBinocularsSound() {
   a.playing = true
 }
 
+let exitGracePeriod = 0
+
 export function isSpectatorMode(): boolean {
   return isSpectating
+}
+
+export function isSpectatorTransitioning(): boolean {
+  return exitGracePeriod > 0
 }
 
 export function setupSpectator() {
@@ -169,6 +175,7 @@ function enterSpectatorMode() {
 export function exitSpectatorMode() {
   if (!isSpectating) return
   isSpectating = false
+  exitGracePeriod = 1.0 // hide UI for 1s while camera returns
 
   // Deactivate virtual camera
   MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
@@ -200,6 +207,7 @@ function updateCamTransform() {
 }
 
 function spectatorMovementSystem(dt: number) {
+  if (exitGracePeriod > 0) exitGracePeriod -= dt
   if (!isSpectating) return
 
   // Exit with 1 key

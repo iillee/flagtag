@@ -64,7 +64,7 @@ function playBoostSound(): void {
       audioClipUrl: 'assets/sounds/boost.mp3',
       playing: false,
       loop: false,
-      volume: 0.5,
+      volume: 0.25,
       global: true
     })
   }
@@ -98,6 +98,10 @@ const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
 let positionsRequested = false
 // shieldActive removed — mushrooms no longer block hits
+
+// ── Mushroom trail timer (gold orbs at feet after mushroom pickup) ──
+const MUSHROOM_TRAIL_DURATION = 5.0 // seconds of gold trail after picking up a mushroom
+let mushroomTrailTimer = 0
 
 // ── Trail pool (gold orbs at feet when shield active) ──
 const TRAIL_SPAWN_INTERVAL = 0.08
@@ -295,6 +299,11 @@ room.onMessage('mushroomPositions', (data) => {
     const pid = (data as any).playerId as string
     console.log('[Mushroom] Mushroom', mid, 'picked up by', pid)
     playBoostSound()
+    // Activate gold trail for the local player who picked up the mushroom
+    const lp = getPlayer()
+    if (lp && pid.toLowerCase() === lp.userId?.toLowerCase()) {
+      mushroomTrailTimer = MUSHROOM_TRAIL_DURATION
+    }
     // Remove the mushroom visual
     for (let i = mushrooms.length - 1; i >= 0; i--) {
       if (mushrooms[i].id === mid) {
@@ -429,13 +438,12 @@ export function mushroomClientSystem(dt: number): void {
 
   processMushroomRaycasts()
 
-  // ── Orb trail while local player has flag immunity shield ──
+  // ── Orb trail after mushroom pickup ──
   cleanupExpiredTrailPuffs()
-  const localPlayer = getPlayer()
-  const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
-  const hasShield = localUserId !== '' && flagImmunityTimers.has(localUserId)
+  if (mushroomTrailTimer > 0) mushroomTrailTimer -= dt
+  const hasMushroomTrail = mushroomTrailTimer > 0
 
-  if (hasShield && Transform.has(engine.PlayerEntity)) {
+  if (hasMushroomTrail && Transform.has(engine.PlayerEntity)) {
     const pos = Transform.get(engine.PlayerEntity).position
     if (lastShieldPlayerPos === null) {
       lastShieldPlayerPos = Vector3.create(pos.x, pos.y, pos.z)
@@ -451,7 +459,7 @@ export function mushroomClientSystem(dt: number): void {
     }
   } else {
     if (lastShieldPlayerPos !== null) {
-      // Shield just ended — clean up any remaining puffs
+      // Trail just ended — clean up any remaining puffs
       hideAllTrailPuffs()
     }
   }
@@ -482,5 +490,6 @@ export function hasMushroomShield(): boolean {
 export function clearMushroomShield(): void {
   hideAllShields()
   hideAllTrailPuffs()
+  mushroomTrailTimer = 0
   console.log('[Mushroom] Effects cleared (round end)')
 }

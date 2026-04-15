@@ -22,6 +22,7 @@ import { musicEntity } from './index'
 
 // ── Music mute state ──
 let musicMuted = false
+let spectatorExitBlink = false
 function toggleMusicMute() {
   musicMuted = !musicMuted
   try {
@@ -31,7 +32,7 @@ function toggleMusicMute() {
     console.error('[UI] Failed to toggle music mute:', e)
   }
 }
-import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
+import { isSpectatorMode, isSpectatorTransitioning, exitSpectatorMode } from './systems/spectatorSystem'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
 import { signedFetch, getHeaders } from '~system/SignedFetch'
@@ -808,14 +809,28 @@ function PlayerListUi() {
           flexDirection: 'column',
           alignItems: 'center',
         }}>
-          <Label value="SPECTATOR MODE" fontSize={28} color={Color4.White()} />
-          <Label value="WASD = Orbit  |  E/F = Up/Down  |  1 = Exit" fontSize={14} color={Color4.create(1, 1, 1, 0.8)} />
-          <UiEntity
-            uiTransform={{ width: 160, height: 40, margin: { top: 8 } }}
-            uiBackground={{ color: Color4.create(1, 1, 1, 0.9) }}
-            onMouseDown={() => exitSpectatorMode()}
+          <UiEntity uiTransform={{
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: { top: 14, bottom: 14, left: 24, right: 24 },
+            borderRadius: 18,
+          }}
+            uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 0.92) }}
           >
-            <Label value="Exit (1)" fontSize={18} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
+            <Label value="SPECTATOR MODE" fontSize={28} color={Color4.White()} />
+            <Label value="WASD = Orbit  |  E/F = Up/Down" fontSize={14} color={Color4.create(1, 1, 1, 0.8)} />
+            <UiEntity
+              uiTransform={{ width: 160, height: 40, margin: { top: 8 }, borderRadius: 10 }}
+              uiBackground={{ color: spectatorExitBlink ? Color4.create(0.5, 0.5, 0.5, 0.9) : Color4.create(1, 1, 1, 0.9) }}
+              onMouseDown={() => {
+                playClickSound()
+                spectatorExitBlink = true
+                executeTask(async () => { await new Promise(r => setTimeout(r, 120)); spectatorExitBlink = false })
+                exitSpectatorMode()
+              }}
+            >
+              <Label value="Exit (1)" fontSize={18} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
+            </UiEntity>
           </UiEntity>
         </UiEntity>
       )}
@@ -1512,7 +1527,7 @@ function DesktopLayout() {
       })()}
 
       {/* ── Ability icons — bottom center (hidden during cinematic) ── */}
-      {!cinematicShowing && !isSpectatorMode() && <UiEntity
+      {!cinematicShowing && !isSpectatorMode() && !isSpectatorTransitioning() && <UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { bottom: 24 },
