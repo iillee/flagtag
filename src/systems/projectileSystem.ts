@@ -294,7 +294,7 @@ room.onMessage('shellTriggered', (data) => {
 
     // Stagger the victim if it's the local player
     const me = getPlayerData()?.userId?.toLowerCase()
-    if (me && data.victimId === me) {
+    if (me && data.victimId === me && !isCinematicActive()) {
       triggerEmote({ predefinedEmote: 'getHit' })
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
@@ -764,6 +764,16 @@ export function projectileClientSystem(dt: number): void {
   updateHandBoomerangVisibility()
   const now = Date.now()
   const serverUp = isServerConnected()
+
+  // During cinematic, cancel any active projectile stagger
+  if (isCinematicActive()) {
+    if (projectileStaggerUntil > 0) {
+      projectileStaggerUntil = 0
+      if (InputModifier.has(engine.PlayerEntity)) {
+        InputModifier.deleteFrom(engine.PlayerEntity)
+      }
+    }
+  }
 
   // Release projectile stagger freeze
   if (projectileStaggerUntil > 0 && now >= projectileStaggerUntil) {

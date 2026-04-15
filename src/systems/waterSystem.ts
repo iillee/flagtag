@@ -3,6 +3,7 @@ import { Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import { isSpectatorMode } from './spectatorSystem'
+import { isCinematicActive } from '../cinematicState'
 
 // Water surface Y level
 const WATER_SURFACE_Y = 1.58
@@ -105,6 +106,21 @@ function setBarVisible(show: boolean) {
 export function waterSystem(dt: number) {
   if (!Transform.has(engine.PlayerEntity)) return
   if (isSpectatorMode()) return
+
+  // During cinematic, pause all drowning logic and hide the bar
+  if (isCinematicActive()) {
+    airRemaining = DROWN_TIME
+    drownBarVisible = false
+    respawnDelay = 0
+    drownCooldown = 0
+    outOfWaterTimer = 3.0
+    wasInWater = false
+    if (waterSoundEntity) {
+      const a = AudioSource.getMutable(waterSoundEntity)
+      if (a.playing) a.playing = false
+    }
+    return
+  }
 
   ensureDrownBar()
 

@@ -16,6 +16,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { PlayerIdentityData } from '@dcl/sdk/ecs'
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
+import { isCinematicActive } from '../cinematicState'
 
 // ── VFX Constants ──
 const VFX_DURATION_MS = 250
@@ -282,6 +283,17 @@ export function combatClientSystem(_dt: number): void {
     playMissSound(missPos)
   }
   pendingMissPositions.length = 0
+
+  // During cinematic, cancel any active stagger and skip stagger logic
+  if (isCinematicActive()) {
+    if (staggerFreezeUntil > 0) {
+      staggerFreezeUntil = 0
+      if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
+    }
+    staggerTriggerAt = 0
+    pendingStagger = false
+    return
+  }
 
   // Stagger: end freeze
   if (staggerFreezeUntil > 0 && now >= staggerFreezeUntil) {

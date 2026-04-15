@@ -6,6 +6,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { triggerEmote, movePlayerTo } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import { setLightningRespawning } from '../gameState/lightningState'
+import { isCinematicActive } from '../cinematicState'
 
 
 // Lightning bolt config
@@ -458,6 +459,15 @@ export function setupLightningMessages() {
 }
 
 export function lightningSystem(dt: number) {
+  // During cinematic, cancel any active respawn and skip death logic
+  if (isCinematicActive()) {
+    if (lightningRespawnDelay > 0) {
+      lightningRespawnDelay = 0
+      setLightningRespawning(false)
+    }
+    return
+  }
+
   // Handle lightning death respawn (runs regardless of flag state)
   if (lightningRespawnDelay > 0) {
     const prevDelay = lightningRespawnDelay

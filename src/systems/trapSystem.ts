@@ -262,7 +262,7 @@ room.onMessage('bananaTriggered', (data) => {
 
   // Stagger the victim if it's the local player
   const me = getPlayerData()?.userId
-  if (me && data.victimId === me.toLowerCase()) {
+  if (me && data.victimId === me.toLowerCase() && !isCinematicActive()) {
     triggerEmote({ predefinedEmote: 'getHit' })
     InputModifier.createOrReplace(engine.PlayerEntity, {
       mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
@@ -582,6 +582,10 @@ export function trapClientSystem(dt: number): void {
   }
 
   // Release trap stagger freeze
+  if (isCinematicActive() && trapStaggerUntil > 0) {
+    trapStaggerUntil = 0
+    if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
+  }
   if (trapStaggerUntil > 0 && now >= trapStaggerUntil) {
     trapStaggerUntil = 0
     if (InputModifier.has(engine.PlayerEntity)) {

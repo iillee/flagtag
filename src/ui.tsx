@@ -168,6 +168,10 @@ export function hideChestPopup() {
   notifyOverlayClosed()
 }
 
+export function isChestPopupVisible() {
+  return chestPopupVisible
+}
+
 // ── Mailbox popup state ──
 let mailboxPopupVisible = false
 
@@ -178,6 +182,10 @@ export function showMailboxPopup() {
 export function hideMailboxPopup() {
   mailboxPopupVisible = false
   notifyOverlayClosed()
+}
+
+export function isMailboxPopupVisible() {
+  return mailboxPopupVisible
 }
 
 // ── UI click sound (preloaded) ──
@@ -1460,7 +1468,7 @@ function DesktopLayout() {
       })()}
 
       {/* ── Ability icons — bottom center (hidden during cinematic) ── */}
-      {!cinematicShowing && <UiEntity
+      {!cinematicShowing && !isSpectatorMode() && <UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { bottom: 24 },

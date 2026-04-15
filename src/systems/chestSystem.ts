@@ -4,7 +4,7 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { showChestPopup } from '../ui'
+import { showChestPopup, hideChestPopup, isChestPopupVisible } from '../ui'
 
 const chestSoundEntity = engine.addEntity()
 Transform.create(chestSoundEntity, { position: Vector3.Zero() })
@@ -16,10 +16,23 @@ AudioSource.create(chestSoundEntity, {
   global: true
 })
 
+const CHEST_CLOSE_DISTANCE = 5
+
 let chestSetup = false
 const attachedEntities = new Set<Entity>()
+let lastOpenedChestEntity: Entity | null = null
 
 export function chestSystem() {
+  // Close chest popup if player walks away
+  if (isChestPopupVisible() && lastOpenedChestEntity !== null && Transform.has(engine.PlayerEntity) && Transform.has(lastOpenedChestEntity)) {
+    const playerPos = Transform.get(engine.PlayerEntity).position
+    const chestPos = Transform.get(lastOpenedChestEntity).position
+    if (Vector3.distance(playerPos, chestPos) > CHEST_CLOSE_DISTANCE) {
+      hideChestPopup()
+      lastOpenedChestEntity = null
+    }
+  }
+
   if (chestSetup) return
 
   for (const [entity] of engine.getEntitiesWith(GltfContainer)) {
@@ -35,6 +48,7 @@ export function chestSystem() {
           const a = AudioSource.getMutable(chestSoundEntity)
           a.currentTime = 0
           a.playing = true
+          lastOpenedChestEntity = entity
           showChestPopup()
         }
       )
@@ -44,7 +58,7 @@ export function chestSystem() {
     }
   }
 
-  if (attachedEntities.size >= 2) {
+  if (attachedEntities.size >= 3) {
     chestSetup = true
   }
 }

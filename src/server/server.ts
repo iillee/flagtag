@@ -24,7 +24,7 @@ const CARRIER_Y_WINDOW_SEC = 2.0 // seconds of carrier Y history to estimate gro
 const BANNER_SRC = 'models/Banner_Red_02/Banner_Red_02.glb'
 
 // ── Mushroom constants ──
-const MUSHROOM_COUNT = 2
+const MUSHROOM_COUNT = 1
 // Shield lasts until hit or round end
 // Mushroom spawn constrained to boundary cylinder
 const MUSHROOM_CX = 250.75
@@ -1011,7 +1011,8 @@ function registerHandlers(): void {
       const mushroom = activeMushrooms.find(m => m.id === mid && !m.pickedUp)
       if (!mushroom) return
       if (mushroom.rerolls >= MUSHROOM_MAX_REROLLS) {
-        console.log('[Server] 🍄 Mushroom', mid, 'hit max rerolls, keeping current position')
+        console.log('[Server] 🍄 Mushroom', mid, 'hit max rerolls, resending current position')
+        room.send('mushroomPositions', { mushroomsJson: JSON.stringify([{ id: mushroom.id, x: mushroom.x, z: mushroom.z }]) })
         return
       }
       mushroom.rerolls++
@@ -2175,5 +2176,5 @@ function spawnMushrooms(): void {
   console.log('[Server] 🍄 Spawned', MUSHROOM_COUNT, 'mushrooms')
   // Broadcast to all connected clients
   const positions = activeMushrooms.map(m => ({ id: m.id, x: m.x, z: m.z }))
-  room.send('mushroomPositions', { mushroomsJson: JSON.stringify(positions) })
+  room.send('mushroomPositions', { mushroomsJson: JSON.stringify(positions), fullReset: true })
 }

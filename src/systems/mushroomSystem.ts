@@ -12,7 +12,7 @@ import { showShieldForPlayer, hideShieldForPlayer, hideAllShields, setShieldAlph
 
 // ── Constants ──
 const MUSHROOM_MODEL = 'models/mushroom_03.glb'
-const MUSHROOM_COUNT = 1
+const MUSHROOM_COUNT = 1  // Must match server
 const MUSHROOM_PICKUP_RADIUS = 0.5
 // Shield lasts until hit or round end (no time limit)
 const MUSHROOM_Y_OFFSET = 0.0   // Raise mushroom above ground so it's not buried
@@ -51,6 +51,7 @@ interface MushroomVisual {
   placed: boolean  // true once raycast found a surface
   x: number
   z: number
+  rerolls?: number
 }
 
 // ── Boost sound ──
@@ -225,15 +226,30 @@ function setupMushroomBeacon(): void {
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('mushroomPositions', (data) => {
     const positions: { id: number, x: number, z: number }[] = JSON.parse((data as any).mushroomsJson || '[]')
-    console.log('[Mushroom] Received', positions.length, 'mushroom positions from server')
+    const fullReset = (data as any).fullReset === true
+    console.log('[Mushroom] Received', positions.length, 'mushroom positions from server', fullReset ? '(full reset)' : '(incremental)')
 
-    // Always clear existing mushrooms before spawning new ones
-    for (const m of mushrooms) {
-      if (m.rayEntity) engine.removeEntity(m.rayEntity!)
-      engine.removeEntity(m.entity)
+    if (fullReset) {
+      // Full round reset — clear all existing mushrooms
+      for (const m of mushrooms) {
+        if (m.rayEntity) engine.removeEntity(m.rayEntity)
+        engine.removeEntity(m.entity)
+      }
+      mushrooms.length = 0
+      pickedUpIds.clear()
+    } else {
+      // Incremental update — only remove mushrooms whose id matches incoming (reroll/replacement)
+      for (const pos of positions) {
+        const existingIdx = mushrooms.findIndex(m => m.id === pos.id)
+        if (existingIdx >= 0) {
+          const old = mushrooms[existingIdx]
+          if (old.rayEntity) engine.removeEntity(old.rayEntity)
+          engine.removeEntity(old.entity)
+          mushrooms.splice(existingIdx, 1)
+          pickedUpIds.delete(pos.id)
+        }
+      }
     }
-    mushrooms.length = 0
-    pickedUpIds.clear()
 
     // Create mushrooms and start raycasting to find surfaces
     for (const pos of positions) {
@@ -342,6 +358,19 @@ function processMushroomRaycasts(): void {
 
       // If landed on or below water level, request a reroll from the server
       if (hitY <= WATER_Y + 0.1) {
+        // Track rerolls client-side to avoid infinite reroll loops
+        if (!m.rerolls) m.rerolls = 0
+        m.rerolls++
+        if (m.rerolls >= 10) {
+          // Max rerolls — just place it at water level
+          console.log('[Mushroom] Mushroom', m.id, 'max rerolls reached, placing at water level')
+          const t = Transform.getMutable(m.entity)
+          t.position = Vector3.create(m.x, WATER_Y + 0.2, m.z)
+          engine.removeEntity(m.rayEntity)
+          m.rayEntity = null
+          m.placed = true
+          continue
+        }
         console.log('[Mushroom] Mushroom', m.id, 'landed on water at', m.x.toFixed(1), m.z.toFixed(1), '— requesting reroll')
         engine.removeEntity(m.rayEntity)
         m.rayEntity = null

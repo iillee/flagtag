@@ -148,6 +148,7 @@ export enum EntityNames {
   castle_glb_2 = "castle.glb_2",
   drawer_glb = "drawer.glb",
   drawer_glb_2 = "drawer.glb_2",
+  drawer_glb_3 = "drawer.glb_3",
   ladder_glb = "ladder.glb",
   ladder_glb_2 = "ladder.glb_2",
   lights_glb = "lights.glb",
