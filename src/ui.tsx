@@ -390,7 +390,18 @@ engine.addSystem(() => {
   }
 })
 
-// (Key 1 is now only used for spectator exit — UI scale is auto-detected)
+// ── Key 1 — cycle UI scale (Small / Medium / Large) ──
+let uiScaleFlashUntil = 0
+function getUIScaleFlash(): boolean { return Date.now() < uiScaleFlashUntil }
+
+engine.addSystem(() => {
+  if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN)) {
+    if (!isSpectatorMode()) {
+      cycleUIScale()
+      uiScaleFlashUntil = Date.now() + 2000
+    }
+  }
+})
 
 // ── Key 4 — close any open overlay ──
 engine.addSystem(() => {
@@ -655,7 +666,7 @@ function PlayerListUi() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(8), right: S(8) },
+                position: { top: S(4), right: S(4) },
                 width: S(80),
                 height: S(80),
                 flexDirection: 'row',
@@ -698,7 +709,7 @@ function PlayerListUi() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(12), right: S(12) },
+                position: { top: S(4), right: S(4) },
                 width: S(80),
                 height: S(80),
                 flexDirection: 'row',
@@ -753,7 +764,7 @@ function PlayerListUi() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(12), right: S(12) },
+                position: { top: S(4), right: S(4) },
                 width: S(80),
                 height: S(80),
                 flexDirection: 'row',
@@ -801,7 +812,25 @@ function PlayerListUi() {
       {/* Drown bar — screen-space, always on top */}
       {isDrownBarVisible() && <DrownBar />}
 
-
+      {/* UI Scale toast */}
+      {getUIScaleFlash() && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { bottom: S(140), left: '50%' },
+            margin: { left: S(-80) },
+            width: S(160),
+            height: S(32),
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderRadius: S(8),
+          }}
+          uiBackground={{ color: PANEL_BG }}
+        >
+          <Label value={`UI: ${getUIScaleLabel()}`} fontSize={S(16)} color={WHITE} font="sans-serif" />
+        </UiEntity>
+      )}
 
       {/* Drown death overlay */}
       {getRespawnCountdown() > 0 && (
@@ -884,7 +913,7 @@ function PlayerListUi() {
                 exitSpectatorMode()
               }}
             >
-              <Label value="Exit (1)" fontSize={S(18)} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
+              <Label value="Exit" fontSize={S(18)} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
             </UiEntity>
           </UiEntity>
         </UiEntity>
@@ -963,7 +992,7 @@ function DesktopLayout() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            height: S(2) * S(_ROW_HEIGHT) + 2 * S(_PADDING),
+            height: S(2 * _ROW_HEIGHT + 2 * _PADDING),
             padding: { left: S(20), right: S(20) },
             borderRadius: S(_BORDER_RADIUS),
           }}
@@ -1073,7 +1102,7 @@ function DesktopLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(12), right: S(12) },
+                position: { top: S(4), right: S(4) },
                 width: S(80),
                 height: S(80),
                 flexDirection: 'row',
@@ -1198,7 +1227,17 @@ function DesktopLayout() {
                 </UiEntity>
                 <UiEntity uiTransform={{ height: S(12) }} />
 
-
+                {/* 1 — toggle UI size */}
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
+                  <UiEntity
+                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
+                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
+                  >
+                    <Label value="1" fontSize={S(16)} color={WHITE} font="sans-serif" />
+                  </UiEntity>
+                  <Label value="toggle UI size" fontSize={S(16)} color={MUTED} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ height: S(12) }} />
 
               </UiEntity>
             </UiEntity>
@@ -1246,7 +1285,7 @@ function DesktopLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(12), right: S(12) },
+                position: { top: S(4), right: S(4) },
                 width: S(80),
                 height: S(80),
                 flexDirection: 'row',
@@ -1415,7 +1454,7 @@ function DesktopLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(12), right: S(12) },
+                position: { top: S(4), right: S(4) },
                 width: S(80),
                 height: S(80),
                 flexDirection: 'row',
@@ -2024,7 +2063,7 @@ function MobileLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 6, right: 6 },
+                position: { top: 4, right: 4 },
                 width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
@@ -2107,7 +2146,7 @@ function MobileLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 6, right: 6 },
+                position: { top: 4, right: 4 },
                 width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
@@ -2177,7 +2216,7 @@ function MobileLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 6, right: 6 },
+                position: { top: 4, right: 4 },
                 width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
@@ -2295,6 +2334,18 @@ function MobileLayout() {
                   </UiEntity>
                   <Label value={musicMuted ? "unmute music" : "mute music"} fontSize={22} color={MUTED} font="sans-serif" />
                 </UiEntity>
+                <UiEntity uiTransform={{ height: 14 }} />
+
+                {/* 1 — toggle UI size */}
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
+                  <UiEntity
+                    uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
+                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
+                  >
+                    <Label value="1" fontSize={22} color={WHITE} font="sans-serif" />
+                  </UiEntity>
+                  <Label value="toggle UI size" fontSize={22} color={MUTED} font="sans-serif" />
+                </UiEntity>
               </UiEntity>
             </UiEntity>
           </UiEntity>
@@ -2336,7 +2387,7 @@ function MobileLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 6, right: 6 },
+                position: { top: 4, right: 4 },
                 width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
@@ -2444,7 +2495,7 @@ function MobileLayout() {
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: 6, right: 6 },
+                position: { top: 4, right: 4 },
                 width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}

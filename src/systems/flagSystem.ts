@@ -27,6 +27,7 @@ import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
 // predictAttackLocally removed — melee attack replaced by proximity steal
 import { isAnyOverlayOpen } from '../ui'
+import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
 import { isCinematicActive } from '../cinematicState'
 import { isSpectatorMode } from './spectatorSystem'
@@ -339,11 +340,13 @@ export function flagClientSystem(dt: number): void {
           playPickupSound()
           skipNextPickupSound = true
           
-          // Optimistic prediction: immediately show clone above our head
+          // Optimistic prediction: immediately show clone above our head + shield
           if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
           createCarryClone(userId)
           optimisticCarrierId = userId
           optimisticTimestamp = now
+          showShieldForPlayer(userId)
+          setShieldAlpha(userId, 1.0)
           
           room.send('requestPickup', { t: 0 })
           lastAutoPickupRequestMs = now
@@ -368,6 +371,7 @@ export function flagClientSystem(dt: number): void {
       playDropSound()
       skipNextDropSound = true
       lastDropTimeMs = Date.now()
+      hideShieldForPlayer(userId)
       room.send('requestDrop', { t: 0 })
     }
   }

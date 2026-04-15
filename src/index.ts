@@ -581,6 +581,20 @@ export async function main() {
   engine.addSystem(shieldSystem)
   engine.addSystem(updateHoldTimeInterpolation)
 
+  // Helper: retry an emote up to 3 times with delays (handles mid-air failures)
+  function retryEmote(emote: string, delayMs: number = 1500, retries: number = 3) {
+    let attempt = 0
+    const tryEmote = () => {
+      attempt++
+      void triggerEmote({ predefinedEmote: emote }).catch(() => {
+        if (attempt < retries) {
+          setTimeout(tryEmote, 500)
+        }
+      })
+    }
+    setTimeout(tryEmote, delayMs)
+  }
+
   // ── Round-end cinematic camera ──
   // Camera at green cube looking toward red cube
   const GREEN_CUBE_POS = Vector3.create(258.78, 19.25, 227.81)
@@ -763,8 +777,11 @@ export async function main() {
       })
     })
 
-    // Force-cancel gliding by triggering a brief emote (clears active glide state)
-    void triggerEmote({ predefinedEmote: 'wave' }).catch(() => {})
+    // Force-cancel gliding/jumping by teleporting player to ground first
+    // triggerEmote fails if the player is mid-air, so we ground them immediately
+    void movePlayerTo({
+      newRelativePosition: { x: 256, y: 47.48, z: 256 },
+    }).catch(() => {})
 
     // Cancel any active death respawns so cinematic can take over
     cancelDrownRespawn()
@@ -803,21 +820,21 @@ export async function main() {
         newRelativePosition: { x: 265.57, y: 19.51, z: 219.65 },
         cameraTarget: GREEN_CUBE,
       })
-      setTimeout(() => { void triggerEmote({ predefinedEmote: 'handsair' }) }, 1500)
+      retryEmote('handsair', 1500, 3)
       console.log('[Client] 🏆 1st place teleported to red cube!')
     } else if (isSecondPlace) {
       void movePlayerTo({
         newRelativePosition: { x: 266.97, y: 18.85, z: 220.87 },
         cameraTarget: GREEN_CUBE,
       })
-      setTimeout(() => { void triggerEmote({ predefinedEmote: 'clap' }) }, 1500)
+      retryEmote('clap', 1500, 3)
       console.log('[Client] 🥈 2nd place teleported to gold cube!')
     } else if (isThirdPlace) {
       void movePlayerTo({
         newRelativePosition: { x: 264.25, y: 18.16, z: 218.57 },
         cameraTarget: GREEN_CUBE,
       })
-      setTimeout(() => { void triggerEmote({ predefinedEmote: 'clap' }) }, 1500)
+      retryEmote('clap', 1500, 3)
       console.log('[Client] 🥉 3rd place teleported to blue cube!')
     } else {
       const spawnX = 261.75 + Math.random() * 3

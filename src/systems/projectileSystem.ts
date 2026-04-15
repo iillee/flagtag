@@ -794,7 +794,9 @@ export function projectileClientSystem(dt: number): void {
 
     // Clear local throw flag when projectile visual has appeared and then gone
     if (localThrowActive) {
-      if (msgProjectileVisuals.length > 0) {
+      const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+      const hasLocalVisual = msgProjectileVisuals.some(v => v.firedBy === localUserId || v.firedBy === '')
+      if (hasLocalVisual) {
         localThrowSawVisual = true
       } else if (localThrowSawVisual) {
         // Visual existed and is now gone — boomerang returned
