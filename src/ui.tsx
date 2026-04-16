@@ -1345,6 +1345,15 @@ function DesktopLayout() {
             </UiEntity>
             <UiEntity uiTransform={{ height: S(12) }} />
 
+            {/* Column header for All Time tab */}
+            {leaderboardTab === 'alltime' && totalEntries > 0 && (
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', width: '100%', height: S(24), margin: { bottom: S(4) } }}>
+                <Label value="#" fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ width: S(36), minWidth: S(36) }} textAlign="top-left" />
+                <Label value="Player" fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ flexGrow: 1 }} textAlign="top-left" />
+                <Label value="Wins" fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ width: S(48), minWidth: S(48) }} textAlign="top-right" />
+              </UiEntity>
+            )}
+
             <UiEntity
               uiTransform={{
                 width: '100%',
@@ -1386,10 +1395,10 @@ function DesktopLayout() {
                             <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" />
                           </UiEntity>
                         ) : (
-                          <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1 }}>
-                            <Label value={`${rank}.`} fontSize={S(_ROW_FONT)} color={MUTED} font="sans-serif" uiTransform={{ width: S(32) }} />
-                            <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
-                            <Label value={`${entry.roundsWon}`} fontSize={S(_ROW_FONT)} color={GOLD} font="sans-serif" />
+                          <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", width: '100%' }}>
+                            <Label value={`${rank}.`} fontSize={S(_ROW_FONT)} color={MUTED} font="sans-serif" uiTransform={{ width: S(36), minWidth: S(36) }} textAlign="middle-left" />
+                            <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" uiTransform={{ flexGrow: 1 }} textAlign="middle-left" />
+                            <Label value={`${entry.roundsWon}`} fontSize={S(_ROW_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(48), minWidth: S(48) }} textAlign="middle-right" />
                           </UiEntity>
                         )}
                       </UiEntity>
