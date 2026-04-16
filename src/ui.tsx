@@ -490,15 +490,33 @@ const UI_ADJUST_PRESETS = [
 let uiAdjustIndex = 1 // default Medium
 
 let autoBaseScale = 1.0 // updated each frame from canvas info
+let detectedMobile = false // updated each frame from canvas width
+
+// Device breakpoints — scale multipliers for different screen sizes
+const DEVICE_BREAKPOINTS = {
+  mobile:  { maxWidth: 768,  scaleMult: 1.8, fontMult: 1.4 },
+  tablet:  { maxWidth: 1024, scaleMult: 1.3, fontMult: 1.2 },
+  desktop: { maxWidth: 1920, scaleMult: 1.0, fontMult: 1.0 },
+  highRes: { maxWidth: Infinity, scaleMult: 1.0, fontMult: 1.0 },
+}
+
+function getDeviceType(width: number): 'mobile' | 'tablet' | 'desktop' | 'highRes' {
+  if (width <= DEVICE_BREAKPOINTS.mobile.maxWidth) return 'mobile'
+  if (width <= DEVICE_BREAKPOINTS.tablet.maxWidth) return 'tablet'
+  if (width <= DEVICE_BREAKPOINTS.desktop.maxWidth) return 'desktop'
+  return 'highRes'
+}
 
 // System that reads screen size and computes auto base scale
 engine.addSystem(() => {
   const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
-  if (canvas && canvas.width > 0) {
-    // Use logical width (accounting for device pixel ratio)
-    const logicalWidth = canvas.width
-    const raw = logicalWidth / 1920
-    autoBaseScale = Math.max(0.6, Math.min(1.6, raw))
+  if (canvas && canvas.width > 0 && canvas.height > 0) {
+    // Use the smaller of width/height ratio so UI never overflows on ultrawide or portrait screens
+    const raw = Math.min(canvas.width / 1920, canvas.height / 1080)
+    const device = getDeviceType(canvas.width)
+    const deviceMult = DEVICE_BREAKPOINTS[device].scaleMult
+    autoBaseScale = Math.max(0.6, Math.min(1.6, raw * deviceMult))
+    detectedMobile = device === 'mobile' || device === 'tablet'
   }
 })
 
@@ -605,7 +623,7 @@ function DrownBar() {
 }
 
 function PlayerListUi() {
-  const mobile = false // isMobile() — disabled
+  const mobile = detectedMobile // auto-detected from canvas width breakpoints
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
       {mobile ? <MobileLayout /> : <DesktopLayout />}
