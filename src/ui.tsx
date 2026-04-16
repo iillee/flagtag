@@ -977,8 +977,8 @@ function DesktopLayout() {
         positionType: 'relative',
       }}
     >
-      {/* Timer — top center */}
-      <UiEntity
+      {/* Timer — top center (hidden when any main overlay is open) */}
+      {!winConditionOverlayVisible && !leaderboardOverlayVisible && !analyticsOverlayVisible && <UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { top: S(14), left: S(0) },
@@ -1001,7 +1001,7 @@ function DesktopLayout() {
           <Label value="Round ends in:" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { bottom: S(-6) } }} />
           <Label value={formatCountdown(countdownSeconds)} fontSize={S(40)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: S(-6) } }} />
         </UiEntity>
-      </UiEntity>
+      </UiEntity>}
 
       {/* Round-end splash — bottom of screen over cinematic camera (only when there are scorers) */}
       {splashVisible && cinematicShowing && splashPlayers.length > 0 && (
@@ -1072,7 +1072,7 @@ function DesktopLayout() {
         </UiEntity>
       )}
 
-      {/* How to Play overlay */}
+      {/* How to Play overlay — 3-column card layout */}
       {winConditionOverlayVisible && (
         <UiEntity
           uiTransform={{
@@ -1080,165 +1080,169 @@ function DesktopLayout() {
             position: { left: S(0), top: S(0) },
             width: '100%',
             height: '100%',
-            flexDirection: 'row',
+            flexDirection: 'column',
             justifyContent: 'center',
             alignItems: 'center',
           }}
-          onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
         >
+          {/* Title */}
           <UiEntity
             uiTransform={{
-              positionType: 'relative',
-              width: S(780),
+              width: S(280),
+              padding: { top: S(6), bottom: S(6) },
+              borderRadius: S(12),
+              margin: { bottom: S(16), top: S(-80) },
               flexDirection: 'column',
+              justifyContent: 'center',
               alignItems: 'center',
-              borderRadius: S(20),
-              padding: { top: S(32), bottom: S(32), left: S(40), right: S(40) },
             }}
-            uiBackground={{ color: PANEL_BG }}
+            uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}
+          >
+            <Label value="FLAG TAG!" fontSize={S(40)} color={GOLD} font="sans-serif" uiTransform={{ margin: { top: S(14) } }} />
+            <Label value="A multiplayer keep away game!" fontSize={S(13)} color={MUTED} font="sans-serif" uiTransform={{ margin: { top: S(-12) } }} />
+          </UiEntity>
+
+          {/* 3-column cards row */}
+          <UiEntity
+            uiTransform={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'stretch',
+              width: S(880),
+              margin: { bottom: S(12) },
+            }}
             onMouseDown={() => {}}
           >
-            {/* Close button */}
+            {/* ── Flag Card ── */}
             <UiEntity
               uiTransform={{
-                positionType: 'absolute',
-                position: { top: S(4), right: S(4) },
-                width: S(80),
-                height: S(80),
-                flexDirection: 'row',
+                width: S(280),
+                height: S(480),
+                flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center',
+                borderRadius: S(16),
+                padding: { top: S(14), bottom: S(14), left: S(16), right: S(16) },
+                margin: { right: S(8) },
               }}
-              onMouseEnter={() => { closeWinConditionHovered = true }}
-              onMouseLeave={() => { closeWinConditionHovered = false }}
-              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false; notifyOverlayClosed() }}
+              uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}
             >
-              <Label value="×" fontSize={S(44)} color={closeWinConditionHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+              <Label value="Flag" fontSize={S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(12) } }} />
+              <Label value={"Find the Flag by following\nthe gold beacon"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: S(4) } }} />
+              {/* Flag beacon image */}
+              <UiEntity
+                uiTransform={{
+                  width: S(126),
+                  height: S(240),
+                  borderRadius: S(8),
+                  margin: { top: S(4) },
+                  flexGrow: 1,
+                }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/beacon.png' } }}
+              />
+              <Label value={"Pick up/steal the Flag by\ngetting close to it"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { top: S(8) } }} />
             </UiEntity>
 
-            {/* Title */}
-            <Label value="Flag Tag!" fontSize={S(56)} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: S(0) }} />
-
-            {/* Subtitle */}
-            <Label
-              value="A multiplayer keep away game running 24/7"
-              fontSize={S(17)}
-              color={MUTED}
-              font="sans-serif"
-              textAlign="top-center"
-            />
-            <UiEntity uiTransform={{ height: S(12) }} />
-
-            {/* Two-column layout: How to Play | Controls */}
+            {/* ── Combat Card ── */}
             <UiEntity
               uiTransform={{
-                width: '100%',
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
+                width: S(280),
+                height: S(480),
+                flexDirection: 'column',
+                alignItems: 'center',
+                borderRadius: S(16),
+                padding: { top: S(14), bottom: S(14), left: S(16), right: S(16) },
+                margin: { left: S(4), right: S(4) },
               }}
+              uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}
             >
-              {/* Left column — How to Play */}
+              <Label value="Combat" fontSize={S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(12) } }} />
+              <Label value={"Throw your boomerang (E) to\nstun rivals and force them\nto drop the Flag"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: S(10) } }} />
+              {/* Boomerang image */}
+              <UiEntity
+                uiTransform={{ width: S(120), height: S(120), margin: { bottom: S(14) } }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
+              />
+              <Label value={"Drop bananas (F) to block\nboomerangs and stun pursuers"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: S(10) } }} />
+              {/* Banana image */}
+              <UiEntity
+                uiTransform={{ width: S(120), height: S(120) }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
+              />
+            </UiEntity>
+
+            {/* ── Win + Controls Card ── */}
+            <UiEntity
+              uiTransform={{
+                width: S(280),
+                height: S(480),
+                flexDirection: 'column',
+                alignItems: 'center',
+                borderRadius: S(16),
+                padding: { top: S(14), bottom: S(14), left: S(16), right: S(16) },
+                margin: { left: S(8) },
+              }}
+              uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}
+              onMouseDown={() => {}}
+            >
+              {/* Close X button */}
               <UiEntity
                 uiTransform={{
-                  width: '62%',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
+                  positionType: 'absolute',
+                  position: { top: S(4), right: S(4) },
+                  width: S(44),
+                  height: S(44),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
+                onMouseEnter={() => { closeWinConditionHovered = true }}
+                onMouseLeave={() => { closeWinConditionHovered = false }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false; notifyOverlayClosed() }}
               >
-                <Label value="How to Play" fontSize={S(24)} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: S(12) }} />
-                <Label value="•  Walk into the flag to pick it up" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: S(12) }} />
-                <Label value="•  Get close to the carrier to steal the flag" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: S(12) }} />
-                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: S(12) }} />
-                <Label value="•  Throw boomerang & banana traps to stun your rivals" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: S(12) }} />
-                <Label value="•  The player with the most points after 5 min. wins!" fontSize={S(16)} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="×" fontSize={S(44)} color={closeWinConditionHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
               </UiEntity>
-
-              {/* Right column — Controls */}
-              <UiEntity
-                uiTransform={{
-                  width: '35%',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                }}
-              >
-                <Label value="Controls" fontSize={S(24)} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: S(12) }} />
-
-                {/* E — throw boomerang */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
-                  <UiEntity
-                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="E" fontSize={S(16)} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value="throw boomerang" fontSize={S(16)} color={MUTED} font="sans-serif" />
-                  <UiEntity
-                    uiTransform={{ width: S(41), height: S(41), margin: { left: S(8) } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
-                  />
+              <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
+                <Label value="Win" fontSize={S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(12) } }} />
+                <Label value={"Score 1 point for every\nsecond you hold the Flag"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ margin: { bottom: S(6) } }} />
+                <Label value={"Win the round by holding\nthe Flag for the longest!"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ margin: { bottom: S(20) } }} />
+                <Label value="Controls" fontSize={S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(16) } }} />
+              </UiEntity>
+              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'flex-start', padding: { left: S(32) } }}>
+              {/* E */}
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(10) } }}>
+                <UiEntity uiTransform={{ width: S(34), height: S(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(5), margin: { right: S(8) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}>
+                  <Label value="E" fontSize={S(16)} color={WHITE} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ height: S(12) }} />
-
-                {/* F — drop banana */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
-                  <UiEntity
-                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="F" fontSize={S(16)} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value="drop banana" fontSize={S(16)} color={MUTED} font="sans-serif" />
-                  <UiEntity
-                    uiTransform={{ width: S(43), height: S(43), margin: { left: S(8) } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
-                  />
+                <Label value="Throw Boomerang" fontSize={S(13)} color={MUTED} font="sans-serif" />
+              </UiEntity>
+              {/* F */}
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(10) } }}>
+                <UiEntity uiTransform={{ width: S(34), height: S(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(5), margin: { right: S(8) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}>
+                  <Label value="F" fontSize={S(16)} color={WHITE} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ height: S(12) }} />
-
-                {/* 3 — drop flag */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
-                  <UiEntity
-                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="3" fontSize={S(16)} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value="drop flag" fontSize={S(16)} color={MUTED} font="sans-serif" />
+                <Label value="Drop Banana" fontSize={S(13)} color={MUTED} font="sans-serif" />
+              </UiEntity>
+              {/* 3 */}
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(10) } }}>
+                <UiEntity uiTransform={{ width: S(34), height: S(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(5), margin: { right: S(8) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}>
+                  <Label value="3" fontSize={S(16)} color={WHITE} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ height: S(12) }} />
-
-                {/* 2 — mute music */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
-                  <UiEntity
-                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="2" fontSize={S(16)} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value={musicMuted ? "unmute music" : "mute music"} fontSize={S(16)} color={MUTED} font="sans-serif" />
+                <Label value="Drop Flag" fontSize={S(13)} color={MUTED} font="sans-serif" />
+              </UiEntity>
+              {/* 2 */}
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(10) } }}>
+                <UiEntity uiTransform={{ width: S(34), height: S(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(5), margin: { right: S(8) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}>
+                  <Label value="2" fontSize={S(16)} color={WHITE} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ height: S(12) }} />
-
-                {/* 1 — toggle UI size */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: S(34) }}>
-                  <UiEntity
-                    uiTransform={{ width: S(32), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(4), margin: { right: S(10) } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="1" fontSize={S(16)} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value="toggle UI size" fontSize={S(16)} color={MUTED} font="sans-serif" />
+                <Label value={musicMuted ? "Unmute Music" : "Mute Music"} fontSize={S(13)} color={MUTED} font="sans-serif" />
+              </UiEntity>
+              {/* 1 */}
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
+                <UiEntity uiTransform={{ width: S(34), height: S(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(5), margin: { right: S(8) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}>
+                  <Label value="1" fontSize={S(16)} color={WHITE} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ height: S(12) }} />
-
+                <Label value="Toggle UI Size" fontSize={S(13)} color={MUTED} font="sans-serif" />
+              </UiEntity>
               </UiEntity>
             </UiEntity>
           </UiEntity>
@@ -1624,7 +1628,7 @@ function DesktopLayout() {
         )
       })()}
 
-      {/* ── Ability icons — bottom center (hidden during cinematic) ── */}
+      {/* ── Ability icons — bottom center (hidden during cinematic/overlays) ── */}
       {!cinematicShowing && !isSpectatorMode() && !isSpectatorTransitioning() && <UiEntity
         uiTransform={{
           positionType: 'absolute',
@@ -1632,6 +1636,7 @@ function DesktopLayout() {
           width: '100%',
           flexDirection: 'row',
           justifyContent: 'center',
+          display: (winConditionOverlayVisible || leaderboardOverlayVisible || analyticsOverlayVisible) ? 'none' : 'flex',
         }}
       >
         <UiEntity
@@ -1699,7 +1704,7 @@ function DesktopLayout() {
       </UiEntity>}
 
       {/* ── Right-side container: scoreboard stacked vertically ── */}
-      <UiEntity
+      {<UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { right: S(16), top: S(14) },
@@ -2192,160 +2197,104 @@ function MobileLayout() {
         </UiEntity>
       )}
 
-      {/* ── How to Play overlay — centered (safe area) ── */}
+      {/* ── How to Play overlay — 3-column card layout (mobile) ── */}
       {winConditionOverlayVisible && (
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { left: 0, top: 106 },
-            width: '100%', height: 'auto',
-            flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start',
+            position: { left: 0, top: 0 },
+            width: '100%', height: '100%',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
         >
+          <Label value="FLAG TAG!" fontSize={52} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 14, top: -80 } }} />
+
+          {/* 3-column cards */}
           <UiEntity
-            uiTransform={{
-              positionType: 'relative',
-              width: '65%',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: { top: 32, bottom: 32, left: 32, right: 32 },
-            }}
-            uiBackground={{ color: PANEL_BG }}
+            uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'stretch', width: '80%', margin: { bottom: 14 } }}
+            onMouseDown={() => {}}
           >
-            {/* Close button */}
-            <UiEntity
-              uiTransform={{
-                positionType: 'absolute',
-                position: { top: 4, right: 4 },
-                width: 88, height: 88,
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-              }}
-              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
-            >
-              <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
+            {/* Flag Card */}
+            <UiEntity uiTransform={{ width: '32%', flexDirection: 'column', alignItems: 'center', borderRadius: 14, padding: { top: 18, bottom: 18, left: 14, right: 14 }, margin: { right: 10 } }} uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}>
+              <Label value="Flag" fontSize={28} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 10 } }} />
+              <Label value={"Find the flag marked by the\ngolden beacon and run into\nit to pick it up"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 8 } }} />
+              <Label value={"Tag other players to steal\nthe flag"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 10 } }} />
+              <UiEntity uiTransform={{ width: 120, height: 160, borderRadius: 8, flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.18, 0.14, 0.8) }}>
+                <UiEntity uiTransform={{ width: 18, height: 18, margin: { bottom: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                <Label value="flag with beacon" fontSize={14} color={LIGHT_GREY} font="sans-serif" textAlign="middle-center" />
+              </UiEntity>
             </UiEntity>
 
-            {/* Title */}
-            <Label value="Flag Tag!" fontSize={64} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: 0 }} />
+            {/* Combat Card */}
+            <UiEntity uiTransform={{ width: '32%', flexDirection: 'column', alignItems: 'center', borderRadius: 14, padding: { top: 18, bottom: 18, left: 14, right: 14 }, margin: { right: 10 } }} uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}>
+              <Label value="Combat" fontSize={28} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 10 } }} />
+              <Label value={"Throw your boomerang with E\nto stun other players and force\nthem to drop the flag"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 8 } }} />
+              <UiEntity uiTransform={{ width: 70, height: 70, margin: { bottom: 12 } }} uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }} />
+              <Label value={"Drop bananas using F to stun\npursuers and to block\nboomerangs"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 8 } }} />
+              <UiEntity uiTransform={{ width: 70, height: 70 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }} />
+            </UiEntity>
 
-            {/* Subtitle */}
-            <Label
-              value="A multiplayer keep away game running 24/7"
-              fontSize={20}
-              color={MUTED}
-              font="sans-serif"
-              textAlign="top-center"
-            />
-            <UiEntity uiTransform={{ height: 12 }} />
-
-            {/* Two-column layout: How to Play | Controls */}
-            <UiEntity
-              uiTransform={{
-                width: '100%',
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-              }}
-            >
-              {/* Left column — How to Play */}
+            {/* Environment Card */}
+            <UiEntity uiTransform={{ width: '32%', flexDirection: 'column', alignItems: 'center', borderRadius: 14, padding: { top: 18, bottom: 18, left: 14, right: 14 } }} uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}>
+              {/* Close X button (mobile) */}
               <UiEntity
                 uiTransform={{
-                  width: '62%',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
+                  positionType: 'absolute',
+                  position: { top: 4, right: 4 },
+                  width: 44,
+                  height: 44,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
               >
-                <Label value="How to Play" fontSize={30} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Walk into the flag to pick it up" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Get close to the carrier to steal the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Score 1 point for every 1 second you hold the flag" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  Throw boomerang & banana traps to stun your rivals" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
-                <UiEntity uiTransform={{ height: 14 }} />
-                <Label value="•  The player with the most points after 5 min. wins!" fontSize={22} color={MUTED} font="sans-serif" textAlign="top-left" />
+                <Label value="×" fontSize={36} color={CLOSE_GREY} font="sans-serif" />
               </UiEntity>
+              <Label value="Environment" fontSize={28} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 10 } }} />
+              <Label value={"Jump or glide into smoke stacks\nto get an updraft"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 8 } }} />
+              <UiEntity uiTransform={{ width: 90, height: 50, borderRadius: 6, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: { bottom: 8 } }} uiBackground={{ color: Color4.create(0.2, 0.18, 0.14, 0.8) }}>
+                <Label value="smoke updraft" fontSize={14} color={LIGHT_GREY} font="sans-serif" textAlign="middle-center" />
+              </UiEntity>
+              <Label value={"Use the glowing orbs to teleport\nacross the map"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 8 } }} />
+              <UiEntity uiTransform={{ width: 90, height: 50, borderRadius: 6, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: { bottom: 8 } }} uiBackground={{ color: Color4.create(0.2, 0.18, 0.14, 0.8) }}>
+                <Label value="teleportation orbs" fontSize={14} color={LIGHT_GREY} font="sans-serif" textAlign="middle-center" />
+              </UiEntity>
+              <Label value="Avoid water and lightning!" fontSize={18} color={CORAL_RED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 12 } }} />
+              <Label value="Win" fontSize={24} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 6 } }} />
+              <Label value={"Win the game by holding the flag\nfor the most amount in the\n5 minute round!"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" />
+            </UiEntity>
+          </UiEntity>
 
-              {/* Right column — Controls */}
-              <UiEntity
-                uiTransform={{
-                  width: '35%',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                }}
-              >
-                <Label value="Controls" fontSize={30} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: 14 }} />
-
-                {/* E — throw boomerang */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
-                  <UiEntity
-                    uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="E" fontSize={22} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value="throw boomerang" fontSize={22} color={MUTED} font="sans-serif" />
-                  <UiEntity
-                    uiTransform={{ width: 52, height: 52, margin: { left: 8 } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
-                  />
-                </UiEntity>
-                <UiEntity uiTransform={{ height: 14 }} />
-
-                {/* F — drop banana */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
-                  <UiEntity
-                    uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="F" fontSize={22} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value="drop banana" fontSize={22} color={MUTED} font="sans-serif" />
-                  <UiEntity
-                    uiTransform={{ width: 55, height: 55, margin: { left: 8 } }}
-                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
-                  />
-                </UiEntity>
-                <UiEntity uiTransform={{ height: 14 }} />
-
-                {/* 3 — drop flag */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
-                  <UiEntity
-                    uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="3" fontSize={22} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value="drop flag" fontSize={22} color={MUTED} font="sans-serif" />
-                </UiEntity>
-                <UiEntity uiTransform={{ height: 14 }} />
-
-                {/* 2 — mute music */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
-                  <UiEntity
-                    uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="2" fontSize={22} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value={musicMuted ? "unmute music" : "mute music"} fontSize={22} color={MUTED} font="sans-serif" />
-                </UiEntity>
-                <UiEntity uiTransform={{ height: 14 }} />
-
-                {/* 1 — toggle UI size */}
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40 }}>
-                  <UiEntity
-                    uiTransform={{ width: 38, height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 10 } }}
-                    uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}
-                  >
-                    <Label value="1" fontSize={22} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                  <Label value="toggle UI size" fontSize={22} color={MUTED} font="sans-serif" />
-                </UiEntity>
+          {/* Controls bar */}
+          <UiEntity
+            uiTransform={{ width: '80%', flexDirection: 'column', alignItems: 'flex-start', borderRadius: 10, padding: { top: 10, bottom: 12, left: 18, right: 18 } }}
+            uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}
+            onMouseDown={() => {}}
+          >
+            <Label value="Controls" fontSize={22} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 8 } }} />
+            <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { right: 22 } }}>
+                <UiEntity uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 6 } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}><Label value="E" fontSize={18} color={WHITE} font="sans-serif" /></UiEntity>
+                <Label value="boomerang" fontSize={18} color={MUTED} font="sans-serif" />
+              </UiEntity>
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { right: 22 } }}>
+                <UiEntity uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 6 } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}><Label value="F" fontSize={18} color={WHITE} font="sans-serif" /></UiEntity>
+                <Label value="banana" fontSize={18} color={MUTED} font="sans-serif" />
+              </UiEntity>
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { right: 22 } }}>
+                <UiEntity uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 6 } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}><Label value="3" fontSize={18} color={WHITE} font="sans-serif" /></UiEntity>
+                <Label value="drop flag" fontSize={18} color={MUTED} font="sans-serif" />
+              </UiEntity>
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { right: 22 } }}>
+                <UiEntity uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 6 } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}><Label value="2" fontSize={18} color={WHITE} font="sans-serif" /></UiEntity>
+                <Label value={musicMuted ? "unmute" : "mute"} fontSize={18} color={MUTED} font="sans-serif" />
+              </UiEntity>
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
+                <UiEntity uiTransform={{ width: 32, height: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 4, margin: { right: 6 } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}><Label value="1" fontSize={18} color={WHITE} font="sans-serif" /></UiEntity>
+                <Label value="UI size" fontSize={18} color={MUTED} font="sans-serif" />
               </UiEntity>
             </UiEntity>
           </UiEntity>
