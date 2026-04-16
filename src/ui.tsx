@@ -36,7 +36,7 @@ function toggleMusicMute() {
 import { isSpectatorMode, isSpectatorTransitioning, exitSpectatorMode } from './systems/spectatorSystem'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
-import { signedFetch, getHeaders } from '~system/SignedFetch'
+import { signedFetch } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
 // Public community — direct join via POST /members
@@ -66,22 +66,15 @@ function joinCommunity() {
       console.log('[Mailbox] Joining community for:', player.userId)
       setMailboxStatus('Joining...')
 
-      // Get signed auth headers, then do a regular fetch
-      const { headers: signedHeaders } = await getHeaders({ url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members` })
-      console.log('[Mailbox] Signed headers:', JSON.stringify(signedHeaders))
-      
-      const headerMap: Record<string, string> = { 'Accept': 'application/json' }
-      if (signedHeaders) {
-        for (const [key, value] of Object.entries(signedHeaders)) {
-          headerMap[key] = value
+      // Use signedFetch for ADR-44 authenticated request
+      const joinRes = await signedFetch({
+        url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({})
         }
-      }
-      
-      const fetchRes = await fetch(`https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`, {
-        method: 'POST',
-        headers: headerMap
       })
-      const joinRes = { status: fetchRes.status, ok: fetchRes.ok, body: await fetchRes.text() }
       console.log('[Mailbox] Join response - status:', joinRes.status, 'ok:', joinRes.ok, 'body:', joinRes.body)
       let data: any = {}
       try { data = JSON.parse(joinRes.body) } catch (_) {}
