@@ -7,7 +7,7 @@ const WinConditionOverlayStateSchema = {
 export const WinConditionOverlayState = engine.defineComponent(
   'ctf-win-condition-overlay',
   WinConditionOverlayStateSchema,
-  { visible: true }
+  { visible: false }
 )
 
 let overlayEntity: ReturnType<typeof engine.addEntity> | null = null
@@ -44,7 +44,7 @@ export function toggleWinConditionOverlay() {
 
 export function createWinConditionOverlayEntity() {
   const entity = engine.addEntity()
-  WinConditionOverlayState.create(entity, { visible: true })
+  WinConditionOverlayState.create(entity, { visible: false })
   setOverlayEntity(entity)
   return entity
 }

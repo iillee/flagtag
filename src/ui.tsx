@@ -122,6 +122,9 @@ function getCinematicFade(): number {
   return cinematicFadeOpacity
 }
 
+// ── Title splash (on load → click → How to Play) ──
+let titleSplashVisible = true
+
 // ── Cinematic showing flag (true while cinematic view is revealed) ──
 let cinematicShowing = false
 
@@ -148,7 +151,8 @@ export function notifyOverlayClosed() {
 export function isAnyOverlayOpen(): boolean {
   // Also return true briefly after an overlay was closed, so the same click doesn't trigger an attack
   if (Date.now() - overlayClosedAt < OVERLAY_CLOSE_GRACE_MS) return true
-  return getWinConditionOverlayVisible()
+  return titleSplashVisible
+    || getWinConditionOverlayVisible()
     || getLeaderboardOverlayVisible()
     || getAnalyticsOverlayVisible()
     || splashVisible
@@ -490,33 +494,15 @@ const UI_ADJUST_PRESETS = [
 let uiAdjustIndex = 1 // default Medium
 
 let autoBaseScale = 1.0 // updated each frame from canvas info
-let detectedMobile = false // updated each frame from canvas width
-
-// Device breakpoints — scale multipliers for different screen sizes
-const DEVICE_BREAKPOINTS = {
-  mobile:  { maxWidth: 768,  scaleMult: 1.8, fontMult: 1.4 },
-  tablet:  { maxWidth: 1024, scaleMult: 1.3, fontMult: 1.2 },
-  desktop: { maxWidth: 1920, scaleMult: 1.0, fontMult: 1.0 },
-  highRes: { maxWidth: Infinity, scaleMult: 1.0, fontMult: 1.0 },
-}
-
-function getDeviceType(width: number): 'mobile' | 'tablet' | 'desktop' | 'highRes' {
-  if (width <= DEVICE_BREAKPOINTS.mobile.maxWidth) return 'mobile'
-  if (width <= DEVICE_BREAKPOINTS.tablet.maxWidth) return 'tablet'
-  if (width <= DEVICE_BREAKPOINTS.desktop.maxWidth) return 'desktop'
-  return 'highRes'
-}
 
 // System that reads screen size and computes auto base scale
 engine.addSystem(() => {
   const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
-  if (canvas && canvas.width > 0 && canvas.height > 0) {
-    // Use the smaller of width/height ratio so UI never overflows on ultrawide or portrait screens
-    const raw = Math.min(canvas.width / 1920, canvas.height / 1080)
-    const device = getDeviceType(canvas.width)
-    const deviceMult = DEVICE_BREAKPOINTS[device].scaleMult
-    autoBaseScale = Math.max(0.6, Math.min(1.6, raw * deviceMult))
-    detectedMobile = device === 'mobile' || device === 'tablet'
+  if (canvas && canvas.width > 0) {
+    // Use logical width (accounting for device pixel ratio)
+    const logicalWidth = canvas.width
+    const raw = logicalWidth / 1920
+    autoBaseScale = Math.max(0.6, Math.min(1.6, raw))
   }
 })
 
@@ -623,7 +609,7 @@ function DrownBar() {
 }
 
 function PlayerListUi() {
-  const mobile = detectedMobile // auto-detected from canvas width breakpoints
+  const mobile = false // isMobile() — disabled
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
       {mobile ? <MobileLayout /> : <DesktopLayout />}
@@ -936,6 +922,48 @@ function PlayerListUi() {
           </UiEntity>
         </UiEntity>
       )}
+
+      {/* ── Title Splash Screen ── */}
+      {titleSplashVisible && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { left: 0, top: 0 },
+            width: '100%',
+            height: '100%',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          uiBackground={{ color: Color4.create(0, 0, 0, 0.75) }}
+          onMouseDown={() => {
+            playClickSound()
+            titleSplashVisible = false
+            setWinConditionOverlayVisible(true)
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              width: S(420),
+              padding: { top: S(32), bottom: S(32), left: S(24), right: S(24) },
+              borderRadius: S(16),
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            uiBackground={{ color: Color4.create(0.12, 0.10, 0.10, 0.95) }}
+            onMouseDown={() => {
+              playClickSound()
+              titleSplashVisible = false
+              setWinConditionOverlayVisible(true)
+            }}
+          >
+            <Label value="FLAG TAG!" fontSize={S(56)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(6) } }} />
+            <Label value="A multiplayer keep away game!" fontSize={S(16)} color={MUTED} font="sans-serif" uiTransform={{ margin: { bottom: S(24) } }} />
+            <Label value="Click anywhere to continue" fontSize={S(13)} color={Color4.create(1, 1, 1, 0.5)} font="sans-serif" />
+          </UiEntity>
+        </UiEntity>
+      )}
     </UiEntity>
   )
 }
@@ -996,7 +1024,7 @@ function DesktopLayout() {
       }}
     >
       {/* Timer — top center (hidden when any main overlay is open) */}
-      {!winConditionOverlayVisible && !leaderboardOverlayVisible && !analyticsOverlayVisible && <UiEntity
+      {<UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { top: S(14), left: S(0) },
@@ -1103,23 +1131,6 @@ function DesktopLayout() {
             alignItems: 'center',
           }}
         >
-          {/* Title */}
-          <UiEntity
-            uiTransform={{
-              width: S(280),
-              padding: { top: S(6), bottom: S(6) },
-              borderRadius: S(12),
-              margin: { bottom: S(16), top: S(-80) },
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-            uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}
-          >
-            <Label value="FLAG TAG!" fontSize={S(40)} color={GOLD} font="sans-serif" uiTransform={{ margin: { top: S(14) } }} />
-            <Label value="A multiplayer keep away game!" fontSize={S(13)} color={MUTED} font="sans-serif" uiTransform={{ margin: { top: S(-12) } }} />
-          </UiEntity>
-
           {/* 3-column cards row */}
           <UiEntity
             uiTransform={{
@@ -1654,7 +1665,7 @@ function DesktopLayout() {
           width: '100%',
           flexDirection: 'row',
           justifyContent: 'center',
-          display: (winConditionOverlayVisible || leaderboardOverlayVisible || analyticsOverlayVisible) ? 'none' : 'flex',
+          display: 'flex',
         }}
       >
         <UiEntity
@@ -1722,7 +1733,7 @@ function DesktopLayout() {
       </UiEntity>}
 
       {/* ── Right-side container: scoreboard stacked vertically ── */}
-      {<UiEntity
+      <UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { right: S(16), top: S(14) },
@@ -2227,8 +2238,6 @@ function MobileLayout() {
             alignItems: 'center',
           }}
         >
-          <Label value="FLAG TAG!" fontSize={52} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 14, top: -80 } }} />
-
           {/* 3-column cards */}
           <UiEntity
             uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'stretch', width: '80%', margin: { bottom: 14 } }}
