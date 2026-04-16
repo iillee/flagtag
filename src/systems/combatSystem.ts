@@ -217,7 +217,7 @@ export function playMissSound(position: Vector3): void {
 
 // ── Stagger & message handling ──
 const STAGGER_EMOTE = 'getHit' as const
-const STAGGER_FREEZE_MS = 800   // Reduced from 1500ms - shorter stun duration
+const STAGGER_FREEZE_MS = 1000  // 1 second stun duration
 const STAGGER_DELAY_MS = 0      // Reduced from 100ms - instant emote trigger
 let staggerFreezeUntil = 0
 let staggerTriggerAt = 0

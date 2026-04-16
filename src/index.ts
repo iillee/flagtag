@@ -777,11 +777,8 @@ export async function main() {
       })
     })
 
-    // Force-cancel gliding/jumping by teleporting player to ground first
-    // triggerEmote fails if the player is mid-air, so we ground them immediately
-    void movePlayerTo({
-      newRelativePosition: { x: 256, y: 47.48, z: 256 },
-    }).catch(() => {})
+    // Cancel gliding/jumping with a ground-level emote reset (no teleport)
+    triggerEmote({ predefinedEmote: 'wave' }).catch(() => {})
 
     // Cancel any active death respawns so cinematic can take over
     cancelDrownRespawn()

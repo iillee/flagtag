@@ -1168,7 +1168,7 @@ function DesktopLayout() {
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/beacon.png' } }}
               />
-              <Label value={"Pick up/steal the Flag by\ngetting close to it"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { top: S(8) } }} />
+              <Label value={"Move close to the Flag to pickup\nor steal it from another player"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { top: S(8) } }} />
             </UiEntity>
 
             {/* ── Combat Card ── */}
@@ -1719,8 +1719,8 @@ function DesktopLayout() {
               uiTransform={{ width: S(_ABILITY_ICON_SIZE), height: S(_ABILITY_ICON_SIZE), margin: { top: S(6) } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: isTrapOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
-                color: isTrapOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                texture: { src: 'assets/images/banana-color.png' },
+                color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
               }}
             />
             {isTrapOnCooldown() && (
@@ -2032,8 +2032,8 @@ function MobileLayout() {
                   uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
                   uiBackground={{
                     textureMode: 'stretch',
-                    texture: { src: isTrapOnCooldown() ? 'assets/images/banana-bw.png' : 'assets/images/banana-color.png' },
-                    color: isTrapOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                    texture: { src: 'assets/images/banana-color.png' },
+                    color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
                   }}
                 />
                 {isTrapOnCooldown() && (
@@ -2246,8 +2246,8 @@ function MobileLayout() {
             {/* Flag Card */}
             <UiEntity uiTransform={{ width: '32%', flexDirection: 'column', alignItems: 'center', borderRadius: 14, padding: { top: 18, bottom: 18, left: 14, right: 14 }, margin: { right: 10 } }} uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}>
               <Label value="Flag" fontSize={28} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 10 } }} />
-              <Label value={"Find the flag marked by the\ngolden beacon and run into\nit to pick it up"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 8 } }} />
-              <Label value={"Tag other players to steal\nthe flag"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 10 } }} />
+              <Label value={"Find the Flag by following\nthe gold beacon"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 8 } }} />
+              <Label value={"Move close to the Flag to pickup\nor steal it from another player"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 10 } }} />
               <UiEntity uiTransform={{ width: 120, height: 160, borderRadius: 8, flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.18, 0.14, 0.8) }}>
                 <UiEntity uiTransform={{ width: 18, height: 18, margin: { bottom: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
                 <Label value="flag with beacon" fontSize={14} color={LIGHT_GREY} font="sans-serif" textAlign="middle-center" />

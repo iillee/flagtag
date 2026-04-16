@@ -1236,7 +1236,7 @@ function handleTrapDrop(playerId: string): void {
   lastTrapDropTime.set(playerId, now)
 
   // Notify clients for sound/VFX + ground raycast
-  room.send('bananaDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z })
+  room.send('bananaDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z, ownerId: playerId })
 
   console.log('[Server] 🪤 Trap dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1), '— active traps:', activeTraps.length)
 }

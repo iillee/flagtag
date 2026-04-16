@@ -28,6 +28,7 @@ import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../cinematicState'
 import { isDrownRespawning } from './waterSystem'
+import { showMissEffect, showHitEffect, playMissSound } from './combatSystem'
 
 const TRAP_MODEL_SRC = 'models/banana_scaled.glb'
 const TRAP_SCALE = Vector3.create(1, 1, 1)
@@ -245,9 +246,10 @@ const MAX_RECENT_DROPS = 20
 // ── Message listeners ──
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('bananaDropped', (data) => {
+  console.log('[Trap] bananaDropped msg:', JSON.stringify(data))
   playTrapDropSound(Vector3.create(data.x, data.y, data.z))
   // Create visual from message bus (instant, no CRDT dependency)
-  createMsgTrapVisual(data.x, data.y, data.z)
+  createMsgTrapVisual(data.x, data.y, data.z, data.ownerId || '')
   // Fire ground raycast so server knows where to land this trap
   fireTrapGroundRaycast(data.x, data.y, data.z)
 })
@@ -258,16 +260,34 @@ room.onMessage('bananaTriggered', (data) => {
   // Remove the message-driven trap visual
   removeMsgTrapVisualNear(data.x, data.y, data.z)
 
-  playTrapSplatSound(pos)
+  // Hit by boomerang (no victim): skip sound here — shellTriggered already plays the miss sound
+  // Stepped on by player: play hit sound + hit VFX (only if prediction didn't already handle it)
+  // Boomerang destroyed banana: smoke puff
+  if (data.victimId && data.victimId !== '') {
+    const me = getPlayerData()?.userId
+    const isMe = me && data.victimId === me.toLowerCase()
+    // If it's us and we're already staggered, prediction already played the VFX
+    if (!isMe || trapStaggerUntil <= Date.now()) {
+      playTrapSplatSound(pos)
+      showHitEffect(pos)
+    }
+  }
+  // Boomerang hits: smoke puff already handled by shellTriggered handler
 
   // Stagger the victim if it's the local player
   const me = getPlayerData()?.userId
   if (me && data.victimId === me.toLowerCase() && !isCinematicActive()) {
-    triggerEmote({ predefinedEmote: 'getHit' })
-    InputModifier.createOrReplace(engine.PlayerEntity, {
-      mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
-    })
-    trapStaggerUntil = Date.now() + TRAP_STAGGER_MS
+    // Only apply if not already staggered (client-side prediction may have already triggered it)
+    const now = Date.now()
+    if (trapStaggerUntil <= now) {
+      triggerEmote({ predefinedEmote: 'getHit' })
+      InputModifier.createOrReplace(engine.PlayerEntity, {
+        mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
+      })
+      trapStaggerUntil = now + TRAP_STAGGER_MS
+    } else {
+      console.log('[Trap] bananaTriggered skipped — already staggered, remaining:', trapStaggerUntil - now, 'ms')
+    }
   }
 })
 
@@ -395,6 +415,7 @@ function updateLocalTraps(dt: number): void {
       if (dist < TRAP_TRIGGER_RADIUS) {
         console.log('[Trap] 🪤 LOCAL trap triggered!')
         playTrapSplatSound(bananaPos)
+        showHitEffect(bananaPos)
         triggerEmote({ predefinedEmote: 'getHit' })
         removeLocalTrap(i)
       }
@@ -458,6 +479,7 @@ interface MsgTrapVisual {
   entity: Entity
   x: number
   z: number
+  ownerId: string
   createdAtMs: number
   falling: boolean
   fallVelocity: number
@@ -468,7 +490,7 @@ interface MsgTrapVisual {
 }
 const msgTrapVisuals: MsgTrapVisual[] = []
 
-function createMsgTrapVisual(x: number, y: number, z: number): void {
+function createMsgTrapVisual(x: number, y: number, z: number, ownerId: string = ''): void {
   const localEntity = acquireTrapFromPool()
   if (!localEntity) return
 
@@ -486,6 +508,7 @@ function createMsgTrapVisual(x: number, y: number, z: number): void {
 
   msgTrapVisuals.push({
     entity: localEntity, x, z,
+    ownerId,
     createdAtMs: Date.now(),
     falling: true, fallVelocity: 0, currentY: y, targetY: 0,
     groundResolved: false, groundRayEntity,
@@ -547,6 +570,34 @@ function updateMsgTrapVisuals(dt: number): void {
 
     const t = Transform.getMutable(vis.entity)
     t.position = Vector3.create(vis.x, vis.currentY, vis.z)
+
+    // Client-side prediction: trigger stagger immediately on proximity
+    if (!vis.falling && !isCinematicActive() && !isDrownRespawning() && Transform.has(engine.PlayerEntity)) {
+      // Skip own banana during 2-second grace period (matches server logic)
+      const me = getPlayerData()?.userId?.toLowerCase() || ''
+      const isOwn = vis.ownerId !== '' && vis.ownerId === me
+      if (isOwn && (now - vis.createdAtMs) < 2000) {
+        console.log('[Trap] Skipping own banana prediction — owner:', vis.ownerId, 'me:', me, 'age:', now - vis.createdAtMs)
+        continue
+      }
+
+      const playerPos = Transform.get(engine.PlayerEntity).position
+      const dx = playerPos.x - vis.x
+      const dz = playerPos.z - vis.z
+      const dy = playerPos.y - vis.currentY
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (dist < TRAP_TRIGGER_RADIUS && trapStaggerUntil <= now) {
+        // Predict the stagger locally — server will confirm and remove the trap
+        triggerEmote({ predefinedEmote: 'getHit' })
+        const trapPos = Vector3.create(vis.x, vis.currentY, vis.z)
+        playTrapSplatSound(trapPos)
+        showHitEffect(trapPos)
+        InputModifier.createOrReplace(engine.PlayerEntity, {
+          mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
+        })
+        trapStaggerUntil = now + TRAP_STAGGER_MS
+      }
+    }
   }
 }
 
