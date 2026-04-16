@@ -12,7 +12,8 @@ import {
   RaycastQueryType,
   VisibilityComponent,
   AvatarEmoteCommand,
-  type Entity
+  type Entity,
+  PlayerIdentityData
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
@@ -268,19 +269,15 @@ room.onMessage('shellDropped', (data) => {
   createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy)
 })
 
-// Listen for return position updates from the server
-room.onMessage('shellReturnPos', (data) => {
-  const firedBy = (data.firedBy || '').toLowerCase()
-  // Find the returning projectile from this player
-  for (const vis of msgProjectileVisuals) {
-    if (vis.returning && vis.firedBy === firedBy) {
-      vis.returnTargetX = data.x
-      vis.returnTargetY = data.y
-      vis.returnTargetZ = data.z
-      break
+/** Look up a remote player's position by wallet address (case-insensitive). */
+function getRemotePlayerPosition(userId: string): Vector3 | null {
+  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+    if (identity.address.toLowerCase() === userId) {
+      return Transform.get(entity).position
     }
   }
-})
+  return null
+}
 
 room.onMessage('shellTriggered', (data) => {
   const pos = Vector3.create(data.x, data.y, data.z)
@@ -580,10 +577,6 @@ interface MsgProjectileVisual {
   spinAngle: number
   returning: boolean
   returnDistance: number
-  // Server-driven return target (updated via shellReturnPos messages)
-  returnTargetX: number
-  returnTargetY: number
-  returnTargetZ: number
 }
 const msgProjectileVisuals: MsgProjectileVisual[] = []
 
@@ -622,9 +615,6 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
     spinAngle: 0,
     returning: false,
     returnDistance: 0,
-    returnTargetX: x,
-    returnTargetY: y,
-    returnTargetZ: z,
   })
   console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))
 }
@@ -701,8 +691,14 @@ function updateMsgProjectileVisuals(dt: number): void {
         const rawPlayerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
         targetPos = Vector3.create(rawPlayerPos.x, rawPlayerPos.y + PROJECTILE_CHEST_OFFSET, rawPlayerPos.z)
       } else {
-        // Remote player's boomerang — use server-provided return target
-        targetPos = Vector3.create(vis.returnTargetX, vis.returnTargetY, vis.returnTargetZ)
+        // Remote player's boomerang — look up their position locally via CRDT
+        const remotePos = getRemotePlayerPosition(vis.firedBy)
+        if (remotePos) {
+          targetPos = Vector3.create(remotePos.x, remotePos.y + PROJECTILE_CHEST_OFFSET, remotePos.z)
+        } else {
+          // Fallback: return to start position if player left
+          targetPos = Vector3.create(vis.startX, vis.startY + PROJECTILE_CHEST_OFFSET, vis.startZ)
+        }
       }
 
       const dx = targetPos.x - shellPos.x

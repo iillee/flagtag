@@ -173,7 +173,6 @@ interface ActiveProjectile {
   returnX: number  // current position during return
   returnY: number
   returnZ: number
-  lastReturnBroadcast: number  // ms timestamp of last shellReturnPos broadcast
 }
 const activeProjectiles: ActiveProjectile[] = []
 const PROJECTILE_SYNC_INTERVAL = 0.1 // seconds between Projectile component CRDT writes
@@ -1393,7 +1392,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     returnX: spawnPos.x,
     returnY: spawnPos.y,
     returnZ: spawnPos.z,
-    lastReturnBroadcast: 0,
+
   })
   lastProjectileFireTime.set(playerId, now)
 
@@ -1472,14 +1471,7 @@ function shellServerSystem(dt: number): void {
       const t = Transform.getMutable(projectile.entity)
       t.position = Vector3.create(projectile.returnX, projectile.returnY, projectile.returnZ)
 
-      // Broadcast thrower's position at ~8Hz so other clients can track the return target
-      if (now - projectile.lastReturnBroadcast >= 125) {
-        projectile.lastReturnBroadcast = now
-        room.send('shellReturnPos', {
-          x: targetPos.x, y: targetPos.y, z: targetPos.z,
-          firedBy: projectile.firedBy,
-        })
-      }
+      // Return target resolved client-side via CRDT player transforms
     }
 
     // Update synced component — throttled to avoid CRDT saturation.

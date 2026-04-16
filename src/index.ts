@@ -777,8 +777,7 @@ export async function main() {
       })
     })
 
-    // Cancel gliding/jumping with a ground-level emote reset (no teleport)
-    triggerEmote({ predefinedEmote: 'wave' }).catch(() => {})
+    // Gliding/jumping cancelled by movePlayerTo teleport below
 
     // Cancel any active death respawns so cinematic can take over
     cancelDrownRespawn()

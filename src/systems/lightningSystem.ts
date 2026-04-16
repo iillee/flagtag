@@ -479,10 +479,7 @@ export function lightningSystem(dt: number) {
       void movePlayerTo({ newRelativePosition: SPAWN_POSITION })
     }
 
-    // Cancel emote 1 second before respawn
-    if (prevDelay > 1.0 && lightningRespawnDelay <= 1.0) {
-      void triggerEmote({ predefinedEmote: 'wave' })
-    }
+    // Death emote finishes naturally during black screen
 
     if (lightningRespawnDelay <= 0) {
       lightningRespawnDelay = 0

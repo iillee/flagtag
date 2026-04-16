@@ -1709,7 +1709,7 @@ function DesktopLayout() {
               uiTransform={{ positionType: 'absolute', position: { top: S(-2), left: S(5) } }}
             />
             <UiEntity
-              uiTransform={{ width: S(_ABILITY_ICON_SIZE), height: S(_ABILITY_ICON_SIZE), margin: { top: S(6) } }}
+              uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3, height: S(_ABILITY_ICON_SIZE) * 1.3, margin: { top: S(2) } }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: 'assets/images/banana-color.png' },

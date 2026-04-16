@@ -138,10 +138,7 @@ export function waterSystem(dt: number) {
       void movePlayerTo({ newRelativePosition: SPAWN_POSITION })
     }
 
-    // Stop emote 1 second before respawn
-    if (prevDelay > 1.0 && respawnDelay <= 1.0) {
-      void triggerEmote({ predefinedEmote: 'wave' })
-    }
+    // Death emote finishes naturally during black screen
 
     if (respawnDelay <= 0) {
       InputModifier.createOrReplace(engine.PlayerEntity, {
