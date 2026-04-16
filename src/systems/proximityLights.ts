@@ -71,6 +71,9 @@ interface LightEntry {
 }
 
 const lights: LightEntry[] = []
+// Pre-allocated arrays for top-N selection (avoids per-check allocations)
+const topIdx: number[] = new Array(MAX_ACTIVE).fill(-1)
+const topDist: number[] = new Array(MAX_ACTIVE).fill(Infinity)
 let checkTimer = 0
 let timeCheckTimer = 0
 let isNight = false
@@ -121,26 +124,42 @@ export function proximityLightSystem(dt: number) {
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
 
-  // Compute squared distances
-  const distSq: { idx: number; d: number }[] = []
+  // Find the MAX_ACTIVE closest lights in a single pass (no allocation, no sort).
+  // Maintain a small fixed array of the best candidates seen so far.
+  // Track the worst (largest) distance in the best-set so we can reject quickly.
+  for (let k = 0; k < MAX_ACTIVE; k++) { topIdx[k] = -1; topDist[k] = Infinity }
+  let worstBestDist = Infinity
+
   for (let i = 0; i < lights.length; i++) {
     const p = lights[i].pos
     const dx = playerPos.x - p.x
     const dy = playerPos.y - p.y
     const dz = playerPos.z - p.z
-    distSq.push({ idx: i, d: dx * dx + dy * dy + dz * dz })
-  }
+    const d = dx * dx + dy * dy + dz * dz
 
-  // Partial sort: find the MAX_ACTIVE closest
-  distSq.sort((a, b) => a.d - b.d)
-  const activeSet = new Set<number>()
-  for (let i = 0; i < MAX_ACTIVE && i < distSq.length; i++) {
-    activeSet.add(distSq[i].idx)
+    if (d >= worstBestDist) continue // fast reject — farther than all current top 8
+
+    // Find the slot with the largest distance and replace it
+    let worstSlot = 0
+    for (let k = 1; k < MAX_ACTIVE; k++) {
+      if (topDist[k] > topDist[worstSlot]) worstSlot = k
+    }
+    topIdx[worstSlot] = i
+    topDist[worstSlot] = d
+
+    // Recompute worst-best threshold
+    worstBestDist = 0
+    for (let k = 0; k < MAX_ACTIVE; k++) {
+      if (topDist[k] > worstBestDist) worstBestDist = topDist[k]
+    }
   }
 
   // Toggle lights
   for (let i = 0; i < lights.length; i++) {
-    const shouldBeActive = activeSet.has(i)
+    let shouldBeActive = false
+    for (let k = 0; k < MAX_ACTIVE; k++) {
+      if (topIdx[k] === i) { shouldBeActive = true; break }
+    }
     if (shouldBeActive !== lights[i].active) {
       lights[i].active = shouldBeActive
       const ls = LightSource.getMutable(lights[i].entity)

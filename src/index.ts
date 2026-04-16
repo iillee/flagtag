@@ -1,5 +1,5 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, Name, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, GltfContainerLoadingState, LoadingState, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi, setCinematicFade, setCinematicShowing, hideMailboxPopup, hideChestPopup } from './ui'
@@ -26,7 +26,7 @@ import { getBoomerangColor } from './gameState/boomerangColor'
 import { setupLadder } from './systems/ladderSystem'
 import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
-import { addPlayerSession, removePlayerSession } from './gameState/sceneTime'
+// sceneTime removed — visitor tracking is fully server-side via VisitorAnalytics
 import { createWinConditionOverlayEntity, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { createLeaderboardOverlayEntity, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { createAnalyticsOverlayEntity, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
@@ -98,7 +98,6 @@ export async function main() {
   let registeredName = ''
   if (local) {
     addPlayer(local.userId, local.name)
-    addPlayerSession(local.userId, local.name || local.userId.slice(0, 8))
     registeredName = local.name || ''
     room.send('registerName', { name: registeredName || local.userId.slice(0, 8) })
 
@@ -138,11 +137,9 @@ export async function main() {
     
     // Add other players
     addPlayer(player.userId, player.name)
-    addPlayerSession(player.userId, player.name || player.userId.slice(0, 8))
   })
   onLeaveScene((userId) => {
     removePlayer(userId)
-    removePlayerSession(userId)
     cleanupRemoteBoomerang(userId)
   })
 
@@ -259,217 +256,115 @@ export async function main() {
     })
   }
 
-  // Glowing orbs at green diamond block locations
-  const greenDiamondPositions = [
-    { x: 290.5, y: 2.6, z: 254.7 },    // Diamond - Green
-    { x: 276.56, y: 52.25, z: 301.5 } // Diamond - Green_2
-  ]
-  const ORB_COLOR = Color3.create(1.0, 0.45, 0.05) // Orange
-  const ORB_BASE_SCALE = 1.2
-
-  const orbEntities: ReturnType<typeof engine.addEntity>[] = []
-
-  for (const pos of greenDiamondPositions) {
-    const baseY = pos.y + 1
-
-    // Orb sphere with emissive glow material
-    const orb = engine.addEntity()
-    Transform.create(orb, {
-      position: Vector3.create(pos.x, baseY, pos.z),
-      scale: Vector3.create(ORB_BASE_SCALE, ORB_BASE_SCALE, ORB_BASE_SCALE)
-    })
-    MeshRenderer.setSphere(orb)
-    Material.setPbrMaterial(orb, {
-      albedoColor: Color4.create(1.0, 0.4, 0.0, 0.85),
-      emissiveColor: ORB_COLOR,
-      emissiveIntensity: 4.0,
-      roughness: 0.2,
-      metallic: 0.0,
-      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
-    })
-
-    // Point light for glow bounce on surroundings
-    const light = engine.addEntity()
-    Transform.create(light, {
-      parent: orb,
-      position: Vector3.Zero()
-    })
-    LightSource.create(light, {
-      type: LightSource.Type.Point({}),
-      color: ORB_COLOR,
-      intensity: 150,
-      range: 12
-    })
-
-    orbEntities.push(orb)
-  }
-
-  // Pulsate all orb scales over time (orange + blue share the same timer)
-  let orbPulseTime = 0
-  const ORB_PULSE_SPEED = 3.0
-  const ORB_PULSE_RANGE = 0.15 // ±15% scale oscillation
-
-  // Teleport sounds — one per orb, both fire on teleport
-  const orbSoundEntities: ReturnType<typeof engine.addEntity>[] = []
-  for (const pos of greenDiamondPositions) {
-    const snd = engine.addEntity()
-    Transform.create(snd, { position: Vector3.create(pos.x, pos.y + 1, pos.z) })
-    AudioSource.create(snd, {
-      audioClipUrl: 'assets/sounds/rs-teleport.mp3',
-      playing: false,
-      loop: false,
-      volume: 1,
-      global: false
-    })
-    orbSoundEntities.push(snd)
-  }
-
-  // Orb teleportation constants
+  // ── Teleport Orb Pairs ──
+  // Reusable helper to create a pair of glowing orbs that teleport the player between them
   const ORB_TRIGGER_RADIUS = 1.5
-  const ORB_LAND_OFFSET = 3 // meters away from destination orb
-  const TELEPORT_COOLDOWN = 1.0 // seconds
+  const ORB_LAND_OFFSET = 3
+  const TELEPORT_COOLDOWN = 1.0
+  const ORB_BASE_SCALE = 1.2
+  const ORB_PULSE_SPEED = 3.0
+  const ORB_PULSE_RANGE = 0.15
 
-  // Teleport state for each orb pair
-  const wasInsideOrb = [false, false]
-  let orangeOrbCooldown = 0
-  const wasInsideBlueOrb = [false, false]
-  let blueOrbCooldown = 0
+  interface OrbPair {
+    positions: { x: number; y: number; z: number }[]
+    orbEntities: Entity[]
+    soundEntities: Entity[]
+    wasInside: boolean[]
+    cooldown: number
+  }
 
-  // Combined teleportation system for all orb pairs
+  function createOrbPair(
+    positions: { x: number; y: number; z: number }[],
+    color: Color3,
+    albedo: Color4
+  ): OrbPair {
+    const orbEntities: Entity[] = []
+    const soundEntities: Entity[] = []
+
+    for (const pos of positions) {
+      const baseY = pos.y + 1
+      const orb = engine.addEntity()
+      Transform.create(orb, {
+        position: Vector3.create(pos.x, baseY, pos.z),
+        scale: Vector3.create(ORB_BASE_SCALE, ORB_BASE_SCALE, ORB_BASE_SCALE)
+      })
+      MeshRenderer.setSphere(orb)
+      Material.setPbrMaterial(orb, {
+        albedoColor: albedo,
+        emissiveColor: color,
+        emissiveIntensity: 4.0,
+        roughness: 0.2,
+        metallic: 0.0,
+        transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
+      })
+      const light = engine.addEntity()
+      Transform.create(light, { parent: orb, position: Vector3.Zero() })
+      LightSource.create(light, { type: LightSource.Type.Point({}), color, intensity: 150, range: 12 })
+      orbEntities.push(orb)
+
+      const snd = engine.addEntity()
+      Transform.create(snd, { position: Vector3.create(pos.x, baseY, pos.z) })
+      AudioSource.create(snd, { audioClipUrl: 'assets/sounds/rs-teleport.mp3', playing: false, loop: false, volume: 1, global: false })
+      soundEntities.push(snd)
+    }
+
+    return { positions, orbEntities, soundEntities, wasInside: positions.map(() => false), cooldown: 0 }
+  }
+
+  const orbPairs: OrbPair[] = [
+    createOrbPair(
+      [{ x: 290.5, y: 2.6, z: 254.7 }, { x: 276.56, y: 52.25, z: 301.5 }],
+      Color3.create(1.0, 0.45, 0.05),   // Orange
+      Color4.create(1.0, 0.4, 0.0, 0.85)
+    ),
+    createOrbPair(
+      [{ x: 224, y: 2.3, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
+      Color3.create(0.05, 0.3, 1.0),    // Blue
+      Color4.create(0.0, 0.2, 1.0, 0.85)
+    ),
+  ]
+
+  // Teleportation + pulse system for all orb pairs
+  let orbPulseTime = 0
   engine.addSystem((dt: number) => {
-    if (orangeOrbCooldown > 0) orangeOrbCooldown -= dt
-    if (blueOrbCooldown > 0) blueOrbCooldown -= dt
     if (!Transform.has(engine.PlayerEntity)) return
     const playerPos = Transform.get(engine.PlayerEntity).position
 
-    // Orange orbs
-    for (let i = 0; i < greenDiamondPositions.length; i++) {
-      const orbPos = greenDiamondPositions[i]
-      const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
-      const isInside = dist < ORB_TRIGGER_RADIUS
+    for (const pair of orbPairs) {
+      if (pair.cooldown > 0) pair.cooldown -= dt
 
-      if (isInside && !wasInsideOrb[i] && orangeOrbCooldown <= 0) {
-        const destIndex = i === 0 ? 1 : 0
-        const dest = greenDiamondPositions[destIndex]
+      for (let i = 0; i < pair.positions.length; i++) {
+        const orbPos = pair.positions[i]
+        const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
+        const isInside = dist < ORB_TRIGGER_RADIUS
 
-        for (const snd of orbSoundEntities) {
-          const a = AudioSource.getMutable(snd)
-          a.currentTime = 0
-          a.playing = true
+        if (isInside && !pair.wasInside[i] && pair.cooldown <= 0) {
+          const destIndex = i === 0 ? 1 : 0
+          const dest = pair.positions[destIndex]
+          for (const snd of pair.soundEntities) {
+            const a = AudioSource.getMutable(snd)
+            a.currentTime = 0
+            a.playing = true
+          }
+          pair.cooldown = TELEPORT_COOLDOWN
+          void movePlayerTo({ newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z) })
         }
-
-        orangeOrbCooldown = TELEPORT_COOLDOWN
-        void movePlayerTo({
-          newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z)
-        })
+        pair.wasInside[i] = isInside
       }
-
-      wasInsideOrb[i] = isInside
     }
 
-    // Blue orbs
-    for (let i = 0; i < blueOrbPositions.length; i++) {
-      const orbPos = blueOrbPositions[i]
-      const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
-      const isInside = dist < ORB_TRIGGER_RADIUS
-
-      if (isInside && !wasInsideBlueOrb[i] && blueOrbCooldown <= 0) {
-        const destIndex = i === 0 ? 1 : 0
-        const dest = blueOrbPositions[destIndex]
-
-        for (const snd of blueOrbSoundEntities) {
-          const a = AudioSource.getMutable(snd)
-          a.currentTime = 0
-          a.playing = true
-        }
-
-        blueOrbCooldown = TELEPORT_COOLDOWN
-        void movePlayerTo({
-          newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z)
-        })
-      }
-
-      wasInsideBlueOrb[i] = isInside
-    }
-  })
-
-  // ── Blue Orb Pair ──
-  const blueOrbPositions = [
-    { x: 224, y: 2.3, z: 288 },
-    { x: 226.3, y: 2.8, z: 211.3 }
-  ]
-  const BLUE_ORB_COLOR = Color3.create(0.05, 0.3, 1.0) // Blue
-  const BLUE_ORB_BASE_SCALE = 1.2
-
-  const blueOrbEntities: ReturnType<typeof engine.addEntity>[] = []
-
-  for (const pos of blueOrbPositions) {
-    const baseY = pos.y + 1
-
-    const orb = engine.addEntity()
-    Transform.create(orb, {
-      position: Vector3.create(pos.x, baseY, pos.z),
-      scale: Vector3.create(BLUE_ORB_BASE_SCALE, BLUE_ORB_BASE_SCALE, BLUE_ORB_BASE_SCALE)
-    })
-    MeshRenderer.setSphere(orb)
-    Material.setPbrMaterial(orb, {
-      albedoColor: Color4.create(0.0, 0.2, 1.0, 0.85),
-      emissiveColor: BLUE_ORB_COLOR,
-      emissiveIntensity: 4.0,
-      roughness: 0.2,
-      metallic: 0.0,
-      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
-    })
-
-    const light = engine.addEntity()
-    Transform.create(light, {
-      parent: orb,
-      position: Vector3.Zero()
-    })
-    LightSource.create(light, {
-      type: LightSource.Type.Point({}),
-      color: BLUE_ORB_COLOR,
-      intensity: 150,
-      range: 12
-    })
-
-    blueOrbEntities.push(orb)
-  }
-
-  // Combined pulse system for all orbs
-  engine.addSystem((dt: number) => {
+    // Pulse all orbs
     orbPulseTime += dt
     const pulse = 1 + ORB_PULSE_RANGE * Math.sin(orbPulseTime * ORB_PULSE_SPEED)
-    const sOrange = ORB_BASE_SCALE * pulse
-    for (const orb of orbEntities) {
-      if (Transform.has(orb)) {
-        const t = Transform.getMutable(orb)
-        t.scale = Vector3.create(sOrange, sOrange, sOrange)
-      }
-    }
-    const sBlue = BLUE_ORB_BASE_SCALE * pulse
-    for (const orb of blueOrbEntities) {
-      if (Transform.has(orb)) {
-        const t = Transform.getMutable(orb)
-        t.scale = Vector3.create(sBlue, sBlue, sBlue)
+    const s = ORB_BASE_SCALE * pulse
+    for (const pair of orbPairs) {
+      for (const orb of pair.orbEntities) {
+        if (Transform.has(orb)) {
+          Transform.getMutable(orb).scale = Vector3.create(s, s, s)
+        }
       }
     }
   })
-
-  // Blue orb teleport sounds
-  const blueOrbSoundEntities: ReturnType<typeof engine.addEntity>[] = []
-  for (const pos of blueOrbPositions) {
-    const snd = engine.addEntity()
-    Transform.create(snd, { position: Vector3.create(pos.x, pos.y + 1, pos.z) })
-    AudioSource.create(snd, {
-      audioClipUrl: 'assets/sounds/rs-teleport.mp3',
-      playing: false,
-      loop: false,
-      volume: 1,
-      global: false
-    })
-    blueOrbSoundEntities.push(snd)
-  }
 
   // ── Reload drop: if we were carrying the flag when /reload happened, drop it ──
   // Flag CRDT data arrives after a few frames, so we poll briefly on startup.

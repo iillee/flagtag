@@ -6,7 +6,7 @@ import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, VisitorAnalytics,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
-  getHoldTimeEntityEnumId, getNextRoundEndTimeMs, getNextTrapSyncId, getNextProjectileSyncId,
+  getHoldTimeEntityEnumId, getNextTrapSyncId, getNextProjectileSyncId,
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString
 } from '../shared/components'
 import { room } from '../shared/messages'
@@ -21,7 +21,6 @@ const SPLASH_DURATION_MS = 3000
 const FLAG_GRAVITY = 15          // m/s² (slightly faster than real gravity for snappy game feel)
 const FLAG_MIN_Y = 1.5           // absolute minimum Y (ground plane)
 const CARRIER_Y_WINDOW_SEC = 2.0 // seconds of carrier Y history to estimate ground level
-const BANNER_SRC = 'models/Banner_Red_02/Banner_Red_02.glb'
 
 // ── Mushroom constants ──
 const MUSHROOM_COUNT = 1
@@ -60,7 +59,7 @@ const LIGHTNING_WARNING_DURATION = 3 // seconds warning before strike
 let lightningRollTimer = 0
 let lightningStrikeScheduled = false
 let lightningWarningTimer = 0
-let lightningOriginalCarrierId = '' // carrier when warning started — strike completes even if dropped
+let _lightningOriginalCarrierId = '' // carrier when warning started — reserved for future use
 
 function getLightningStrikeChance(points: number): number {
   if (points < 100) return 0.0
@@ -130,7 +129,7 @@ function updateConcurrentTracking(): void {
 }
 
 // ── Trap state ──
-const TRAP_MODEL_SRC = 'models/banana_scaled.glb'
+// TRAP_MODEL_SRC removed — server doesn't create visuals
 /** Track last trap drop time per player for cooldown. */
 const lastTrapDropTime = new Map<string, number>()
 /** Track active trap entities for cleanup, with per-trap gravity state. */
@@ -146,8 +145,8 @@ interface ActiveTrap {
 const activeTraps: ActiveTrap[] = []
 
 // ── Projectile state ──
-const PROJECTILE_MODEL_SRC = 'models/boomerang.r.glb'
-const PROJECTILE_GROUND_OFFSET = 0.35  // Raise projectile above ground so it doesn't clip terrain
+// PROJECTILE_MODEL_SRC removed — server doesn't create visuals
+// PROJECTILE_GROUND_OFFSET removed — unused on server
 const lastProjectileFireTime = new Map<string, number>()
 interface ActiveProjectile {
   entity: Entity
@@ -777,14 +776,6 @@ function getPlayerPosition(address: string): Vector3 | null {
   return null
 }
 
-function getPlayerRotation(address: string): Quaternion | null {
-  const needle = address.toLowerCase()
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === needle) return Transform.get(entity).rotation
-  }
-  return null
-}
-
 // ── Gravity helpers ──
 
 /**
@@ -1156,8 +1147,6 @@ function handleDrop(playerId: string): void {
   flushHoldTimeAccum()
 
   const playerPos = getPlayerPosition(playerId)
-  const playerRot = getPlayerRotation(playerId)
-
   let dropPos: Vector3
   if (playerPos) {
     // Drop at player's feet (not behind them) to prevent wall clipping
@@ -1820,7 +1809,7 @@ function lightningServerSystem(dt: number): void {
         persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       }
 
-      lightningOriginalCarrierId = ''
+      _lightningOriginalCarrierId = ''
     }
     return // Don't roll while a strike is pending
   }
@@ -1840,7 +1829,7 @@ function lightningServerSystem(dt: number): void {
       console.log(`[Server] ⚡ Lightning roll succeeded! Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
       lightningStrikeScheduled = true
       lightningWarningTimer = 0
-      lightningOriginalCarrierId = flag!.carrierPlayerId!
+      _lightningOriginalCarrierId = flag!.carrierPlayerId!
       room.send('lightningWarning', { t: 0 })
     } else if (chance > 0) {
       console.log(`[Server] ⚡ Lightning roll failed. Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
@@ -1978,7 +1967,7 @@ function countdownServerSystem(): void {
         lightningRollTimer = 0
         lightningStrikeScheduled = false
         lightningWarningTimer = 0
-        lightningOriginalCarrierId = ''
+        _lightningOriginalCarrierId = ''
         room.send('respawnPlayers', { t: 0 })
         console.log('[Server] ⚠️ Emergency round-end recovery executed')
       } catch (recoveryErr) {
@@ -2122,7 +2111,7 @@ async function handleRoundEnd(): Promise<void> {
   lightningRollTimer = 0
   lightningStrikeScheduled = false
   lightningWarningTimer = 0
-  lightningOriginalCarrierId = ''
+  _lightningOriginalCarrierId = ''
 
   // ── 6. Reset flag to random spawn point ──
   resetGravityState()

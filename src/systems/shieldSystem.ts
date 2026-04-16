@@ -39,6 +39,8 @@ interface PlayerShield {
   pulseTime: number
   rotationAngle: number
   alphaMultiplier: number  // 0–1, used for fade-out
+  lastMaterialAlpha: number    // last alpha written to material — skip update if unchanged
+  lastMaterialEmissive: number // last emissiveIntensity written
 }
 
 const activeShields = new Map<string, PlayerShield>()
@@ -83,7 +85,7 @@ export function showShieldForPlayer(playerId: string): void {
     planes.push(plane)
   }
 
-  activeShields.set(playerId, { anchor, planes, pulseTime: 0, rotationAngle: 0, alphaMultiplier: 1.0 })
+  activeShields.set(playerId, { anchor, planes, pulseTime: 0, rotationAngle: 0, alphaMultiplier: 1.0, lastMaterialAlpha: -1, lastMaterialEmissive: -1 })
   console.log('[Shield] Forcefield shown for', playerId.slice(0, 8))
 }
 
@@ -154,19 +156,25 @@ export function shieldSystem(dt: number): void {
       transform.scale = Vector3.create(PLANE_WIDTH * scaleMul, PLANE_HEIGHT * scaleMul, 1)
     }
 
-    for (const plane of shield.planes) {
-      Material.setPbrMaterial(plane, {
-        albedoColor: Color4.create(SHIELD_COLOR.r, SHIELD_COLOR.g, SHIELD_COLOR.b, alpha),
-        texture: SHIELD_GRADIENT_TEXTURE,
-        alphaTexture: SHIELD_GRADIENT_TEXTURE,
-        emissiveColor: SHIELD_EMISSIVE,
-        emissiveIntensity: SHIELD_EMISSIVE_INTENSITY * shield.alphaMultiplier,
-        roughness: 1.0,
-        metallic: 0.0,
-        specularIntensity: 0.0,
-        transparencyMode: MaterialTransparencyMode.MTM_AUTO,
-        castShadows: false,
-      })
+    // Only update material when alpha or emissive changed meaningfully (saves ~450 setPbrMaterial calls/sec)
+    const emissive = SHIELD_EMISSIVE_INTENSITY * shield.alphaMultiplier
+    if (Math.abs(alpha - shield.lastMaterialAlpha) >= 0.015 || Math.abs(emissive - shield.lastMaterialEmissive) >= 0.05) {
+      shield.lastMaterialAlpha = alpha
+      shield.lastMaterialEmissive = emissive
+      for (const plane of shield.planes) {
+        Material.setPbrMaterial(plane, {
+          albedoColor: Color4.create(SHIELD_COLOR.r, SHIELD_COLOR.g, SHIELD_COLOR.b, alpha),
+          texture: SHIELD_GRADIENT_TEXTURE,
+          alphaTexture: SHIELD_GRADIENT_TEXTURE,
+          emissiveColor: SHIELD_EMISSIVE,
+          emissiveIntensity: emissive,
+          roughness: 1.0,
+          metallic: 0.0,
+          specularIntensity: 0.0,
+          transparencyMode: MaterialTransparencyMode.MTM_AUTO,
+          castShadows: false,
+        })
+      }
     }
   }
 }

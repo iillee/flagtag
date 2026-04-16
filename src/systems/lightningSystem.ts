@@ -140,6 +140,7 @@ let thunderEntity: Entity | null = null
 let sparkEntities: Entity[] = []
 let sparkAngle = 0
 let sparksActive = false
+let lastSparkIntensity = -1  // throttle material updates
 
 
 let buzzEntity: Entity | null = null
@@ -168,11 +169,7 @@ function createSegment(
 
   // Rotation: orient Y-axis along the segment direction
   const dir = Vector3.normalize(Vector3.create(dx, dy, dz))
-  const up = Vector3.Up()
-  // Use quaternion lookRotation then rotate 90 on X to align box Y with direction
-  const rot = Quaternion.fromLookAt(Vector3.create(mx, my, mz), Vector3.create(mx + dir.x, my + dir.y, mz + dir.z), up)
-  
-  // Actually, simpler: compute rotation to align (0,1,0) to dir
+  // Compute rotation to align (0,1,0) to dir
   const q = quatFromTo(Vector3.Up(), dir)
 
   Transform.create(e, {
@@ -515,6 +512,7 @@ export function lightningSystem(dt: number) {
     // Activate sparks + buzz at start
     if (!sparksActive) {
       sparksActive = true
+      lastSparkIntensity = -1 // force first material update
       for (const s of sparkEntities) {
         VisibilityComponent.getMutable(s).visible = true
       }
@@ -546,13 +544,21 @@ export function lightningSystem(dt: number) {
       t.scale = Vector3.create(size, size, size)
       t.rotation = Quaternion.fromEulerDegrees(sparkAngle * 200 + i * 60, sparkAngle * 300, 0)
 
-      Material.setPbrMaterial(sparkEntities[i]!, {
-        albedoColor: Color4.create(0.8, 0.9, 1, 1),
-        emissiveColor: SPARK_COLOR,
-        emissiveIntensity: intensity,
-        metallic: 0,
-        roughness: 1
-      })
+      // Material updated below (throttled)
+    }
+
+    // Only update spark materials when intensity changed meaningfully
+    if (Math.abs(intensity - lastSparkIntensity) >= 0.5) {
+      lastSparkIntensity = intensity
+      for (let i = 0; i < sparkEntities.length; i++) {
+        Material.setPbrMaterial(sparkEntities[i]!, {
+          albedoColor: Color4.create(0.8, 0.9, 1, 1),
+          emissiveColor: SPARK_COLOR,
+          emissiveIntensity: intensity,
+          metallic: 0,
+          roughness: 1
+        })
+      }
     }
 
     // Play thunder sound at THUNDER_LEAD before strike

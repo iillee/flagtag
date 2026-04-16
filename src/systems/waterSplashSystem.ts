@@ -39,6 +39,7 @@ interface Splash {
   velX: number
   velZ: number
   velY: number
+  lastAlpha: number  // last alpha written to material — skip update if unchanged
 }
 
 const splashPool: Splash[] = []
@@ -72,6 +73,7 @@ function initPool() {
       active: false,
       startX: 0, startZ: 0, waterY: 0,
       velX: 0, velZ: 0, velY: 0,
+      lastAlpha: 0,
     })
   }
 }
@@ -92,6 +94,7 @@ function spawnSplash(x: number, z: number, waterY: number) {
   splash.velX = (Math.random() - 0.5) * 0.5
   splash.velZ = (Math.random() - 0.5) * 0.5
   splash.velY = SPLASH_MAX_HEIGHT / SPLASH_LIFETIME * (1.5 + Math.random() * 0.5)
+  splash.lastAlpha = 0.7
 
   const t = Transform.getMutable(splash.entity)
   t.position = Vector3.create(splash.startX, waterY + 0.1, splash.startZ)
@@ -136,17 +139,21 @@ export function waterSplashSystem(dt: number) {
     const baseScale = SPLASH_SIZE * scaleMult
     t.scale = Vector3.create(baseScale, baseScale, baseScale)
 
+    // Only update material when alpha changed meaningfully (saves many setPbrMaterial calls/sec)
     const alpha = 0.7 * (1 - fadeProgress)
-    Material.setPbrMaterial(splash.entity, {
-      albedoColor: Color4.create(0.85, 0.92, 1, alpha),
-      emissiveColor: Color4.create(0.7, 0.85, 1, 1),
-      emissiveIntensity: 0.5,
-      roughness: 1,
-      metallic: 0,
-      specularIntensity: 0,
-      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-      castShadows: false,
-    })
+    if (Math.abs(alpha - splash.lastAlpha) >= 0.08) {
+      splash.lastAlpha = alpha
+      Material.setPbrMaterial(splash.entity, {
+        albedoColor: Color4.create(0.85, 0.92, 1, alpha),
+        emissiveColor: Color4.create(0.7, 0.85, 1, 1),
+        emissiveIntensity: 0.5,
+        roughness: 1,
+        metallic: 0,
+        specularIntensity: 0,
+        transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+        castShadows: false,
+      })
+    }
   }
 
   // Spawn splashes while player moves in water

@@ -10,16 +10,16 @@ import {
   Raycast,
   RaycastResult,
   RaycastQueryType,
-  VisibilityComponent,
   AvatarEmoteCommand,
   type Entity,
   PlayerIdentityData
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
-import { Flag, Projectile, PROJECTILE_COOLDOWN_SEC, PROJECTILE_LIFETIME_SEC, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE } from '../shared/components'
+import { Projectile, PROJECTILE_COOLDOWN_SEC, PROJECTILE_LIFETIME_SEC, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE } from '../shared/components'
 
 import { room } from '../shared/messages'
+import { playErrorSound, isServerConnected } from './clientUtils'
 import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../cinematicState'
@@ -81,10 +81,8 @@ function getProjectileModelSrc(): string {
 }
 const PROJECTILE_SCALE = Vector3.create(2.5, 4.5, 2.5)
 const PROJECTILE_STAGGER_MS = 800
-const PROJECTILE_GRAVITY = 15  // m/s² — matches server FLAG_GRAVITY
 const PROJECTILE_SPIN_SPEED = 720 // degrees per second
 const PROJECTILE_CHEST_OFFSET = 0.8 // Y offset from player position to chest height
-const PROJECTILE_GROUND_OFFSET = 0.35 // Raise projectile above ground so it doesn't clip terrain — matches server
 const GROUND_RAY_INTERVAL = 0.05 // seconds between ground raycasts for moving projectiles
 
 // Stagger state for projectile hits
@@ -114,24 +112,7 @@ function stopProjectileSound(entity: Entity): void {
   }
 }
 
-// ── Error sound (cooldown denial) ──
-let errorSoundEntity: Entity | null = null
-function playErrorSound(): void {
-  if (!errorSoundEntity) {
-    errorSoundEntity = engine.addEntity()
-    Transform.create(errorSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(errorSoundEntity, {
-      audioClipUrl: 'assets/sounds/error.mp3',
-      playing: false,
-      loop: false,
-      volume: 0.6,
-      global: true
-    })
-  }
-  const a = AudioSource.getMutable(errorSoundEntity)
-  a.currentTime = 0
-  a.playing = true
-}
+// playErrorSound imported from clientUtils
 
 // ── Client cooldown tracking ──
 let lastLocalProjectileFireTime = 0
@@ -307,10 +288,7 @@ room.onMessage('shellTriggered', (data) => {
   }
 })
 
-// ── Local test mode (no server) ──
-function isServerConnected(): boolean {
-  return [...engine.getEntitiesWith(Flag)].length > 0
-}
+// isServerConnected imported from clientUtils
 
 function getPlayerForward(): { dirX: number; dirZ: number } {
   if (!Transform.has(engine.PlayerEntity)) return { dirX: 0, dirZ: 1 }

@@ -1,7 +1,6 @@
 import {
   engine,
   Transform,
-  PlayerIdentityData,
   inputSystem,
   InputAction,
   PointerEventType,
@@ -25,13 +24,8 @@ import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
-// predictAttackLocally removed — melee attack replaced by proximity steal
-import { isAnyOverlayOpen } from '../ui'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
-import { isCinematicActive } from '../cinematicState'
-import { isSpectatorMode } from './spectatorSystem'
-import { isDrownRespawning } from './waterSystem'
 
 // Visual clone system for smooth flag carrying
 let carryCloneEntity: Entity | null = null
@@ -140,31 +134,6 @@ function hideBeaconPuff(entity: Entity): void {
   const t = Transform.getMutable(entity)
   t.position = HIDDEN_POS
   t.scale = Vector3.Zero()
-}
-
-// Helper to find player entity by ID
-function getCarrierEntity(carrierPlayerId: string): Entity | null {
-  if (!carrierPlayerId) return null
-  const needle = carrierPlayerId.toLowerCase()
-  
-  const local = getPlayerData()
-  if (local) {
-    const localIdentity = PlayerIdentityData.getOrNull(engine.PlayerEntity)
-    if (localIdentity && localIdentity.address.toLowerCase() === needle) {
-      return engine.PlayerEntity
-    }
-    if (local.userId?.toLowerCase() === needle) {
-      return engine.PlayerEntity
-    }
-  }
-  
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === needle) {
-      return entity as Entity
-    }
-  }
-  
-  return null
 }
 
 // State tracking
@@ -377,7 +346,7 @@ export function flagClientSystem(dt: number): void {
   }
 
   // Handle flag state changes with clone system
-  for (const [flagEntity, flag] of engine.getEntitiesWith(Flag)) {
+  for (const [, flag] of engine.getEntitiesWith(Flag)) {
     const stateChanged = prevFlagState !== null && prevFlagState !== flag.state
     const carrierChanged = flag.state === FlagState.Carried && flag.carrierPlayerId !== prevCarrierId && prevCarrierId !== ''
 

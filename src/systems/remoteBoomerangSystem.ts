@@ -15,7 +15,7 @@ import {
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { room } from '../shared/messages'
-import { BoomerangColor, getBoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
+import { BoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
 
 interface RemoteBoomerang {
   anchor: Entity

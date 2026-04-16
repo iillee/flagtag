@@ -1,50 +1,19 @@
-import { engine, Schemas } from '@dcl/sdk/ecs'
+// Simple boolean state — no ECS component needed for a local UI toggle
 
-const WinConditionOverlayStateSchema = {
-  visible: Schemas.Boolean
-}
-
-export const WinConditionOverlayState = engine.defineComponent(
-  'ctf-win-condition-overlay',
-  WinConditionOverlayStateSchema,
-  { visible: false }
-)
-
-let overlayEntity: ReturnType<typeof engine.addEntity> | null = null
-
-function setOverlayEntity(entity: ReturnType<typeof engine.addEntity>) {
-  overlayEntity = entity
-}
-
-function getEntity() {
-  if (overlayEntity === null) return null
-  if (!WinConditionOverlayState.has(overlayEntity)) return null
-  return overlayEntity
-}
+let winConditionOverlayVisible = false
 
 export function getWinConditionOverlayVisible(): boolean {
-  const e = getEntity()
-  if (!e) return false
-  return WinConditionOverlayState.get(e).visible
+  return winConditionOverlayVisible
 }
 
-export function setWinConditionOverlayVisible(visible: boolean) {
-  const e = getEntity()
-  if (!e) return
-  const mutable = WinConditionOverlayState.getMutable(e)
-  mutable.visible = visible
+export function setWinConditionOverlayVisible(visible: boolean): void {
+  winConditionOverlayVisible = visible
 }
 
-export function toggleWinConditionOverlay() {
-  const e = getEntity()
-  if (!e) return
-  const mutable = WinConditionOverlayState.getMutable(e)
-  mutable.visible = !mutable.visible
+export function toggleWinConditionOverlay(): void {
+  winConditionOverlayVisible = !winConditionOverlayVisible
 }
 
-export function createWinConditionOverlayEntity() {
-  const entity = engine.addEntity()
-  WinConditionOverlayState.create(entity, { visible: false })
-  setOverlayEntity(entity)
-  return entity
+export function createWinConditionOverlayEntity(): void {
+  // No-op: overlay uses simple boolean state, no ECS entity needed
 }

@@ -7,7 +7,6 @@ import { showMailboxPopup, hideMailboxPopup, isMailboxPopupVisible } from '../ui
 
 // Mailbox position/rotation from composite (entity 512)
 const MAILBOX_POS = Vector3.create(214.54, 12.54, 286.28)
-const MAILBOX_ROT = { x: 0, y: 0.555660605430603, z: 0, w: 0.831409215927124 }
 const MATCH_DIST = 2
 const MAILBOX_CLOSE_DISTANCE = 5
 

@@ -1,10 +1,10 @@
 import {
   engine, Transform, GltfContainer, Entity, AudioSource,
   Raycast, RaycastResult, RaycastQueryType,
-  MeshRenderer, Material, Billboard, BillboardMode, MaterialTransparencyMode,
+  MeshRenderer, Material, MaterialTransparencyMode,
   Tween, EasingFunction
 } from '@dcl/sdk/ecs'
-import { Vector3, Quaternion, Color4, Color3 } from '@dcl/sdk/math'
+import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
 import { Flag } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
@@ -12,29 +12,19 @@ import { showShieldForPlayer, hideShieldForPlayer, hideAllShields, setShieldAlph
 
 // ── Constants ──
 const MUSHROOM_MODEL = 'models/mushroom_03.glb'
-const MUSHROOM_COUNT = 1  // Must match server
+
 const MUSHROOM_PICKUP_RADIUS = 0.5
 // Shield lasts until hit or round end (no time limit)
 const MUSHROOM_Y_OFFSET = 0.0   // Raise mushroom above ground so it's not buried
 
 // ── Beacon constants (red, matching flag beacon style) ──
-const BEACON_HEIGHT = 110
-const BEACON_Y_OFFSET = 5.0
-const BEACON_INNER_WIDTH = 0.5
-const BEACON_OUTER_WIDTH = 2.0
-const BEACON_INNER_ALPHA = 0.35
-const BEACON_OUTER_ALPHA = 0.1
-const BEACON_EMISSIVE_INNER = 1.0
-const BEACON_EMISSIVE_OUTER = 0.6
-const BEACON_PULSE_SPEED = 2.5
-const BEACON_PULSE_RANGE = 0.15
-const BEACON_COLOR = { r: 1, g: 0.15, b: 0.15 } // Red
+// Mushroom beacon removed — was never called
 
 // Scene bounds (10×15 parcels = 160×240m)
-const SCENE_MIN_X = 2
-const SCENE_MAX_X = 510
-const SCENE_MIN_Z = 2
-const SCENE_MAX_Z = 510
+
+
+
+
 const RAY_START_Y = 100  // Cast from high above
 const WATER_Y = 1.577    // Y level of water planes
 
@@ -75,24 +65,7 @@ function playBoostSound(): void {
 }
 
 // ── Shield break sound ──
-let shieldBreakSoundEntity: Entity | null = null
-function playShieldBreakSound(): void {
-  if (!shieldBreakSoundEntity) {
-    shieldBreakSoundEntity = engine.addEntity()
-    Transform.create(shieldBreakSoundEntity, { position: Vector3.create(0, 0, 0) })
-    AudioSource.create(shieldBreakSoundEntity, {
-      audioClipUrl: 'assets/sounds/shield-break.mp3',
-      playing: false,
-      loop: false,
-      volume: 1.0,
-      global: true
-    })
-  }
-  const a = AudioSource.getMutable(shieldBreakSoundEntity)
-  a.playing = false
-  a.currentTime = 0
-  a.playing = true
-}
+// playShieldBreakSound + shieldBreakSoundEntity removed — unused
 
 const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
@@ -186,48 +159,7 @@ function hideAllTrailPuffs(): void {
 }
 
 // ── Beacon state ──
-let beaconInner: Entity | null = null
-let beaconOuter: Entity | null = null
-let beaconPulseTime = 0
-
-function setupMushroomBeacon(): void {
-  if (beaconInner) return // already set up
-
-  const HIDDEN = Vector3.create(0, -200, 0)
-  const GRADIENT_TEXTURE = Material.Texture.Common({ src: 'images/beacon-gradient.png' })
-  const ALPHA_TEXTURE = Material.Texture.Common({ src: 'images/beacon-alpha.png' })
-  const c = BEACON_COLOR
-
-  beaconInner = engine.addEntity()
-  Transform.create(beaconInner, { position: HIDDEN, scale: Vector3.create(BEACON_INNER_WIDTH, BEACON_HEIGHT, 1) })
-  MeshRenderer.setPlane(beaconInner)
-  Billboard.create(beaconInner, { billboardMode: BillboardMode.BM_Y })
-  Material.setPbrMaterial(beaconInner, {
-    texture: GRADIENT_TEXTURE,
-    alphaTexture: ALPHA_TEXTURE,
-    albedoColor: Color4.create(c.r, c.g, c.b, BEACON_INNER_ALPHA),
-    emissiveColor: Color3.create(c.r, c.g, c.b),
-    emissiveIntensity: BEACON_EMISSIVE_INNER,
-    transparencyMode: MaterialTransparencyMode.MTM_AUTO,
-    castShadows: false
-  })
-
-  beaconOuter = engine.addEntity()
-  Transform.create(beaconOuter, { position: HIDDEN, scale: Vector3.create(BEACON_OUTER_WIDTH, BEACON_HEIGHT, 1) })
-  MeshRenderer.setPlane(beaconOuter)
-  Billboard.create(beaconOuter, { billboardMode: BillboardMode.BM_Y })
-  Material.setPbrMaterial(beaconOuter, {
-    texture: GRADIENT_TEXTURE,
-    alphaTexture: ALPHA_TEXTURE,
-    albedoColor: Color4.create(c.r, c.g, c.b, BEACON_OUTER_ALPHA),
-    emissiveColor: Color3.create(c.r, c.g, c.b),
-    emissiveIntensity: BEACON_EMISSIVE_OUTER,
-    transparencyMode: MaterialTransparencyMode.MTM_AUTO,
-    castShadows: false
-  })
-
-  console.log('[Mushroom] 🍄 Red beacon created')
-}
+// setupMushroomBeacon removed — was never called
 
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('mushroomPositions', (data) => {
@@ -406,32 +338,6 @@ function processMushroomRaycasts(): void {
 }
 
 // ── Beacon positioning ──
-function updateMushroomBeacon(dt: number): void {
-  if (!beaconInner || !beaconOuter) return
-
-  beaconPulseTime += dt
-  const pulse = 1 + BEACON_PULSE_RANGE * Math.sin(beaconPulseTime * BEACON_PULSE_SPEED)
-
-  // Find the first placed mushroom to attach beacon to
-  const target = mushrooms.find(m => m.placed)
-  if (target) {
-    const mPos = Transform.get(target.entity).position
-    const beaconY = mPos.y + BEACON_Y_OFFSET + BEACON_HEIGHT / 2
-
-    const innerT = Transform.getMutable(beaconInner)
-    innerT.position = Vector3.create(mPos.x, beaconY, mPos.z)
-    innerT.scale = Vector3.create(BEACON_INNER_WIDTH * pulse, BEACON_HEIGHT, 1)
-
-    const outerT = Transform.getMutable(beaconOuter)
-    outerT.position = Vector3.create(mPos.x, beaconY, mPos.z)
-    outerT.scale = Vector3.create(BEACON_OUTER_WIDTH * (2 - pulse), BEACON_HEIGHT, 1)
-  } else {
-    const HIDDEN = Vector3.create(0, -200, 0)
-    Transform.getMutable(beaconInner).position = HIDDEN
-    Transform.getMutable(beaconOuter).position = HIDDEN
-  }
-}
-
 // ── Client system (called every frame) ──
 export function mushroomClientSystem(dt: number): void {
   // Request mushroom positions from server once

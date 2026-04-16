@@ -266,7 +266,7 @@ export function combatClientSystem(_dt: number): void {
         // Find the attacker among other players
         let closest: { pos: Vector3; rot: any } | null = null
         let closestDist = 3
-        for (const [ent, , transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+        for (const [, , transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
           const d = Vector3.distance(transform.position, attackerPos)
           if (d < closestDist) {
             closestDist = d

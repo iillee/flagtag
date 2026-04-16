@@ -20,15 +20,16 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
-import { Flag, Trap, TRAP_COOLDOWN_SEC, TRAP_LIFETIME_SEC, TRAP_TRIGGER_RADIUS } from '../shared/components'
+import { TRAP_COOLDOWN_SEC, TRAP_LIFETIME_SEC, TRAP_TRIGGER_RADIUS } from '../shared/components'
 
 import { room } from '../shared/messages'
+import { playErrorSound, isServerConnected } from './clientUtils'
 
 import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../cinematicState'
 import { isDrownRespawning } from './waterSystem'
-import { showMissEffect, showHitEffect, playMissSound } from './combatSystem'
+import { showHitEffect } from './combatSystem'
 
 const TRAP_MODEL_SRC = 'models/banana_scaled.glb'
 const TRAP_SCALE = Vector3.create(1, 1, 1)
@@ -37,25 +38,7 @@ const TRAP_STAGGER_MS = 1000 // Duration when hitting own trap
 // Stagger state for trap hits
 let trapStaggerUntil = 0
 
-// ── Sound ──
-// ── Error sound (cooldown denial) ──
-let errorSoundEntity: Entity | null = null
-function playErrorSound(): void {
-  if (!errorSoundEntity) {
-    errorSoundEntity = engine.addEntity()
-    Transform.create(errorSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(errorSoundEntity, {
-      audioClipUrl: 'assets/sounds/error.mp3',
-      playing: false,
-      loop: false,
-      volume: 0.6,
-      global: true
-    })
-  }
-  const a = AudioSource.getMutable(errorSoundEntity)
-  a.currentTime = 0
-  a.playing = true
-}
+// playErrorSound imported from clientUtils
 
 let trapDropSoundEntity: Entity | null = null
 let trapSplatSoundEntity: Entity | null = null
@@ -129,7 +112,7 @@ function initSplatPool(): void {
   }
 }
 
-function showSplatEffect(position: Vector3): void {
+function _showSplatEffect(position: Vector3): void {
   initSplatPool()
   const expiresAt = Date.now() + SPLAT_DURATION_MS + 50
 
@@ -237,12 +220,6 @@ function processTrapRaycasts(): void {
   }
 }
 
-// ── Trap drop position cache ──
-// Store positions from 'bananaDropped' messages so we can use them as fallback
-// if the CRDT Transform sync is slow/incomplete.
-const recentTrapDropPositions: { x: number; y: number; z: number; timestamp: number }[] = []
-const MAX_RECENT_DROPS = 20
-
 // ── Message listeners ──
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('bananaDropped', (data) => {
@@ -291,10 +268,7 @@ room.onMessage('bananaTriggered', (data) => {
   }
 })
 
-// ── Local test mode (no server) ──
-function isServerConnected(): boolean {
-  return [...engine.getEntitiesWith(Flag)].length > 0
-}
+// isServerConnected imported from clientUtils
 
 const LOCAL_GRAVITY = 15 // m/s² — matches server FLAG_GRAVITY
 const LOCAL_MIN_Y = 1  // Traps sit on the actual ground surface

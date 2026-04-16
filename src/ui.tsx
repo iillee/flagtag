@@ -111,10 +111,6 @@ export function setCinematicFade(opacity: number) {
 }
 
 /** @deprecated Currently unused — kept for potential future use */
-function getCinematicFade(): number {
-  return cinematicFadeOpacity
-}
-
 // ── Title splash (on load → click → How to Play) ──
 let titleSplashVisible = true
 
@@ -243,8 +239,8 @@ let closeChestHovered = false
 const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 
 // Attack flicker state — dims the hit icon briefly when E is pressed
-const ATTACK_FLICKER_MS = 150
-let lastAttackPressMs = 0
+const _ATTACK_FLICKER_MS = 150
+let _lastAttackPressMs = 0
 
 function attackFlickerSystem(): void {
   if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN) && !isAnyOverlayOpen()) {
@@ -252,12 +248,8 @@ function attackFlickerSystem(): void {
     const cmd = inputSystem.getInputCommand(InputAction.IA_POINTER, PointerEventType.PET_DOWN)
     const hitEntity = cmd?.hit?.entityId
     if (hitEntity && PointerEvents.has(hitEntity as Entity)) return
-    lastAttackPressMs = Date.now()
+    _lastAttackPressMs = Date.now()
   }
-}
-
-function isAttackFlickering(): boolean {
-  return Date.now() - lastAttackPressMs < ATTACK_FLICKER_MS
 }
 
 // Scroll state for lists
@@ -277,7 +269,7 @@ interface SplashPlayer {
 }
 
 let splashPlayers: SplashPlayer[] = []
-let splashWinnerUserId: string | null = null
+let _splashWinnerUserId: string | null = null
 let lastSplashRoundWinnerJson = '' // track the last roundWinnerJson we showed, to avoid re-triggering
 
 function roundEndSplashSystem(dt: number): void {
@@ -299,10 +291,10 @@ function roundEndSplashSystem(dt: number): void {
           seconds: p.seconds
         }))
         // Track winner userId for teleport logic
-        splashWinnerUserId = (serverData.length > 0 && serverData[0].userId) ? serverData[0].userId : null
+        _splashWinnerUserId = (serverData.length > 0 && serverData[0].userId) ? serverData[0].userId : null
       } catch {
         splashPlayers = []
-        splashWinnerUserId = null
+        _splashWinnerUserId = null
       }
 
       // Play trumpet sound once (only if someone scored)
@@ -328,7 +320,7 @@ function roundEndSplashSystem(dt: number): void {
   if (splashVisible && !getCinematicShowing() && now >= splashHideTime) {
     splashVisible = false
     splashPlayers = []
-    splashWinnerUserId = null
+    _splashWinnerUserId = null
     if (trumpetEntity) {
       engine.removeEntity(trumpetEntity)
       trumpetEntity = null
@@ -468,7 +460,7 @@ const SILVER = Color4.create(0.75, 0.78, 0.82, 1)
 const BRONZE = Color4.create(0.8, 0.5, 0.2, 1)
 
 // Accent Colors
-const LIGHT_BLUE = Color4.create(0.45, 0.75, 1, 1)
+// LIGHT_BLUE removed — unused
 const CORAL_RED = Color4.create(1, 0.5, 0.45, 1)
 
 // Background Colors
@@ -780,7 +772,6 @@ function PlayerListUi() {
             <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
               {(['r', 'y', 'b', 'g'] as BoomerangColor[]).map((color) => {
                 const selected = getBoomerangColor() === color
-                const borderColor = selected ? GOLD : Color4.create(0.3, 0.3, 0.35, 1)
                 return (
                   <UiEntity
                     key={`boom-${color}`}
@@ -975,7 +966,7 @@ const _TITLE_FONT = 20
 const _ROW_FONT = 15
 const _PADDING = 14
 const _BORDER_RADIUS = 18
-const _ICON_FONT_SQUARE = 20
+// _ICON_FONT_SQUARE removed — unused
 const _ICON_FONT_QUESTION = 22
 const _ICON_FONT_ANALYTICS = 20
 const _ABILITY_BTN_SIZE = 74
@@ -1907,7 +1898,6 @@ function MobileLayout() {
   const M_CIRCLE_TEXTURE = 'assets/images/UI_circle.png'
   const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 0.8) // 80% opacity for circle PNG
   const M_ICON_SIZE = 50
-  const M_KEYBIND_FONT = 16
   const analyticsOverlayVisible = getAnalyticsOverlayVisible()
 
   return (

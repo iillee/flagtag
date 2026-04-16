@@ -1,50 +1,19 @@
-import { engine, Schemas } from '@dcl/sdk/ecs'
+// Simple boolean state — no ECS component needed for a local UI toggle
 
-const LeaderboardOverlayStateSchema = {
-  visible: Schemas.Boolean
-}
-
-export const LeaderboardOverlayState = engine.defineComponent(
-  'ctf-leaderboard-overlay',
-  LeaderboardOverlayStateSchema,
-  { visible: false }
-)
-
-let overlayEntity: ReturnType<typeof engine.addEntity> | null = null
-
-function setOverlayEntity(entity: ReturnType<typeof engine.addEntity>) {
-  overlayEntity = entity
-}
-
-function getEntity() {
-  if (overlayEntity === null) return null
-  if (!LeaderboardOverlayState.has(overlayEntity)) return null
-  return overlayEntity
-}
+let leaderboardOverlayVisible = false
 
 export function getLeaderboardOverlayVisible(): boolean {
-  const e = getEntity()
-  if (!e) return false
-  return LeaderboardOverlayState.get(e).visible
+  return leaderboardOverlayVisible
 }
 
-export function setLeaderboardOverlayVisible(visible: boolean) {
-  const e = getEntity()
-  if (!e) return
-  const mutable = LeaderboardOverlayState.getMutable(e)
-  mutable.visible = visible
+export function setLeaderboardOverlayVisible(visible: boolean): void {
+  leaderboardOverlayVisible = visible
 }
 
-export function toggleLeaderboardOverlay() {
-  const e = getEntity()
-  if (!e) return
-  const mutable = LeaderboardOverlayState.getMutable(e)
-  mutable.visible = !mutable.visible
+export function toggleLeaderboardOverlay(): void {
+  leaderboardOverlayVisible = !leaderboardOverlayVisible
 }
 
-export function createLeaderboardOverlayEntity() {
-  const entity = engine.addEntity()
-  LeaderboardOverlayState.create(entity, { visible: false })
-  setOverlayEntity(entity)
-  return entity
+export function createLeaderboardOverlayEntity(): void {
+  // No-op: overlay uses simple boolean state, no ECS entity needed
 }

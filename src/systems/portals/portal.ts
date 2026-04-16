@@ -3,9 +3,7 @@ import {
   Entity,
   Transform,
   GltfContainer,
-  MeshRenderer,
-  Material,
-  TextShape,
+
   AudioSource,
   LightSource,
   Tween,
@@ -14,11 +12,8 @@ import {
   triggerAreaEventsSystem,
   PlayerIdentityData,
   Schemas,
-  GltfNodeModifiers,
-  VisibilityComponent,
-  MaterialTransparencyMode
 } from '@dcl/sdk/ecs'
-import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
+import { Color3, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { onLeaveScene } from '@dcl/sdk/players'
 
 enum PortalState {
@@ -31,9 +26,7 @@ export type PortalOptions = {
   position: { x: number; y: number; z: number }
   rotation?: { x: number; y: number; z: number }
   size?: number
-  thumbnail?: string
   name?: string
-  usersCount?: number
   door?: {
     offsetX?: number  // local X from root center (applied to both sides symmetrically)
     offsetY?: number  // local Y from root center
@@ -188,10 +181,7 @@ const FRAME_OFFSET = { x: 0, y: -1.6, z: 0.16 }  // layers share this offset to 
 // portalBody lifts by -FRAME_OFFSET.y, arch opening is ~3 m tall → midpoint ≈ 1.5 m above root
 const PORTAL_CENTER_Y_OFFSET = 2.5
 
-// Info card — unified panel above the portal (thumbnail + label on a shared background)
-const INFO_CARD_POS = { x: 0, y: 4.55, z: -0.4 }  // above portal, slightly in front (Y raised to match floor-level root convention)
-const INFO_CARD_SCALE = { x: 0.85, y: 0.85, z: 1 }
-const INFO_CARD_TILT = -12                          // X-rotation degrees — top leans toward player
+// Info card constants removed — card was never rendered
 
 // ─────────────────────────────────────────────────────────────────
 // Portal class
@@ -204,23 +194,12 @@ export class Portal {
   private doorLeft: Entity
   private doorRight: Entity
   private audioAmb: Entity
-  private audioOpen: Entity
-  private audioClose: Entity
   private portalLight: Entity
   private ajarTrigger: Entity
   private openTrigger: Entity
   private closeTrigger: Entity
   private thresholdTrigger: Entity
   private portalBody: Entity
-  private infoCard: Entity
-  private infoBg: Entity
-  private infoLabel: Entity
-  private thumbPlane: Entity
-  private usersIcon: Entity
-
-  private _name?: string
-  private _usersCount?: number
-  private _thumbnail?: string
   private _lodSystem?: (dt: number) => void
 
   constructor(options: PortalOptions) {
@@ -309,10 +288,7 @@ export class Portal {
       intensity: 10000,
     })
 
-    // Audio entities — only ambient loop is used (doors were removed)
     this.audioAmb = this.createAudioEntity('assets/sounds/portals/doorAmb.mp3', true)
-    this.audioOpen = this.createAudioEntity('assets/sounds/portalload.mp3', false)
-    this.audioClose = this.createAudioEntity('assets/sounds/portalload.mp3', false)
 
     // Double doors
     const dOpts = options.door ?? {}
@@ -389,50 +365,7 @@ export class Portal {
       return entity
     })
 
-    // Info card — shared container for background, thumbnail, and label
-    this.infoCard = engine.addEntity()
-    Transform.create(this.infoCard, {
-      position: INFO_CARD_POS,
-      rotation: Quaternion.fromEulerDegrees(INFO_CARD_TILT, 0, 0),
-      scale: INFO_CARD_SCALE,
-      parent: this.root,
-    })
-
-    // Background plane — sits behind thumbnail and label
-    this.infoBg = engine.addEntity()
-    Transform.create(this.infoBg, {
-      position: Vector3.create(0, -0.25, +0.02),
-      rotation: Quaternion.Identity(),
-      scale: Vector3.create(1.5, 2, 1),
-      parent: this.infoCard,
-    })
-    // Info card background removed
-
-    // Thumbnail plane
-    this.thumbPlane = engine.addEntity()
-    Transform.create(this.thumbPlane, {
-      position: Vector3.create(0, 0.65, 0),
-      scale: Vector3.create(1.5, 1.5, 1),
-      parent: this.infoCard,
-    })
-
-    // Info label
-    this.infoLabel = engine.addEntity()
-    Transform.create(this.infoLabel, {
-      position: Vector3.create(0, -0.55, 0.01),
-      parent: this.infoCard,
-    })
-
-    // Users icon — PNG plane shown next to the connected users count
-    this.usersIcon = engine.addEntity()
-    Transform.create(this.usersIcon, {
-      position: Vector3.create(-0.5, -0.8, 0.0),
-      scale: Vector3.create(0.18, 0.18, 1),
-      parent: this.infoCard,
-    })
-    // Users icon removed
-
-    this.update(options)
+    // Info card, thumbnail, users icon removed — were never rendered
 
     // ── LOD: only attach parallax layer GLTFs when player is within 32m ──
     // Layers load in sequence from largest (outer, i=0) → smallest (inner, i=LAYER_COUNT-1)
@@ -530,27 +463,6 @@ export class Portal {
       }
     }
 
-    if (options.name !== undefined) this._name = options.name
-    if (options.usersCount !== undefined) this._usersCount = options.usersCount
-    if (options.thumbnail !== undefined) this._thumbnail = options.thumbnail
-
-    const lines: string[] = []
-    const chunks = (this._name || '').match(/.{1,25}(\s|$)|.{1,25}/g) ?? []
-    const wrapped = chunks.length > 2
-      ? chunks[0]!.trimEnd() + '\n' + chunks[1]!.trimEnd().slice(0, 22) + '...'
-      : chunks.join('\n').trimEnd()
-
-    lines.push(wrapped)
-
-    const hasUsers = this._usersCount !== undefined && this._usersCount > 1
-    if (hasUsers) {
-      lines.push(`<size=1.8>${this._usersCount} users</size>`)
-      const posY = Number(this._name?.length) > 25 ? -0.815 : -0.68
-      const posX = this._usersCount! >= 100 ? -0.51 : this._usersCount! >= 10 ? -0.44 : -0.385
-      Transform.getMutable(this.usersIcon).position = Vector3.create(posX, posY, 0)
-    }
-
-    // Info label, users icon, and thumbnail removed — card is invisible
   }
 
   private fireDoorTween(angle: number): void {
