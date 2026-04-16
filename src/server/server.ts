@@ -3,7 +3,7 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
-  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, VisitorAnalytics,
+  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, VisitorAnalytics,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
   getHoldTimeEntityEnumId, getNextRoundEndTimeMs, getNextTrapSyncId, getNextProjectileSyncId,
@@ -48,6 +48,7 @@ let mushroomIdCounter = 0
 let flagEntity: Entity
 let countdownEntity: Entity
 let leaderboardEntity: Entity
+let allTimeLeaderboardEntity: Entity
 let visitorAnalyticsEntity: Entity
 
 let holdTimeAccum = 0
@@ -213,6 +214,10 @@ async function persistFlagState(): Promise<void> {
 
 async function persistLeaderboard(json: string): Promise<void> {
   await Storage.set('leaderboard', json)
+}
+
+async function persistAllTimeLeaderboard(json: string): Promise<void> {
+  await Storage.set('allTimeLeaderboard', json)
 }
 
 async function persistPlayerNames(): Promise<void> {
@@ -668,6 +673,36 @@ export async function setupServer(): Promise<void> {
   leaderboardEntity = engine.addEntity()
   LeaderboardState.create(leaderboardEntity, { json: leaderboardJson, date: '' })
   syncEntity(leaderboardEntity, [LeaderboardState.componentId], SyncIds.LEADERBOARD)
+
+  // Load persisted all-time leaderboard
+  let savedAllTime: string | null = null
+  try {
+    savedAllTime = await Storage.get<string>('allTimeLeaderboard')
+  } catch (err) {
+    console.error('[Server] Failed to load all-time leaderboard from storage:', err)
+  }
+  let allTimeJson = savedAllTime || '[]'
+
+  // Patch all-time names too
+  try {
+    const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(allTimeJson)
+    let patched = false
+    for (const entry of entries) {
+      const knownName = playerNames.get(entry.userId.toLowerCase())
+      if (knownName && isRealName(knownName) && entry.name !== knownName) {
+        entry.name = knownName
+        patched = true
+      }
+    }
+    if (patched) {
+      allTimeJson = JSON.stringify(entries)
+      console.log('[Server] Patched all-time leaderboard names from persisted name directory')
+    }
+  } catch { /* ignore */ }
+
+  allTimeLeaderboardEntity = engine.addEntity()
+  AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: allTimeJson })
+  syncEntity(allTimeLeaderboardEntity, [AllTimeLeaderboardState.componentId], SyncIds.ALLTIME_LEADERBOARD)
   
   // Check for daily reset on server startup
   await checkLeaderboardDailyReset()
@@ -820,6 +855,27 @@ function updatePlayerName(userId: string, name: string): boolean {
         const mutable = LeaderboardState.getMutable(leaderboardEntity)
         mutable.json = json
         persistLeaderboard(json).catch(e => console.error('[Server] persistLeaderboard error:', e))
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  // Update all-time leaderboard entries
+  const atLb = AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)
+  if (atLb && atLb.json) {
+    try {
+      const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(atLb.json)
+      let changed = false
+      for (const entry of entries) {
+        if (entry.userId.toLowerCase() === key && entry.name !== name) {
+          entry.name = name
+          changed = true
+        }
+      }
+      if (changed) {
+        const json = JSON.stringify(entries)
+        const atMutable = AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity)
+        atMutable.json = json
+        persistAllTimeLeaderboard(json).catch(e => console.error('[Server] persistAllTimeLeaderboard error:', e))
       }
     } catch { /* ignore parse errors */ }
   }
@@ -2013,6 +2069,30 @@ async function handleRoundEnd(): Promise<void> {
     const mutable = LeaderboardState.getMutable(leaderboardEntity)
     mutable.json = json
     await persistLeaderboard(json)
+
+    // ── 4b. Update all-time leaderboard ──
+    const atLb = AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)
+    let atEntries: { userId: string; name: string; roundsWon: number }[] = []
+    if (atLb && atLb.json) {
+      try { atEntries = JSON.parse(atLb.json) } catch { atEntries = [] }
+    }
+    for (const p of players) {
+      if (p.seconds < maxSeconds) continue
+      const pKey = p.userId.toLowerCase()
+      const existing = atEntries.find((e) => e.userId.toLowerCase() === pKey)
+      if (existing) {
+        existing.roundsWon += 1
+        const displayName = playerNames.get(pKey)
+        if (displayName) existing.name = displayName
+      } else {
+        const displayName = playerNames.get(pKey) || pKey.slice(0, 8)
+        atEntries.push({ userId: pKey, name: displayName, roundsWon: 1 })
+      }
+    }
+    const atJson = JSON.stringify(atEntries)
+    const atMutable = AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity)
+    atMutable.json = atJson
+    await persistAllTimeLeaderboard(atJson)
   }
 
   // ── 5. Remove all active traps ──

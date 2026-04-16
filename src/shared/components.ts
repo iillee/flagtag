@@ -97,6 +97,14 @@ export const LeaderboardState = engine.defineComponent('ctf-leaderboard-state', 
 
 LeaderboardState.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
+// ── All-Time Leaderboard state (synced from server) ──
+
+export const AllTimeLeaderboardState = engine.defineComponent('ctf-alltime-leaderboard-state', {
+  json: Schemas.String,
+}, { json: '[]' })
+
+AllTimeLeaderboardState.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
 // ── Shared constants ──
 
 export const FLAG_BASE_POSITION = { x: 230, y: 13, z: 258 }
@@ -230,7 +238,8 @@ export enum SyncIds {
   FLAG = 1,
   COUNTDOWN = 200,
   LEADERBOARD = 201,
-  VISITOR_ANALYTICS = 202
+  VISITOR_ANALYTICS = 202,
+  ALLTIME_LEADERBOARD = 203
 }
 
 export function getTodayDateString(): string {
