@@ -485,7 +485,7 @@ const UI_ADJUST_PRESETS = [
   { label: 'Medium', mult: 1.0  },
   { label: 'Large',  mult: 1.2  },
 ]
-let uiAdjustIndex = 1 // default Medium
+let uiAdjustIndex = 0 // default Small
 
 let autoBaseScale = 1.0 // updated each frame from canvas info
 
@@ -1154,13 +1154,12 @@ function DesktopLayout() {
               {/* Flag beacon image */}
               <UiEntity
                 uiTransform={{
-                  width: S(126),
-                  height: S(240),
+                  width: S(160),
+                  flexGrow: 1,
                   borderRadius: S(8),
                   margin: { top: S(4) },
-                  flexGrow: 1,
                 }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/beacon.png' } }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/beacon2.png' } }}
               />
               <Label value={"Move close to the Flag to pickup\nor steal it from another player"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { top: S(8) } }} />
             </UiEntity>
