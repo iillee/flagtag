@@ -268,11 +268,11 @@ room.onMessage('mushroomPositions', (data) => {
   })
 
   engine.addSystem((dt: number) => {
+    const expired: string[] = []
     for (const [pid, remaining] of flagImmunityTimers) {
       const next = remaining - dt
       if (next <= 0) {
-        flagImmunityTimers.delete(pid)
-        hideShieldForPlayer(pid)
+        expired.push(pid)
       } else {
         flagImmunityTimers.set(pid, next)
         // Fade out during the last FADE_DURATION seconds
@@ -280,6 +280,10 @@ room.onMessage('mushroomPositions', (data) => {
           setShieldAlpha(pid, next / FADE_DURATION)
         }
       }
+    }
+    for (const pid of expired) {
+      flagImmunityTimers.delete(pid)
+      hideShieldForPlayer(pid)
     }
   })
 
@@ -382,9 +386,10 @@ export function mushroomClientSystem(dt: number): void {
     if (!m.placed) continue
     const mPos = Transform.get(m.entity).position
     const dx = playerPos.x - mPos.x
+    const dy = playerPos.y - mPos.y
     const dz = playerPos.z - mPos.z
     const dist = Math.sqrt(dx * dx + dz * dz)
-    if (dist < MUSHROOM_PICKUP_RADIUS && !pickedUpIds.has(m.id)) {
+    if (dist < MUSHROOM_PICKUP_RADIUS && dy >= -0.5 && dy <= 2.0 && !pickedUpIds.has(m.id)) {
       pickedUpIds.add(m.id)
       room.send('pickupMushroom', { id: m.id })
     }
