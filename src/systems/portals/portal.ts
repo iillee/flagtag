@@ -423,6 +423,9 @@ export class Portal {
       }
     }
     engine.addSystem(this._lodSystem)
+
+    // Apply position/rotation/scale to root and portalBody
+    this.update(options)
   }
 
   update(options: PortalOptions): void {
