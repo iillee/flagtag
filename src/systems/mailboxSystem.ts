@@ -66,7 +66,7 @@ export function mailboxSystem() {
       })
       MeshRenderer.setPlane(letter)
       Material.setPbrMaterial(letter, {
-        texture: Material.Texture.Common({ src: 'images/letter.png' }),
+        texture: Material.Texture.Common({ src: 'assets/images/letter.png' }),
         roughness: 1,
         metallic: 0,
         specularIntensity: 0

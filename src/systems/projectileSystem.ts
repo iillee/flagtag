@@ -571,7 +571,7 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
   if (color && GltfContainer.has(localEntity)) {
     const validColors = ['r', 'y', 'b', 'g']
     const c = validColors.includes(color) ? color : 'r'
-    GltfContainer.getMutable(localEntity).src = `models/boomerang.${c}.glb`
+    GltfContainer.getMutable(localEntity).src = `assets/models/boomerang.${c}.glb`
   }
 
   attachProjectileSound(localEntity)

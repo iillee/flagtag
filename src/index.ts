@@ -83,7 +83,7 @@ export async function main() {
     rotation: Quaternion.fromEulerDegrees(0, 0, 90)
   })
   GltfContainer.create(boomerangModel, {
-    src: 'models/boomerang.r.glb',
+    src: 'assets/models/boomerang.r.glb',
     visibleMeshesCollisionMask: 0,
     invisibleMeshesCollisionMask: 0
   })
@@ -176,7 +176,7 @@ export async function main() {
     const BOUNDARY_SHOW_DIST = 40 // meters — planes fade in when player is this close
     const angleStep = (Math.PI * 2) / BOUNDARY_SEGMENTS
     const planeWidth = 2 * BOUNDARY_RADIUS * Math.sin(angleStep / 2) + 0.2
-    const BOUNDARY_TEX = Material.Texture.Common({ src: 'images/boundary-rgba.png' })
+    const BOUNDARY_TEX = Material.Texture.Common({ src: 'assets/images/boundary-rgba.png' })
 
     const boundaryPlanes: { entity: Entity; px: number; pz: number; lastAlpha: number }[] = []
 
@@ -411,10 +411,10 @@ export async function main() {
   // NOTE: Keep these entities in the composite! They mark podium positions for 1st/2nd/3rd place.
   // Red=1st, Gold=2nd, Blue=3rd, Green=camera target. Hidden here to be invisible at runtime.
   const PODIUM_CUBE_SRCS = new Set([
-    'models/solid_red.glb',
-    'models/gold.glb',
-    'models/solid_blue.glb',
-    'models/solid_green.glb',
+    'assets/models/solid_red.glb',
+    'assets/models/gold.glb',
+    'assets/models/solid_blue.glb',
+    'assets/models/solid_green.glb',
   ])
   const hiddenPodiumCubes = new Set<Entity>()
 

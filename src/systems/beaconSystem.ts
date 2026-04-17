@@ -51,8 +51,8 @@ export function setupBeacon(): void {
   MeshRenderer.setPlane(outerBeacon)
   Billboard.create(outerBeacon, { billboardMode: BillboardMode.BM_Y })
 
-  const GRADIENT_TEXTURE = Material.Texture.Common({ src: 'images/beacon-gradient.png' })
-  const ALPHA_TEXTURE = Material.Texture.Common({ src: 'images/beacon-alpha.png' })
+  const GRADIENT_TEXTURE = Material.Texture.Common({ src: 'assets/images/beacon-gradient.png' })
+  const ALPHA_TEXTURE = Material.Texture.Common({ src: 'assets/images/beacon-alpha.png' })
   const c = BEACON_COLOR
 
   Material.setPbrMaterial(innerBeacon, {

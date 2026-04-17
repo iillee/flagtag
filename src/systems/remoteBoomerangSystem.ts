@@ -32,7 +32,7 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
     if (rb.color !== color) {
       rb.color = color
       GltfContainer.createOrReplace(rb.model, {
-        src: `models/boomerang.${color}.glb`,
+        src: `assets/models/boomerang.${color}.glb`,
         visibleMeshesCollisionMask: 0,
         invisibleMeshesCollisionMask: 0
       })
@@ -56,7 +56,7 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
     rotation: Quaternion.fromEulerDegrees(0, 0, 90)
   })
   GltfContainer.create(model, {
-    src: `models/boomerang.${color}.glb`,
+    src: `assets/models/boomerang.${color}.glb`,
     visibleMeshesCollisionMask: 0,
     invisibleMeshesCollisionMask: 0
   })

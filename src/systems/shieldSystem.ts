@@ -30,7 +30,7 @@ const PULSE_SCALE_MAX = 1.03
 
 // Rotation
 const ROTATE_SPEED_DEG = 10
-const SHIELD_GRADIENT_TEXTURE = Material.Texture.Common({ src: 'images/beacon-gradient.png' })
+const SHIELD_GRADIENT_TEXTURE = Material.Texture.Common({ src: 'assets/images/beacon-gradient.png' })
 
 // ── Per-player shield tracking ──
 interface PlayerShield {

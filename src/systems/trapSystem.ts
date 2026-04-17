@@ -31,7 +31,7 @@ import { isCinematicActive } from '../cinematicState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect } from './combatSystem'
 
-const TRAP_MODEL_SRC = 'models/banana_scaled.glb'
+const TRAP_MODEL_SRC = 'assets/models/banana_scaled.glb'
 const TRAP_SCALE = Vector3.create(1, 1, 1)
 const TRAP_STAGGER_MS = 1000 // Duration when hitting own trap
 

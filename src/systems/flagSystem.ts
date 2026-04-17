@@ -64,7 +64,7 @@ function createCarryClone(carrierId: string): void {
   })
   console.log('[Flag] Clone created (AAPT_NAME_TAG)')
 }
-const BANNER_SRC = 'models/Banner_Red_02/Banner_Red_02.glb'
+const BANNER_SRC = 'assets/models/Banner_Red_02/Banner_Red_02.glb'
 
 const HIDDEN_POS = Vector3.create(0, -100, 0)
 

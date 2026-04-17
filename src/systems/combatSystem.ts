@@ -140,7 +140,7 @@ export function showHitEffect(targetPos: Vector3): void {
 
 export function showMissEffect(targetPos: Vector3): void {
   initPools()
-  const centerPos = Vector3.add(targetPos, Vector3.create(0, 1.2, 0))
+  const centerPos = Vector3.create(targetPos.x, targetPos.y, targetPos.z)
   const config = CLOUD_CONFIGS[cloudConfigIndex % CLOUD_CONFIGS.length]
   cloudConfigIndex++
   const scaleMult = 0.85 + Math.random() * 0.3

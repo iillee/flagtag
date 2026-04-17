@@ -1388,7 +1388,7 @@ function DesktopLayout() {
                         {leaderboardTab === 'daily' ? (
                           <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1 }}>
                             {Array.from({ length: entry.roundsWon }, (_, ri) => (
-                              <UiEntity key={`rw-${ri}`} uiTransform={{ width: S(14), height: S(14), margin: { right: S(2) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                              <UiEntity key={`rw-${ri}`} uiTransform={{ width: S(14), height: S(14), margin: { right: S(2) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
                             ))}
                             {entry.roundsWon > 0 && <UiEntity uiTransform={{ width: S(4) }} />}
                             <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" />
@@ -1800,7 +1800,7 @@ function DesktopLayout() {
               onMouseLeave={() => { squareIconHovered = false }}
               onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
             >
-              <UiEntity uiTransform={{ width: S(16), height: S(16) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
+              <UiEntity uiTransform={{ width: S(16), height: S(16) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
             </UiEntity>
             <UiEntity
               uiTransform={{ width: S(28), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
@@ -1856,7 +1856,7 @@ function DesktopLayout() {
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
                   {isCarrier ? (
                     <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <UiEntity uiTransform={{ width: S(16), height: S(16), margin: { right: S(4) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                      <UiEntity uiTransform={{ width: S(16), height: S(16), margin: { right: S(4) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
                       <Label value={p.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" />
                     </UiEntity>
                   ) : (
@@ -1964,7 +1964,7 @@ function MobileLayout() {
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; leaderboardTab = 'daily'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
-                <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: leaderboardOverlayVisible ? GOLD : WHITE }} />
+                <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible ? GOLD : WHITE }} />
               </UiEntity>
               <UiEntity
                 uiTransform={{
@@ -2038,7 +2038,7 @@ function MobileLayout() {
                 <UiEntity uiTransform={{ width: 6 }} />
                 <Label value={`${myScore}`} fontSize={32} color={scoreColor} font="sans-serif" />
                 {hasFlag && (
-                  <UiEntity uiTransform={{ width: 22, height: 22, margin: { left: 6 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                  <UiEntity uiTransform={{ width: 22, height: 22, margin: { left: 6 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
                 )}
               </UiEntity>
             </UiEntity>
@@ -2166,7 +2166,7 @@ function MobileLayout() {
                     >
                       <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
                         {isCarrier && (
-                          <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                          <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
                         )}
                         <Label value={p.name} fontSize={22} color={nameColor} font="sans-serif" />
                       </UiEntity>
@@ -2279,7 +2279,7 @@ function MobileLayout() {
               <Label value={"Find the Flag by following\nthe gold beacon"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 8 } }} />
               <Label value={"Move close to the Flag to pickup\nor steal it from another player"} fontSize={18} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 10 } }} />
               <UiEntity uiTransform={{ width: 120, height: 160, borderRadius: 8, flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.18, 0.14, 0.8) }}>
-                <UiEntity uiTransform={{ width: 18, height: 18, margin: { bottom: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                <UiEntity uiTransform={{ width: 18, height: 18, margin: { bottom: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
                 <Label value="flag with beacon" fontSize={14} color={LIGHT_GREY} font="sans-serif" textAlign="middle-center" />
               </UiEntity>
             </UiEntity>
@@ -2454,7 +2454,7 @@ function MobileLayout() {
                       {leaderboardTab === 'daily' ? (
                         <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1 }}>
                           {Array.from({ length: entry.roundsWon }, (_, ri) => (
-                            <UiEntity key={`m-rw-${ri}`} uiTransform={{ width: 16, height: 16, margin: { right: 2 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'images/flag-icon-white.png' }, color: GOLD }} />
+                            <UiEntity key={`m-rw-${ri}`} uiTransform={{ width: 16, height: 16, margin: { right: 2 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
                           ))}
                           {entry.roundsWon > 0 && <UiEntity uiTransform={{ width: 4 }} />}
                           <Label value={entry.name} fontSize={22} color={nameColor} font="sans-serif" />

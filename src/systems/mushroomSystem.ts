@@ -11,7 +11,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { showShieldForPlayer, hideShieldForPlayer, hideAllShields, setShieldAlpha } from './shieldSystem'
 
 // ── Constants ──
-const MUSHROOM_MODEL = 'models/mushroom_03.glb'
+const MUSHROOM_MODEL = 'assets/models/mushroom_03.glb'
 
 const MUSHROOM_PICKUP_RADIUS = 0.5
 // Shield lasts until hit or round end (no time limit)

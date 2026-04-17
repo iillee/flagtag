@@ -15,7 +15,7 @@ export function getBoomerangColor(): BoomerangColor {
 }
 
 export function getBoomerangModelSrc(): string {
-  return `models/boomerang.${selectedColor}.glb`
+  return `assets/models/boomerang.${selectedColor}.glb`
 }
 
 export function getBoomerangColorLabel(): string {
