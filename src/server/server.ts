@@ -30,14 +30,12 @@ const MUSHROOM_CX = 250.75
 const MUSHROOM_CZ = 255.5
 const MUSHROOM_RADIUS = 128
 
-const MUSHROOM_MAX_REROLLS = 10
+const MUSHROOM_CANDIDATES = 10  // Number of candidate positions per mushroom
 
 interface ServerMushroom {
   id: number
-  x: number
-  z: number
+  candidates: { x: number; z: number }[]
   pickedUp: boolean
-  rerolls: number
 }
 const activeMushrooms: ServerMushroom[] = []
 let mushroomIdCounter = 0
@@ -1030,7 +1028,7 @@ function registerHandlers(): void {
   // ── Mushroom position request (client asks on connect) ──
   room.onMessage('requestMushroomPositions', (_data, _context) => {
     try {
-      const remaining = activeMushrooms.filter(m => !m.pickedUp).map(m => ({ id: m.id, x: m.x, z: m.z }))
+      const remaining = activeMushrooms.filter(m => !m.pickedUp).map(mushroomToPayload)
       room.send('mushroomPositions', { mushroomsJson: JSON.stringify(remaining) })
     } catch (err) { console.error('[Server] ❌ requestMushroomPositions handler error:', err) }
   })
@@ -1051,25 +1049,7 @@ function registerHandlers(): void {
     } catch (err) { console.error('[Server] ❌ pickupMushroom handler error:', err) }
   })
 
-  // ── Mushroom reroll (client detected water landing) ──
-  room.onMessage('rerollMushroom', (data, _context) => {
-    try {
-      const mid = (data as any).id as number
-      const mushroom = activeMushrooms.find(m => m.id === mid && !m.pickedUp)
-      if (!mushroom) return
-      if (mushroom.rerolls >= MUSHROOM_MAX_REROLLS) {
-        console.log('[Server] 🍄 Mushroom', mid, 'hit max rerolls, resending current position')
-        room.send('mushroomPositions', { mushroomsJson: JSON.stringify([{ id: mushroom.id, x: mushroom.x, z: mushroom.z }]) })
-        return
-      }
-      mushroom.rerolls++
-      const rerollPos = randomMushroomPos()
-      mushroom.x = rerollPos.x
-      mushroom.z = rerollPos.z
-      console.log('[Server] 🍄 Rerolled mushroom', mid, 'to', mushroom.x.toFixed(1), mushroom.z.toFixed(1), `(attempt ${mushroom.rerolls}/${MUSHROOM_MAX_REROLLS})`)
-      room.send('mushroomPositions', { mushroomsJson: JSON.stringify([{ id: mushroom.id, x: mushroom.x, z: mushroom.z }]) })
-    } catch (err) { console.error('[Server] ❌ rerollMushroom handler error:', err) }
-  })
+  // Mushroom reroll removed — candidates are now sent upfront
 
   // ── Boomerang color change ──
   room.onMessage('colorChanged', (data, context) => {
@@ -2224,33 +2204,39 @@ function nameResolverServerSystem(dt: number): void {
 }
 
 // ── Mushroom spawning ──
-function randomMushroomPos(): { x: number; z: number } {
-  const angle = Math.random() * Math.PI * 2
-  const r = MUSHROOM_RADIUS * Math.sqrt(Math.random())
-  return { x: MUSHROOM_CX + Math.cos(angle) * r, z: MUSHROOM_CZ + Math.sin(angle) * r }
+function randomMushroomCandidates(): { x: number; z: number }[] {
+  const candidates: { x: number; z: number }[] = []
+  for (let i = 0; i < MUSHROOM_CANDIDATES; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const r = MUSHROOM_RADIUS * Math.sqrt(Math.random())
+    candidates.push({ x: MUSHROOM_CX + Math.cos(angle) * r, z: MUSHROOM_CZ + Math.sin(angle) * r })
+  }
+  return candidates
+}
+
+function mushroomToPayload(m: ServerMushroom): any {
+  return { id: m.id, candidates: m.candidates }
 }
 
 function spawnOneMushroom(): void {
-  const { x, z } = randomMushroomPos()
-  const m = { id: mushroomIdCounter++, x, z, pickedUp: false, rerolls: 0 }
+  const candidates = randomMushroomCandidates()
+  const m: ServerMushroom = { id: mushroomIdCounter++, candidates, pickedUp: false }
   activeMushrooms.push(m)
-  console.log('[Server] 🍄 Spawned replacement mushroom', m.id, 'at', x.toFixed(1), z.toFixed(1))
-  room.send('mushroomPositions', { mushroomsJson: JSON.stringify([{ id: m.id, x: m.x, z: m.z }]) })
+  console.log('[Server] 🍄 Spawned replacement mushroom', m.id, 'with', candidates.length, 'candidates')
+  room.send('mushroomPositions', { mushroomsJson: JSON.stringify([mushroomToPayload(m)]) })
 }
 
 function spawnMushrooms(): void {
   activeMushrooms.length = 0
   for (let i = 0; i < MUSHROOM_COUNT; i++) {
-    const { x, z } = randomMushroomPos()
+    const candidates = randomMushroomCandidates()
     activeMushrooms.push({
       id: mushroomIdCounter++,
-      x, z,
-      pickedUp: false,
-      rerolls: 0
+      candidates,
+      pickedUp: false
     })
   }
   console.log('[Server] 🍄 Spawned', MUSHROOM_COUNT, 'mushrooms')
-  // Broadcast to all connected clients
-  const positions = activeMushrooms.map(m => ({ id: m.id, x: m.x, z: m.z }))
+  const positions = activeMushrooms.map(mushroomToPayload)
   room.send('mushroomPositions', { mushroomsJson: JSON.stringify(positions), fullReset: true })
 }

@@ -39,9 +39,8 @@ interface MushroomVisual {
   entity: Entity
   rayEntity: Entity | null
   placed: boolean  // true once raycast found a surface
-  x: number
-  z: number
-  rerolls?: number
+  candidates: { x: number; z: number }[]
+  candidateIndex: number
 }
 
 // ── Boost sound ──
@@ -69,8 +68,6 @@ function playBoostSound(): void {
 
 const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
-const rerollCounts = new Map<number, number>()  // Track rerolls by mushroom id (persists across entity recreation)
-const MAX_CLIENT_REROLLS = 5  // Stop sending reroll requests after this many
 let positionsRequested = false
 // shieldActive removed — mushrooms no longer block hits
 
@@ -163,7 +160,7 @@ function hideAllTrailPuffs(): void {
 
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('mushroomPositions', (data) => {
-    const positions: { id: number, x: number, z: number }[] = JSON.parse((data as any).mushroomsJson || '[]')
+    const positions: { id: number, candidates: { x: number, z: number }[] }[] = JSON.parse((data as any).mushroomsJson || '[]')
     const fullReset = (data as any).fullReset === true
     console.log('[Mushroom] Received', positions.length, 'mushroom positions from server', fullReset ? '(full reset)' : '(incremental)')
 
@@ -175,9 +172,8 @@ room.onMessage('mushroomPositions', (data) => {
       }
       mushrooms.length = 0
       pickedUpIds.clear()
-      rerollCounts.clear()
     } else {
-      // Incremental update — only remove mushrooms whose id matches incoming (reroll/replacement)
+      // Incremental update — only remove mushrooms whose id matches incoming (replacement)
       for (const pos of positions) {
         const existingIdx = mushrooms.findIndex(m => m.id === pos.id)
         if (existingIdx >= 0) {
@@ -190,12 +186,16 @@ room.onMessage('mushroomPositions', (data) => {
       }
     }
 
-    // Create mushrooms and start raycasting to find surfaces
+    // Create mushrooms and start raycasting first candidate
     for (const pos of positions) {
+      const candidates = pos.candidates
+      if (candidates.length === 0) continue
+      const first = candidates[0]
+
       const entity = engine.addEntity()
       // Start hidden underground until raycast finds surface
       Transform.create(entity, {
-        position: Vector3.create(pos.x, -100, pos.z),
+        position: Vector3.create(first.x, -100, first.z),
         scale: Vector3.create(0.25, 0.25, 0.25),
         rotation: Quaternion.fromEulerDegrees(0, Math.random() * 360, 0)
       })
@@ -208,7 +208,7 @@ room.onMessage('mushroomPositions', (data) => {
       // Create raycast entity to find surface
       const rayEntity = engine.addEntity()
       Transform.create(rayEntity, {
-        position: Vector3.create(pos.x, RAY_START_Y, pos.z)
+        position: Vector3.create(first.x, RAY_START_Y, first.z)
       })
       Raycast.create(rayEntity, {
         direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
@@ -222,8 +222,8 @@ room.onMessage('mushroomPositions', (data) => {
         entity,
         rayEntity,
         placed: false,
-        x: pos.x,
-        z: pos.z
+        candidates,
+        candidateIndex: 0
       })
     }
   })
@@ -304,36 +304,49 @@ function processMushroomRaycasts(): void {
         hitY = WATER_Y
       }
 
-      // If landed on or below water level, request a reroll from the server
+      const currentCandidate = m.candidates[m.candidateIndex]
+
+      // If landed on or below water level, try the next candidate
       if (hitY <= WATER_Y + 0.1) {
-        // Track rerolls by mushroom id (persists across entity recreation)
-        const rerolls = (rerollCounts.get(m.id) || 0) + 1
-        rerollCounts.set(m.id, rerolls)
-        if (rerolls >= MAX_CLIENT_REROLLS) {
-          // Max rerolls — just place it at water level
-          console.log('[Mushroom] Mushroom', m.id, 'max rerolls reached (' + rerolls + '), placing at water level')
-          const t = Transform.getMutable(m.entity)
-          t.position = Vector3.create(m.x, WATER_Y + 0.2, m.z)
-          engine.removeEntity(m.rayEntity)
-          m.rayEntity = null
-          m.placed = true
-          rerollCounts.delete(m.id)
-          continue
-        }
-        console.log('[Mushroom] Mushroom', m.id, 'landed on water at', m.x.toFixed(1), m.z.toFixed(1), '— requesting reroll (' + rerolls + '/' + MAX_CLIENT_REROLLS + ')')
         engine.removeEntity(m.rayEntity)
         m.rayEntity = null
-        // Remove this mushroom; server will send new position via mushroomPositions
-        engine.removeEntity(m.entity)
-        mushrooms.splice(i, 1)
-        room.send('rerollMushroom', { id: m.id })
+
+        m.candidateIndex++
+        if (m.candidateIndex >= m.candidates.length) {
+          // All candidates exhausted — place at water level as fallback
+          console.log('[Mushroom] Mushroom', m.id, 'all', m.candidates.length, 'candidates on water, placing at water level')
+          const t = Transform.getMutable(m.entity)
+          t.position = Vector3.create(currentCandidate.x, WATER_Y + 0.2, currentCandidate.z)
+          m.placed = true
+          continue
+        }
+
+        // Try next candidate
+        const next = m.candidates[m.candidateIndex]
+        console.log('[Mushroom] Mushroom', m.id, 'candidate', m.candidateIndex - 1, 'on water, trying candidate', m.candidateIndex)
+
+        // Move the mushroom entity to new candidate (still hidden)
+        const mt = Transform.getMutable(m.entity)
+        mt.position = Vector3.create(next.x, -100, next.z)
+
+        // New raycast for next candidate
+        const rayEntity = engine.addEntity()
+        Transform.create(rayEntity, {
+          position: Vector3.create(next.x, RAY_START_Y, next.z)
+        })
+        Raycast.create(rayEntity, {
+          direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
+          maxDistance: 200,
+          queryType: RaycastQueryType.RQT_HIT_FIRST,
+          continuous: false
+        })
+        m.rayEntity = rayEntity
         continue
       }
 
       const t = Transform.getMutable(m.entity)
-      t.position = Vector3.create(m.x, hitY + MUSHROOM_Y_OFFSET, m.z)
-      console.log('[Mushroom] Placed mushroom', m.id, 'at', m.x.toFixed(1), hitY.toFixed(1), m.z.toFixed(1), hitSurface ? '(raycast hit)' : '(ground fallback)')
-      // Clean up ray entity
+      t.position = Vector3.create(currentCandidate.x, hitY + MUSHROOM_Y_OFFSET, currentCandidate.z)
+      console.log('[Mushroom] Placed mushroom', m.id, 'at', currentCandidate.x.toFixed(1), hitY.toFixed(1), currentCandidate.z.toFixed(1), hitSurface ? '(raycast hit)' : '(ground fallback)', 'candidate', m.candidateIndex)
       engine.removeEntity(m.rayEntity)
       m.rayEntity = null
       m.placed = true
