@@ -24,7 +24,7 @@ import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
-import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer } from './shieldSystem'
+import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
 
 // Visual clone system for smooth flag carrying
@@ -314,6 +314,7 @@ export function flagClientSystem(dt: number): void {
           createCarryClone(userId)
           optimisticCarrierId = userId
           optimisticTimestamp = now
+          hideAllShields()  // Only one shield at a time
           showShieldForPlayer(userId)
           setShieldAlpha(userId, 1.0)
           
@@ -382,6 +383,7 @@ export function flagClientSystem(dt: number): void {
         // Different carrier or no prediction — create clone normally
         if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
         createCarryClone(flag.carrierPlayerId)
+        // Don't show shield here — the server's flagImmunity message handles it with proper fade timer
         optimisticCarrierId = null
         optimisticTimestamp = 0
       }
@@ -407,9 +409,13 @@ export function flagClientSystem(dt: number): void {
         lastDropTimeMs = Date.now()
       }
 
-      // Clean up all clones + clear optimistic state
+      // Clean up all clones + clear optimistic state + hide stale shields
+      // Skip hideAllShields if we just made an optimistic pickup this frame
+      // (the optimistic pickup already called hideAllShields before showing the new shield)
+      const skipShieldClear = !!optimisticCarrierId
       optimisticCarrierId = null
       optimisticTimestamp = 0
+      if (!skipShieldClear) hideAllShields()
       cleanupClone()
       
       // Restore flag visual visibility (server controls position via CRDT)
@@ -423,6 +429,7 @@ export function flagClientSystem(dt: number): void {
     // Optimistic rollback: if we predicted a pickup but server never confirmed, undo it
     if (optimisticCarrierId && flag.state !== FlagState.Carried && Date.now() - optimisticTimestamp > OPTIMISTIC_ROLLBACK_MS) {
       console.log('[Flag] ⏪ Optimistic prediction rolled back (server rejected)')
+      hideShieldForPlayer(optimisticCarrierId)
       cleanupClone()
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
       optimisticCarrierId = null
@@ -430,9 +437,11 @@ export function flagClientSystem(dt: number): void {
     }
     // Also roll back immediately if server says someone ELSE is carrying (steal denied, etc.)
     if (optimisticCarrierId && flag.state === FlagState.Carried && flag.carrierPlayerId !== optimisticCarrierId) {
+      hideShieldForPlayer(optimisticCarrierId)
       cleanupClone()
       createCarryClone(flag.carrierPlayerId)
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+      // Don't show shield here — server's flagImmunity message handles it with proper fade timer
       optimisticCarrierId = null
       optimisticTimestamp = 0
     }
