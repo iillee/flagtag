@@ -464,9 +464,23 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
 }
 
 // ── Pre-midnight Discord report ──
-// Send the daily report during the last hour (23:00–23:59 UTC) so all data is intact.
-// The actual reset still happens at midnight UTC.
+// Send the daily report once at 23:55 UTC so all data is intact before midnight reset.
+// Persisted to Storage so server restarts don't re-trigger.
+// Only fires on the deployed world (requires ENABLE_DISCORD_REPORTS=true EnvVar).
 let dailyReportSentForDay = ''
+
+
+async function loadDailyReportSentDay(): Promise<void> {
+  try {
+    const saved = await Storage.get<string>('dailyReportSentForDay')
+    if (saved) {
+      dailyReportSentForDay = saved
+      console.log('[Server] Loaded dailyReportSentForDay:', saved)
+    }
+  } catch (err) {
+    console.error('[Server] Failed to load dailyReportSentForDay:', err)
+  }
+}
 
 async function checkPreMidnightReport(): Promise<void> {
   const now = new Date()
@@ -475,12 +489,12 @@ async function checkPreMidnightReport(): Promise<void> {
   // Already sent today's report
   if (dailyReportSentForDay === currentDay) return
   
-  // Send anytime during the last hour of the UTC day (23:00–23:59)
-  // Wider window = much less likely to miss if server has brief downtime
+  // Send during the last hour of the UTC day (23:00–23:59)
   const hour = now.getUTCHours()
   if (hour === 23) {
     console.log('[Server] 📊 Sending pre-midnight daily analytics report for', currentDay)
     dailyReportSentForDay = currentDay
+    await Storage.set('dailyReportSentForDay', currentDay)
     await sendDailyAnalyticsToDiscord()
   }
 }
@@ -496,6 +510,8 @@ async function checkVisitorDailyReset(): Promise<boolean> {
     // (e.g. server was down at 23:55 UTC)
     if (dailyReportSentForDay !== lastVisitorResetDay) {
       console.log('[Server] Pre-midnight report was missed, sending now before reset')
+      dailyReportSentForDay = lastVisitorResetDay
+      await Storage.set('dailyReportSentForDay', lastVisitorResetDay)
       await sendDailyAnalyticsToDiscord()
     }
     
@@ -706,6 +722,7 @@ export async function setupServer(): Promise<void> {
 
   // Initialize visitor analytics
   await loadVisitorData()
+  await loadDailyReportSentDay()
   visitorAnalyticsEntity = engine.addEntity()
   VisitorAnalytics.create(visitorAnalyticsEntity, { 
     date: getTodayDateString(),

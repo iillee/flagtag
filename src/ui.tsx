@@ -1345,10 +1345,10 @@ function DesktopLayout() {
                 alignItems: 'center',
                 height: S(28),
               }}>
-                <Label value="#" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '7%', height: S(28) }} textAlign="middle-left" />
-                <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { left: '7%', top: 0 }, width: '18%', height: S(28) }} textAlign="middle-left" />
-                <Label value="Address" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { left: '25%', top: 0 }, width: '63%', height: S(28) }} textAlign="middle-left" />
-                <Label value="Wins" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { right: 0, top: 0 }, width: '12%', height: S(28) }} textAlign="middle-left" />
+                <Label value="#" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: S(32), height: S(28) }} textAlign="middle-left" />
+                <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '18%', height: S(28) }} textAlign="middle-left" />
+                <Label value="Address" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
+                <Label value="Wins" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(28) }} textAlign="middle-left" />
               </UiEntity>
             )}
 
@@ -1394,11 +1394,11 @@ function DesktopLayout() {
                             ))}
                           </UiEntity>
                         ) : (
-                          <UiEntity uiTransform={{ width: '100%', height: S(_ROW_HEIGHT), position: { left: 0, top: 0 } }}>
-                            <Label value={`${rank}.`} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '7%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
-                            <Label value={entry.name} fontSize={S(12)} color={nameColor} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { left: '7%', top: 0 }, width: '18%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
-                            <Label value={entry.userId || ''} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { left: '25%', top: 0 }, height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
-                            <Label value={`${entry.roundsWon}`} fontSize={S(12)} color={GOLD} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { right: 0, top: 0 }, width: '12%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                          <UiEntity uiTransform={{ width: '100%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center' }}>
+                            <Label value={`${rank}.`} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ width: S(32), height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                            <Label value={entry.name} fontSize={S(12)} color={nameColor} font="sans-serif" uiTransform={{ width: '18%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                            <Label value={entry.userId || ''} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                            <Label value={`${entry.roundsWon}`} fontSize={S(12)} color={GOLD} font="sans-serif" uiTransform={{ width: '12%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
                           </UiEntity>
                         )}
                       </UiEntity>
@@ -2461,7 +2461,7 @@ function MobileLayout() {
                         </UiEntity>
                       ) : (
                         <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1 }}>
-                          <Label value={`${rank}.`} fontSize={22} color={MUTED} font="sans-serif" uiTransform={{ width: 36 }} />
+                          <Label value={`${rank}.`} fontSize={22} color={MUTED} font="sans-serif" uiTransform={{ width: 36 }} textAlign="middle-left" />
                           <Label value={entry.name} fontSize={22} color={nameColor} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
                           <Label value={`${entry.roundsWon}`} fontSize={22} color={GOLD} font="sans-serif" />
                         </UiEntity>

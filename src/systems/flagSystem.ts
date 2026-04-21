@@ -8,6 +8,9 @@ import {
   Material,
   MaterialTransparencyMode,
   Tween,
+  TweenSequence,
+  TweenLoop,
+  EasingFunction,
 
   Raycast,
   RaycastResult,
@@ -34,7 +37,8 @@ let carryCloneEntity: Entity | null = null
  * Create the visual clone that follows the flag carrier.
  * Uses AAPT_NAME_TAG anchor with a child entity for bob/spin animation.
  */
-let carryCloneVisual: Entity | null = null  // Child entity with model + bob/spin
+let carryCloneBob: Entity | null = null      // Intermediate entity for bob tween
+let carryCloneVisual: Entity | null = null    // Child entity with model + spin tween
 
 function createCarryClone(carrierId: string): void {
   cleanupClone()
@@ -50,19 +54,61 @@ function createCarryClone(carrierId: string): void {
     scale: Vector3.One()
   })
 
-  // Child entity with model — bob/spin animated locally
-  // Offset upward ~0.85m above name tag so the flag doesn't clip into the avatar's head
+  // Bob entity — Tween-based yoyo bob (no per-frame Transform writes)
+  const BOB_BASE = 0.85
+  const BOB_AMP = 0.15
+  carryCloneBob = engine.addEntity()
+  Transform.create(carryCloneBob, {
+    parent: carryCloneEntity,
+    position: Vector3.create(0, BOB_BASE, 0)
+  })
+  Tween.create(carryCloneBob, {
+    mode: Tween.Mode.Move({
+      start: Vector3.create(0, BOB_BASE - BOB_AMP, 0),
+      end: Vector3.create(0, BOB_BASE + BOB_AMP, 0)
+    }),
+    duration: 3000,
+    easingFunction: EasingFunction.EF_EASESINE
+  })
+  TweenSequence.create(carryCloneBob, {
+    sequence: [],
+    loop: TweenLoop.TL_YOYO
+  })
+
+  // Visual entity — Tween-based continuous spin + GltfContainer
   carryCloneVisual = engine.addEntity()
   Transform.create(carryCloneVisual, {
-    parent: carryCloneEntity,
-    position: Vector3.create(0, 0.85, 0)
+    parent: carryCloneBob,
+    position: Vector3.Zero()
   })
   GltfContainer.create(carryCloneVisual, {
     src: BANNER_SRC,
     visibleMeshesCollisionMask: 0,
     invisibleMeshesCollisionMask: 0
   })
-  console.log('[Flag] Clone created (AAPT_NAME_TAG)')
+  Tween.create(carryCloneVisual, {
+    mode: Tween.Mode.Rotate({
+      start: Quaternion.fromEulerDegrees(0, 0, 0),
+      end: Quaternion.fromEulerDegrees(0, 180, 0)
+    }),
+    duration: 7200,
+    easingFunction: EasingFunction.EF_LINEAR
+  })
+  TweenSequence.create(carryCloneVisual, {
+    sequence: [
+      {
+        mode: Tween.Mode.Rotate({
+          start: Quaternion.fromEulerDegrees(0, 180, 0),
+          end: Quaternion.fromEulerDegrees(0, 360, 0)
+        }),
+        duration: 7200,
+        easingFunction: EasingFunction.EF_LINEAR
+      }
+    ],
+    loop: TweenLoop.TL_RESTART
+  })
+
+  console.log('[Flag] Clone created (AAPT_NAME_TAG) with tween bob/spin')
 }
 const BANNER_SRC = 'assets/models/Banner_Red_02/Banner_Red_02.glb'
 
@@ -166,6 +212,10 @@ function cleanupClone(): void {
     engine.removeEntity(carryCloneVisual)
     carryCloneVisual = null
   }
+  if (carryCloneBob !== null) {
+    engine.removeEntity(carryCloneBob)
+    carryCloneBob = null
+  }
   if (carryCloneEntity !== null) { 
     engine.removeEntity(carryCloneEntity)
     carryCloneEntity = null 
@@ -263,12 +313,9 @@ function updateFlagBob(dt: number): void {
     }
   }
 
-  // Animate the carried flag visual (above player's head, offset 0.85m above name tag)
-  if (carryCloneVisual && Transform.has(carryCloneVisual)) {
-    const t = Transform.getMutable(carryCloneVisual)
-    t.position = Vector3.create(0, 0.425 + bobY, 0)
-    t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
-  }
+  // Carried flag bob/spin is handled by Tweens (renderer-side), not per-frame
+  // Transform writes — mutating Transform on AvatarAttach children causes
+  // the flag to disappear on the desktop client.
 }
 
 export function flagClientSystem(dt: number): void {
@@ -450,7 +497,7 @@ export function flagClientSystem(dt: number): void {
     // 1. Flag is carried but clone is missing or broken — recreate it
     // Only check GltfContainer — desktop clone has no Transform (AvatarAttach controls position)
     const cloneMissing = carryCloneEntity === null
-    const cloneBroken = carryCloneEntity !== null && (carryCloneVisual === null || !GltfContainer.has(carryCloneVisual))
+    const cloneBroken = carryCloneEntity !== null && (carryCloneBob === null || carryCloneVisual === null || !GltfContainer.has(carryCloneVisual))
     if (flag.state === FlagState.Carried && (cloneMissing || cloneBroken) && !needsCloneCreate) {
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
       createCarryClone(flag.carrierPlayerId)
