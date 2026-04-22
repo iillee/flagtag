@@ -106,7 +106,6 @@ function joinCommunity() {
 
 // ── Cinematic fade overlay ──
 let cinematicFadeOpacity = 0 // 0 = transparent, 1 = fully black
-
 export function setCinematicFade(opacity: number) {
   cinematicFadeOpacity = Math.max(0, Math.min(1, opacity))
 }
@@ -339,6 +338,7 @@ function roundEndSplashSystem(dt: number): void {
       trumpetEntity = null
     }
   }
+
 }
 
 engine.addSystem(roundEndSplashSystem)
@@ -1006,6 +1006,8 @@ function DesktopLayout() {
     players.length > 0 && players[0].seconds > 0 ? players[0].userId : null
   const carrierUserId = getCurrentFlagCarrierUserId()
   const countdownSeconds = getCountdownSeconds()
+
+
 
   const winConditionOverlayVisible = getWinConditionOverlayVisible()
   const leaderboardOverlayVisible = getLeaderboardOverlayVisible()

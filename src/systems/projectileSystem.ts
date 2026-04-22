@@ -776,10 +776,12 @@ export function projectileClientSystem(dt: number): void {
         // Visual existed and is now gone — boomerang returned
         localThrowActive = false
         localThrowSawVisual = false
+        lastLocalProjectileFireTime = now // start post-catch cooldown
       } else if (now - lastLocalProjectileFireTime > PROJECTILE_LIFETIME_SEC * 1000) {
         // Safety: message never arrived
         localThrowActive = false
         localThrowSawVisual = false
+        lastLocalProjectileFireTime = now // start post-catch cooldown
       }
     }
   } else {

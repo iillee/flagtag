@@ -14,6 +14,20 @@ All major changes to the Flag Tag project are documented here in reverse chronol
 
 ---
 
+## [2026-04-22] - Boomerang Post-Catch Cooldown (450ms)
+### Added 0.45s cooldown after boomerang catch to prevent close-range spam
+**Justification:** Players could spam boomerang at close range creating an inescapable stun-lock. The cooldown starts on catch (not throw), giving a natural "wind-up" feel.
+**Files Modified:** `src/shared/components.ts`, `src/systems/projectileSystem.ts`, `GAME_DESIGN_DOCUMENT.md`
+**Impact:** Prevents boomerang spam griefing while maintaining responsive combat feel.
+
+## [2026-04-22] - Timer Round-End Display Reverted
+### Reverted timer hide/show logic to original simple behavior
+**Justification:** Attempts to hide timer during round transitions and show 0:00 caused visual bugs (flickering 4:59). Reverted to clean `countdownSeconds > 0` check — timer simply disappears at round end and reappears after cinematic.
+**Files Modified:** `src/ui.tsx`, `src/index.ts`
+**Impact:** Cleaner round-end transition, no timer flickering.
+
+---
+
 ## [2026-03-12 20:25] - Spawn Points Configured: Final Coordinates Set
 ### Set exact flag spawn coordinates provided by user, removed diamond detection system
 **Justification:** User provided exact coordinates for the three flag spawn locations, eliminating need for complex diamond detection/scanning system.

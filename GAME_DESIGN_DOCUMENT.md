@@ -102,7 +102,7 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 - **Hit Detection (Server):** 2m radius hit check against all players except the thrower
 - **On Hit:** Forces flag drop if victim is carrying; victim gets stun VFX + movement freeze
 - **Trap Interaction:** Boomerang destroys bananas on contact, then returns
-- **Cooldown:** 0s (can throw again immediately after return)
+- **Cooldown:** 0.45s after catch (prevents close-range spam while feeling natural)
 - **Max Active:** 1 per player
 - **Customization:** 4 colors (Red, Yellow, Blue, Green) — selected via chest UI, synced to all players, visible on hand model
 - **Visual:** Client-side local entity with spinning animation; remote players see synced position via `Projectile` component data
@@ -379,7 +379,7 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 | Boomerang Speed | 30 m/s | `components.ts` |
 | Boomerang Range | 50m | `components.ts` |
 | Boomerang Hit Radius | 2m | `components.ts` |
-| Boomerang Cooldown | 0s | `components.ts` |
+| Boomerang Cooldown | 0.45s (post-catch) | `components.ts` |
 | Banana Lifetime | 15s | `components.ts` |
 | Banana Cooldown | 5s | `components.ts` |
 | Banana Max Active | 3 | `components.ts` |
