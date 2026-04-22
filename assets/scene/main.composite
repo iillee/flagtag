@@ -2547,6 +2547,48 @@
             "parent": 0
           }
         },
+        "631": {
+          "json": {
+            "position": {
+              "x": 210.75,
+              "y": 12.961334228515625,
+              "z": 305.75
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "632": {
+          "json": {
+            "position": {
+              "x": 225,
+              "y": 1.8311773538589478,
+              "z": 287.75
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        },
         "634": {
           "json": {
             "position": {
@@ -4959,6 +5001,16 @@
             "value": "Classic Bench_35"
           }
         },
+        "631": {
+          "json": {
+            "value": "Ambient Sound - Crickets"
+          }
+        },
+        "632": {
+          "json": {
+            "value": "Ambient Sound - Crickets_2"
+          }
+        },
         "634": {
           "json": {
             "value": "Sit Spot 1_37"
@@ -6343,7 +6395,9 @@
                   656,
                   638,
                   658,
-                  662
+                  662,
+                  631,
+                  632
                 ]
               },
               {
@@ -7068,6 +7122,14 @@
               {
                 "entity": 662,
                 "children": []
+              },
+              {
+                "entity": 631,
+                "children": []
+              },
+              {
+                "entity": 632,
+                "children": []
               }
             ]
           }
@@ -7257,6 +7319,12 @@
           "json": {}
         },
         "630": {
+          "json": {}
+        },
+        "631": {
+          "json": {}
+        },
+        "632": {
           "json": {}
         },
         "636": {
@@ -9532,6 +9600,116 @@
               "text": "A classic bench that players can sit on. Click to sit down at this location."
             },
             "version": 1
+          }
+        },
+        "631": {
+          "json": {
+            "isBasicViewEnabled": true,
+            "componentName": "",
+            "fields": [],
+            "assetId": "4b18276b-554d-4ec0-af44-3044d0e559d3",
+            "label": "Ambient Sound",
+            "sections": [
+              {
+                "id": "sound",
+                "items": [
+                  {
+                    "component": "asset-packs::Actions",
+                    "widget": "FileUploadField",
+                    "label": "Sound Path",
+                    "path": "src",
+                    "basicViewId": "loop-sound"
+                  },
+                  {
+                    "component": "asset-packs::Actions",
+                    "widget": "RangeField",
+                    "label": "Volume",
+                    "path": "volume",
+                    "basicViewId": "loop-sound",
+                    "constraints": {
+                      "max": 1,
+                      "step": 0.009999999776482582,
+                      "default": "1"
+                    },
+                    "transform": {
+                      "in": {
+                        "steps": [
+                          {
+                            "op": "toPercentage"
+                          }
+                        ]
+                      },
+                      "out": {
+                        "steps": [
+                          {
+                            "op": "fromPercentage"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "helpTooltip": {
+              "text": "Play the file in Sound Path in a continuous loop. Swap the file for any other local sound file in the scene."
+            },
+            "version": 2
+          }
+        },
+        "632": {
+          "json": {
+            "isBasicViewEnabled": true,
+            "componentName": "",
+            "fields": [],
+            "assetId": "4b18276b-554d-4ec0-af44-3044d0e559d3",
+            "label": "Ambient Sound",
+            "sections": [
+              {
+                "id": "sound",
+                "items": [
+                  {
+                    "component": "asset-packs::Actions",
+                    "widget": "FileUploadField",
+                    "label": "Sound Path",
+                    "path": "src",
+                    "basicViewId": "loop-sound"
+                  },
+                  {
+                    "component": "asset-packs::Actions",
+                    "widget": "RangeField",
+                    "label": "Volume",
+                    "path": "volume",
+                    "basicViewId": "loop-sound",
+                    "constraints": {
+                      "max": 1,
+                      "step": 0.009999999776482582,
+                      "default": "1"
+                    },
+                    "transform": {
+                      "in": {
+                        "steps": [
+                          {
+                            "op": "toPercentage"
+                          }
+                        ]
+                      },
+                      "out": {
+                        "steps": [
+                          {
+                            "op": "fromPercentage"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "helpTooltip": {
+              "text": "Play the file in Sound Path in a continuous loop. Swap the file for any other local sound file in the scene."
+            },
+            "version": 2
           }
         },
         "634": {
@@ -18130,6 +18308,58 @@
             ]
           }
         },
+        "631": {
+          "json": {
+            "id": 158,
+            "value": [
+              {
+                "name": "Play once",
+                "type": "play_sound",
+                "jsonPayload": "{\"src\":\"assets/asset-packs/ambient_sound_-_crickets/Swamp.mp3\",\"global\":false,\"volume\":1}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Loop",
+                "type": "play_sound",
+                "jsonPayload": "{\"loop\":true,\"src\":\"assets/asset-packs/ambient_sound_-_crickets/Swamp.mp3\",\"global\":false}",
+                "allowedInBasicView": true,
+                "basicViewId": "loop-sound"
+              },
+              {
+                "name": "Stop",
+                "type": "stop_sound",
+                "jsonPayload": "{}",
+                "allowedInBasicView": true
+              }
+            ]
+          }
+        },
+        "632": {
+          "json": {
+            "id": 159,
+            "value": [
+              {
+                "name": "Play once",
+                "type": "play_sound",
+                "jsonPayload": "{\"src\":\"assets/asset-packs/ambient_sound_-_crickets/Swamp.mp3\",\"global\":false,\"volume\":1}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Loop",
+                "type": "play_sound",
+                "jsonPayload": "{\"loop\":true,\"src\":\"assets/asset-packs/ambient_sound_-_crickets/Swamp.mp3\",\"global\":false}",
+                "allowedInBasicView": true,
+                "basicViewId": "loop-sound"
+              },
+              {
+                "name": "Stop",
+                "type": "stop_sound",
+                "jsonPayload": "{}",
+                "allowedInBasicView": true
+              }
+            ]
+          }
+        },
         "634": {
           "json": {
             "id": 149,
@@ -18388,7 +18618,7 @@
         "0": {
           "json": {
             "id": 0,
-            "value": 157
+            "value": 159
           }
         }
       }
@@ -22066,6 +22296,40 @@
             ]
           }
         },
+        "631": {
+          "json": {
+            "value": [
+              {
+                "type": "on_spawn",
+                "conditions": [],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 158,
+                    "name": "Loop"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "632": {
+          "json": {
+            "value": [
+              {
+                "type": "on_spawn",
+                "conditions": [],
+                "operation": "and",
+                "actions": [
+                  {
+                    "id": 159,
+                    "name": "Loop"
+                  }
+                ]
+              }
+            ]
+          }
+        },
         "634": {
           "json": {
             "value": [
@@ -22997,6 +23261,31 @@
               "Taken"
             ],
             "defaultValue": "Free"
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Placeholder",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "src": {
+            "type": "string",
+            "serializationType": "utf8-string"
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "631": {
+          "json": {
+            "src": "assets/asset-packs/ambient_sound_-_crickets/ambient_sound.glb"
+          }
+        },
+        "632": {
+          "json": {
+            "src": "assets/asset-packs/ambient_sound_-_crickets/ambient_sound.glb"
           }
         }
       }
