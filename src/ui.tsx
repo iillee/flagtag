@@ -10,6 +10,7 @@ import {
 import { isTrapOnCooldown, getTrapCooldownRemaining } from './systems/trapSystem'
 import { isProjectileOnCooldown, getProjectileCooldownRemaining } from './systems/projectileSystem'
 import { clearMushroomShield } from './systems/mushroomSystem'
+import { isCinematicActive } from './cinematicState'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries, getAllTimeLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
@@ -123,6 +124,18 @@ export function setCinematicShowing(showing: boolean) {
 
 export function getCinematicShowing(): boolean {
   return cinematicShowing
+}
+
+// ── "Next Round Starting..." overlay (shown on black screen before fade-out) ──
+let nextRoundStartingVisible = false
+let creditsCountdown = 0
+
+export function setNextRoundStartingVisible(visible: boolean) {
+  nextRoundStartingVisible = visible
+}
+
+export function setCreditsCountdown(seconds: number) {
+  creditsCountdown = seconds
 }
 
 export function setupUi() {
@@ -614,15 +627,17 @@ function PlayerListUi() {
           }}
           uiBackground={{ color: Color4.create(0, 0, 0, cinematicFadeOpacity) }}
         >
-          {/* No scorers: show centered text on black screen */}
-          {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
-            <Label value="Round Over" fontSize={S(42)} color={GOLD} font="sans-serif" />
-          )}
-          {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
-            <UiEntity uiTransform={{ height: S(16) }} />
-          )}
-          {splashVisible && cinematicShowing && splashPlayers.length === 0 && (
-            <Label value="Next round starting..." fontSize={S(20)} color={LIGHT_GREY} font="sans-serif" />
+          {/* Next Round / Credits screen (no-scorers OR after cinematic podium) */}
+          {((splashVisible && cinematicShowing && splashPlayers.length === 0) || (nextRoundStartingVisible && !cinematicShowing)) && (
+            <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
+              <Label value={`Next Round Starting... ${creditsCountdown > 0 ? Math.ceil(creditsCountdown) : ''}`} fontSize={S(42)} color={GOLD} font="sans-serif" />
+              <UiEntity uiTransform={{ height: S(24) }} />
+              <Label value="Special Thanks to:" fontSize={S(26)} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ height: S(8) }} />
+              <Label value="Oskar Stålberg and Townscaper for generating the level" fontSize={S(20)} color={LIGHT_GREY} font="sans-serif" />
+              <Label value="Lastraum, Stom, and Baseddev for resources and support" fontSize={S(20)} color={LIGHT_GREY} font="sans-serif" />
+              <Label value="The many many bug hunters who helped playtest" fontSize={S(20)} color={LIGHT_GREY} font="sans-serif" />
+            </UiEntity>
           )}
         </UiEntity>
       )}
@@ -1008,8 +1023,8 @@ function DesktopLayout() {
         positionType: 'relative',
       }}
     >
-      {/* Timer — top center (hidden when any main overlay is open) */}
-      {<UiEntity
+      {/* Timer — top center (hidden during entire cinematic sequence) */}
+      {!isCinematicActive() && !splashVisible && cinematicFadeOpacity === 0 && countdownSeconds > 0 && <UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { top: S(14), left: S(0) },

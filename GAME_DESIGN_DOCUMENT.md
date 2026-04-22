@@ -89,7 +89,8 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
   5. Winner plays "handsair" emote, 2nd/3rd play "clap"
   6. Splash UI shows top 3 with scores + "Next round starting..."
   7. After 10s (or 3s if no scorers), fade to black, release camera, return players to spawn
-- **No Scorers Round:** If nobody scored, short 3s black interstitial instead of full cinematic
+- **Credits Screen:** After the cinematic (or immediately for no-scorer rounds), a black screen shows "Next Round Starting... X" with a countdown and credits (special thanks). Lasts 10 seconds before fading to gameplay.
+- **Timer Hiding:** The round countdown timer hides as soon as the round ends and stays hidden through the entire cinematic/credits sequence.
 
 ### 3.3 Combat: Boomerang (E Key)
 
@@ -211,11 +212,10 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 - Overlays open as centered popups with larger touch targets
 - Score button opens full scoreboard overlay
 
-### 5.3 Round-End Splash
-- Shows top 3 players with name, rank (#1/#2/#3), and score
-- "Next round starting..." message
-- Closeable via × button
-- Appears during cinematic camera sequence
+### 5.3 Round-End Splash & Credits
+- Shows top 3 players with name, rank (#1/#2/#3), and score during cinematic
+- Credits screen follows (or replaces cinematic if no scorers): "Next Round Starting... X" countdown with special thanks to contributors
+- Appears on black overlay during round transition
 
 ### 5.4 UI Scaling
 - `S()` function scales all UI values by viewport width ratio (base 1920px)
@@ -392,7 +392,7 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 | Boundary Radius | 128m | `index.ts` |
 | Flag Gravity | 15 m/s² | `server.ts` |
 | Splash Duration | 3s | `server.ts` |
-| Cinematic Duration | 10s (3s no scorers) | `index.ts` |
+| Cinematic Duration | 10s podium + 10s credits | `index.ts` |
 | Mushroom Count | 1 | `server.ts` |
 | Hold Time Sync | 0.5s | `server.ts` |
 

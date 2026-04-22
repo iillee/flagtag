@@ -2,7 +2,7 @@ import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
-import { setupUi, setCinematicFade, setCinematicShowing, hideMailboxPopup, hideChestPopup } from './ui'
+import { setupUi, setCinematicFade, setCinematicShowing, setNextRoundStartingVisible, setCreditsCountdown, hideMailboxPopup, hideChestPopup } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem, initPools as initCombatPools } from './systems/combatSystem'
 import { trapClientSystem, initTrapPool } from './systems/trapSystem'
@@ -561,7 +561,7 @@ export async function main() {
         }
       } else if (fadePhase === 4) {
         // Showing cinematic — wait for cinematicTimer
-        // (handled below)
+        if (noScorersRound) setCreditsCountdown(Math.max(0, cinematicTimer))
       } else if (fadePhase === 5) {
         // End: fading to black
         const progress = 1 - Math.max(0, fadeTimer / END_FADE_IN_DUR)
@@ -586,12 +586,16 @@ export async function main() {
           }
 
           fadePhase = 6
-          fadeTimer = END_FADE_HOLD_DUR
+          fadeTimer = 10.0 // show "Next Round Starting..." credits for 10 seconds
+          setNextRoundStartingVisible(true)
         }
       } else if (fadePhase === 6) {
-        // End: hold black
+        // End: hold black — show credits countdown
         setCinematicFade(1)
+        setCreditsCountdown(Math.max(0, fadeTimer))
         if (fadeTimer <= 0) {
+          setNextRoundStartingVisible(false)
+          setCreditsCountdown(0)
           fadePhase = 7
           fadeTimer = END_FADE_OUT_DUR
         }
@@ -615,6 +619,7 @@ export async function main() {
       if (noScorersRound) {
         // No scorers: screen is already black — skip end-fade, go straight to fade-out reveal
         setCinematicShowing(false)
+        setCreditsCountdown(0)
         if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
         fadePhase = 7
         fadeTimer = END_FADE_OUT_DUR
@@ -685,7 +690,7 @@ export async function main() {
 
     // No scorers: short 3-second interstitial, no cinematic camera
     // With scorers: full 10-second podium cinematic
-    cinematicTimer = noScorersRound ? 3 : 10
+    cinematicTimer = noScorersRound ? 10 : 10
 
     // Close all open UIs when cinematic begins
     setWinConditionOverlayVisible(false)
