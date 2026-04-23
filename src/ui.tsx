@@ -1739,15 +1739,11 @@ function DesktopLayout() {
               uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, margin: { top: S(-2) } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : `assets/images/boomerang.${getBoomerangColor()}.png` },
-                color: isProjectileOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
+                color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
               }}
             />
-            {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && (
-              <Label value={`${getProjectileCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif"
-                uiTransform={{ positionType: 'absolute' }}
-              />
-            )}
+
           </UiEntity>
 
           {/* Trap (F) */}
@@ -2102,15 +2098,11 @@ function MobileLayout() {
                   uiTransform={{ width: (M_ICON_SIZE - 4) * 1.5, height: (M_ICON_SIZE - 4) * 1.5 }}
                   uiBackground={{
                     textureMode: 'stretch',
-                    texture: { src: isProjectileOnCooldown() ? 'assets/images/boomerang.bw.png' : `assets/images/boomerang.${getBoomerangColor()}.png` },
-                    color: isProjectileOnCooldown() ? Color4.create(1, 1, 1, 0.3) : Color4.White()
+                    texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
+                    color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
                   }}
                 />
-                {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && (
-                  <Label value={`${getProjectileCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
-                    uiTransform={{ positionType: 'absolute' }}
-                  />
-                )}
+
               </UiEntity>
 
             </UiEntity>
