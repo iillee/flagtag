@@ -9,6 +9,7 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 
 // Forcefield visual config
@@ -16,7 +17,7 @@ const SHIELD_COLOR = Color4.create(1.0, 0.82, 0.2, 0.12)
 const SHIELD_EMISSIVE = Color4.create(1.0, 0.75, 0.1, 1.0)
 const SHIELD_EMISSIVE_INTENSITY = 4.0
 const SHIELD_RADIUS = 0.64475
-const SHIELD_Y_OFFSET = 1.45
+function getShieldYOffset(): number { return isMobile() ? 0.4 : 1.45 }
 const PLANE_WIDTH = 0.53
 const PLANE_HEIGHT = 1.1
 const NUM_PLANES = 8
@@ -65,7 +66,7 @@ export function showShieldForPlayer(playerId: string): void {
     const plane = engine.addEntity()
     Transform.create(plane, {
       parent: anchor,
-      position: Vector3.create(x, SHIELD_Y_OFFSET, z),
+      position: Vector3.create(x, getShieldYOffset(), z),
       rotation: Quaternion.fromEulerDegrees(0, angleDeg, 0),
       scale: Vector3.create(PLANE_WIDTH, PLANE_HEIGHT, 1)
     })
@@ -151,7 +152,7 @@ export function shieldSystem(dt: number): void {
       const z = Math.cos(baseRad) * r
 
       const transform = Transform.getMutable(plane)
-      transform.position = Vector3.create(x, SHIELD_Y_OFFSET, z)
+      transform.position = Vector3.create(x, getShieldYOffset(), z)
       transform.rotation = Quaternion.fromEulerDegrees(0, baseDeg, 0)
       transform.scale = Vector3.create(PLANE_WIDTH * scaleMul, PLANE_HEIGHT * scaleMul, 1)
     }

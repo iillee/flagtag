@@ -1,6 +1,7 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
+import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
 import { setupUi, setCinematicFade, setCinematicShowing, setNextRoundStartingVisible, setCreditsCountdown, hideMailboxPopup, hideChestPopup } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
@@ -78,9 +79,9 @@ export async function main() {
   const boomerangModel = engine.addEntity()
   Transform.create(boomerangModel, {
     parent: boomerangHand,
-    position: Vector3.create(0.04, 0.15, 0.1),
+    position: isMobile() ? Vector3.create(0.02, 0.08, 0.05) : Vector3.create(0.04, 0.15, 0.1),
     scale: Vector3.create(1, 1.5, 1),
-    rotation: Quaternion.fromEulerDegrees(0, 0, 90)
+    rotation: Quaternion.fromEulerDegrees(isMobile() ? -135 : 0, 0, 90)
   })
   GltfContainer.create(boomerangModel, {
     src: 'assets/models/boomerang.r.glb',
@@ -318,7 +319,7 @@ export async function main() {
       Color4.create(1.0, 0.4, 0.0, 0.85)
     ),
     createOrbPair(
-      [{ x: 224, y: 2.3, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
+      [{ x: 224, y: 1.3, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
       Color3.create(0.05, 0.3, 1.0),    // Blue
       Color4.create(0.0, 0.2, 1.0, 0.85)
     ),

@@ -13,6 +13,7 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { room } from '../shared/messages'
 import { BoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
@@ -51,9 +52,9 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
   const model = engine.addEntity()
   Transform.create(model, {
     parent: anchor,
-    position: Vector3.create(0.04, 0.15, 0.1),
+    position: isMobile() ? Vector3.create(0.02, 0.08, 0.05) : Vector3.create(0.04, 0.15, 0.1),
     scale: Vector3.create(1, 1.5, 1),
-    rotation: Quaternion.fromEulerDegrees(0, 0, 90)
+    rotation: Quaternion.fromEulerDegrees(isMobile() ? -135 : 0, 0, 90)
   })
   GltfContainer.create(model, {
     src: `assets/models/boomerang.${color}.glb`,

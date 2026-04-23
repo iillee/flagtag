@@ -26,6 +26,10 @@ let wasInWater = false
 let waterSoundEntity: ReturnType<typeof engine.addEntity> | null = null
 let lastPlayerPos = Vector3.Zero()
 
+// Grace period — ignore drowning for the first few seconds after scene load
+// to prevent the bar from showing due to the player entity spawning at y=0 briefly
+let loadGraceTimer = 3.0
+
 // Drowning state (exported for UI)
 let airRemaining = DROWN_TIME
 let drownBarVisible = false
@@ -106,6 +110,14 @@ function setBarVisible(show: boolean) {
 export function waterSystem(dt: number) {
   if (!Transform.has(engine.PlayerEntity)) return
   if (isSpectatorMode()) return
+
+  // Grace period at scene load — player entity may briefly report y=0
+  if (loadGraceTimer > 0) {
+    loadGraceTimer -= dt
+    airRemaining = DROWN_TIME
+    drownBarVisible = false
+    return
+  }
 
   // During cinematic, pause all drowning logic and hide the bar
   if (isCinematicActive()) {
