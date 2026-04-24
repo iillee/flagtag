@@ -128,6 +128,27 @@ export function getCinematicShowing(): boolean {
 // ── "Next Round Starting..." overlay (shown on black screen before fade-out) ──
 let nextRoundStartingVisible = false
 let creditsCountdown = 0
+const creditLines = [
+  'Oskar Stålberg and Townscaper for generating the level',
+  'Lastraum, Stom, and Baseddev for resources and support',
+  'The many many bug hunters who helped playtest',
+]
+let creditLineIndex = 0
+let creditLineTimer = 0
+const CREDIT_LINE_DURATION = 3 // seconds per line
+
+engine.addSystem((dt: number) => {
+  if (!nextRoundStartingVisible && !(splashVisible && cinematicShowing && splashPlayers.length === 0)) {
+    creditLineTimer = 0
+    creditLineIndex = 0
+    return
+  }
+  creditLineTimer += dt
+  if (creditLineTimer >= CREDIT_LINE_DURATION) {
+    creditLineTimer = 0
+    creditLineIndex = (creditLineIndex + 1) % creditLines.length
+  }
+})
 
 export function setNextRoundStartingVisible(visible: boolean) {
   nextRoundStartingVisible = visible
@@ -631,13 +652,14 @@ function PlayerListUi() {
           {/* Next Round / Credits screen (no-scorers OR after cinematic podium) */}
           {((splashVisible && cinematicShowing && splashPlayers.length === 0) || (nextRoundStartingVisible && !cinematicShowing)) && (
             <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
-              <Label value={`Next Round Starting... ${creditsCountdown > 0 ? Math.ceil(creditsCountdown) : ''}`} fontSize={mobile ? 72 : S(42)} color={GOLD} font="sans-serif" />
+              <Label value="Next Round Starting..." fontSize={mobile ? 72 : S(42)} color={GOLD} font="sans-serif" />
+              {creditsCountdown > 0 && (
+                <Label value={`${Math.ceil(creditsCountdown)}`} fontSize={mobile ? 60 : S(36)} color={GOLD} font="sans-serif" />
+              )}
               <UiEntity uiTransform={{ height: S(24) }} />
               <Label value="Special Thanks to:" fontSize={mobile ? 42 : S(26)} color={LIGHT_GREY} font="sans-serif" />
               <UiEntity uiTransform={{ height: S(8) }} />
-              <Label value="Oskar Stålberg and Townscaper for generating the level" fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" />
-              <Label value="Lastraum, Stom, and Baseddev for resources and support" fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" />
-              <Label value="The many many bug hunters who helped playtest" fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" />
+              <Label value={creditLines[creditLineIndex]} fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" />
             </UiEntity>
           )}
         </UiEntity>

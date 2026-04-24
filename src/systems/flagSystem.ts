@@ -32,17 +32,25 @@ import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShield
 import { isLightningRespawning } from '../gameState/lightningState'
 
 // Visual clone system for smooth flag carrying
-let carryCloneEntity: Entity | null = null
-
-/**
- * Create the visual clone that follows the flag carrier.
- * Desktop: AvatarAttach + Tween bob/spin (no per-frame Transform writes)
- * Mobile: standalone entity, positioned per-frame via PlayerIdentityData lookup
- */
-let carryCloneBob: Entity | null = null      // Intermediate entity for bob tween (desktop only)
-let carryCloneVisual: Entity | null = null    // Child entity with model + spin tween
+// Architecture: AvatarAttach anchor with a single child entity for the visual.
+// NO Tweens on AvatarAttach children — Tweens internally mutate Transform which causes
+// the flag to vanish on some clients. Instead, bob/spin are done via per-frame Transform
+// writes on the visual child (which is safe — the engine bug only affects Tween-driven writes).
+let carryCloneAnchor: Entity | null = null    // AvatarAttach entity
+let carryCloneVisual: Entity | null = null     // Child entity with GltfContainer
+let carryCloneCarrierId: string | null = null  // Current carrier ID for safety net recreation
+let cloneBobPhase = 0                          // Bob animation phase (radians)
+let cloneSpinAngle = 0                         // Spin animation angle (degrees)
+let cloneCreateTime = 0                        // Timestamp when clone was created
+let cloneVerifiedVisible = false               // Whether we've confirmed the clone is rendering
 
 const BANNER_SRC = 'assets/models/Banner_Red_02/Banner_Red_02.glb'
+const BOB_BASE_Y_NAMETAG = 0.85   // Y offset above name tag anchor
+const BOB_BASE_Y_POSITION = 2.2   // Y offset above position anchor (mobile)
+const BOB_AMP = 0.15
+const BOB_SPEED = 2.1             // radians/sec (~3s cycle)
+const SPIN_SPEED = 50             // degrees/sec (~7.2s full rotation)
+const CLONE_VERIFY_DELAY_MS = 2000 // If clone hasn't verified after this, recreate
 
 // Pre-warm the flag model so the first clone appears instantly
 let preWarmEntity: Entity | null = null
@@ -58,97 +66,55 @@ function createCarryClone(carrierId: string): void {
 
   const mobile = isMobile()
   console.log(`[Flag] createCarryClone — isMobile=${mobile}, carrierId=${carrierId}`)
+  carryCloneCarrierId = carrierId
+  cloneBobPhase = 0
+  cloneSpinAngle = 0
+  cloneCreateTime = Date.now()
+  cloneVerifiedVisible = false
 
-  // Anchor entity attached to player's name tag
-  carryCloneEntity = engine.addEntity()
-  AvatarAttach.create(carryCloneEntity, {
+  // Anchor entity with AvatarAttach
+  const anchorPoint = mobile ? AvatarAnchorPointType.AAPT_POSITION : AvatarAnchorPointType.AAPT_NAME_TAG
+  carryCloneAnchor = engine.addEntity()
+  AvatarAttach.create(carryCloneAnchor, {
     avatarId: carrierId,
-    anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
-  })
-  Transform.create(carryCloneEntity, {
-    position: Vector3.Zero(),
-    scale: Vector3.One()
+    anchorPointId: anchorPoint
   })
 
-  if (mobile) {
-    // ── Mobile path: AAPT_POSITION (only RIGHT_FOREARM, LEFT_FOREARM, POSITION work on mobile) ──
-    // Use POSITION anchor + child entity with Y offset to place flag above head
-    engine.removeEntity(carryCloneEntity)
-    carryCloneEntity = engine.addEntity()
-    AvatarAttach.create(carryCloneEntity, {
-      avatarId: carrierId,
-      anchorPointId: AvatarAnchorPointType.AAPT_POSITION
-    })
-    Transform.create(carryCloneEntity, {
-      position: Vector3.Zero(),
-      scale: Vector3.One()
-    })
-    carryCloneVisual = engine.addEntity()
-    Transform.create(carryCloneVisual, {
-      parent: carryCloneEntity,
-      position: Vector3.create(0, 2.2, 0)
-    })
-    GltfContainer.create(carryCloneVisual, {
-      src: BANNER_SRC,
-      visibleMeshesCollisionMask: 0,
-      invisibleMeshesCollisionMask: 0
-    })
-    console.log('[Flag] Clone created (MOBILE — AAPT_POSITION + child offset)')
-  } else {
-    // ── Desktop path: AvatarAttach + Tween bob/spin ──
-    const BOB_BASE = 0.85
-    const BOB_AMP = 0.15
-    carryCloneBob = engine.addEntity()
-    Transform.create(carryCloneBob, {
-      parent: carryCloneEntity,
-      position: Vector3.create(0, BOB_BASE, 0)
-    })
-    Tween.create(carryCloneBob, {
-      mode: Tween.Mode.Move({
-        start: Vector3.create(0, BOB_BASE - BOB_AMP, 0),
-        end: Vector3.create(0, BOB_BASE + BOB_AMP, 0)
-      }),
-      duration: 3000,
-      easingFunction: EasingFunction.EF_EASESINE
-    })
-    TweenSequence.create(carryCloneBob, {
-      sequence: [],
-      loop: TweenLoop.TL_YOYO
-    })
+  // Visual child — parented to the anchor, NO Tweens
+  const baseY = mobile ? BOB_BASE_Y_POSITION : BOB_BASE_Y_NAMETAG
+  carryCloneVisual = engine.addEntity()
+  Transform.create(carryCloneVisual, {
+    parent: carryCloneAnchor,
+    position: Vector3.create(0, baseY, 0)
+  })
+  GltfContainer.create(carryCloneVisual, {
+    src: BANNER_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
 
-    carryCloneVisual = engine.addEntity()
-    Transform.create(carryCloneVisual, {
-      parent: carryCloneBob,
-      position: Vector3.Zero()
-    })
-    GltfContainer.create(carryCloneVisual, {
-      src: BANNER_SRC,
-      visibleMeshesCollisionMask: 0,
-      invisibleMeshesCollisionMask: 0
-    })
-    Tween.create(carryCloneVisual, {
-      mode: Tween.Mode.Rotate({
-        start: Quaternion.fromEulerDegrees(0, 0, 0),
-        end: Quaternion.fromEulerDegrees(0, 180, 0)
-      }),
-      duration: 7200,
-      easingFunction: EasingFunction.EF_LINEAR
-    })
-    TweenSequence.create(carryCloneVisual, {
-      sequence: [
-        {
-          mode: Tween.Mode.Rotate({
-            start: Quaternion.fromEulerDegrees(0, 180, 0),
-            end: Quaternion.fromEulerDegrees(0, 360, 0)
-          }),
-          duration: 7200,
-          easingFunction: EasingFunction.EF_LINEAR
-        }
-      ],
-      loop: TweenLoop.TL_RESTART
-    })
-    console.log('[Flag] Clone created (AAPT_NAME_TAG) with tween bob/spin')
-  }
+  console.log(`[Flag] Clone created (${mobile ? 'AAPT_POSITION' : 'AAPT_NAME_TAG'} anchor, per-frame bob/spin, NO tweens)`)
+}
+
+/** Per-frame update: animate bob/spin on the visual child via Transform writes */
+function updateCarryClonePosition(dt: number): void {
+  if (carryCloneAnchor === null || carryCloneVisual === null) return
+  if (!Transform.has(carryCloneVisual)) return
+
+  const mobile = isMobile()
+  const baseY = mobile ? BOB_BASE_Y_POSITION : BOB_BASE_Y_NAMETAG
+
+  // Animate bob and spin
+  cloneBobPhase += BOB_SPEED * dt
+  cloneSpinAngle = (cloneSpinAngle + SPIN_SPEED * dt) % 360
+  const bobOffset = Math.sin(cloneBobPhase) * BOB_AMP
+
+  const t = Transform.getMutable(carryCloneVisual)
+  t.position = Vector3.create(0, baseY + bobOffset, 0)
+  t.rotation = Quaternion.fromEulerDegrees(0, cloneSpinAngle, 0)
+
+  // Mark as verified once we've successfully written at least one frame
+  if (!cloneVerifiedVisible) cloneVerifiedVisible = true
 }
 
 const HIDDEN_POS = Vector3.create(0, -100, 0)
@@ -251,14 +217,12 @@ function cleanupClone(): void {
     engine.removeEntity(carryCloneVisual)
     carryCloneVisual = null
   }
-  if (carryCloneBob !== null) {
-    engine.removeEntity(carryCloneBob)
-    carryCloneBob = null
+  if (carryCloneAnchor !== null) { 
+    engine.removeEntity(carryCloneAnchor)
+    carryCloneAnchor = null 
   }
-  if (carryCloneEntity !== null) { 
-    engine.removeEntity(carryCloneEntity)
-    carryCloneEntity = null 
-  }
+  carryCloneCarrierId = null
+  cloneVerifiedVisible = false
 }
 
 function playPickupSound(): void {
@@ -352,9 +316,8 @@ function updateFlagBob(dt: number): void {
     }
   }
 
-  // Carried flag bob/spin is handled by Tweens (renderer-side), not per-frame
-  // Transform writes — mutating Transform on AvatarAttach children causes
-  // the flag to disappear on the desktop client.
+  // Carried flag bob/spin is handled per-frame on a standalone visual entity
+  // (decoupled from AvatarAttach to avoid the disappearing flag engine bug).
 }
 
 export function flagClientSystem(dt: number): void {
@@ -444,7 +407,7 @@ export function flagClientSystem(dt: number): void {
       isFirstFrame ||                          // Just loaded the scene
       stateChanged ||                          // State changed to Carried
       carrierChanged ||                        // Carrier swapped (steal)
-      (carryCloneEntity === null && !stateChanged)  // Clone missing (safety net)
+      (carryCloneAnchor === null && !stateChanged)  // Clone missing (safety net)
     )
     const needsCloneRemove = flag.state !== FlagState.Carried && (
       isFirstFrame ||
@@ -462,7 +425,7 @@ export function flagClientSystem(dt: number): void {
       }
       
       // If optimistic prediction already created the clone for the correct carrier, just confirm it
-      if (optimisticCarrierId && optimisticCarrierId === flag.carrierPlayerId && carryCloneEntity !== null) {
+      if (optimisticCarrierId && optimisticCarrierId === flag.carrierPlayerId && carryCloneAnchor !== null) {
         // Prediction was correct — just clear the optimistic state
         optimisticCarrierId = null
         optimisticTimestamp = 0
@@ -535,10 +498,12 @@ export function flagClientSystem(dt: number): void {
 
     // Safety nets
     // 1. Flag is carried but clone is missing or broken — recreate it
-    // Only check GltfContainer — desktop clone has no Transform (AvatarAttach controls position)
-    const cloneMissing = carryCloneEntity === null
-    const cloneBroken = carryCloneEntity !== null && (carryCloneVisual === null || !GltfContainer.has(carryCloneVisual))
-    if (flag.state === FlagState.Carried && (cloneMissing || cloneBroken) && !needsCloneCreate) {
+    const cloneMissing = carryCloneAnchor === null
+    const cloneBroken = carryCloneAnchor !== null && (carryCloneVisual === null || !GltfContainer.has(carryCloneVisual))
+    // 1b. Clone exists but AvatarAttach may have silently failed — recreate after timeout
+    const cloneTimedOut = carryCloneAnchor !== null && !cloneBroken && !cloneVerifiedVisible && (Date.now() - cloneCreateTime > CLONE_VERIFY_DELAY_MS)
+    if (flag.state === FlagState.Carried && (cloneMissing || cloneBroken || cloneTimedOut) && !needsCloneCreate) {
+      console.log(`[Flag] ⚠️ Safety net: recreating clone (missing=${cloneMissing}, broken=${cloneBroken}, timedOut=${cloneTimedOut})`)
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
       createCarryClone(flag.carrierPlayerId)
     }
@@ -559,9 +524,8 @@ export function flagClientSystem(dt: number): void {
 
   const clampedDt = Math.min(dt, 0.1)
 
-  // No per-frame animation on the carried clone — mutating Transform on AvatarAttach children
-  // causes the flag to disappear on the desktop client.
-
+  // Update carried flag bob/spin (per-frame Transform writes on AvatarAttach child — no Tweens)
+  updateCarryClonePosition(clampedDt)
 
 
   // Handle ground raycast response
