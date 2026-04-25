@@ -89,7 +89,7 @@ const GROUND_RAY_INTERVAL = 0.05 // seconds between ground raycasts for moving p
 let projectileStaggerUntil = 0
 
 // ── Sound ──
-const PROJECTILE_SOUND_SRC = 'assets/sounds/mk_shell_short.mp3'
+const PROJECTILE_SOUND_SRC = 'assets/sounds/boomerang2.mp3'
 
 /** Attach a looping spatial projectile sound directly to a projectile entity. */
 function attachProjectileSound(entity: Entity): void {

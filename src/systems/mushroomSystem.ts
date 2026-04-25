@@ -50,7 +50,7 @@ function playBoostSound(): void {
     boostSoundEntity = engine.addEntity()
     Transform.create(boostSoundEntity, { position: Vector3.create(0, 0, 0) })
     AudioSource.create(boostSoundEntity, {
-      audioClipUrl: 'assets/sounds/boost.mp3',
+      audioClipUrl: 'assets/sounds/powerup.mp3',
       playing: false,
       loop: false,
       volume: 0.25,

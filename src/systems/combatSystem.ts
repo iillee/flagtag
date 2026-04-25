@@ -177,8 +177,8 @@ export function showMissEffect(targetPos: Vector3): void {
 }
 
 // ── Sound pools ──
-const HIT_SOUND_PATH = 'assets/sounds/rs-hit.mp3'
-const MISS_SOUND_PATH = 'assets/sounds/rs-miss.mp3'
+const HIT_SOUND_PATH = 'assets/sounds/hit.mp3'
+const MISS_SOUND_PATH = 'assets/sounds/miss2.mp3'
 const HIT_SOUND_POOL_SIZE = 5
 const hitSoundPool: Entity[] = []
 let hitSoundPoolIndex = 0
@@ -205,7 +205,7 @@ export function playMissSound(position: Vector3): void {
   if (!missSoundEntity) {
     missSoundEntity = engine.addEntity()
     Transform.create(missSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: false, loop: false, volume: 1, global: false })
+    AudioSource.create(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: false, loop: false, volume: 2, global: false })
   }
   // Position the sound at the miss location
   const t = Transform.getMutable(missSoundEntity)

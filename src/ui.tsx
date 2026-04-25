@@ -144,9 +144,9 @@ engine.addSystem((dt: number) => {
     return
   }
   creditLineTimer += dt
-  if (creditLineTimer >= CREDIT_LINE_DURATION) {
+  if (creditLineTimer >= CREDIT_LINE_DURATION && creditLineIndex < creditLines.length - 1) {
     creditLineTimer = 0
-    creditLineIndex = (creditLineIndex + 1) % creditLines.length
+    creditLineIndex = creditLineIndex + 1
   }
 })
 
@@ -651,15 +651,17 @@ function PlayerListUi() {
         >
           {/* Next Round / Credits screen (no-scorers OR after cinematic podium) */}
           {((splashVisible && cinematicShowing && splashPlayers.length === 0) || (nextRoundStartingVisible && !cinematicShowing)) && (
-            <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
-              <Label value="Next Round Starting..." fontSize={mobile ? 72 : S(42)} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%' }}>
+              <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '35%' }, flexDirection: 'column', alignItems: 'center' }}>
+                <Label value="Special Thanks to:" fontSize={mobile ? 72 : S(42)} color={GOLD} font="sans-serif" />
+                <UiEntity uiTransform={{ height: S(16) }} />
+                {creditLines.slice(0, creditLineIndex + 1).map((line, i) => (
+                  <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" />
+                ))}
+              </UiEntity>
               {creditsCountdown > 0 && (
-                <Label value={`${Math.ceil(creditsCountdown)}`} fontSize={mobile ? 60 : S(36)} color={GOLD} font="sans-serif" />
+                <Label value={`Next round in ${Math.ceil(creditsCountdown)}...`} fontSize={mobile ? 42 : S(26)} color={GOLD} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { bottom: '5%' }, width: '100%', justifyContent: 'center' }} />
               )}
-              <UiEntity uiTransform={{ height: S(24) }} />
-              <Label value="Special Thanks to:" fontSize={mobile ? 42 : S(26)} color={LIGHT_GREY} font="sans-serif" />
-              <UiEntity uiTransform={{ height: S(8) }} />
-              <Label value={creditLines[creditLineIndex]} fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" />
             </UiEntity>
           )}
         </UiEntity>
@@ -1162,6 +1164,7 @@ function DesktopLayout() {
             justifyContent: 'center',
             alignItems: 'center',
           }}
+          onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false; notifyOverlayClosed() }}
         >
           {/* 3-column cards row */}
           <UiEntity
@@ -1223,7 +1226,7 @@ function DesktopLayout() {
                 uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
               />
               <Label value={"Drop bananas (F) to block\nboomerangs and stun pursuers"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: S(10) } }} />
-              {/* Banana image */}
+              {/* Trap image */}
               <UiEntity
                 uiTransform={{ width: S(120), height: S(120) }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
@@ -1280,7 +1283,7 @@ function DesktopLayout() {
                 <UiEntity uiTransform={{ width: S(34), height: S(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(5), margin: { right: S(8) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}>
                   <Label value="F" fontSize={S(16)} color={WHITE} font="sans-serif" />
                 </UiEntity>
-                <Label value="Drop Banana" fontSize={S(13)} color={MUTED} font="sans-serif" />
+                <Label value="Drop Trap" fontSize={S(13)} color={MUTED} font="sans-serif" />
               </UiEntity>
               {/* 3 */}
               <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(10) } }}>
@@ -2367,7 +2370,7 @@ function MobileLayout() {
                 uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
               />
               <Label value={"Drop bananas (F) to block\nboomerangs and stun pursuers"} fontSize={13} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 10 } }} />
-              {/* Banana image */}
+              {/* Trap image */}
               <UiEntity
                 uiTransform={{ width: 120, height: 120 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
@@ -2422,7 +2425,7 @@ function MobileLayout() {
                 <UiEntity uiTransform={{ width: 34, height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 5, margin: { right: 8 } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}>
                   <Label value="F" fontSize={16} color={WHITE} font="sans-serif" />
                 </UiEntity>
-                <Label value="Drop Banana" fontSize={13} color={MUTED} font="sans-serif" />
+                <Label value="Drop Trap" fontSize={13} color={MUTED} font="sans-serif" />
               </UiEntity>
               {/* 3 */}
               <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: 10 } }}>

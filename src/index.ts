@@ -305,7 +305,7 @@ export async function main() {
 
       const snd = engine.addEntity()
       Transform.create(snd, { position: Vector3.create(pos.x, baseY, pos.z) })
-      AudioSource.create(snd, { audioClipUrl: 'assets/sounds/rs-teleport.mp3', playing: false, loop: false, volume: 1, global: false })
+      AudioSource.create(snd, { audioClipUrl: 'assets/sounds/teleport.mp3', playing: false, loop: false, volume: 1, global: false })
       soundEntities.push(snd)
     }
 
@@ -319,7 +319,7 @@ export async function main() {
       Color4.create(1.0, 0.4, 0.0, 0.85)
     ),
     createOrbPair(
-      [{ x: 224, y: 1.3, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
+      [{ x: 224, y: 2.0, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
       Color3.create(0.05, 0.3, 1.0),    // Blue
       Color4.create(0.0, 0.2, 1.0, 0.85)
     ),

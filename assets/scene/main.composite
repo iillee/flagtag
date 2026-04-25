@@ -6255,7 +6255,7 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "631": {
           "json": {
             "gizmo": 0
           }
@@ -18321,7 +18321,7 @@
               {
                 "name": "Loop",
                 "type": "play_sound",
-                "jsonPayload": "{\"loop\":true,\"src\":\"assets/asset-packs/ambient_sound_-_crickets/Swamp.mp3\",\"global\":false}",
+                "jsonPayload": "{\"loop\":true,\"src\":\"assets/asset-packs/ambient_sound_-_crickets/Swamp.mp3\",\"global\":false,\"volume\":0.5}",
                 "allowedInBasicView": true,
                 "basicViewId": "loop-sound"
               },
@@ -18347,7 +18347,7 @@
               {
                 "name": "Loop",
                 "type": "play_sound",
-                "jsonPayload": "{\"loop\":true,\"src\":\"assets/asset-packs/ambient_sound_-_crickets/Swamp.mp3\",\"global\":false}",
+                "jsonPayload": "{\"loop\":true,\"src\":\"assets/asset-packs/ambient_sound_-_crickets/Swamp.mp3\",\"global\":false,\"volume\":0.5}",
                 "allowedInBasicView": true,
                 "basicViewId": "loop-sound"
               },

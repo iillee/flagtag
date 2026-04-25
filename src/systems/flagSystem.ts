@@ -229,7 +229,7 @@ function playPickupSound(): void {
   if (!pickupSoundEntity) {
     pickupSoundEntity = engine.addEntity()
     Transform.create(pickupSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(pickupSoundEntity, { audioClipUrl: 'assets/sounds/rs-pickup.ogg', playing: false, loop: false, volume: 1, global: true })
+    AudioSource.create(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup.mp3', playing: false, loop: false, volume: 1, global: true })
   }
   const a = AudioSource.getMutable(pickupSoundEntity)
   a.currentTime = 0
@@ -240,7 +240,7 @@ function playDropSound(): void {
   if (!dropSoundEntity) {
     dropSoundEntity = engine.addEntity()
     Transform.create(dropSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(dropSoundEntity, { audioClipUrl: 'assets/sounds/rs-drop.mp3', playing: false, loop: false, volume: 1, global: true })
+    AudioSource.create(dropSoundEntity, { audioClipUrl: 'assets/sounds/drop.mp3', playing: false, loop: false, volume: 1, global: true })
   }
   const a = AudioSource.getMutable(dropSoundEntity)
   a.currentTime = 0

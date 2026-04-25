@@ -274,7 +274,7 @@ export function setupLightning() {
   deathSoundEntity = engine.addEntity()
   Transform.create(deathSoundEntity, { position: Vector3.Zero() })
   AudioSource.create(deathSoundEntity, {
-    audioClipUrl: 'assets/sounds/gameover.wav',
+    audioClipUrl: 'assets/sounds/death.mp3',
     playing: false,
     loop: false,
     volume: 1.0,

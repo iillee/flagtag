@@ -95,7 +95,7 @@ function ensureDrownBar() {
   drownSoundEntity = engine.addEntity()
   Transform.create(drownSoundEntity, { position: Vector3.create(0, 0, 0) })
   AudioSource.create(drownSoundEntity, {
-    audioClipUrl: 'assets/sounds/gameover.wav',
+    audioClipUrl: 'assets/sounds/death.mp3',
     playing: false,
     loop: false,
     volume: 1.0,
