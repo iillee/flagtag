@@ -53,7 +53,7 @@ function playBoostSound(): void {
       audioClipUrl: 'assets/sounds/powerup.mp3',
       playing: false,
       loop: false,
-      volume: 0.25,
+      volume: 0.0625,
       global: true
     })
   }

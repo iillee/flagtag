@@ -130,8 +130,9 @@ let nextRoundStartingVisible = false
 let creditsCountdown = 0
 const creditLines = [
   'Oskar Stålberg and Townscaper for generating the level',
+  'Dylann Taylor for the track SpriteSprint',
   'Lastraum, Stom, and Baseddev for resources and support',
-  'The many many bug hunters who helped playtest',
+  'the many unnammed playtesters and bughunters, you know who you are',
 ]
 let creditLineIndex = 0
 let creditLineTimer = 0
@@ -1146,7 +1147,7 @@ function DesktopLayout() {
                 )
               })}
               <UiEntity uiTransform={{ height: S(24) }} />
-              <Label value="Next round starting..." fontSize={S(15)} color={LIGHT_GREY} font="sans-serif" />
+              <Label value="Next round starting..." fontSize={S(15)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: S(440), flexShrink: 0 }} textAlign="middle-center" />
             </UiEntity>
           </UiEntity>
         </UiEntity>
@@ -2292,7 +2293,7 @@ function MobileLayout() {
                 )
               })}
               <UiEntity uiTransform={{ height: 20 }} />
-              <Label value="Next round starting..." fontSize={22} color={LIGHT_GREY} font="sans-serif" />
+              <Label value="Next round starting..." fontSize={22} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: 500, flexShrink: 0 }} textAlign="middle-center" />
             </UiEntity>
           </UiEntity>
         </UiEntity>

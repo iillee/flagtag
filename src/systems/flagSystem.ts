@@ -45,7 +45,7 @@ let cloneCreateTime = 0                        // Timestamp when clone was creat
 let cloneVerifiedVisible = false               // Whether we've confirmed the clone is rendering
 
 const BANNER_SRC = 'assets/models/Banner_Red_02/Banner_Red_02.glb'
-const BOB_BASE_Y_NAMETAG = 0.85   // Y offset above name tag anchor
+const BOB_BASE_Y_NAMETAG = 0.55   // Y offset above name tag anchor
 const BOB_BASE_Y_POSITION = 2.2   // Y offset above position anchor (mobile)
 const BOB_AMP = 0.15
 const BOB_SPEED = 2.1             // radians/sec (~3s cycle)
@@ -229,7 +229,7 @@ function playPickupSound(): void {
   if (!pickupSoundEntity) {
     pickupSoundEntity = engine.addEntity()
     Transform.create(pickupSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: false, loop: false, volume: 1, global: true })
+    AudioSource.create(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: false, loop: false, volume: 2, global: true })
   }
   const a = AudioSource.getMutable(pickupSoundEntity)
   a.currentTime = 0

@@ -148,7 +148,7 @@ export async function main() {
   musicEntity = engine.addEntity()
   Transform.create(musicEntity, { position: Vector3.create(0, 0, 0) })
   AudioSource.create(musicEntity, {
-    audioClipUrl: 'assets/sounds/Medieval.mp3',
+    audioClipUrl: 'assets/sounds/SpriteSprint_Loop.wav',
     playing: true,
     loop: true,
     volume: 0.0984375,
@@ -587,7 +587,7 @@ export async function main() {
           }
 
           fadePhase = 6
-          fadeTimer = 10.0 // show "Next Round Starting..." credits for 10 seconds
+          fadeTimer = 15.0 // show "Next Round Starting..." credits for 15 seconds
           setNextRoundStartingVisible(true)
         }
       } else if (fadePhase === 6) {
@@ -691,7 +691,7 @@ export async function main() {
 
     // No scorers: short 3-second interstitial, no cinematic camera
     // With scorers: full 10-second podium cinematic
-    cinematicTimer = noScorersRound ? 10 : 10
+    cinematicTimer = noScorersRound ? 15 : 15
 
     // Close all open UIs when cinematic begins
     setWinConditionOverlayVisible(false)
