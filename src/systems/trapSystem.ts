@@ -48,7 +48,7 @@ function playTrapDropSound(position: Vector3): void {
     trapDropSoundEntity = engine.addEntity()
     Transform.create(trapDropSoundEntity, { position: Vector3.Zero() })
     AudioSource.create(trapDropSoundEntity, {
-      audioClipUrl: 'assets/sounds/trap.mp3',
+      audioClipUrl: 'assets/sounds/trap2.mp3',
       playing: false,
       loop: false,
       volume: 0.8,

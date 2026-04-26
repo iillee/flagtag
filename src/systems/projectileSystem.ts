@@ -98,7 +98,8 @@ function attachProjectileSound(entity: Entity): void {
     playing: true,
     loop: true,
     volume: 1.0,
-    global: false
+    global: false,
+    pitch: 1.3
   })
 }
 

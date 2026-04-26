@@ -205,7 +205,7 @@ export function playMissSound(position: Vector3): void {
   if (!missSoundEntity) {
     missSoundEntity = engine.addEntity()
     Transform.create(missSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: false, loop: false, volume: 2, global: false })
+    AudioSource.create(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: false, loop: false, volume: 2.5, global: false })
   }
   // Position the sound at the miss location
   const t = Transform.getMutable(missSoundEntity)
