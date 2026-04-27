@@ -399,11 +399,13 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
     }).sort((a, b) => b.time_seconds - a.time_seconds)
 
     // Build structured JSON report for AI agent consumption
+    const totalSeconds = users.reduce((sum, u) => sum + u.time_seconds, 0)
     const report = {
       scene: 'flagtag.dcl.eth',
       date: lastVisitorResetDay,
       unique_users: users.length,
-      total_time_seconds: users.reduce((sum, u) => sum + u.time_seconds, 0),
+      playtime: `${Math.floor(totalSeconds / 60)} minutes`,
+      total_time_seconds: totalSeconds,
       peak_concurrent: { count: peakConcurrent, time: peakConcurrentTime },
       hourly_peak: hourlyPeakConcurrent.map((count, hour) => `${hour}:00 - ${count}`),
       users
@@ -420,7 +422,7 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
       messages.push(`\`\`\`json\n${jsonBlock}\n\`\`\``)
     } else {
       // Send header message then chunked user data
-      const header = JSON.stringify({ scene: report.scene, date: report.date, unique_users: report.unique_users, peak_concurrent: report.peak_concurrent, hourly_peak: report.hourly_peak }, null, 2)
+      const header = JSON.stringify({ scene: report.scene, date: report.date, unique_users: report.unique_users, playtime: report.playtime, peak_concurrent: report.peak_concurrent, hourly_peak: report.hourly_peak }, null, 2)
       messages.push(`\`\`\`json\n${header}\n\`\`\``)
 
       // Chunk users array into messages that fit
