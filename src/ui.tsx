@@ -1443,12 +1443,13 @@ function DesktopLayout() {
                         }}
                       >
                         {leaderboardTab === 'daily' ? (
-                          <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1 }}>
-                            <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" />
-                            {entry.roundsWon > 0 && <UiEntity uiTransform={{ width: S(4) }} />}
-                            {Array.from({ length: entry.roundsWon }, (_, ri) => (
-                              <UiEntity key={`rw-${ri}`} uiTransform={{ width: S(14), height: S(14), margin: { right: S(2) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
-                            ))}
+                          <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", width: '100%' }}>
+                            <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" uiTransform={{ width: '45%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                            <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1, flexWrap: 'wrap' }}>
+                              {Array.from({ length: entry.roundsWon }, (_, ri) => (
+                                <UiEntity key={`rw-${ri}`} uiTransform={{ width: S(14), height: S(14), margin: { right: S(2) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
+                              ))}
+                            </UiEntity>
                           </UiEntity>
                         ) : (
                           <UiEntity uiTransform={{ width: '100%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center' }}>

@@ -607,9 +607,9 @@ export function trapClientSystem(dt: number): void {
   }
 
   // Release trap stagger freeze
+  // Do NOT touch InputModifier during cinematic — the cinematic system owns it
   if (isCinematicActive() && trapStaggerUntil > 0) {
     trapStaggerUntil = 0
-    if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
   }
   if (trapStaggerUntil > 0 && now >= trapStaggerUntil) {
     trapStaggerUntil = 0

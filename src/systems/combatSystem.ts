@@ -285,11 +285,9 @@ export function combatClientSystem(_dt: number): void {
   pendingMissPositions.length = 0
 
   // During cinematic, cancel any active stagger and skip stagger logic
+  // Do NOT touch InputModifier — the cinematic system owns it during fadePhase
   if (isCinematicActive()) {
-    if (staggerFreezeUntil > 0) {
-      staggerFreezeUntil = 0
-      if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
-    }
+    staggerFreezeUntil = 0
     staggerTriggerAt = 0
     pendingStagger = false
     return

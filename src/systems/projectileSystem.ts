@@ -741,13 +741,9 @@ export function projectileClientSystem(dt: number): void {
   const serverUp = isServerConnected()
 
   // During cinematic, cancel any active projectile stagger
+  // Do NOT touch InputModifier — the cinematic system owns it during fadePhase
   if (isCinematicActive()) {
-    if (projectileStaggerUntil > 0) {
-      projectileStaggerUntil = 0
-      if (InputModifier.has(engine.PlayerEntity)) {
-        InputModifier.deleteFrom(engine.PlayerEntity)
-      }
-    }
+    projectileStaggerUntil = 0
   }
 
   // Release projectile stagger freeze
