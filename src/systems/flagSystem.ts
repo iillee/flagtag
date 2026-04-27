@@ -47,6 +47,7 @@ let carryCloneAnchor: Entity | null = null     // AvatarAttach entity (smooth tr
 let carryCloneOffset: Entity | null = null     // STATIC child — never mutated after creation
 let carryCloneVisual: Entity | null = null     // Grandchild — GltfContainer + bob/spin writes
 let carryCloneCarrierId: string | null = null  // Current carrier ID
+let cloneVisible = false                       // Whether the clone is currently showing
 let cloneBobPhase = 0                          // Bob animation phase (radians)
 let cloneSpinAngle = 0                         // Spin animation angle (degrees)
 
@@ -56,43 +57,31 @@ const BOB_AMP = 0.15
 const BOB_SPEED = 2.1             // radians/sec (~3s cycle)
 const SPIN_SPEED = 50             // degrees/sec (~7.2s full rotation)
 
-// Pre-warm the flag model so the first clone appears instantly
-let preWarmEntity: Entity | null = null
-function preWarmFlagModel(): void {
-  if (preWarmEntity !== null) return
-  preWarmEntity = engine.addEntity()
-  Transform.create(preWarmEntity, { position: Vector3.create(0, -200, 0), scale: Vector3.Zero() })
-  GltfContainer.create(preWarmEntity, { src: BANNER_SRC, visibleMeshesCollisionMask: 0, invisibleMeshesCollisionMask: 0 })
-}
+const CLONE_HIDDEN_POS = Vector3.create(0, -500, 0)
 
-function createCarryClone(carrierId: string): void {
-  cleanupClone()
+// ── Pre-pooled clone entities ──
+// Created once at scene start, reused for every pickup. No entity creation on the hot path.
+// Architecture: Anchor (AvatarAttach) → Offset (STATIC) → Visual (bob + spin)
+// KEY RULE: Never write Transform on a direct child of AvatarAttach — the static Offset
+// entity buffers against the Bevy propagation race.
+let clonePoolReady = false
 
-  console.log(`[Flag] createCarryClone — carrierId=${carrierId}`)
-  carryCloneCarrierId = carrierId
-  cloneBobPhase = 0
-  cloneSpinAngle = 0
+function initClonePool(): void {
+  if (clonePoolReady) return
+  clonePoolReady = true
 
-  // Layer 1: Anchor — AvatarAttach to the carrier's name tag.
-  // Engine manages this entity's world transform. We NEVER write to it.
+  // Layer 1: Anchor — parked offscreen until needed
   carryCloneAnchor = engine.addEntity()
-  AvatarAttach.create(carryCloneAnchor, {
-    avatarId: carrierId,
-    anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
-  })
+  Transform.create(carryCloneAnchor, { position: CLONE_HIDDEN_POS })
 
-  // Layer 2: Offset — STATIC child of the anchor.
-  // Set once, NEVER mutated. Acts as a buffer so AvatarAttach propagation
-  // doesn't race with our per-frame writes.
+  // Layer 2: Offset — STATIC child, set once, NEVER mutated
   carryCloneOffset = engine.addEntity()
   Transform.create(carryCloneOffset, {
     parent: carryCloneAnchor,
     position: Vector3.create(0, BOB_BASE_Y, 0)
   })
 
-  // Layer 3: Visual — grandchild with the model + bob/spin animation.
-  // Per-frame Transform writes here are safe because this entity is NOT
-  // a direct child of AvatarAttach.
+  // Layer 3: Visual — grandchild with model, animated per-frame (safe)
   carryCloneVisual = engine.addEntity()
   Transform.create(carryCloneVisual, {
     parent: carryCloneOffset,
@@ -103,13 +92,58 @@ function createCarryClone(carrierId: string): void {
     visibleMeshesCollisionMask: 0,
     invisibleMeshesCollisionMask: 0
   })
+  VisibilityComponent.create(carryCloneVisual, { visible: false })
 
-  console.log(`[Flag] Clone created (Anchor → StaticOffset → Visual, safe from AvatarAttach race)`)
+  console.log('[Flag] Clone pool initialized (Anchor → StaticOffset → Visual)')
+}
+
+/** Retarget the pre-pooled clone to a carrier and show it. No entity creation. */
+function showClone(carrierId: string): void {
+  initClonePool()
+  if (carryCloneAnchor === null) return
+
+  // Retarget AvatarAttach to the new carrier
+  if (carryCloneCarrierId !== carrierId) {
+    // Remove old Transform (it may have a stale parent or position)
+    // and recreate with AvatarAttach — this is the only way to retarget
+    if (AvatarAttach.has(carryCloneAnchor)) {
+      AvatarAttach.deleteFrom(carryCloneAnchor)
+    }
+    // Remove stale transform position (was parked offscreen or attached to prev carrier)
+    Transform.createOrReplace(carryCloneAnchor, { position: Vector3.Zero() })
+    AvatarAttach.create(carryCloneAnchor, {
+      avatarId: carrierId,
+      anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+    })
+    carryCloneCarrierId = carrierId
+    cloneBobPhase = 0
+    cloneSpinAngle = 0
+  }
+
+  VisibilityComponent.createOrReplace(carryCloneVisual!, { visible: true })
+  cloneVisible = true
+}
+
+/** Hide the clone (keeps entities alive for reuse). */
+function hideClone(): void {
+  if (!clonePoolReady || !carryCloneVisual) return
+  if (!cloneVisible) return
+
+  VisibilityComponent.createOrReplace(carryCloneVisual, { visible: false })
+  // Detach from carrier and park offscreen
+  if (carryCloneAnchor && AvatarAttach.has(carryCloneAnchor)) {
+    AvatarAttach.deleteFrom(carryCloneAnchor)
+  }
+  if (carryCloneAnchor) {
+    Transform.createOrReplace(carryCloneAnchor, { position: CLONE_HIDDEN_POS })
+  }
+  carryCloneCarrierId = null
+  cloneVisible = false
 }
 
 /** Per-frame update: bob/spin on the Visual grandchild (safe — not a direct AvatarAttach child) */
 function updateCarryClonePosition(dt: number): void {
-  if (carryCloneVisual === null) return
+  if (!cloneVisible || carryCloneVisual === null) return
   if (!Transform.has(carryCloneVisual)) return
 
   // Animate bob and spin
@@ -207,31 +241,23 @@ let lastDropTimeMs = 0
 let pickupSoundEntity: Entity | null = null
 let dropSoundEntity: Entity | null = null
 
-// Optimistic sound tracking — prevent duplicate plays when CRDT state catches up
+// Sound dedup — prevent double-play when local action + CRDT both trigger
 let skipNextPickupSound = false
 let skipNextDropSound = false
 
-// Optimistic prediction — create clone immediately on pickup request, before server confirms
-let optimisticCarrierId: string | null = null   // Who we optimistically predicted as carrier
-let optimisticTimestamp: number = 0              // When we made the prediction
-const OPTIMISTIC_ROLLBACK_MS = 1500             // If server hasn't confirmed in 1.5s, roll back
+// Server confirmation fast-path — pickupConfirmed message arrives before CRDT sync
+// Phase 1 (instant): hide flag visual + play sound on auto-pickup
+// Phase 2 (~50-100ms): create clone + shield when pickupConfirmed arrives
+let pendingPickupUntil = 0                       // Suppress flag-visual restore until this timestamp
+const PENDING_PICKUP_TIMEOUT_MS = 1500           // Give up waiting for confirmation after 1.5s
+let confirmedCarrierId: string | null = null     // Set by pickupConfirmed message, consumed by system
 
-// Cleanup function to prevent clone duplication
-function cleanupClone(): void {
-  if (carryCloneVisual !== null) {
-    engine.removeEntity(carryCloneVisual)
-    carryCloneVisual = null
-  }
-  if (carryCloneOffset !== null) {
-    engine.removeEntity(carryCloneOffset)
-    carryCloneOffset = null
-  }
-  if (carryCloneAnchor !== null) {
-    engine.removeEntity(carryCloneAnchor)
-    carryCloneAnchor = null
-  }
-  carryCloneCarrierId = null
-}
+// Listen for fast server confirmation (arrives before CRDT sync)
+room.onMessage('pickupConfirmed', (data) => {
+  confirmedCarrierId = data.playerId
+})
+
+
 
 function playPickupSound(): void {
   if (!pickupSoundEntity) {
@@ -331,7 +357,7 @@ function updateFlagBob(dt: number): void {
 export function flagClientSystem(dt: number): void {
   // Ensure the synced flag entity has a local visual child (GltfContainer + bob/spin)
   ensureFlagModel()
-  preWarmFlagModel()
+  initClonePool()
   updateFlagBob(dt)
 
   const userId = getPlayerData()?.userId?.toLowerCase()
@@ -364,17 +390,12 @@ export function flagClientSystem(dt: number): void {
         if (flag.state === FlagState.Carried) continue
         const dist = Vector3.distance(myPos, Transform.get(flagEnt).position)
         if (dist <= AUTO_PICKUP_RADIUS) {
+          // Instant: hide flag + play sound + show clone above our head (no server wait)
           playPickupSound()
           skipNextPickupSound = true
-          
-          // Optimistic prediction: immediately show clone above our head + shield
           if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-          createCarryClone(userId)
-          optimisticCarrierId = userId
-          optimisticTimestamp = now
-          hideAllShields()  // Only one shield at a time
-          showShieldForPlayer(userId)
-          setShieldAlpha(userId, 1.0)
+          showClone(userId)
+          pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
           
           room.send('requestPickup', { t: 0 })
           lastAutoPickupRequestMs = now
@@ -404,6 +425,28 @@ export function flagClientSystem(dt: number): void {
     }
   }
 
+  // ── Phase 2: consume pickupConfirmed message (faster than CRDT) ──
+  // For local pickups, clone is already showing (Phase 1). This confirms it or retargets for steals.
+  // For other players' pickups/steals, this creates the clone before CRDT arrives.
+  if (confirmedCarrierId) {
+    const carrier = confirmedCarrierId
+    confirmedCarrierId = null
+    pendingPickupUntil = 0
+    if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+    // Show clone for confirmed carrier (no-op if already showing for same carrier)
+    if (carryCloneCarrierId !== carrier || !cloneVisible) {
+      showClone(carrier)
+    }
+  }
+
+  // ── Pending pickup timeout: server didn't confirm — roll back ──
+  if (pendingPickupUntil > 0 && Date.now() > pendingPickupUntil) {
+    console.log('[Flag] ⏪ Pickup not confirmed — rolling back')
+    pendingPickupUntil = 0
+    hideClone()
+    if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
+  }
+
   // Handle flag state changes with clone system
   for (const [, flag] of engine.getEntitiesWith(Flag)) {
     const stateChanged = prevFlagState !== null && prevFlagState !== flag.state
@@ -423,7 +466,7 @@ export function flagClientSystem(dt: number): void {
     )
 
     if (needsCloneCreate) {
-      // Play pickup sound (skip if we already played it optimistically)
+      // Play pickup sound (skip if we already played it in auto-pickup)
       if (!isFirstFrame) {
         if (skipNextPickupSound) {
           skipNextPickupSound = false
@@ -432,18 +475,11 @@ export function flagClientSystem(dt: number): void {
         }
       }
       
-      // If optimistic prediction already created the clone for the correct carrier, just confirm it
-      if (optimisticCarrierId && optimisticCarrierId === flag.carrierPlayerId && carryCloneVisual !== null) {
-        // Prediction was correct — just clear the optimistic state
-        optimisticCarrierId = null
-        optimisticTimestamp = 0
-      } else {
-        // Different carrier or no prediction — create clone normally
-        if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-        createCarryClone(flag.carrierPlayerId)
-        // Don't show shield here — the server's flagImmunity message handles it with proper fade timer
-        optimisticCarrierId = null
-        optimisticTimestamp = 0
+      pendingPickupUntil = 0
+      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+      // Show clone for carrier (no-op if already showing for same carrier via Phase 1/2)
+      if (carryCloneCarrierId !== flag.carrierPlayerId || !cloneVisible) {
+        showClone(flag.carrierPlayerId)
       }
 
     } else if (needsCloneRemove) {
@@ -467,14 +503,9 @@ export function flagClientSystem(dt: number): void {
         lastDropTimeMs = Date.now()
       }
 
-      // Clean up all clones + clear optimistic state + hide stale shields
-      // Skip hideAllShields if we just made an optimistic pickup this frame
-      // (the optimistic pickup already called hideAllShields before showing the new shield)
-      const skipShieldClear = !!optimisticCarrierId
-      optimisticCarrierId = null
-      optimisticTimestamp = 0
-      if (!skipShieldClear) hideAllShields()
-      cleanupClone()
+      hideAllShields()
+      hideClone()
+      pendingPickupUntil = 0
       
       // Restore flag visual visibility (server controls position via CRDT)
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
@@ -484,45 +515,24 @@ export function flagClientSystem(dt: number): void {
       }
     }
 
-    // Optimistic rollback: if we predicted a pickup but server never confirmed, undo it
-    if (optimisticCarrierId && flag.state !== FlagState.Carried && Date.now() - optimisticTimestamp > OPTIMISTIC_ROLLBACK_MS) {
-      console.log('[Flag] ⏪ Optimistic prediction rolled back (server rejected)')
-      hideShieldForPlayer(optimisticCarrierId)
-      cleanupClone()
-      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
-      optimisticCarrierId = null
-      optimisticTimestamp = 0
-    }
-    // Also roll back immediately if server says someone ELSE is carrying (steal denied, etc.)
-    if (optimisticCarrierId && flag.state === FlagState.Carried && flag.carrierPlayerId !== optimisticCarrierId) {
-      hideShieldForPlayer(optimisticCarrierId)
-      cleanupClone()
-      createCarryClone(flag.carrierPlayerId)
-      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-      // Don't show shield here — server's flagImmunity message handles it with proper fade timer
-      optimisticCarrierId = null
-      optimisticTimestamp = 0
-    }
-
     // ── Safety nets (unconditional, run every frame) ──
 
-    // 1. Flag IS carried — ensure clone exists and matches the correct carrier
+    // 1. Flag IS carried — ensure clone is showing for the correct carrier
     if (flag.state === FlagState.Carried && !needsCloneCreate) {
-      const cloneMissing = carryCloneVisual === null
-      const wrongCarrier = carryCloneCarrierId !== null && carryCloneCarrierId !== flag.carrierPlayerId
-      if (cloneMissing || wrongCarrier) {
-        console.log(`[Flag] ⚠️ Safety net: recreating clone (missing=${cloneMissing}, wrongCarrier=${wrongCarrier})`)
+      const wrongOrMissing = !cloneVisible || carryCloneCarrierId !== flag.carrierPlayerId
+      if (wrongOrMissing) {
+        console.log(`[Flag] ⚠️ Safety net: showing clone for correct carrier`)
         if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-        createCarryClone(flag.carrierPlayerId)
+        showClone(flag.carrierPlayerId)
       }
     }
     
-    // 2. Flag is NOT carried — force cleanup of any lingering clone + restore flag visual
-    //    This is unconditional and catches ALL edge cases (race conditions, missed state changes, etc.)
-    if (flag.state !== FlagState.Carried && !optimisticCarrierId) {
-      if (carryCloneVisual !== null) {
-        console.log('[Flag] ⚠️ Safety net: cleaning up orphaned clone (flag not carried)')
-        cleanupClone()
+    // 2. Flag is NOT carried — hide any lingering clone + restore flag visual
+    //    Guards with pendingPickupUntil to avoid flickering during pickup request window
+    if (flag.state !== FlagState.Carried && pendingPickupUntil === 0) {
+      if (cloneVisible) {
+        console.log('[Flag] ⚠️ Safety net: hiding orphaned clone (flag not carried)')
+        hideClone()
         hideAllShields()
       }
       if (flagVisualEntity) {

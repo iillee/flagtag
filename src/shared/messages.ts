@@ -18,6 +18,7 @@ export const Messages = {
   hitVfx: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   missVfx: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   stagger: Schemas.Map({ victimId: Schemas.String }),
+  pickupConfirmed: Schemas.Map({ playerId: Schemas.String }),
   pickupSound: Schemas.Map({ t: Schemas.Int }),
   dropSound: Schemas.Map({ t: Schemas.Int }),
   bananaDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String }),

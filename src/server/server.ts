@@ -1130,6 +1130,7 @@ function handlePickup(playerId: string): void {
 
   resetGravityState()
   lastStealTime.set(playerId, Date.now()) // Grant immunity on pickup too
+  room.send('pickupConfirmed', { playerId })
   room.send('flagImmunity', { playerId, durationMs: STEAL_IMMUNITY_MS })
   room.send('pickupSound', { t: 0 })
   persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
@@ -1186,6 +1187,7 @@ function handleFlagSteal(victimId: string, attackerId: string): void {
 
   lastStealTime.set(attackerId, Date.now())
   resetGravityState()
+  room.send('pickupConfirmed', { playerId: attackerId })
   room.send('flagImmunity', { playerId: attackerId, durationMs: STEAL_IMMUNITY_MS })
   room.send('pickupSound', { t: 0 })
   persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
