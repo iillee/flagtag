@@ -180,6 +180,7 @@ let flagFalling = false
 let flagFallVelocity = 0
 let flagGravityTargetY = FLAG_MIN_Y
 const carrierYSamples: { y: number; time: number }[] = []
+let lastDropperId = ''  // Who dropped the flag — only accept reportGroundY from them
 
 // Carrier staleness detection — force-drop if carrier position is unavailable
 const CARRIER_NO_POSITION_TIMEOUT_MS = 5000   // No position data → likely disconnected
@@ -1022,6 +1023,9 @@ function registerHandlers(): void {
   room.onMessage('reportGroundY', (data, context) => {
     try {
       if (!context) return
+      const from = context.from.toLowerCase()
+      // Only accept ground report from the player who dropped the flag
+      if (lastDropperId && from !== lastDropperId) return
       const flag = Flag.getOrNull(flagEntity)
       if (!flag || flag.state !== FlagState.Dropped) return
 
@@ -1161,6 +1165,9 @@ function handleDrop(playerId: string): void {
 
   const t = Transform.getMutable(flagEntity)
   t.position = dropPos
+
+  // Track who dropped — only accept reportGroundY from this player
+  lastDropperId = playerId
 
   // Start gravity — estimate ground from carrier's recent Y history
   computeGravityTarget(dropPos.y)
@@ -1631,6 +1638,7 @@ function flagServerSystem(dt: number): void {
       mutable.dropAnchorX = flagPos.x
       mutable.dropAnchorY = flagPos.y
       mutable.dropAnchorZ = flagPos.z
+      lastDropperId = ''  // No specific dropper — accept first non-quarantined report
       resetCarrierTracking()
       computeGravityTarget(flagPos.y)
       room.send('dropSound', { t: 0 })
@@ -1709,6 +1717,7 @@ function flagServerSystem(dt: number): void {
       mutable.dropAnchorX = flagPos.x
       mutable.dropAnchorY = flagPos.y
       mutable.dropAnchorZ = flagPos.z
+      lastDropperId = ''  // No specific dropper — accept first non-quarantined report
 
       resetCarrierTracking()
       computeGravityTarget(flagPos.y)
