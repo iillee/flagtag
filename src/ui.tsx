@@ -132,7 +132,7 @@ const creditLines = [
   'Oskar Stålberg and Townscaper for generating the level',
   'Dylann Taylor for the track SpriteSprint',
   'Lastraum, Stom, and Baseddev for resources and support',
-  'the many unnammed playtesters and bughunters, you know who you are',
+  'All playtesters and bughunters',
 ]
 let creditLineIndex = 0
 let creditLineTimer = 0
@@ -1271,7 +1271,7 @@ function DesktopLayout() {
                 <Label value={"Win the round by holding\nthe Flag for the longest!"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ margin: { bottom: S(20) } }} />
                 <Label value="Controls" fontSize={S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(16) } }} />
               </UiEntity>
-              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'flex-start', padding: { left: S(32) } }}>
+              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'flex-start', padding: { left: S(32) }, margin: { bottom: S(12) } }}>
               {/* E */}
               <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(10) } }}>
                 <UiEntity uiTransform={{ width: S(34), height: S(30), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(5), margin: { right: S(8) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.32, 1) }}>

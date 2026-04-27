@@ -142,14 +142,20 @@ export function updateHoldTimeInterpolation(): void {
 
 export function getPlayersWithHoldTimes(): { userId: string; name: string; seconds: number }[] {
   // Build lookup from synced hold-time entities, keyed by lowercase playerId.
-  // Multiple entities may exist for the same player (e.g. after server restart),
-  // so take the MAX seconds to avoid showing stale zero-score duplicates.
-  // Store raw float for accurate sorting; floor only for display.
+  // If duplicates exist (shouldn't after server cleanup), SUM them — but if
+  // ANY entity for a player has seconds=0, treat the whole player as 0
+  // (the server reset scores to 0 at round end; stale entities must not override).
   const synced = new Map<string, number>()
+  const hasZero = new Set<string>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
     const key = data.playerId.toLowerCase()
+    if (data.seconds === 0) hasZero.add(key)
     const existing = synced.get(key) ?? 0
     synced.set(key, Math.max(existing, data.seconds))
+  }
+  // If the server reset a player's score to 0, force it to 0 regardless of stale duplicates
+  for (const key of hasZero) {
+    synced.set(key, 0)
   }
 
   // Client-side interpolation: add elapsed time since last CRDT update for the current carrier.

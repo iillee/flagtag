@@ -1984,13 +1984,34 @@ function countdownServerSystem(): void {
 async function handleRoundEnd(): Promise<void> {
   const now = Date.now()
 
+  // ══════════════════════════════════════════════════════════════════════
+  // CRITICAL: All state mutations that affect holdTimeServerSystem MUST
+  // happen synchronously BEFORE any `await`. During `await` gaps, the
+  // engine runs systems — if the flag is still Carried, holdTimeServerSystem
+  // keeps accumulating time and can write it back AFTER we reset scores.
+  // ══════════════════════════════════════════════════════════════════════
+
   // ── 0a. Flush any in-progress hold time so final scores are accurate ──
   flushHoldTimeAccum()
 
-  // ── 0b. Check for daily leaderboard reset ──
-  await checkLeaderboardDailyReset()
+  // ── 0b. Reset flag to random spawn point IMMEDIATELY (before any await) ──
+  // This ensures holdTimeServerSystem sees AtBase on the very next frame
+  // and stops accumulating time.
+  resetGravityState()
+  const spawnPoint = getRandomSpawnPoint()
+  console.log('[Server] Round ended, flag respawning at random location to prevent spawn camping')
+  
+  const flagMutable = Flag.getMutable(flagEntity)
+  flagMutable.state = FlagState.AtBase
+  flagMutable.carrierPlayerId = ''
+  flagMutable.baseX = spawnPoint.x
+  flagMutable.baseY = spawnPoint.y
+  flagMutable.baseZ = spawnPoint.z
+  
+  const flagT = Transform.getMutable(flagEntity)
+  flagT.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
 
-  // ── 1. Determine winner(s) ──
+  // ── 1. Determine winner(s) — read scores BEFORE resetting them ──
   let maxSeconds = 0
   const players: { userId: string; seconds: number }[] = []
 
@@ -2001,7 +2022,80 @@ async function handleRoundEnd(): Promise<void> {
     }
   }
 
-  // ── 2. Save top 3 snapshot for splash display ──
+  // ── 2. Reset ALL hold times to 0 synchronously ──
+  // Iterate the ENTIRE ECS (not just holdTimeEntities map) to catch any
+  // stale/orphaned entities that might show old scores on clients.
+  const connectedNow = new Set<string>()
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    connectedNow.add(identity.address.toLowerCase())
+  }
+
+  const entitiesToRemove: string[] = []
+  for (const [entity, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+    const key = data.playerId.toLowerCase()
+    if (connectedNow.has(key)) {
+      PlayerFlagHoldTime.getMutable(entity).seconds = 0
+    } else {
+      // Disconnected — mark for removal
+      entitiesToRemove.push(key)
+    }
+  }
+  for (const userKey of entitiesToRemove) {
+    const entity = holdTimeEntities.get(userKey)
+    if (entity) {
+      engine.removeEntity(entity)
+      holdTimeEntities.delete(userKey)
+      knownPlayers.delete(userKey)
+    }
+  }
+  if (entitiesToRemove.length > 0) {
+    console.log('[Server] Cleaned up', entitiesToRemove.length, 'hold-time entities for disconnected players')
+  }
+
+  // Force-clear accumulator again (holdTimeServerSystem cannot have run since
+  // step 0a because we haven't hit any await yet, but be defensive)
+  holdTimeAccum = 0
+  holdTimeCarrierKey = ''
+
+  // ── 3. Remove all active traps ──
+  for (const trap of activeTraps) {
+    engine.removeEntity(trap.entity)
+  }
+  activeTraps.length = 0
+  lastTrapDropTime.clear()
+  console.log('[Server] 🪤 All traps cleared for new round')
+
+  // ── 3b. Remove all active projectiles ──
+  for (const projectile of activeProjectiles) {
+    engine.removeEntity(projectile.entity)
+  }
+  activeProjectiles.length = 0
+  lastProjectileFireTime.clear()
+  console.log('[Server] 🎯 All projectiles cleared for new round')
+
+  // ── 3c. Clear combat cooldown maps to prevent memory growth ──
+  lastStealTime.clear()
+
+  // ── 3d. Reset lightning state ──
+  lightningRollTimer = 0
+  lightningStrikeScheduled = false
+  lightningWarningTimer = 0
+  _lightningOriginalCarrierId = ''
+
+  // ── 3e. Respawn mushrooms ──
+  spawnMushrooms()
+  console.log('[Server] 🍄 Mushrooms respawned for new round')
+
+  // ── 3f. Respawn all players at spawn point immediately ──
+  room.send('respawnPlayers', { t: 0 })
+  console.log('[Server] 📍 Respawning all players at spawn point')
+
+  // ══════════════════════════════════════════════════════════════════════
+  // All synchronous state mutations done. Safe to await now.
+  // holdTimeServerSystem will see AtBase and not accumulate.
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── 4. Save top 3 snapshot for splash display ──
   const topPlayers = [...players]
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 3)
@@ -2020,7 +2114,7 @@ async function handleRoundEnd(): Promise<void> {
     console.log('[Server] Top player:', p.name, '-', p.seconds, 'seconds')
   }
 
-  // ── 3. Set timer: splash + winner data (roundEndTimeMs already set by countdownServerSystem) ──
+  // ── 5. Set timer: splash + winner data ──
   const timerMutable = CountdownTimer.getMutable(countdownEntity)
   timerMutable.roundEndTriggered = true
   timerMutable.roundEndDisplayUntilMs = now + SPLASH_DURATION_MS
@@ -2028,7 +2122,10 @@ async function handleRoundEnd(): Promise<void> {
   
   console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
 
-  // ── 4. Update leaderboard ──
+  // ── 6. Check for daily leaderboard reset ──
+  await checkLeaderboardDailyReset()
+
+  // ── 7. Update leaderboard (async persistence is safe now) ──
   if (maxSeconds > 0) {
     const lb = LeaderboardState.getOrNull(leaderboardEntity)
     let entries: { userId: string; name: string; roundsWon: number }[] = []
@@ -2056,7 +2153,7 @@ async function handleRoundEnd(): Promise<void> {
     mutable.json = json
     await persistLeaderboard(json)
 
-    // ── 4b. Update all-time leaderboard ──
+    // ── 7b. Update all-time leaderboard ──
     const atLb = AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)
     let atEntries: { userId: string; name: string; roundsWon: number }[] = []
     if (atLb && atLb.json) {
@@ -2081,83 +2178,8 @@ async function handleRoundEnd(): Promise<void> {
     await persistAllTimeLeaderboard(atJson)
   }
 
-  // ── 5. Remove all active traps ──
-  for (const trap of activeTraps) {
-    engine.removeEntity(trap.entity)
-  }
-  activeTraps.length = 0
-  lastTrapDropTime.clear()
-  console.log('[Server] 🪤 All traps cleared for new round')
-
-  // ── 5b. Remove all active projectiles ──
-  for (const projectile of activeProjectiles) {
-    engine.removeEntity(projectile.entity)
-  }
-  activeProjectiles.length = 0
-  lastProjectileFireTime.clear()
-  console.log('[Server] 🎯 All projectiles cleared for new round')
-
-  // ── 5c. Clear combat cooldown maps to prevent memory growth ──
-  lastStealTime.clear()
-
-  // ── 5d. Respawn mushrooms ──
-  spawnMushrooms()
-  console.log('[Server] 🍄 Mushrooms respawned for new round')
-
-  // ── 5e. Reset lightning state ──
-  lightningRollTimer = 0
-  lightningStrikeScheduled = false
-  lightningWarningTimer = 0
-  _lightningOriginalCarrierId = ''
-
-  // ── 6. Reset flag to random spawn point ──
-  resetGravityState()
-  const spawnPoint = getRandomSpawnPoint()
-  console.log('[Server] Round ended, flag respawning at random location to prevent spawn camping')
-  
-  const flagMutable = Flag.getMutable(flagEntity)
-  flagMutable.state = FlagState.AtBase
-  flagMutable.carrierPlayerId = ''
-  
-  // Update flag's base position to the new spawn point
-  flagMutable.baseX = spawnPoint.x
-  flagMutable.baseY = spawnPoint.y
-  flagMutable.baseZ = spawnPoint.z
-  
-  const t = Transform.getMutable(flagEntity)
-  t.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
+  // ── 8. Persist flag state ──
   await persistFlagState()
-
-  // ── 6b. Respawn all players at spawn point immediately ──
-  room.send('respawnPlayers', { t: 0 })
-  console.log('[Server] 📍 Respawning all players at spawn point')
-
-  // ── 7. Reset hold times — remove entities for disconnected players to prevent CRDT accumulation ──
-  // Connected players keep their entity (reset to 0). Disconnected players' entities are fully removed.
-  const connectedNow = new Set<string>()
-  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-    connectedNow.add(identity.address.toLowerCase())
-  }
-
-  const entitiesToRemove: string[] = []
-  for (const [userKey, entity] of holdTimeEntities) {
-    if (connectedNow.has(userKey)) {
-      // Still connected — reset score to 0
-      PlayerFlagHoldTime.getMutable(entity).seconds = 0
-    } else {
-      // Disconnected — fully remove the synced entity to free CRDT space
-      entitiesToRemove.push(userKey)
-    }
-  }
-  for (const userKey of entitiesToRemove) {
-    const entity = holdTimeEntities.get(userKey)!
-    engine.removeEntity(entity)
-    holdTimeEntities.delete(userKey)
-    knownPlayers.delete(userKey)
-  }
-  if (entitiesToRemove.length > 0) {
-    console.log('[Server] Cleaned up', entitiesToRemove.length, 'hold-time entities for disconnected players')
-  }
 }
 
 let visitorSyncTimer = 0

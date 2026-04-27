@@ -24,7 +24,7 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
-import { isMobile } from '@dcl/sdk/platform'
+
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
@@ -32,25 +32,29 @@ import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShield
 import { isLightningRespawning } from '../gameState/lightningState'
 
 // Visual clone system for smooth flag carrying
-// Architecture: AvatarAttach anchor with a single child entity for the visual.
-// NO Tweens on AvatarAttach children — Tweens internally mutate Transform which causes
-// the flag to vanish on some clients. Instead, bob/spin are done via per-frame Transform
-// writes on the visual child (which is safe — the engine bug only affects Tween-driven writes).
-let carryCloneAnchor: Entity | null = null    // AvatarAttach entity
-let carryCloneVisual: Entity | null = null     // Child entity with GltfContainer
-let carryCloneCarrierId: string | null = null  // Current carrier ID for safety net recreation
+//
+// Architecture (inspired by STS mannequin pattern):
+//   Anchor (AvatarAttach)  →  Offset (STATIC)  →  Visual (bob + spin)
+//
+// KEY RULE: Never write Transform on a direct child of AvatarAttach.
+// Bevy's AvatarAttach propagation can race with per-frame Transform writes
+// on direct children, causing the entity to "detach" and freeze in world space.
+// The static Offset entity acts as a buffer — its Transform is set once at
+// creation and NEVER mutated, so there's no race. The Visual (grandchild)
+// is safely animated because AvatarAttach only interacts with its immediate child.
+//
+let carryCloneAnchor: Entity | null = null     // AvatarAttach entity (smooth tracking)
+let carryCloneOffset: Entity | null = null     // STATIC child — never mutated after creation
+let carryCloneVisual: Entity | null = null     // Grandchild — GltfContainer + bob/spin writes
+let carryCloneCarrierId: string | null = null  // Current carrier ID
 let cloneBobPhase = 0                          // Bob animation phase (radians)
 let cloneSpinAngle = 0                         // Spin animation angle (degrees)
-let cloneCreateTime = 0                        // Timestamp when clone was created
-let cloneVerifiedVisible = false               // Whether we've confirmed the clone is rendering
 
 const BANNER_SRC = 'assets/models/Banner_Red_02/Banner_Red_02.glb'
-const BOB_BASE_Y_NAMETAG = 0.55   // Y offset above name tag anchor
-const BOB_BASE_Y_POSITION = 2.2   // Y offset above position anchor (mobile)
+const BOB_BASE_Y = 0.55           // Y offset above name tag anchor (set once on Offset, never changed)
 const BOB_AMP = 0.15
 const BOB_SPEED = 2.1             // radians/sec (~3s cycle)
 const SPIN_SPEED = 50             // degrees/sec (~7.2s full rotation)
-const CLONE_VERIFY_DELAY_MS = 2000 // If clone hasn't verified after this, recreate
 
 // Pre-warm the flag model so the first clone appears instantly
 let preWarmEntity: Entity | null = null
@@ -64,28 +68,35 @@ function preWarmFlagModel(): void {
 function createCarryClone(carrierId: string): void {
   cleanupClone()
 
-  const mobile = isMobile()
-  console.log(`[Flag] createCarryClone — isMobile=${mobile}, carrierId=${carrierId}`)
+  console.log(`[Flag] createCarryClone — carrierId=${carrierId}`)
   carryCloneCarrierId = carrierId
   cloneBobPhase = 0
   cloneSpinAngle = 0
-  cloneCreateTime = Date.now()
-  cloneVerifiedVisible = false
 
-  // Anchor entity with AvatarAttach
-  const anchorPoint = mobile ? AvatarAnchorPointType.AAPT_POSITION : AvatarAnchorPointType.AAPT_NAME_TAG
+  // Layer 1: Anchor — AvatarAttach to the carrier's name tag.
+  // Engine manages this entity's world transform. We NEVER write to it.
   carryCloneAnchor = engine.addEntity()
   AvatarAttach.create(carryCloneAnchor, {
     avatarId: carrierId,
-    anchorPointId: anchorPoint
+    anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
   })
 
-  // Visual child — parented to the anchor, NO Tweens
-  const baseY = mobile ? BOB_BASE_Y_POSITION : BOB_BASE_Y_NAMETAG
+  // Layer 2: Offset — STATIC child of the anchor.
+  // Set once, NEVER mutated. Acts as a buffer so AvatarAttach propagation
+  // doesn't race with our per-frame writes.
+  carryCloneOffset = engine.addEntity()
+  Transform.create(carryCloneOffset, {
+    parent: carryCloneAnchor,
+    position: Vector3.create(0, BOB_BASE_Y, 0)
+  })
+
+  // Layer 3: Visual — grandchild with the model + bob/spin animation.
+  // Per-frame Transform writes here are safe because this entity is NOT
+  // a direct child of AvatarAttach.
   carryCloneVisual = engine.addEntity()
   Transform.create(carryCloneVisual, {
-    parent: carryCloneAnchor,
-    position: Vector3.create(0, baseY, 0)
+    parent: carryCloneOffset,
+    position: Vector3.Zero()
   })
   GltfContainer.create(carryCloneVisual, {
     src: BANNER_SRC,
@@ -93,16 +104,13 @@ function createCarryClone(carrierId: string): void {
     invisibleMeshesCollisionMask: 0
   })
 
-  console.log(`[Flag] Clone created (${mobile ? 'AAPT_POSITION' : 'AAPT_NAME_TAG'} anchor, per-frame bob/spin, NO tweens)`)
+  console.log(`[Flag] Clone created (Anchor → StaticOffset → Visual, safe from AvatarAttach race)`)
 }
 
-/** Per-frame update: animate bob/spin on the visual child via Transform writes */
+/** Per-frame update: bob/spin on the Visual grandchild (safe — not a direct AvatarAttach child) */
 function updateCarryClonePosition(dt: number): void {
-  if (carryCloneAnchor === null || carryCloneVisual === null) return
+  if (carryCloneVisual === null) return
   if (!Transform.has(carryCloneVisual)) return
-
-  const mobile = isMobile()
-  const baseY = mobile ? BOB_BASE_Y_POSITION : BOB_BASE_Y_NAMETAG
 
   // Animate bob and spin
   cloneBobPhase += BOB_SPEED * dt
@@ -110,11 +118,8 @@ function updateCarryClonePosition(dt: number): void {
   const bobOffset = Math.sin(cloneBobPhase) * BOB_AMP
 
   const t = Transform.getMutable(carryCloneVisual)
-  t.position = Vector3.create(0, baseY + bobOffset, 0)
+  t.position = Vector3.create(0, bobOffset, 0)
   t.rotation = Quaternion.fromEulerDegrees(0, cloneSpinAngle, 0)
-
-  // Mark as verified once we've successfully written at least one frame
-  if (!cloneVerifiedVisible) cloneVerifiedVisible = true
 }
 
 const HIDDEN_POS = Vector3.create(0, -100, 0)
@@ -217,12 +222,15 @@ function cleanupClone(): void {
     engine.removeEntity(carryCloneVisual)
     carryCloneVisual = null
   }
-  if (carryCloneAnchor !== null) { 
+  if (carryCloneOffset !== null) {
+    engine.removeEntity(carryCloneOffset)
+    carryCloneOffset = null
+  }
+  if (carryCloneAnchor !== null) {
     engine.removeEntity(carryCloneAnchor)
-    carryCloneAnchor = null 
+    carryCloneAnchor = null
   }
   carryCloneCarrierId = null
-  cloneVerifiedVisible = false
 }
 
 function playPickupSound(): void {
@@ -407,7 +415,7 @@ export function flagClientSystem(dt: number): void {
       isFirstFrame ||                          // Just loaded the scene
       stateChanged ||                          // State changed to Carried
       carrierChanged ||                        // Carrier swapped (steal)
-      (carryCloneAnchor === null && !stateChanged)  // Clone missing (safety net)
+      (carryCloneVisual === null && !stateChanged)  // Clone missing (safety net)
     )
     const needsCloneRemove = flag.state !== FlagState.Carried && (
       isFirstFrame ||
@@ -425,7 +433,7 @@ export function flagClientSystem(dt: number): void {
       }
       
       // If optimistic prediction already created the clone for the correct carrier, just confirm it
-      if (optimisticCarrierId && optimisticCarrierId === flag.carrierPlayerId && carryCloneAnchor !== null) {
+      if (optimisticCarrierId && optimisticCarrierId === flag.carrierPlayerId && carryCloneVisual !== null) {
         // Prediction was correct — just clear the optimistic state
         optimisticCarrierId = null
         optimisticTimestamp = 0
@@ -496,24 +504,33 @@ export function flagClientSystem(dt: number): void {
       optimisticTimestamp = 0
     }
 
-    // Safety nets
-    // 1. Flag is carried but clone is missing or broken — recreate it
-    const cloneMissing = carryCloneAnchor === null
-    const cloneBroken = carryCloneAnchor !== null && (carryCloneVisual === null || !GltfContainer.has(carryCloneVisual))
-    // 1b. Clone exists but AvatarAttach may have silently failed — recreate after timeout
-    const cloneTimedOut = carryCloneAnchor !== null && !cloneBroken && !cloneVerifiedVisible && (Date.now() - cloneCreateTime > CLONE_VERIFY_DELAY_MS)
-    if (flag.state === FlagState.Carried && (cloneMissing || cloneBroken || cloneTimedOut) && !needsCloneCreate) {
-      console.log(`[Flag] ⚠️ Safety net: recreating clone (missing=${cloneMissing}, broken=${cloneBroken}, timedOut=${cloneTimedOut})`)
-      if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-      createCarryClone(flag.carrierPlayerId)
+    // ── Safety nets (unconditional, run every frame) ──
+
+    // 1. Flag IS carried — ensure clone exists and matches the correct carrier
+    if (flag.state === FlagState.Carried && !needsCloneCreate) {
+      const cloneMissing = carryCloneVisual === null
+      const wrongCarrier = carryCloneCarrierId !== null && carryCloneCarrierId !== flag.carrierPlayerId
+      if (cloneMissing || wrongCarrier) {
+        console.log(`[Flag] ⚠️ Safety net: recreating clone (missing=${cloneMissing}, wrongCarrier=${wrongCarrier})`)
+        if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+        createCarryClone(flag.carrierPlayerId)
+      }
     }
     
-    // 2. Flag is NOT carried — ensure flag visual is visible (skip if optimistic pickup is pending)
-    if (flag.state !== FlagState.Carried && flagVisualEntity && !optimisticCarrierId) {
-      if (!VisibilityComponent.has(flagVisualEntity)) {
-        VisibilityComponent.create(flagVisualEntity, { visible: true })
-      } else if (!VisibilityComponent.get(flagVisualEntity).visible) {
-        VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
+    // 2. Flag is NOT carried — force cleanup of any lingering clone + restore flag visual
+    //    This is unconditional and catches ALL edge cases (race conditions, missed state changes, etc.)
+    if (flag.state !== FlagState.Carried && !optimisticCarrierId) {
+      if (carryCloneVisual !== null) {
+        console.log('[Flag] ⚠️ Safety net: cleaning up orphaned clone (flag not carried)')
+        cleanupClone()
+        hideAllShields()
+      }
+      if (flagVisualEntity) {
+        if (!VisibilityComponent.has(flagVisualEntity)) {
+          VisibilityComponent.create(flagVisualEntity, { visible: true })
+        } else if (!VisibilityComponent.get(flagVisualEntity).visible) {
+          VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
+        }
       }
     }
 
@@ -524,7 +541,7 @@ export function flagClientSystem(dt: number): void {
 
   const clampedDt = Math.min(dt, 0.1)
 
-  // Update carried flag bob/spin (per-frame Transform writes on AvatarAttach child — no Tweens)
+  // Update carried flag bob/spin (writes on Visual grandchild — safe from AvatarAttach race)
   updateCarryClonePosition(clampedDt)
 
 

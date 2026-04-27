@@ -1,6 +1,6 @@
 # Flag Tag — Game Design Document
 
-> **Version:** 1.0 · **Last Updated:** April 17, 2026  
+> **Version:** 1.1 · **Last Updated:** April 26, 2026  
 > **Platform:** Decentraland SDK7 · **Deployment:** World (`flagtag.dcl.eth`)  
 > **Scene Size:** 32×32 parcels (512m × 512m, 1024 parcels)
 
@@ -74,21 +74,28 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 - **Water Respawn:** If flag falls below Y=1.58 (water level), it respawns at a random spawn point
 - **Spawn Points:** 3 predefined locations on the map; randomly selected at round start and water respawn
 - **Visual:** Client-side bob animation (0.25m amplitude), slow spin, gold particle trail, gold vertical beacon (110m tall)
-- **Carry Visual:** Flag attaches to carrier's right hand via `AvatarAttach`
+- **Carry Visual:** Flag floats above carrier's head using a 3-layer entity hierarchy: `Anchor (AvatarAttach AAPT_NAME_TAG)` → `Offset (static, never mutated)` → `Visual (bob + spin)`. The static intermediate entity prevents a Bevy race condition where per-frame Transform writes on a direct AvatarAttach child cause the entity to detach and freeze in world space.
 
 ### 3.2 Round Timer & Scoring
 
 - **Round Length:** 5 minutes, aligned to UTC 5-minute boundaries (e.g., :00, :05, :10...)
 - **Scoring:** Server accumulates hold time (synced every 0.5s via CRDT); client interpolates between syncs for smooth scoreboard counting
 - **Winner:** Player with the most cumulative hold time at round end
-- **Round End Sequence:**
-  1. Server broadcasts `respawnPlayers`
-  2. All clients freeze movement, fade to black (1.5s)
-  3. Top 3 players teleported to podium cubes (1st=red, 2nd=gold, 3rd=blue)
-  4. Virtual camera activates (green cube position looking at red cube)
-  5. Winner plays "handsair" emote, 2nd/3rd play "clap"
-  6. Splash UI shows top 3 with scores + "Next round starting..."
-  7. After 10s (or 3s if no scorers), fade to black, release camera, return players to spawn
+- **Round End Sequence (Server):**
+  1. Flush hold time accumulator (ensures final scores are accurate)
+  2. Reset flag to AtBase at random spawn point (synchronous, before any `await` — prevents `holdTimeServerSystem` from re-accumulating during async gaps)
+  3. Read final scores, then reset ALL `PlayerFlagHoldTime` entities to 0 (iterates full ECS, not just tracked map, to catch stale orphans)
+  4. Clear `holdTimeAccum` / `holdTimeCarrierKey` defensively
+  5. Clean up traps, projectiles, cooldowns, lightning, mushrooms
+  6. Broadcast `respawnPlayers`
+  7. (async) Set splash timer + winner JSON, update leaderboards, persist to Storage
+- **Round End Sequence (Client):**
+  1. Receive `respawnPlayers` → freeze movement, fade to black (1.5s)
+  2. Top 3 players teleported to podium cubes (1st=red, 2nd=gold, 3rd=blue)
+  3. Virtual camera activates (green cube position looking at red cube)
+  4. Winner plays "handsair" emote, 2nd/3rd play "clap"
+  5. Splash UI shows top 3 with scores + "Next round starting..."
+  6. After 10s (or 3s if no scorers), fade to black, release camera, return players to spawn
 - **Credits Screen:** After the cinematic (or immediately for no-scorer rounds), a black screen shows "Next Round Starting... X" with a countdown and credits (special thanks). Lasts 10 seconds before fading to gameplay.
 - **Timer Hiding:** The round countdown timer hides as soon as the round ends and stays hidden through the entire cinematic/credits sequence.
 
@@ -295,29 +302,38 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 - **Mitigation:** Projectile Transform is NOT synced (clients read component data instead); hold time syncs at 0.5s intervals; projectile component syncs at 10Hz
 - **Risk:** High player counts with many simultaneous boomerangs + bananas could still cause pressure
 
-### 9.2 Player Position Accuracy
+### 9.2 AvatarAttach + Transform Race Condition (Resolved)
+- **Problem:** Writing Transform every frame on a direct child of an AvatarAttach entity caused a race condition in Bevy's transform propagation. The child entity would "detach" from the parent hierarchy and freeze at a world position, making the flag clone appear stuck above the player's head with no way to drop it.
+- **Resolution:** Inserted a static intermediate entity (Transform set once at creation, never mutated) between the AvatarAttach anchor and the animated visual. Per-frame bob/spin writes now happen on the grandchild, which is safe because AvatarAttach only interacts with its immediate child.
+- **Pattern:** `Anchor (AvatarAttach)` → `Offset (STATIC)` → `Visual (animated)` — reusable for any AvatarAttach-based visuals that need animation.
+
+### 9.3 Player Position Accuracy
 - **Problem:** Server reads player positions from CRDT-synced `Transform` on `PlayerIdentityData` entities, which can be ~200ms stale
 - **Impact:** Hit detection, proximity steal, and flag carry position may be slightly delayed
 - **Mitigation:** Generous hit radii (2m for boomerangs, 2m for proximity steal, 3m for flag pickup)
 
-### 9.3 Gravity & Ground Detection
+### 9.4 Gravity & Ground Detection
 - **Problem:** Server has no physics engine — ground level is estimated via client raycasts (`reportGroundY`, `reportShellGroundY`, `reportBananaGroundY`) and carrier Y-position history
 - **Risk:** Flag or bananas can briefly float or sink before ground data arrives; if no client reports ground, objects fall to `FLAG_MIN_Y` (1.5m)
 
-### 9.4 Carrier Disconnect
+### 9.5 Carrier Disconnect
 - **Detection:** Server checks `PlayerIdentityData` presence each frame + 5s staleness timeout on position data
 - **Risk:** Brief network hiccups could trigger false disconnect detection; 5s timeout means flag can be "stuck" on a disconnected player for up to 5 seconds
 
-### 9.5 Name Resolution Delays
+### 9.6 Name Resolution Delays
 - **Problem:** Player display names aren't always available immediately on connect (Decentraland platform latency)
 - **Mitigation:** Client + server both have periodic name resolver systems (every 2-3s); names persist in Storage
 - **Risk:** Leaderboard entries may briefly show truncated wallet addresses (0x...) before names resolve
 
-### 9.6 Round Timer Drift
+### 9.7 Round-End Async Race Condition (Resolved)
+- **Problem:** `handleRoundEnd()` was async. The flag stayed in `Carried` state through `await` gaps (Storage persistence), during which `holdTimeServerSystem` kept accumulating time. After resetting `PlayerFlagHoldTime.seconds = 0`, the next frame's `flushHoldTimeAccum()` wrote stale time back. This caused: scoreboard not resetting, wrong player awarded 1st place.
+- **Resolution:** All critical state mutations (flag reset to AtBase, hold time reset, accumulator clear) now happen synchronously before any `await`. Also iterates ALL hold-time entities in the ECS (not just the tracked `holdTimeEntities` map) to catch orphaned entities from previous server lifetimes.
+
+### 9.8 Round Timer Drift
 - **Problem:** Rounds are aligned to UTC clock boundaries, but `Date.now()` on the server may have slight drift
 - **Mitigation:** Server recalculates next boundary from `Date.now()` at each round end; countdown is pure UTC-based (not accumulated delta time)
 
-### 9.7 Entity Limits
+### 9.9 Entity Limits
 - **Scene is 1024 parcels** — generous entity/triangle budgets, but:
   - Each active banana = 1 synced entity
   - Each active boomerang = 1 synced entity  
@@ -325,13 +341,13 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
   - Proximity lights dynamically created/destroyed
 - **Risk:** With many players all using abilities simultaneously, entity count could spike
 
-### 9.8 Mobile Experience
+### 9.10 Mobile Experience
 - The game has a dedicated mobile UI layout, but gameplay is challenging on mobile due to:
   - Smaller screen real estate
   - Touch controls less precise for aiming boomerangs
   - No E/F key access (relies on Decentraland's action bar slots)
 
-### 9.9 Single Server Instance
+### 9.11 Single Server Instance
 - The authoritative server is a single instance — there's no load balancing or sharding
 - All players in the world connect to the same server process
 - Server crash = full state reset (flag position, scores) though leaderboards persist via Storage

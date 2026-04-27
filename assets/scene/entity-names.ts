@@ -5,7 +5,6 @@
  * Object containing all entity names in the scene for autocomplete support.
  */
 export enum EntityNames {
-  Ambient_Sound___Crickets = "Ambient Sound - Crickets",
   Ambient_Sound___Crickets_2 = "Ambient Sound - Crickets_2",
   Balsam_Flower = "Balsam Flower",
   Big_Rock = "Big Rock",
