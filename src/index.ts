@@ -376,7 +376,7 @@ export async function main() {
     engine.addSystem(function reloadDropSystem() {
       reloadCheckFrames++
       for (const [, flag] of engine.getEntitiesWith(Flag)) {
-        if (flag.state === FlagState.Carried && flag.carrierPlayerId === local.userId) {
+        if (flag.state === FlagState.Carried && flag.carrierPlayerId === local.userId.toLowerCase()) {
           console.log('[Main] Detected flag carry on scene load (likely /reload) — requesting respawn')
           room.send('requestReloadRespawn', { t: 0 })
         }

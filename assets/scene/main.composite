@@ -2547,6 +2547,27 @@
             "parent": 0
           }
         },
+        "631": {
+          "json": {
+            "position": {
+              "x": 264,
+              "y": 47.40749740600586,
+              "z": 297.75
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.011416199617087841,
+              "z": 0,
+              "w": 0.9999348521232605
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 3
+            },
+            "parent": 0
+          }
+        },
         "632": {
           "json": {
             "position": {
@@ -2564,6 +2585,27 @@
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "parent": 0
+          }
+        },
+        "633": {
+          "json": {
+            "position": {
+              "x": 268.75,
+              "y": 47.488101959228516,
+              "z": 304
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 0
           }
@@ -4156,6 +4198,20 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "631": {
+          "json": {
+            "src": "assets/asset-packs/rug/Carpet_03/Carpet_03.glb",
+            "visibleMeshesCollisionMask": 2,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "633": {
+          "json": {
+            "src": "assets/asset-packs/clay_pot/Pot_01/Pot_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "636": {
           "json": {
             "src": "assets/models/Bench_01.glb",
@@ -4980,9 +5036,19 @@
             "value": "Classic Bench_35"
           }
         },
+        "631": {
+          "json": {
+            "value": "Rug"
+          }
+        },
         "632": {
           "json": {
             "value": "Ambient Sound - Crickets_2"
+          }
+        },
+        "633": {
+          "json": {
+            "value": "Clay Pot"
           }
         },
         "634": {
@@ -6229,9 +6295,9 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "633": {
           "json": {
-            "gizmo": 0
+            "gizmo": 1
           }
         }
       }
@@ -6370,7 +6436,9 @@
                   638,
                   658,
                   662,
-                  632
+                  632,
+                  631,
+                  633
                 ]
               },
               {
@@ -7099,6 +7167,14 @@
               {
                 "entity": 632,
                 "children": []
+              },
+              {
+                "entity": 631,
+                "children": []
+              },
+              {
+                "entity": 633,
+                "children": []
               }
             ]
           }
@@ -7290,7 +7366,13 @@
         "630": {
           "json": {}
         },
+        "631": {
+          "json": {}
+        },
         "632": {
+          "json": {}
+        },
+        "633": {
           "json": {}
         },
         "636": {

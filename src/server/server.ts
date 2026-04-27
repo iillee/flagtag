@@ -911,15 +911,13 @@ function registerHandlers(): void {
   room.onMessage('requestPickup', (_data, context) => {
     try {
       if (!context) return
-      const from = context.from.toLowerCase()
-      handlePickup(from)
+      handlePickup(context.from.toLowerCase())
     } catch (err) { console.error('[Server] ❌ requestPickup handler error:', err) }
   })
   room.onMessage('requestDrop', (_data, context) => {
     try {
       if (!context) return
-      const from = context.from.toLowerCase()
-      handleDrop(from)
+      handleDrop(context.from.toLowerCase())
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
   // Reload-respawn: player reloaded scene while carrying flag → respawn at random point
@@ -929,7 +927,6 @@ function registerHandlers(): void {
       const from = context.from.toLowerCase()
       const flag = Flag.getOrNull(flagEntity)
       if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== from) return
-      console.log('[Server] 🔄 Player', from.slice(0, 8), 'reloaded while carrying flag — respawning flag')
       const spawn = getRandomSpawnPoint()
       const mutable = Flag.getMutable(flagEntity)
       mutable.state = FlagState.AtBase
@@ -1123,7 +1120,6 @@ function handlePickup(playerId: string): void {
   const flagPos = Transform.get(flagEntity).position
   const dist = Vector3.distance(playerPos, flagPos)
   if (dist > PICKUP_RADIUS) return
-  console.log('[Server] 🚩 Pickup by', playerId.slice(0, 8))
 
   // Flush any leftover hold time from a previous carrier (safety)
   flushHoldTimeAccum()

@@ -51,6 +51,8 @@ export const Messages = {
   // Round end respawn
   requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
   respawnPlayers: Schemas.Map({ t: Schemas.Int }),
+
+
 }
 
 export const room = registerMessages(Messages)
