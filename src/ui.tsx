@@ -1035,6 +1035,7 @@ function DesktopLayout() {
   
   const visitorCount = getTodayVisitorCount()
   const onlineCount = getCurrentOnlineCount()
+  const totalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
   const leaderUserId =
     players.length > 0 && players[0].seconds > 0 ? players[0].userId : null
   const carrierUserId = getCurrentFlagCarrierUserId()
@@ -1593,23 +1594,26 @@ function DesktopLayout() {
                 alignItems: 'center',
               }}
             >
-              <UiEntity uiTransform={{ width: '20%' }}>
+              <UiEntity uiTransform={{ width: '18%' }}>
                 <Label value={`Unique Users: ${visitorCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '14%' }}>
+              <UiEntity uiTransform={{ width: '12%' }}>
                 <Label value={`Online: ${onlineCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '12%' }}>
+              <UiEntity uiTransform={{ width: '11%' }}>
                 <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '18%' }}>
+              <UiEntity uiTransform={{ width: '16%' }}>
                 <Label value={`Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '26%' }}>
+              <UiEntity uiTransform={{ width: '20%' }}>
                 <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
+              <UiEntity uiTransform={{ width: '15%' }}>
+                <Label value={`Playtime: ${totalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+              </UiEntity>
               <UiEntity
-                uiTransform={{ width: '10%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                uiTransform={{ width: '8%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
                 onMouseDown={() => { playClickSound(); toggleMusicMute() }}
               >
                 <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
@@ -2586,6 +2590,7 @@ function MobileLayout() {
         const visitorCount = getTodayVisitorCount()
         const onlineCount = getCurrentOnlineCount()
         const serverConnected = getServerConnectionStatus()
+        const mTotalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
         const M_VISITORS_PER_PAGE = 6
         const totalVisitors = allVisitors.length
         const maxOffset = Math.max(0, totalVisitors - M_VISITORS_PER_PAGE)
@@ -2638,6 +2643,8 @@ function MobileLayout() {
               <Label value={`Online: ${onlineCount}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
               <UiEntity uiTransform={{ width: 16 }} />
               <Label value={`Server: ${serverConnected}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ width: 16 }} />
+              <Label value={`Playtime: ${mTotalPlaytimeMin}m`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
               <UiEntity uiTransform={{ width: 16 }} />
               <UiEntity
                 uiTransform={{ flexDirection: 'row', alignItems: 'center' }}
