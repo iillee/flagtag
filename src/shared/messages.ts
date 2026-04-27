@@ -53,6 +53,9 @@ export const Messages = {
   requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
   respawnPlayers: Schemas.Map({ t: Schemas.Int }),
 
+  // Admin: trigger Discord report manually
+  testDiscord: Schemas.Map({ t: Schemas.Int }),
+
 
 }
 

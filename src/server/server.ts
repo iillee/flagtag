@@ -443,24 +443,23 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
       }
     }
 
-    // Build multipart form data to attach JSON file + send code block message
-    const filename = `${report.date}_flagtag_analytics.json`
-    const boundary = '----DclAnalytics' + Date.now()
-    const messageContent = messages.join('\n')
-
-    const bodyParts = [
-      `--${boundary}\r\nContent-Disposition: form-data; name="payload_json"\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ content: messageContent })}`,
-      `--${boundary}\r\nContent-Disposition: form-data; name="files[0]"; filename="${filename}"\r\nContent-Type: application/json\r\n\r\n${jsonBlock}`,
-      `--${boundary}--`
-    ]
-    const body = bodyParts.join('\r\n')
-
-    const res = await fetch(DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-      body
-    })
-    console.log('[Server] Discord webhook response:', res.status)
+    // Send each message as a separate simple JSON POST (multipart doesn't work in deployed runtime)
+    for (let i = 0; i < messages.length; i++) {
+      const res = await fetch(DISCORD_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: messages[i] })
+      })
+      console.log(`[Server] Discord webhook message ${i + 1}/${messages.length} response:`, res.status)
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('[Server] Discord webhook error body:', text)
+      }
+      // Rate limit: wait 500ms between messages
+      if (i < messages.length - 1) {
+        await new Promise(resolve => setTimeout(() => resolve(undefined), 500))
+      }
+    }
   } catch (err) {
     console.error('[Server] Failed to send Discord webhook:', err)
   }
@@ -1089,6 +1088,23 @@ function registerHandlers(): void {
     try {
       room.send('updraftLocation', { index: updraftActiveIndex })
     } catch (err) { console.error('[Server] ❌ requestUpdraftLocation handler error:', err) }
+  })
+
+  // Admin: manually trigger Discord analytics report
+  const ADMIN_ADDRESSES = ['0x1e93e534c5e26b01ed242410b43ae23dd0faa52b']
+  room.onMessage('testDiscord', (_data, context) => {
+    if (!context) return
+    const from = context.from.toLowerCase()
+    if (!ADMIN_ADDRESSES.includes(from)) {
+      console.log('[Server] testDiscord rejected from non-admin:', from)
+      return
+    }
+    console.log('[Server] 📊 Admin triggered Discord analytics report')
+    sendDailyAnalyticsToDiscord().then(() => {
+      console.log('[Server] ✅ Manual Discord report sent')
+    }).catch(err => {
+      console.error('[Server] ❌ Manual Discord report failed:', err)
+    })
   })
 }
 

@@ -127,6 +127,7 @@ export function getCinematicShowing(): boolean {
 
 // ── "Next Round Starting..." overlay (shown on black screen before fade-out) ──
 let nextRoundStartingVisible = false
+let noScorersCreditsVisible = false // set by cinematic system when no one scored
 let creditsCountdown = 0
 const creditLines = [
   'Oskar Stålberg and Townscaper for generating the level',
@@ -139,7 +140,7 @@ let creditLineTimer = 0
 const CREDIT_LINE_DURATION = 3 // seconds per line
 
 engine.addSystem((dt: number) => {
-  if (!nextRoundStartingVisible && !(splashVisible && cinematicShowing && splashPlayers.length === 0)) {
+  if (!nextRoundStartingVisible && !noScorersCreditsVisible) {
     creditLineTimer = 0
     creditLineIndex = 0
     return
@@ -153,6 +154,10 @@ engine.addSystem((dt: number) => {
 
 export function setNextRoundStartingVisible(visible: boolean) {
   nextRoundStartingVisible = visible
+}
+
+export function setNoScorersCreditsVisible(visible: boolean) {
+  noScorersCreditsVisible = visible
 }
 
 export function setCreditsCountdown(seconds: number) {
@@ -651,7 +656,7 @@ function PlayerListUi() {
           uiBackground={{ color: Color4.create(0, 0, 0, cinematicFadeOpacity) }}
         >
           {/* Next Round / Credits screen (no-scorers OR after cinematic podium) */}
-          {((splashVisible && cinematicShowing && splashPlayers.length === 0) || (nextRoundStartingVisible && !cinematicShowing)) && (
+          {(noScorersCreditsVisible || (nextRoundStartingVisible && !cinematicShowing)) && (
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%' }}>
               <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '35%' }, flexDirection: 'column', alignItems: 'center' }}>
                 <Label value="Special Thanks to:" fontSize={mobile ? 72 : S(42)} color={GOLD} font="sans-serif" />

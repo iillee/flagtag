@@ -3,7 +3,7 @@ import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Mat
 import { isServer } from '@dcl/sdk/network'
 import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
-import { setupUi, setCinematicFade, setCinematicShowing, setNextRoundStartingVisible, setCreditsCountdown, hideMailboxPopup, hideChestPopup } from './ui'
+import { setupUi, setCinematicFade, setCinematicShowing, setNextRoundStartingVisible, setCreditsCountdown, setNoScorersCreditsVisible, hideMailboxPopup, hideChestPopup } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem, initPools as initCombatPools } from './systems/combatSystem'
 import { trapClientSystem, initTrapPool } from './systems/trapSystem'
@@ -546,6 +546,7 @@ export async function main() {
           setCinematicShowing(true)
           if (noScorersRound) {
             // No scorers: stay on black screen, skip fade-out reveal
+            setNoScorersCreditsVisible(true)
             fadePhase = 4
           } else {
             fadePhase = 3
@@ -620,6 +621,7 @@ export async function main() {
       if (noScorersRound) {
         // No scorers: screen is already black — skip end-fade, go straight to fade-out reveal
         setCinematicShowing(false)
+        setNoScorersCreditsVisible(false)
         setCreditsCountdown(0)
         if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
         fadePhase = 7
