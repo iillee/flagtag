@@ -1,5 +1,5 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType, inputSystem, InputAction, PointerEventType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
@@ -636,22 +636,19 @@ export async function main() {
   })
 
   // Respawn all players at spawn point when round ends
-  room.onMessage('respawnPlayers', () => {
+  room.onMessage('respawnPlayers', (data) => {
     const localPlayer = getPlayer()
     const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
 
-    // Read top 3 from CountdownTimer CRDT (roundWinnerJson)
+    // Read top 3 directly from message (no CRDT race)
     let topPlayers: Array<{ userId: string; seconds: number }> = []
-    for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
-      if (timer.roundWinnerJson) {
-        try {
-          const data = JSON.parse(timer.roundWinnerJson) as Array<{ userId?: string; seconds: number }>
-          topPlayers = data
-            .filter(d => d.userId && d.seconds > 0)
-            .map(d => ({ userId: d.userId!.toLowerCase(), seconds: d.seconds }))
-        } catch { /* ignore */ }
-      }
-      break
+    if (data.winnersJson) {
+      try {
+        const parsed = JSON.parse(data.winnersJson) as Array<{ userId?: string; seconds: number }>
+        topPlayers = parsed
+          .filter(d => d.userId && d.seconds > 0)
+          .map(d => ({ userId: d.userId!.toLowerCase(), seconds: d.seconds }))
+      } catch { /* ignore */ }
     }
 
     const place1 = topPlayers[0]?.userId ?? null

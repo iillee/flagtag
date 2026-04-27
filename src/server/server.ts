@@ -265,6 +265,9 @@ async function loadVisitorData(): Promise<void> {
     return
   }
   
+  console.log('[Server] Storage.get visitorData:', savedData ? `${savedData.length} chars` : 'null')
+  console.log('[Server] Storage.get lastVisitorResetDay:', savedResetDay || 'null')
+
   if (savedData && savedResetDay) {
     try {
       const visitorRecords = JSON.parse(savedData)
@@ -373,6 +376,7 @@ const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/149080843609767
 
 async function sendDailyAnalyticsToDiscord(): Promise<void> {
   try {
+    console.log('[Server] Discord report: visitorSessions.size =', visitorSessions.size)
     const now = Date.now()
 
     // Build per-user data: address, time spent, stars (wins)
@@ -1990,7 +1994,7 @@ function countdownServerSystem(): void {
         lightningStrikeScheduled = false
         lightningWarningTimer = 0
         _lightningOriginalCarrierId = ''
-        room.send('respawnPlayers', { t: 0 })
+        room.send('respawnPlayers', { t: 0, winnersJson: '[]' })
         console.log('[Server] ⚠️ Emergency round-end recovery executed')
       } catch (recoveryErr) {
         console.error('[Server.ERROR] Emergency recovery also failed:', recoveryErr)
@@ -2111,16 +2115,7 @@ async function handleRoundEnd(): Promise<void> {
   spawnMushrooms()
   console.log('[Server] 🍄 Mushrooms respawned for new round')
 
-  // ── 3f. Respawn all players at spawn point immediately ──
-  room.send('respawnPlayers', { t: 0 })
-  console.log('[Server] 📍 Respawning all players at spawn point')
-
-  // ══════════════════════════════════════════════════════════════════════
-  // All synchronous state mutations done. Safe to await now.
-  // holdTimeServerSystem will see AtBase and not accumulate.
-  // ══════════════════════════════════════════════════════════════════════
-
-  // ── 4. Save top 3 snapshot for splash display ──
+  // ── 3f. Compute top 3 BEFORE sending respawnPlayers (avoids CRDT race) ──
   const topPlayers = [...players]
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 3)
@@ -2139,11 +2134,22 @@ async function handleRoundEnd(): Promise<void> {
     console.log('[Server] Top player:', p.name, '-', p.seconds, 'seconds')
   }
 
-  // ── 5. Set timer: splash + winner data ──
+  const winnersJson = JSON.stringify(topPlayers)
+
+  // ── 3g. Respawn all players at spawn point immediately ──
+  room.send('respawnPlayers', { t: 0, winnersJson })
+  console.log('[Server] 📍 Respawning all players at spawn point')
+
+  // ══════════════════════════════════════════════════════════════════════
+  // All synchronous state mutations done. Safe to await now.
+  // holdTimeServerSystem will see AtBase and not accumulate.
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── 4. Set timer: splash + winner data (CRDT backup — clients use message data) ──
   const timerMutable = CountdownTimer.getMutable(countdownEntity)
   timerMutable.roundEndTriggered = true
   timerMutable.roundEndDisplayUntilMs = now + SPLASH_DURATION_MS
-  timerMutable.roundWinnerJson = JSON.stringify(topPlayers)
+  timerMutable.roundWinnerJson = winnersJson
   
   console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
 

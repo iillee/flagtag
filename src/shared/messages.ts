@@ -51,7 +51,7 @@ export const Messages = {
 
   // Round end respawn
   requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
-  respawnPlayers: Schemas.Map({ t: Schemas.Int }),
+  respawnPlayers: Schemas.Map({ t: Schemas.Int, winnersJson: Schemas.String }),
 
   // Admin: trigger Discord report manually
   testDiscord: Schemas.Map({ t: Schemas.Int }),
