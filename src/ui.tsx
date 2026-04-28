@@ -1401,11 +1401,26 @@ function DesktopLayout() {
             </UiEntity>
             <UiEntity uiTransform={{ height: S(12) }} />
 
+            {/* Column header for Daily tab - absolutely positioned */}
+            {leaderboardTab === 'daily' && totalEntries > 0 && (
+              <UiEntity uiTransform={{
+                positionType: 'absolute',
+                position: { top: S(116), left: S(24), right: S(24 + (totalEntries > LEADERBOARD_PER_PAGE ? 18 : 0)) },
+                flexDirection: 'row',
+                alignItems: 'center',
+                height: S(28),
+              }}>
+                <Label value="#" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: S(32), height: S(28) }} textAlign="middle-left" />
+                <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '18%', height: S(28) }} textAlign="middle-left" />
+                <Label value="Wins" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
+              </UiEntity>
+            )}
+
             {/* Column header for All Time tab - absolutely positioned to stay above data */}
             {leaderboardTab === 'alltime' && totalEntries > 0 && (
               <UiEntity uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(116), left: S(24), right: S(24 + (totalEntries > LEADERBOARD_PER_PAGE ? 28 : 0)) },
+                position: { top: S(116), left: S(24), right: S(24 + (totalEntries > LEADERBOARD_PER_PAGE ? 18 : 0)) },
                 flexDirection: 'row',
                 alignItems: 'center',
                 height: S(28),
@@ -1417,7 +1432,25 @@ function DesktopLayout() {
               </UiEntity>
             )}
 
-            {/* Column header for Metrics tab — removed, now inline in metrics content */}
+            {/* Column header for Metrics tab - absolutely positioned to match All Time tab */}
+            {leaderboardTab === 'metrics' && (() => {
+              const totalVisitors = allVisitors.length
+              const metricsHasScroll = totalVisitors > VISITORS_PER_PAGE
+              return (
+              <UiEntity uiTransform={{
+                positionType: 'absolute',
+                position: { top: S(116), left: S(24), right: S(24 + (metricsHasScroll ? 18 : 0)) },
+                flexDirection: 'row',
+                alignItems: 'center',
+                height: S(28),
+              }}>
+                <Label value="" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: S(32), height: S(28) }} textAlign="middle-left" />
+                <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '18%', height: S(28) }} textAlign="middle-left" />
+                <Label value="Address" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
+                <Label value="Playtime" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(28) }} textAlign="middle-left" />
+              </UiEntity>
+              )
+            })()}
 
             {/* Daily Metrics tab content */}
             {leaderboardTab === 'metrics' && (() => {
@@ -1432,56 +1465,7 @@ function DesktopLayout() {
               const metricsThumbRatio = totalVisitors > 0 ? Math.max(0.15, VISITORS_PER_PAGE / totalVisitors) : 1
 
               return (
-              <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'column' }}>
-                <UiEntity
-                  uiTransform={{
-                    width: '100%',
-                    height: S(_ROW_HEIGHT),
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                  }}
-                >
-                  <UiEntity uiTransform={{ width: '18%' }}>
-                    <Label value={`Unique Users: ${visitorCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                  </UiEntity>
-                  <UiEntity uiTransform={{ width: '12%' }}>
-                    <Label value={`Online: ${onlineCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                  </UiEntity>
-                  <UiEntity uiTransform={{ width: '11%' }}>
-                    <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                  </UiEntity>
-                  <UiEntity uiTransform={{ width: '16%' }}>
-                    <Label value={`Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                  </UiEntity>
-                  <UiEntity uiTransform={{ width: '20%' }}>
-                    <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                  </UiEntity>
-                  <UiEntity uiTransform={{ width: '15%' }}>
-                    <Label value={`Playtime: ${totalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                  </UiEntity>
-                  <UiEntity
-                    uiTransform={{ width: '8%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-                    onMouseDown={() => { playClickSound(); toggleMusicMute() }}
-                  >
-                    <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
-                  </UiEntity>
-                </UiEntity>
-                <UiEntity uiTransform={{ height: S(16) }} />
-                {/* Column headers */}
-                <UiEntity uiTransform={{
-                  width: '100%',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  height: S(28),
-                  padding: { right: S(8) },
-                }}>
-                  <Label value="" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '5%', height: S(28) }} textAlign="middle-left" />
-                  <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '22%', height: S(28) }} textAlign="middle-left" />
-                  <Label value="Address" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28), padding: { left: S(16) } }} textAlign="middle-left" />
-                  <Label value="Playtime" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(28) }} textAlign="middle-left" />
-                </UiEntity>
-                <UiEntity uiTransform={{ height: S(4) }} />
-                <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'row' }}>
+              <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'row', margin: { top: S(32) } }}>
                   <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
                     {totalVisitors === 0 ? (
                       <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>
@@ -1492,32 +1476,25 @@ function DesktopLayout() {
                         <UiEntity
                           key={`metric-visitor-${visitor.userId}-${visitorScrollOffset}-${i}`}
                           uiTransform={{
-                            width: '100%',
-                            height: (S(_ROW_HEIGHT) + S(4)),
+                            height: S(_ROW_HEIGHT),
                             flexDirection: 'row',
                             alignItems: 'center',
-                            padding: { left: S(0), right: S(8), top: S(2), bottom: S(2) },
+                            justifyContent: 'flex-start',
                           }}
                         >
-                          <UiEntity uiTransform={{ width: '5%', flexDirection: 'row', alignItems: 'center' }}>
+                          <UiEntity uiTransform={{ width: S(32), height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center' }}>
                             <Label value={visitor.isOnline ? "●" : "○"} fontSize={S(14)} color={visitor.isOnline ? WHITE : GREY} font="sans-serif" />
                           </UiEntity>
-                          <UiEntity uiTransform={{ width: '22%', overflow: 'hidden', height: (S(_ROW_HEIGHT) + S(4)), maxHeight: (S(_ROW_HEIGHT) + S(4)) }}>
-                            <Label value={visitor.name} fontSize={S(12)} color={WHITE} font="sans-serif" />
-                          </UiEntity>
-                          <UiEntity uiTransform={{ width: '61%', overflow: 'hidden', height: (S(_ROW_HEIGHT) + S(4)), maxHeight: (S(_ROW_HEIGHT) + S(4)), padding: { left: S(16) } }}>
-                            <Label value={visitor.userId} fontSize={S(11)} color={WHITE} font="sans-serif" />
-                          </UiEntity>
-                          <UiEntity uiTransform={{ width: '12%', flexDirection: 'row', justifyContent: 'flex-start' }}>
-                            <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={S(12)} color={WHITE} font="sans-serif" />
-                          </UiEntity>
+                          <Label value={visitor.name} fontSize={S(12)} color={WHITE} font="sans-serif" uiTransform={{ width: '18%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                          <Label value={visitor.userId} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                          <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={S(12)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
                         </UiEntity>
                       ))
                     )}
                   </UiEntity>
 
                   {metricsNeedsScroll && (
-                    <UiEntity uiTransform={{ width: S(10), flexDirection: 'column', alignItems: 'center', margin: { left: S(4) } }}>
+                    <UiEntity uiTransform={{ width: S(10), flexDirection: 'column', alignItems: 'center', margin: { left: S(8) } }}>
                       <UiEntity
                         uiTransform={{ width: S(10), height: S(28), flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
                         onMouseDown={() => { if (metricsCanScrollUp) visitorScrollOffset -= 1 }}
@@ -1560,9 +1537,46 @@ function DesktopLayout() {
                     </UiEntity>
                   )}
                 </UiEntity>
-              </UiEntity>
               )
             })()}
+
+            {/* Stats row for Metrics tab — absolutely positioned at bottom of panel */}
+            {leaderboardTab === 'metrics' && (
+              <UiEntity
+                uiTransform={{
+                  positionType: 'absolute',
+                  position: { bottom: S(24), left: S(24), right: S(24) },
+                  height: S(_ROW_HEIGHT),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}
+              >
+                <UiEntity uiTransform={{ width: '18%' }}>
+                  <Label value={`Unique Users: ${visitorCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ width: '12%' }}>
+                  <Label value={`Online: ${onlineCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ width: '11%' }}>
+                  <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ width: '16%' }}>
+                  <Label value={`Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ width: '20%' }}>
+                  <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ width: '15%' }}>
+                  <Label value={`Playtime: ${totalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity
+                  uiTransform={{ width: '8%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                  onMouseDown={() => { playClickSound(); toggleMusicMute() }}
+                >
+                  <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+              </UiEntity>
+            )}
 
             {/* Leaderboard tab content (daily + alltime) */}
             {leaderboardTab !== 'metrics' && (
@@ -1571,7 +1585,7 @@ function DesktopLayout() {
                 width: '100%',
                 flexGrow: 1,
                 flexDirection: 'row',
-                margin: leaderboardTab === 'alltime' && totalEntries > 0 ? { top: S(32) } : undefined,
+                margin: (leaderboardTab === 'alltime' || leaderboardTab === 'daily') && totalEntries > 0 ? { top: S(32) } : undefined,
               }}
             >
               <UiEntity
@@ -1601,7 +1615,8 @@ function DesktopLayout() {
                       >
                         {leaderboardTab === 'daily' ? (
                           <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", width: '100%' }}>
-                            <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" uiTransform={{ width: '30%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                            <Label value={`${rank}.`} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ width: S(32), height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                            <Label value={entry.name} fontSize={S(12)} color={nameColor} font="sans-serif" uiTransform={{ width: '18%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
                             <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1, flexWrap: 'wrap' }}>
                               {Array.from({ length: entry.roundsWon }, (_, ri) => (
                                 <UiEntity key={`rw-${ri}`} uiTransform={{ width: S(14), height: S(14), margin: { right: S(2) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
@@ -1628,7 +1643,7 @@ function DesktopLayout() {
                     width: S(10),
                     flexDirection: 'column',
                     alignItems: 'center',
-                    margin: { left: S(4) },
+                    margin: { left: S(8) },
                   }}
                 >
                   <UiEntity
@@ -1822,7 +1837,7 @@ function DesktopLayout() {
                           <Label value={visitor.name} fontSize={S(12)} color={WHITE} font="sans-serif" />
                         </UiEntity>
                         <UiEntity uiTransform={{ width: '61%', overflow: 'hidden', height: (S(_ROW_HEIGHT) + S(4)), maxHeight: (S(_ROW_HEIGHT) + S(4)), padding: { left: S(16) } }}>
-                          <Label value={visitor.userId} fontSize={S(11)} color={WHITE} font="sans-serif" />
+                          <Label value={visitor.userId} fontSize={S(12)} color={WHITE} font="sans-serif" />
                         </UiEntity>
                         <UiEntity uiTransform={{ width: '12%', flexDirection: 'row', justifyContent: 'flex-end' }}>
                           <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={S(12)} color={WHITE} font="sans-serif" />
