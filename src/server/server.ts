@@ -555,9 +555,14 @@ async function syncVisitorAnalytics(): Promise<void> {
       totalSeconds += Math.floor(sessionMs / 1000)
     }
     
+    // Always prefer the authoritative playerNames directory over the session name
+    const bestName = (playerNames.has(userId) && isRealName(playerNames.get(userId)!))
+      ? playerNames.get(userId)!
+      : data.name
+
     return {
       userId,
-      name: data.name,
+      name: bestName,
       isOnline,
       totalSeconds
     }

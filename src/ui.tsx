@@ -1013,7 +1013,7 @@ function PlayerListUi() {
 // Desktop layout base values (scaled at render time via S())
 const _PANEL_WIDTH = 240
 const _ROW_HEIGHT = 32
-const VISITORS_PER_PAGE = 10
+const VISITORS_PER_PAGE = 9
 const LEADERBOARD_PER_PAGE = 12
 const _TITLE_FONT = 20
 const _ROW_FONT = 15
@@ -1494,7 +1494,7 @@ function DesktopLayout() {
                   </UiEntity>
 
                   {metricsNeedsScroll && (
-                    <UiEntity uiTransform={{ width: S(10), flexDirection: 'column', alignItems: 'center', margin: { left: S(8) } }}>
+                    <UiEntity uiTransform={{ width: S(10), flexDirection: 'column', alignItems: 'center', margin: { left: S(8), bottom: S(28) } }}>
                       <UiEntity
                         uiTransform={{ width: S(10), height: S(28), flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
                         onMouseDown={() => { if (metricsCanScrollUp) visitorScrollOffset -= 1 }}
