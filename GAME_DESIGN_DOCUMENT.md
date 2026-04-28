@@ -1,6 +1,6 @@
 # Flag Tag — Game Design Document
 
-> **Version:** 1.1 · **Last Updated:** April 26, 2026  
+> **Version:** 1.2 · **Last Updated:** April 27, 2026  
 > **Platform:** Decentraland SDK7 · **Deployment:** World (`flagtag.dcl.eth`)  
 > **Scene Size:** 32×32 parcels (512m × 512m, 1024 parcels)
 
@@ -206,12 +206,14 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 
 ### 5.1 Desktop Layout (scaled by viewport)
 - **Top-Left:** Round countdown timer (MM:SS format, pill-shaped dark background)
-- **Right Side:** Scoreboard panel — lists all players sorted by hold time, gold highlight for leader, flag icon for current carrier
-- **Bottom Center:** Ability icons — Boomerang (E) and Banana (F) with cooldown overlays
-- **Scoreboard Header Icons:**
+- **Right Side:** Scoreboard panel — lists all players sorted by hold time, gold highlight for leader, flag icon for current carrier. Two icon buttons stacked vertically to the left of the scoreboard (each with its own rounded background):
+  - Flag icon → Leaderboards overlay
   - `?` → How to Play overlay (3-column cards: Flag, Combat, Environment + Controls bar)
-  - Flag icon → Leaderboard overlay (Daily / All Time tabs with scrolling)
-  - `#` → Analytics overlay (daily visitors, online count, server status, time-in-scene)
+- **Bottom Center:** Ability icons — Boomerang (E) and Banana (F) with cooldown overlays
+- **Leaderboards Overlay:** Three tabs:
+  - **Daily Leaderboard** — today's round winners with flag icons per win
+  - **All Time Leaderboard** — cumulative wins across all days with rank, name, address, win count
+  - **Daily Metrics** — visitor analytics (unique users, online count, server status, date/time, playtime, scrollable visitor list with online status and time-in-scene)
 
 ### 5.2 Mobile Layout
 - Repositioned for touch-safe areas (avoids joystick, chat, action buttons)

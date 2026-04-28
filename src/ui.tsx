@@ -294,7 +294,7 @@ function attackFlickerSystem(): void {
 // Scroll state for lists
 let visitorScrollOffset = 0
 let leaderboardScrollOffset = 0
-let leaderboardTab: 'daily' | 'alltime' = 'daily'
+let leaderboardTab: 'daily' | 'alltime' | 'metrics' = 'daily'
 
 // ── Round-end splash state ──
 let splashVisible = false
@@ -1372,7 +1372,7 @@ function DesktopLayout() {
             >
               <Label value="×" fontSize={S(44)} color={closeLeaderboardHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value="Leaderboard" fontSize={S(28)} color={GOLD} font="sans-serif" />
+            <Label value="Leaderboards" fontSize={S(28)} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: S(8) }} />
             <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: S(32) }}>
               <UiEntity
@@ -1380,7 +1380,7 @@ function DesktopLayout() {
                 uiBackground={{ color: leaderboardTab === 'daily' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                 onMouseDown={() => { playClickSound(); leaderboardTab = 'daily'; leaderboardScrollOffset = 0 }}
               >
-                <Label value="Daily" fontSize={S(16)} color={leaderboardTab === 'daily' ? WHITE : MUTED} font="sans-serif" />
+                <Label value="Daily Leaderboard" fontSize={S(16)} color={leaderboardTab === 'daily' ? WHITE : MUTED} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: S(6) }} />
               <UiEntity
@@ -1388,7 +1388,15 @@ function DesktopLayout() {
                 uiBackground={{ color: leaderboardTab === 'alltime' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                 onMouseDown={() => { playClickSound(); leaderboardTab = 'alltime'; leaderboardScrollOffset = 0 }}
               >
-                <Label value="All Time" fontSize={S(16)} color={leaderboardTab === 'alltime' ? WHITE : MUTED} font="sans-serif" />
+                <Label value="All Time Leaderboard" fontSize={S(16)} color={leaderboardTab === 'alltime' ? WHITE : MUTED} font="sans-serif" />
+              </UiEntity>
+              <UiEntity uiTransform={{ width: S(6) }} />
+              <UiEntity
+                uiTransform={{ flexGrow: 1, height: S(32), flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: S(6) }}
+                uiBackground={{ color: leaderboardTab === 'metrics' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
+                onMouseDown={() => { playClickSound(); leaderboardTab = 'metrics'; leaderboardScrollOffset = 0; visitorScrollOffset = 0 }}
+              >
+                <Label value="Daily Metrics" fontSize={S(16)} color={leaderboardTab === 'metrics' ? WHITE : MUTED} font="sans-serif" />
               </UiEntity>
             </UiEntity>
             <UiEntity uiTransform={{ height: S(12) }} />
@@ -1409,6 +1417,141 @@ function DesktopLayout() {
               </UiEntity>
             )}
 
+            {/* Daily Metrics tab content */}
+            {leaderboardTab === 'metrics' && (() => {
+              const totalVisitors = allVisitors.length
+              const metricsMaxOffset = Math.max(0, totalVisitors - VISITORS_PER_PAGE)
+              if (visitorScrollOffset > metricsMaxOffset) visitorScrollOffset = metricsMaxOffset
+              if (visitorScrollOffset < 0) visitorScrollOffset = 0
+              const visibleVisitors = allVisitors.slice(visitorScrollOffset, visitorScrollOffset + VISITORS_PER_PAGE)
+              const metricsCanScrollUp = visitorScrollOffset > 0
+              const metricsCanScrollDown = visitorScrollOffset < metricsMaxOffset
+              const metricsNeedsScroll = totalVisitors > VISITORS_PER_PAGE
+              const metricsThumbRatio = totalVisitors > 0 ? Math.max(0.15, VISITORS_PER_PAGE / totalVisitors) : 1
+
+              return (
+              <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'column' }}>
+                <UiEntity
+                  uiTransform={{
+                    width: '100%',
+                    height: S(_ROW_HEIGHT),
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                  }}
+                >
+                  <UiEntity uiTransform={{ width: '18%' }}>
+                    <Label value={`Unique Users: ${visitorCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                  <UiEntity uiTransform={{ width: '12%' }}>
+                    <Label value={`Online: ${onlineCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                  <UiEntity uiTransform={{ width: '11%' }}>
+                    <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                  <UiEntity uiTransform={{ width: '16%' }}>
+                    <Label value={`Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                  <UiEntity uiTransform={{ width: '20%' }}>
+                    <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                  <UiEntity uiTransform={{ width: '15%' }}>
+                    <Label value={`Playtime: ${totalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                  <UiEntity
+                    uiTransform={{ width: '8%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                    onMouseDown={() => { playClickSound(); toggleMusicMute() }}
+                  >
+                    <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
+                  </UiEntity>
+                </UiEntity>
+                <UiEntity uiTransform={{ height: S(12) }} />
+                <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'row' }}>
+                  <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
+                    {totalVisitors === 0 ? (
+                      <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>
+                        <Label value="No visitors today" fontSize={S(_ROW_FONT)} color={MUTED} font="sans-serif" />
+                      </UiEntity>
+                    ) : (
+                      visibleVisitors.map((visitor, i) => (
+                        <UiEntity
+                          key={`metric-visitor-${visitor.userId}-${visitorScrollOffset}-${i}`}
+                          uiTransform={{
+                            width: '100%',
+                            height: (S(_ROW_HEIGHT) + S(4)),
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: { left: S(0), right: S(8), top: S(2), bottom: S(2) },
+                          }}
+                        >
+                          <UiEntity uiTransform={{ width: '5%', flexDirection: 'row', alignItems: 'center' }}>
+                            <Label value={visitor.isOnline ? "●" : "○"} fontSize={S(14)} color={visitor.isOnline ? WHITE : GREY} font="sans-serif" />
+                          </UiEntity>
+                          <UiEntity uiTransform={{ width: '22%', overflow: 'hidden', height: (S(_ROW_HEIGHT) + S(4)), maxHeight: (S(_ROW_HEIGHT) + S(4)) }}>
+                            <Label value={visitor.name} fontSize={S(12)} color={WHITE} font="sans-serif" />
+                          </UiEntity>
+                          <UiEntity uiTransform={{ width: '61%', overflow: 'hidden', height: (S(_ROW_HEIGHT) + S(4)), maxHeight: (S(_ROW_HEIGHT) + S(4)), padding: { left: S(16) } }}>
+                            <Label value={visitor.userId} fontSize={S(11)} color={WHITE} font="sans-serif" />
+                          </UiEntity>
+                          <UiEntity uiTransform={{ width: '12%', flexDirection: 'row', justifyContent: 'flex-end' }}>
+                            <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={S(12)} color={WHITE} font="sans-serif" />
+                          </UiEntity>
+                        </UiEntity>
+                      ))
+                    )}
+                  </UiEntity>
+
+                  {metricsNeedsScroll && (
+                    <UiEntity uiTransform={{ width: S(24), flexDirection: 'column', alignItems: 'center', margin: { left: S(4) } }}>
+                      <UiEntity
+                        uiTransform={{ width: S(24), height: S(28), flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: S(4) }}
+                        uiBackground={{ color: metricsCanScrollUp ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
+                        onMouseDown={() => { if (metricsCanScrollUp) visitorScrollOffset -= 1 }}
+                      >
+                        <Label value="▲" fontSize={S(14)} color={metricsCanScrollUp ? WHITE : CLOSE_GREY} font="sans-serif" />
+                      </UiEntity>
+                      <UiEntity
+                        uiTransform={{ width: S(10), flexGrow: 1, flexDirection: 'column', borderRadius: S(0), margin: { top: S(2), bottom: S(2) } }}
+                        uiBackground={{ color: Color4.create(0.18, 0.18, 0.2, 1) }}
+                      >
+                        {(() => {
+                          const TRACK_SEGMENTS = 8
+                          const segments: any[] = []
+                          for (let s = 0; s < TRACK_SEGMENTS; s++) {
+                            const segFraction = s / TRACK_SEGMENTS
+                            const segTarget = Math.round(segFraction * metricsMaxOffset)
+                            const segTopFrac = s / TRACK_SEGMENTS
+                            const segBotFrac = (s + 1) / TRACK_SEGMENTS
+                            const thumbTopFrac = metricsMaxOffset > 0 ? visitorScrollOffset / metricsMaxOffset * (1 - metricsThumbRatio) : 0
+                            const thumbBotFrac = thumbTopFrac + metricsThumbRatio
+                            const isThumb = thumbTopFrac < segBotFrac && thumbBotFrac > segTopFrac
+                            segments.push(
+                              <UiEntity
+                                key={`metrics-track-seg-${s}`}
+                                uiTransform={{ width: S(10), flexGrow: 1, borderRadius: S(0) }}
+                                uiBackground={{ color: isThumb ? Color4.create(0.45, 0.45, 0.5, 1) : Color4.create(0, 0, 0, 0) }}
+                                onMouseDown={() => { visitorScrollOffset = segTarget }}
+                              />
+                            )
+                          }
+                          return segments
+                        })()}
+                      </UiEntity>
+                      <UiEntity
+                        uiTransform={{ width: S(24), height: S(28), flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: S(4) }}
+                        uiBackground={{ color: metricsCanScrollDown ? Color4.create(0.25, 0.25, 0.28, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
+                        onMouseDown={() => { if (metricsCanScrollDown) visitorScrollOffset += 1 }}
+                      >
+                        <Label value="▼" fontSize={S(14)} color={metricsCanScrollDown ? WHITE : CLOSE_GREY} font="sans-serif" />
+                      </UiEntity>
+                    </UiEntity>
+                  )}
+                </UiEntity>
+              </UiEntity>
+              )
+            })()}
+
+            {/* Leaderboard tab content (daily + alltime) */}
+            {leaderboardTab !== 'metrics' && (
             <UiEntity
               uiTransform={{
                 width: '100%',
@@ -1444,7 +1587,7 @@ function DesktopLayout() {
                       >
                         {leaderboardTab === 'daily' ? (
                           <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", width: '100%' }}>
-                            <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" uiTransform={{ width: '45%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
+                            <Label value={entry.name} fontSize={S(_ROW_FONT)} color={nameColor} font="sans-serif" uiTransform={{ height: S(_ROW_HEIGHT), margin: { right: S(8) } }} textAlign="middle-left" />
                             <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1, flexWrap: 'wrap' }}>
                               {Array.from({ length: entry.roundsWon }, (_, ri) => (
                                 <UiEntity key={`rw-${ri}`} uiTransform={{ width: S(14), height: S(14), margin: { right: S(2) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
@@ -1531,6 +1674,7 @@ function DesktopLayout() {
                 </UiEntity>
               )}
             </UiEntity>
+            )}
           </UiEntity>
         </UiEntity>
         )
@@ -1820,16 +1964,45 @@ function DesktopLayout() {
         </UiEntity>
       </UiEntity>}
 
-      {/* ── Right-side container: scoreboard stacked vertically ── */}
+      {/* ── Right-side container: scoreboard + icon buttons ── */}
       <UiEntity
         uiTransform={{
           positionType: 'absolute',
           position: { right: S(16), top: S(14) },
-          width: S(_PANEL_WIDTH),
-          flexDirection: 'column',
-          alignItems: 'stretch',
+          flexDirection: 'row',
+          alignItems: 'flex-start',
         }}
       >
+        {/* Icon buttons — to the left of scoreboard */}
+        <UiEntity
+          uiTransform={{
+            width: S(46),
+            height: S(2 * _ROW_HEIGHT + 2 * _PADDING),
+            flexDirection: 'column',
+            alignItems: 'center',
+            margin: { right: S(4) },
+          }}
+        >
+          <UiEntity
+            uiTransform={{ width: S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS) }}
+            uiBackground={{ color: PANEL_BG }}
+            onMouseEnter={() => { squareIconHovered = true }}
+            onMouseLeave={() => { squareIconHovered = false }}
+            onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+          >
+            <UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
+          </UiEntity>
+          <UiEntity uiTransform={{ height: S(4) }} />
+          <UiEntity
+            uiTransform={{ width: S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS) }}
+            uiBackground={{ color: PANEL_BG }}
+            onMouseEnter={() => { questionIconHovered = true }}
+            onMouseLeave={() => { questionIconHovered = false }}
+            onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
+          >
+            <Label value="?" fontSize={S(24)} color={winConditionOverlayVisible || questionIconHovered ? GOLD : WHITE} font="sans-serif" />
+          </UiEntity>
+        </UiEntity>
         {/* Scoreboard panel */}
         <UiEntity
           uiTransform={{
@@ -1846,43 +2019,10 @@ function DesktopLayout() {
             height: S(_ROW_HEIGHT),
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-start',
           }}
         >
           <Label value="Scoreboard" fontSize={S(_TITLE_FONT)} color={MUTED} font="sans-serif" />
-          <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-            <UiEntity
-              uiTransform={{ width: S(28), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-              onMouseEnter={() => { squareIconHovered = true }}
-              onMouseLeave={() => { squareIconHovered = false }}
-              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
-            >
-              <UiEntity uiTransform={{ width: S(16), height: S(16) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
-            </UiEntity>
-            <UiEntity
-              uiTransform={{ width: S(28), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-              onMouseEnter={() => { questionIconHovered = true }}
-              onMouseLeave={() => { questionIconHovered = false }}
-              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
-            >
-              <Label value="?" fontSize={S(_ICON_FONT_QUESTION)} color={winConditionOverlayVisible || questionIconHovered ? GOLD : WHITE} font="sans-serif" />
-            </UiEntity>
-            <UiEntity
-              uiTransform={{ width: S(28), height: S(28), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-              onMouseEnter={() => { analyticsIconHovered = true }}
-              onMouseLeave={() => { analyticsIconHovered = false }}
-              onMouseDown={() => {
-                playClickSound();
-                setWinConditionOverlayVisible(false);
-                setLeaderboardOverlayVisible(false);
-                visitorScrollOffset = 0;
-                toggleAnalyticsOverlay();
-                notifyOverlayClosed();
-              }}
-            >
-              <Label value="#" fontSize={S(_ICON_FONT_ANALYTICS)} color={analyticsOverlayVisible || analyticsIconHovered ? GOLD : WHITE} font="sans-serif" />
-            </UiEntity>
-          </UiEntity>
         </UiEntity>
         {players.length === 0 ? (
           <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>
@@ -1926,6 +2066,7 @@ function DesktopLayout() {
           })
         )}
         </UiEntity>
+        
       </UiEntity>
     </UiEntity>
   )
@@ -2501,7 +2642,7 @@ function MobileLayout() {
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value="Leaderboard" fontSize={36} color={GOLD} font="sans-serif" uiTransform={{ height: 44, flexShrink: 0 }} />
+            <Label value="Leaderboards" fontSize={36} color={GOLD} font="sans-serif" uiTransform={{ height: 44, flexShrink: 0 }} />
             <UiEntity uiTransform={{ height: 12, flexShrink: 0 }} />
             <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 40 }}>
               <UiEntity
@@ -2509,19 +2650,80 @@ function MobileLayout() {
                 uiBackground={{ color: leaderboardTab === 'daily' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                 onMouseDown={() => { playClickSound(); leaderboardTab = 'daily'; leaderboardScrollOffset = 0 }}
               >
-                <Label value="Daily" fontSize={20} color={leaderboardTab === 'daily' ? WHITE : MUTED} font="sans-serif" />
+                <Label value="Daily" fontSize={16} color={leaderboardTab === 'daily' ? WHITE : MUTED} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: 8 }} />
+              <UiEntity uiTransform={{ width: 6 }} />
               <UiEntity
                 uiTransform={{ flexGrow: 1, height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 6 }}
                 uiBackground={{ color: leaderboardTab === 'alltime' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                 onMouseDown={() => { playClickSound(); leaderboardTab = 'alltime'; leaderboardScrollOffset = 0 }}
               >
-                <Label value="All Time" fontSize={20} color={leaderboardTab === 'alltime' ? WHITE : MUTED} font="sans-serif" />
+                <Label value="All Time" fontSize={16} color={leaderboardTab === 'alltime' ? WHITE : MUTED} font="sans-serif" />
+              </UiEntity>
+              <UiEntity uiTransform={{ width: 6 }} />
+              <UiEntity
+                uiTransform={{ flexGrow: 1, height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 6 }}
+                uiBackground={{ color: leaderboardTab === 'metrics' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
+                onMouseDown={() => { playClickSound(); leaderboardTab = 'metrics'; leaderboardScrollOffset = 0; visitorScrollOffset = 0 }}
+              >
+                <Label value="Metrics" fontSize={16} color={leaderboardTab === 'metrics' ? WHITE : MUTED} font="sans-serif" />
               </UiEntity>
             </UiEntity>
             <UiEntity uiTransform={{ height: 12 }} />
 
+            {/* Mobile metrics tab */}
+            {leaderboardTab === 'metrics' && (() => {
+              const mAllVisitors = [...getAllVisitors()].sort((a, b) => {
+                if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
+                return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+              })
+              const mVisitorCount = getTodayVisitorCount()
+              const mOnlineCount = getCurrentOnlineCount()
+              const mServerConnected = getServerConnectionStatus()
+              const mPlaytime = Math.floor(mAllVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
+              const M_VIS_PAGE = 6
+              const mTotalVis = mAllVisitors.length
+              const mMaxOff = Math.max(0, mTotalVis - M_VIS_PAGE)
+              if (visitorScrollOffset > mMaxOff) visitorScrollOffset = mMaxOff
+              if (visitorScrollOffset < 0) visitorScrollOffset = 0
+              const mVisibleVis = mAllVisitors.slice(visitorScrollOffset, visitorScrollOffset + M_VIS_PAGE)
+              const mCanUp = visitorScrollOffset > 0
+              const mCanDown = visitorScrollOffset < mMaxOff
+
+              return (
+              <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
+                <Label value={`Users: ${mVisitorCount}  Online: ${mOnlineCount}  Server: ${mServerConnected}`} fontSize={16} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`Date: ${formatUTCDate()}  Time: ${formatUTCTime()}  Playtime: ${mPlaytime}m`} fontSize={16} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: 4, bottom: 8 } }} />
+                {mCanUp && (
+                  <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }} onMouseDown={() => { visitorScrollOffset -= 1 }}>
+                    <Label value="▲ More" fontSize={22} color={WHITE} font="sans-serif" />
+                  </UiEntity>
+                )}
+                {mTotalVis === 0 ? (
+                  <UiEntity uiTransform={{ height: 44 * 2, justifyContent: 'center', alignItems: 'center' }}>
+                    <Label value="No visitors today" fontSize={22} color={MUTED} font="sans-serif" />
+                  </UiEntity>
+                ) : (
+                  mVisibleVis.map((visitor, i) => (
+                    <UiEntity key={`m-met-${visitor.userId}-${visitorScrollOffset}-${i}`} uiTransform={{ height: 44, flexDirection: 'row', alignItems: 'center' }}>
+                      <Label value={visitor.isOnline ? "●" : "○"} fontSize={16} color={visitor.isOnline ? WHITE : GREY} font="sans-serif" uiTransform={{ width: 24 }} />
+                      <Label value={visitor.name} fontSize={18} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
+                      <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={18} color={MUTED} font="sans-serif" />
+                    </UiEntity>
+                  ))
+                )}
+                {mCanDown && (
+                  <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }} onMouseDown={() => { visitorScrollOffset += 1 }}>
+                    <Label value="▼ More" fontSize={22} color={WHITE} font="sans-serif" />
+                  </UiEntity>
+                )}
+              </UiEntity>
+              )
+            })()}
+
+            {/* Leaderboard content (daily + alltime) */}
+            {leaderboardTab !== 'metrics' && (
+            <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
             {/* Scroll up */}
             {lbCanScrollUp && (
               <UiEntity
@@ -2581,6 +2783,8 @@ function MobileLayout() {
               >
                 <Label value="▼ More" fontSize={22} color={WHITE} font="sans-serif" />
               </UiEntity>
+            )}
+            </UiEntity>
             )}
           </UiEntity>
         </UiEntity>
