@@ -2554,16 +2554,16 @@
               "y": 47.40749740600586,
               "z": 297.75
             },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 3
+            },
             "rotation": {
               "x": 0,
               "y": 0.011416199617087841,
               "z": 0,
               "w": 0.9999348521232605
-            },
-            "scale": {
-              "x": 2,
-              "y": 2,
-              "z": 3
             },
             "parent": 0
           }
@@ -2596,16 +2596,16 @@
               "y": 47.488101959228516,
               "z": 304
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -6295,9 +6295,9 @@
         "serializationType": "map"
       },
       "data": {
-        "633": {
+        "0": {
           "json": {
-            "gizmo": 1
+            "gizmo": 0
           }
         }
       }
@@ -9820,7 +9820,7 @@
       }
     },
     {
-      "name": "inspector::SceneMetadata-v3",
+      "name": "inspector::SceneMetadata-v4",
       "jsonSchema": {
         "type": "object",
         "properties": {
@@ -10137,6 +10137,14 @@
             "optionalJsonSchema": {
               "type": "string",
               "serializationType": "utf8-string"
+            }
+          },
+          "disableNearbyVoiceChat": {
+            "type": "boolean",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "boolean",
+              "serializationType": "boolean"
             }
           }
         },
@@ -14296,7 +14304,8 @@
               }
             ],
             "skyboxConfig": {},
-            "creator": "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b"
+            "creator": "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b",
+            "disableNearbyVoiceChat": false
           }
         }
       }
