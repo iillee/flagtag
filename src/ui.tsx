@@ -1614,10 +1614,10 @@ function DesktopLayout() {
                         }}
                       >
                         {leaderboardTab === 'daily' ? (
-                          <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", width: '100%' }}>
+                          <UiEntity uiTransform={{ width: '100%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center' }}>
                             <Label value={`${rank}.`} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ width: S(32), height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
                             <Label value={entry.name} fontSize={S(12)} color={nameColor} font="sans-serif" uiTransform={{ width: '18%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
-                            <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1, flexWrap: 'wrap' }}>
+                            <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1, height: S(_ROW_HEIGHT), overflow: 'hidden' }}>
                               {Array.from({ length: entry.roundsWon }, (_, ri) => (
                                 <UiEntity key={`rw-${ri}`} uiTransform={{ width: S(14), height: S(14), margin: { right: S(2) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
                               ))}
