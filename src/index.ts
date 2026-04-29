@@ -477,19 +477,52 @@ export async function main() {
   engine.addSystem(shieldSystem)
   engine.addSystem(updateHoldTimeInterpolation)
 
-  // Helper: retry an emote up to 3 times with delays (handles mid-air failures)
-  function retryEmote(emote: string, delayMs: number = 1500, retries: number = 3) {
-    let attempt = 0
-    const tryEmote = () => {
-      attempt++
-      void triggerEmote({ predefinedEmote: emote }).catch(() => {
-        if (attempt < retries) {
-          setTimeout(tryEmote, 500)
-        }
-      })
-    }
-    setTimeout(tryEmote, delayMs)
+  // Helper: wait until player Y stops changing (grounded), then trigger emote
+  let pendingEmote: { emote: string } | null = null
+  const STABLE_EPSILON = 0.01   // Y change per frame below this = stable
+  const STABLE_FRAMES = 5       // must be stable for this many consecutive frames
+  const EMOTE_TIMEOUT = 6.0     // give up after this many seconds
+  const EMOTE_MIN_DELAY = 0.5   // minimum wait before checking (let teleport settle)
+  let stableCount = 0
+  let emoteElapsed = 0
+  let lastPlayerY = 0
+
+  function waitForGroundedEmote(emote: string, _targetY: number) {
+    pendingEmote = { emote }
+    stableCount = 0
+    emoteElapsed = 0
+    lastPlayerY = -9999
   }
+
+  engine.addSystem((dt: number) => {
+    if (!pendingEmote) return
+    emoteElapsed += dt
+
+    if (emoteElapsed >= EMOTE_TIMEOUT) {
+      console.log('[Client] ⏰ Emote grounded check timed out, forcing emote')
+      void triggerEmote({ predefinedEmote: pendingEmote.emote }).catch(() => {})
+      pendingEmote = null
+      return
+    }
+
+    // Wait a minimum delay for the teleport to take effect
+    if (emoteElapsed < EMOTE_MIN_DELAY) return
+
+    const playerY = Transform.get(engine.PlayerEntity).position.y
+    const deltaY = Math.abs(playerY - lastPlayerY)
+    lastPlayerY = playerY
+
+    if (deltaY < STABLE_EPSILON) {
+      stableCount++
+      if (stableCount >= STABLE_FRAMES) {
+        console.log(`[Client] ✅ Player grounded (Y stable at ${playerY.toFixed(2)} for ${STABLE_FRAMES} frames), triggering emote: ${pendingEmote.emote}`)
+        void triggerEmote({ predefinedEmote: pendingEmote.emote }).catch(() => {})
+        pendingEmote = null
+      }
+    } else {
+      stableCount = 0
+    }
+  })
 
   // ── Round-end cinematic camera ──
   // Camera at green cube looking toward red cube
@@ -716,21 +749,21 @@ export async function main() {
         newRelativePosition: { x: 265.57, y: 19.51, z: 219.65 },
         cameraTarget: GREEN_CUBE,
       })
-      retryEmote('handsair', 1500, 3)
+      waitForGroundedEmote('handsair', 19.51)
       console.log('[Client] 🏆 1st place teleported to red cube!')
     } else if (isSecondPlace) {
       void movePlayerTo({
         newRelativePosition: { x: 266.97, y: 18.85, z: 220.87 },
         cameraTarget: GREEN_CUBE,
       })
-      retryEmote('clap', 1500, 3)
+      waitForGroundedEmote('clap', 18.85)
       console.log('[Client] 🥈 2nd place teleported to gold cube!')
     } else if (isThirdPlace) {
       void movePlayerTo({
         newRelativePosition: { x: 264.25, y: 18.16, z: 218.57 },
         cameraTarget: GREEN_CUBE,
       })
-      retryEmote('clap', 1500, 3)
+      waitForGroundedEmote('clap', 18.16)
       console.log('[Client] 🥉 3rd place teleported to blue cube!')
     } else {
       const spawnX = 261.75 + Math.random() * 3

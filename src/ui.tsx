@@ -1952,6 +1952,11 @@ function DesktopLayout() {
                 color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
               }}
             />
+            {isProjectileOnCooldown() && (
+              <Label value={`${getProjectileCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
+              />
+            )}
 
           </UiEntity>
 
@@ -2308,6 +2313,11 @@ function MobileLayout() {
                     color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
                   }}
                 />
+                {isProjectileOnCooldown() && (
+                  <Label value={`${getProjectileCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
+                    uiTransform={{ positionType: 'absolute' }}
+                  />
+                )}
 
               </UiEntity>
 
