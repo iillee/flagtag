@@ -749,7 +749,7 @@ export function projectileClientSystem(dt: number): void {
   // Release projectile stagger freeze
   if (projectileStaggerUntil > 0 && now >= projectileStaggerUntil) {
     projectileStaggerUntil = 0
-    if (InputModifier.has(engine.PlayerEntity)) {
+    if (!isSpectatorMode() && InputModifier.has(engine.PlayerEntity)) {
       InputModifier.deleteFrom(engine.PlayerEntity)
     }
   }

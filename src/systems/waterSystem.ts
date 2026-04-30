@@ -153,9 +153,11 @@ export function waterSystem(dt: number) {
     // Death emote finishes naturally during black screen
 
     if (respawnDelay <= 0) {
-      InputModifier.createOrReplace(engine.PlayerEntity, {
-        mode: InputModifier.Mode.Standard({ disableAll: false })
-      })
+      if (!isSpectatorMode()) {
+        InputModifier.createOrReplace(engine.PlayerEntity, {
+          mode: InputModifier.Mode.Standard({ disableAll: false })
+        })
+      }
       drownCooldown = 2.0
       airRemaining = DROWN_TIME
       setBarVisible(false)

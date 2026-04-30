@@ -376,6 +376,14 @@ const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/149080843609767
 
 async function sendDailyAnalyticsToDiscord(): Promise<void> {
   try {
+    // Skip webhook in local preview
+    const { getRealm } = await import('~system/Runtime')
+    const realm = await getRealm({})
+    if (realm.realmInfo?.isPreview) {
+      console.log('[Server] Skipping Discord webhook — running in preview mode')
+      return
+    }
+
     console.log('[Server] Discord report: visitorSessions.size =', visitorSessions.size)
     const now = Date.now()
 
@@ -448,6 +456,7 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
     }
 
     // Send each message as a separate simple JSON POST (multipart doesn't work in deployed runtime)
+    console.log(`[Server] Discord webhook: sending ${messages.length} messages for ${users.length} users`)
     for (let i = 0; i < messages.length; i++) {
       const res = await fetch(DISCORD_WEBHOOK_URL, {
         method: 'POST',
@@ -459,9 +468,9 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
         const text = await res.text()
         console.error('[Server] Discord webhook error body:', text)
       }
-      // Rate limit: wait 500ms between messages
+      // Rate limit: wait 1500ms between messages to avoid Discord 429s
       if (i < messages.length - 1) {
-        await new Promise(resolve => setTimeout(() => resolve(undefined), 500))
+        await new Promise(resolve => setTimeout(() => resolve(undefined), 1500))
       }
     }
   } catch (err) {

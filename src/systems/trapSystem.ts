@@ -613,7 +613,7 @@ export function trapClientSystem(dt: number): void {
   }
   if (trapStaggerUntil > 0 && now >= trapStaggerUntil) {
     trapStaggerUntil = 0
-    if (InputModifier.has(engine.PlayerEntity)) {
+    if (!isSpectatorMode() && InputModifier.has(engine.PlayerEntity)) {
       InputModifier.deleteFrom(engine.PlayerEntity)
     }
   }
