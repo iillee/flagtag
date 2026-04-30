@@ -7,6 +7,16 @@ export interface LeaderboardEntry {
   roundsWon: number
 }
 
+/** Addresses to hide from the in-game leaderboard display (data is still stored server-side). */
+const HIDDEN_LEADERBOARD_ADDRESSES = [
+  '0x1e93e534c5e26b01ed242410b43ae23dd0faa52b', // ile
+  '0x874b9d062b060e004c3167974c42f5e6878fae0c', // tester
+]
+
+function isHiddenFromLeaderboard(entry: LeaderboardEntry): boolean {
+  return HIDDEN_LEADERBOARD_ADDRESSES.includes(entry.userId.toLowerCase())
+}
+
 /** Read leaderboard from the synced LeaderboardState component (server writes it).
  *  Names are resolved server-side via AvatarBase scanning and persisted name directory. */
 export function getLeaderboardEntries(): LeaderboardEntry[] {
@@ -14,13 +24,13 @@ export function getLeaderboardEntries(): LeaderboardEntry[] {
     if (!lb.json) return []
     try {
       const entries: LeaderboardEntry[] = JSON.parse(lb.json)
-      // Sort by most wins; on tie, preserve original order (whoever was on the board first stays on top)
-      const originalIndex = new Map(entries.map((e, i) => [e.userId, i]))
-      entries.sort((a, b) => {
+      const visible = entries.filter(e => !isHiddenFromLeaderboard(e))
+      const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
+      visible.sort((a, b) => {
         if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon
         return (originalIndex.get(a.userId) ?? 0) - (originalIndex.get(b.userId) ?? 0)
       })
-      return entries
+      return visible
     } catch {
       return []
     }
@@ -34,12 +44,13 @@ export function getAllTimeLeaderboardEntries(): LeaderboardEntry[] {
     if (!lb.json) return []
     try {
       const entries: LeaderboardEntry[] = JSON.parse(lb.json)
-      const originalIndex = new Map(entries.map((e, i) => [e.userId, i]))
-      entries.sort((a, b) => {
+      const visible = entries.filter(e => !isHiddenFromLeaderboard(e))
+      const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
+      visible.sort((a, b) => {
         if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon
         return (originalIndex.get(a.userId) ?? 0) - (originalIndex.get(b.userId) ?? 0)
       })
-      return entries
+      return visible
     } catch {
       return []
     }
