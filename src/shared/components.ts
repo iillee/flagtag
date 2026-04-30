@@ -105,6 +105,15 @@ export const AllTimeLeaderboardState = engine.defineComponent('ctf-alltime-leade
 
 AllTimeLeaderboardState.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
+// ── Monthly Leaderboard state (synced from server) ──
+
+export const MonthlyLeaderboardState = engine.defineComponent('ctf-monthly-leaderboard-state', {
+  json: Schemas.String,
+  month: Schemas.String,
+}, { json: '[]', month: '' })
+
+MonthlyLeaderboardState.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
 // ── Shared constants ──
 
 export const FLAG_BASE_POSITION = { x: 230, y: 13, z: 258 }
@@ -147,6 +156,22 @@ export const VisitorAnalytics = engine.defineComponent('ctf-visitor-analytics', 
 })
 
 VisitorAnalytics.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
+// ── Monthly Visitor Analytics (synced from server) ──
+
+export const MonthlyVisitorAnalytics = engine.defineComponent('ctf-monthly-visitor-analytics', {
+  month: Schemas.String,
+  visitorDataJson: Schemas.String, // JSON array of visitor records
+  onlineCount: Schemas.Int,
+  totalUniqueVisitors: Schemas.Int
+}, { 
+  month: '', 
+  visitorDataJson: '[]', 
+  onlineCount: 0, 
+  totalUniqueVisitors: 0 
+})
+
+MonthlyVisitorAnalytics.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
 // ── Trap (powerup) ──
 
@@ -239,7 +264,16 @@ export enum SyncIds {
   COUNTDOWN = 200,
   LEADERBOARD = 201,
   VISITOR_ANALYTICS = 202,
-  ALLTIME_LEADERBOARD = 203
+  ALLTIME_LEADERBOARD = 203,
+  MONTHLY_LEADERBOARD = 204,
+  MONTHLY_VISITOR_ANALYTICS = 205
+}
+
+export function getCurrentMonthString(): string {
+  const d = new Date()
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
 }
 
 export function getTodayDateString(): string {

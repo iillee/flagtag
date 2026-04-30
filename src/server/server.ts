@@ -3,11 +3,11 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
-  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, VisitorAnalytics,
+  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState, VisitorAnalytics, MonthlyVisitorAnalytics,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
   getHoldTimeEntityEnumId, getNextTrapSyncId, getNextProjectileSyncId,
-  FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString
+  FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString
 } from '../shared/components'
 import { room } from '../shared/messages'
 
@@ -46,7 +46,9 @@ let flagEntity: Entity
 let countdownEntity: Entity
 let leaderboardEntity: Entity
 let allTimeLeaderboardEntity: Entity
+let monthlyLeaderboardEntity: Entity
 let visitorAnalyticsEntity: Entity
+let monthlyVisitorAnalyticsEntity: Entity
 
 let holdTimeAccum = 0
 let holdTimeCarrierKey = '' // Track WHO we're accumulating for
@@ -104,8 +106,10 @@ function getOrCreateHoldTimeEntity(userKey: string): Entity {
 
 // ── Visitor tracking ──
 const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesToday: number }>()
+const monthlyVisitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesMonth: number }>()
 const playerBoomerangColors = new Map<string, string>() // playerId -> color ('r','y','b','g')
 let lastVisitorResetDay = ''
+let lastMonthlyVisitorResetMonth = ''
 
 // ── Concurrent user tracking (hourly peaks) ──
 // 24 entries, index = UTC hour. Each stores the max concurrent users seen that hour.
@@ -216,6 +220,10 @@ async function persistLeaderboard(json: string): Promise<void> {
 
 async function persistAllTimeLeaderboard(json: string): Promise<void> {
   await Storage.set('allTimeLeaderboard', json)
+}
+
+async function persistMonthlyLeaderboard(json: string): Promise<void> {
+  await Storage.set('monthlyLeaderboard', json)
 }
 
 async function persistPlayerNames(): Promise<void> {
@@ -369,6 +377,21 @@ async function checkLeaderboardDailyReset(): Promise<boolean> {
   }
   
   return false
+}
+
+// Check and perform monthly leaderboard reset at the start of each month (UTC)
+async function checkMonthlyLeaderboardReset(): Promise<void> {
+  const currentMonth = getCurrentMonthString()
+  const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)
+  if (mlLb && mlLb.month && mlLb.month !== currentMonth) {
+    console.log('[Server] Monthly leaderboard reset for new month:', currentMonth, '(was:', mlLb.month, ')')
+    const mlMutable = MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity)
+    mlMutable.json = '[]'
+    mlMutable.month = currentMonth
+    await persistMonthlyLeaderboard('[]')
+    await Storage.set('monthlyLeaderboardMonth', currentMonth)
+    console.log('[Server] Monthly leaderboard reset completed')
+  }
 }
 
 // ── Discord webhook for daily analytics ──
@@ -596,7 +619,50 @@ async function syncVisitorAnalytics(): Promise<void> {
   await persistVisitorData(visitorDataJson)
 }
 
+async function syncMonthlyVisitorAnalytics(): Promise<void> {
+  const currentMonth = getCurrentMonthString()
+  const now = Date.now()
+  const onlineCount = Array.from(monthlyVisitorSessions.values()).filter(v => v.sessionStartMs > 0).length
 
+  const visitorData = Array.from(monthlyVisitorSessions.entries()).map(([userId, data]) => {
+    const isOnline = data.sessionStartMs > 0
+    let totalSeconds = data.totalMinutesMonth * 60
+    if (isOnline) {
+      const sessionMs = now - data.sessionStartMs
+      totalSeconds += Math.floor(sessionMs / 1000)
+    }
+    const bestName = (playerNames.has(userId) && isRealName(playerNames.get(userId)!))
+      ? playerNames.get(userId)!
+      : data.name
+    return { userId, name: bestName, isOnline, totalSeconds }
+  })
+  .sort((a, b) => {
+    if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
+    return b.totalSeconds - a.totalSeconds
+  })
+  .slice(0, 100)
+
+  const visitorDataJson = JSON.stringify(visitorData)
+  const mutable = MonthlyVisitorAnalytics.getMutable(monthlyVisitorAnalyticsEntity)
+  mutable.month = currentMonth
+  mutable.visitorDataJson = visitorDataJson
+  mutable.onlineCount = onlineCount
+  mutable.totalUniqueVisitors = monthlyVisitorSessions.size
+
+  await Storage.set('monthlyVisitorData', visitorDataJson)
+  await Storage.set('monthlyVisitorResetMonth', currentMonth)
+}
+
+async function checkMonthlyVisitorReset(): Promise<void> {
+  const currentMonth = getCurrentMonthString()
+  if (lastMonthlyVisitorResetMonth !== '' && lastMonthlyVisitorResetMonth !== currentMonth) {
+    console.log('[Server] Monthly visitor reset for new month:', currentMonth)
+    monthlyVisitorSessions.clear()
+    lastMonthlyVisitorResetMonth = currentMonth
+    await syncMonthlyVisitorAnalytics()
+    console.log('[Server] Monthly visitor data reset completed')
+  }
+}
 
 // ── Setup ──
 export async function setupServer(): Promise<void> {
@@ -736,9 +802,44 @@ export async function setupServer(): Promise<void> {
   allTimeLeaderboardEntity = engine.addEntity()
   AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: allTimeJson })
   syncEntity(allTimeLeaderboardEntity, [AllTimeLeaderboardState.componentId], SyncIds.ALLTIME_LEADERBOARD)
+
+  // Load persisted monthly leaderboard
+  let savedMonthly: string | null = null
+  let savedMonthlyMonth: string | null = null
+  try {
+    savedMonthly = await Storage.get<string>('monthlyLeaderboard')
+    savedMonthlyMonth = await Storage.get<string>('monthlyLeaderboardMonth')
+  } catch (err) {
+    console.error('[Server] Failed to load monthly leaderboard from storage:', err)
+  }
+  const currentMonth = getCurrentMonthString()
+  // Reset if stored month doesn't match current month
+  let monthlyJson = (savedMonthlyMonth === currentMonth && savedMonthly) ? savedMonthly : '[]'
+
+  // Patch monthly names
+  try {
+    const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(monthlyJson)
+    let patched = false
+    for (const entry of entries) {
+      const knownName = playerNames.get(entry.userId.toLowerCase())
+      if (knownName && isRealName(knownName) && entry.name !== knownName) {
+        entry.name = knownName
+        patched = true
+      }
+    }
+    if (patched) {
+      monthlyJson = JSON.stringify(entries)
+      console.log('[Server] Patched monthly leaderboard names from persisted name directory')
+    }
+  } catch { /* ignore */ }
+
+  monthlyLeaderboardEntity = engine.addEntity()
+  MonthlyLeaderboardState.create(monthlyLeaderboardEntity, { json: monthlyJson, month: currentMonth })
+  syncEntity(monthlyLeaderboardEntity, [MonthlyLeaderboardState.componentId], SyncIds.MONTHLY_LEADERBOARD)
   
-  // Check for daily reset on server startup
+  // Check for daily/monthly reset on server startup
   await checkLeaderboardDailyReset()
+  await checkMonthlyLeaderboardReset()
 
   // Initialize visitor analytics
   await loadVisitorData()
@@ -752,6 +853,53 @@ export async function setupServer(): Promise<void> {
   })
   syncEntity(visitorAnalyticsEntity, [VisitorAnalytics.componentId], SyncIds.VISITOR_ANALYTICS)
   await syncVisitorAnalytics()
+
+  // Initialize monthly visitor analytics
+  const currentMonthForVisitors = getCurrentMonthString()
+  let savedMonthlyVisitorData: string | null = null
+  let savedMonthlyVisitorMonth: string | null = null
+  try {
+    savedMonthlyVisitorData = await Storage.get<string>('monthlyVisitorData')
+    savedMonthlyVisitorMonth = await Storage.get<string>('monthlyVisitorResetMonth')
+  } catch (err) {
+    console.error('[Server] Failed to load monthly visitor data:', err)
+  }
+  lastMonthlyVisitorResetMonth = savedMonthlyVisitorMonth || currentMonthForVisitors
+
+  // Restore monthly visitor data if same month
+  if (savedMonthlyVisitorData && lastMonthlyVisitorResetMonth === currentMonthForVisitors) {
+    try {
+      const records = JSON.parse(savedMonthlyVisitorData)
+      for (const record of records) {
+        const minutes = record.totalSeconds != null ? Math.floor(record.totalSeconds / 60) : (record.totalMinutes || 0)
+        const recordKey = (record.userId || '').toLowerCase()
+        const bestName = (playerNames.has(recordKey) && isRealName(playerNames.get(recordKey)!))
+          ? playerNames.get(recordKey)!
+          : record.name
+        monthlyVisitorSessions.set(recordKey, {
+          name: bestName,
+          sessionStartMs: 0,
+          totalMinutesMonth: minutes
+        })
+      }
+      console.log('[Server] Restored monthly visitor data for', currentMonthForVisitors, '- loaded', records.length, 'visitors')
+    } catch (e) {
+      console.error('[Server] Failed to parse monthly visitor data:', e)
+    }
+  } else if (lastMonthlyVisitorResetMonth !== currentMonthForVisitors) {
+    console.log('[Server] Monthly visitor data was from', lastMonthlyVisitorResetMonth, 'but current month is', currentMonthForVisitors, '- starting fresh')
+    lastMonthlyVisitorResetMonth = currentMonthForVisitors
+  }
+
+  monthlyVisitorAnalyticsEntity = engine.addEntity()
+  MonthlyVisitorAnalytics.create(monthlyVisitorAnalyticsEntity, {
+    month: currentMonthForVisitors,
+    visitorDataJson: '[]',
+    onlineCount: 0,
+    totalUniqueVisitors: 0
+  })
+  syncEntity(monthlyVisitorAnalyticsEntity, [MonthlyVisitorAnalytics.componentId], SyncIds.MONTHLY_VISITOR_ANALYTICS)
+  await syncMonthlyVisitorAnalytics()
 
   // ── Reconcile stale CRDT entities from previous server lifetime ──
   // After a server restart, in-memory Maps are empty but old synced
@@ -864,6 +1012,12 @@ function updatePlayerName(userId: string, name: string): boolean {
     visitor.name = name
   }
   
+  // Update monthly visitor session
+  const monthlyVisitor = monthlyVisitorSessions.get(key)
+  if (monthlyVisitor) {
+    monthlyVisitor.name = name
+  }
+  
   // Update leaderboard entries
   const lb = LeaderboardState.getOrNull(leaderboardEntity)
   if (lb && lb.json) {
@@ -902,6 +1056,27 @@ function updatePlayerName(userId: string, name: string): boolean {
         const atMutable = AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity)
         atMutable.json = json
         persistAllTimeLeaderboard(json).catch(e => console.error('[Server] persistAllTimeLeaderboard error:', e))
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  // Update monthly leaderboard entries
+  const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)
+  if (mlLb && mlLb.json) {
+    try {
+      const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(mlLb.json)
+      let changed = false
+      for (const entry of entries) {
+        if (entry.userId.toLowerCase() === key && entry.name !== name) {
+          entry.name = name
+          changed = true
+        }
+      }
+      if (changed) {
+        const json = JSON.stringify(entries)
+        const mlMutable = MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity)
+        mlMutable.json = json
+        persistMonthlyLeaderboard(json).catch(e => console.error('[Server] persistMonthlyLeaderboard error:', e))
       }
     } catch { /* ignore parse errors */ }
   }
@@ -1916,6 +2091,21 @@ function playerTrackingSystem(): void {
         })
       }
 
+      // Monthly visitor tracking
+      const existingMonthlyVisitor = monthlyVisitorSessions.get(userKey)
+      if (existingMonthlyVisitor) {
+        existingMonthlyVisitor.sessionStartMs = Date.now()
+        if (isRealName(playerName) || !isRealName(existingMonthlyVisitor.name)) {
+          existingMonthlyVisitor.name = playerName
+        }
+      } else {
+        monthlyVisitorSessions.set(userKey, {
+          name: playerName,
+          sessionStartMs: Date.now(),
+          totalMinutesMonth: 0
+        })
+      }
+
       console.log('[Server] Player joined:', playerName, '(total visitors today:', visitorSessions.size, ')')
       changed = true
     }
@@ -1935,6 +2125,16 @@ function playerTrackingSystem(): void {
 
         console.log('[Server] Player left:', visitor.name, 'session:', sessionMinutes, 'min, total today:', visitor.totalMinutesToday, 'min')
       }
+
+      // Monthly visitor disconnect tracking
+      const monthlyVisitor = monthlyVisitorSessions.get(userKey)
+      if (monthlyVisitor && monthlyVisitor.sessionStartMs > 0) {
+        const sessionMs = Date.now() - monthlyVisitor.sessionStartMs
+        const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
+        monthlyVisitor.totalMinutesMonth += sessionMinutes
+        monthlyVisitor.sessionStartMs = 0
+      }
+
       changed = true
     }
   }
@@ -1943,6 +2143,7 @@ function playerTrackingSystem(): void {
   if (changed) {
     updateConcurrentTracking()
     syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
+    syncMonthlyVisitorAnalytics().catch(e => console.error('[Server] syncMonthlyVisitorAnalytics error:', e))
   }
 }
 
@@ -2167,8 +2368,9 @@ async function handleRoundEnd(): Promise<void> {
   
   console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
 
-  // ── 6. Check for daily leaderboard reset ──
+  // ── 6. Check for daily/monthly leaderboard reset ──
   await checkLeaderboardDailyReset()
+  await checkMonthlyLeaderboardReset()
 
   // ── 7. Update leaderboard (async persistence is safe now) ──
   if (maxSeconds > 0) {
@@ -2221,6 +2423,34 @@ async function handleRoundEnd(): Promise<void> {
     const atMutable = AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity)
     atMutable.json = atJson
     await persistAllTimeLeaderboard(atJson)
+
+    // ── 7c. Update monthly leaderboard ──
+    const currentMonth = getCurrentMonthString()
+    const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)
+    let mlEntries: { userId: string; name: string; roundsWon: number }[] = []
+    if (mlLb && mlLb.json && mlLb.month === currentMonth) {
+      try { mlEntries = JSON.parse(mlLb.json) } catch { mlEntries = [] }
+    }
+    // If month changed, start fresh
+    for (const p of players) {
+      if (p.seconds < maxSeconds) continue
+      const pKey = p.userId.toLowerCase()
+      const existing = mlEntries.find((e) => e.userId.toLowerCase() === pKey)
+      if (existing) {
+        existing.roundsWon += 1
+        const displayName = playerNames.get(pKey)
+        if (displayName) existing.name = displayName
+      } else {
+        const displayName = playerNames.get(pKey) || pKey.slice(0, 8)
+        mlEntries.push({ userId: pKey, name: displayName, roundsWon: 1 })
+      }
+    }
+    const mlJson = JSON.stringify(mlEntries)
+    const mlMutable = MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity)
+    mlMutable.json = mlJson
+    mlMutable.month = currentMonth
+    await persistMonthlyLeaderboard(mlJson)
+    await Storage.set('monthlyLeaderboardMonth', currentMonth)
   }
 
   // ── 8. Persist flag state ──
@@ -2242,8 +2472,12 @@ function visitorTrackingServerSystem(dt: number): void {
     // Check for daily reset (midnight UTC)
     checkVisitorDailyReset().catch(e => console.error('[Server] checkVisitorDailyReset error:', e))
     
+    // Check for monthly visitor reset
+    checkMonthlyVisitorReset().catch(e => console.error('[Server] checkMonthlyVisitorReset error:', e))
+    
     // Sync current visitor data
     syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
+    syncMonthlyVisitorAnalytics().catch(e => console.error('[Server] syncMonthlyVisitorAnalytics error:', e))
   }
 }
 

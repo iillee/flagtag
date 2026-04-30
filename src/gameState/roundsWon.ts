@@ -1,5 +1,5 @@
 import { engine } from '@dcl/sdk/ecs'
-import { LeaderboardState, AllTimeLeaderboardState } from '../shared/components'
+import { LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState } from '../shared/components'
 
 export interface LeaderboardEntry {
   userId: string
@@ -21,6 +21,26 @@ function isHiddenFromLeaderboard(entry: LeaderboardEntry): boolean {
  *  Names are resolved server-side via AvatarBase scanning and persisted name directory. */
 export function getLeaderboardEntries(): LeaderboardEntry[] {
   for (const [, lb] of engine.getEntitiesWith(LeaderboardState)) {
+    if (!lb.json) return []
+    try {
+      const entries: LeaderboardEntry[] = JSON.parse(lb.json)
+      const visible = entries.filter(e => !isHiddenFromLeaderboard(e))
+      const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
+      visible.sort((a, b) => {
+        if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon
+        return (originalIndex.get(a.userId) ?? 0) - (originalIndex.get(b.userId) ?? 0)
+      })
+      return visible
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+/** Read monthly leaderboard from the synced MonthlyLeaderboardState component. */
+export function getMonthlyLeaderboardEntries(): LeaderboardEntry[] {
+  for (const [, lb] of engine.getEntitiesWith(MonthlyLeaderboardState)) {
     if (!lb.json) return []
     try {
       const entries: LeaderboardEntry[] = JSON.parse(lb.json)
