@@ -575,6 +575,11 @@ function formatUTCDate(): string {
   return `${month}/${day}/${year}`
 }
 
+function formatUTCMonth(): string {
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  return months[new Date().getUTCMonth()]
+}
+
 function formatVisitorTime(totalSeconds: number): string {
   if (totalSeconds < 60) return `${totalSeconds}s`
   const minutes = Math.floor(totalSeconds / 60)
@@ -1688,7 +1693,7 @@ function DesktopLayout() {
                   <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
                 <UiEntity uiTransform={{ width: '16%' }}>
-                  <Label value={`Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                  <Label value={metricsTab === 'monthly' ? `Month: ${formatUTCMonth()}` : `Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
                 <UiEntity uiTransform={{ width: '20%' }}>
                   <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />

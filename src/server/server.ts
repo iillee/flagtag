@@ -446,58 +446,121 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
       users
     }
 
-    const jsonBlock = JSON.stringify(report, null, 2)
+    // Build a short summary for the Discord message text
+    const summaryLines = [
+      `📊 **Flag Tag Daily Report** — ${report.date}`,
+      `👥 **${report.unique_users}** unique users | ⏱️ **${report.playtime}** total playtime`,
+      `📈 Peak concurrent: **${report.peak_concurrent.count}** at ${report.peak_concurrent.time} UTC`,
+      `See attached JSON for full user details (addresses, names, playtime, stars).`
+    ]
+    const summaryText = summaryLines.join('\n')
 
-    // Discord has a 2000 char message limit. If the JSON fits in a code block, send inline.
-    // Otherwise, split across multiple messages.
-    const MAX_BLOCK_LEN = 1900 // leave room for ```json wrapper
-    const messages: string[] = []
+    // Full report JSON as file attachment (no truncation, full addresses)
+    const fullJson = JSON.stringify(report, null, 2)
+    const fileName = `flagtag-report-${report.date}.json`
 
-    if (jsonBlock.length <= MAX_BLOCK_LEN) {
-      messages.push(`\`\`\`json\n${jsonBlock}\n\`\`\``)
-    } else {
-      // Send header message then chunked user data
-      const header = JSON.stringify({ scene: report.scene, date: report.date, unique_users: report.unique_users, playtime: report.playtime, peak_concurrent: report.peak_concurrent, hourly_peak: report.hourly_peak }, null, 2)
-      messages.push(`\`\`\`json\n${header}\n\`\`\``)
+    // Build multipart/form-data manually (FormData not available in DCL runtime)
+    const boundary = '----DCLWebhookBoundary' + Date.now()
+    const multipartBody = [
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="payload_json"`,
+      `Content-Type: application/json`,
+      ``,
+      JSON.stringify({ content: summaryText }),
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="files[0]"; filename="${fileName}"`,
+      `Content-Type: application/json`,
+      ``,
+      fullJson,
+      `--${boundary}--`
+    ].join('\r\n')
 
-      // Chunk users array into messages that fit
-      let chunk: typeof users = []
-      let chunkLen = 0
-      for (const user of users) {
-        const userJson = JSON.stringify(user)
-        if (chunkLen + userJson.length + 5 > MAX_BLOCK_LEN && chunk.length > 0) {
-          messages.push(`\`\`\`json\n${JSON.stringify(chunk, null, 2)}\n\`\`\``)
-          chunk = []
-          chunkLen = 0
+    // Send with retry logic
+    console.log(`[Server] Discord webhook: sending report with attachment (${users.length} users, ${fullJson.length} bytes)`)
+    let success = false
+    for (let attempt = 0; attempt < 3 && !success; attempt++) {
+      if (attempt > 0) {
+        console.log(`[Server] Discord webhook retry ${attempt}`)
+        await new Promise(resolve => setTimeout(() => resolve(undefined), 3000))
+      }
+      try {
+        const res = await fetch(DISCORD_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+          body: multipartBody
+        })
+        console.log(`[Server] Discord webhook response:`, res.status)
+        if (res.status === 429) {
+          const body = await res.text()
+          console.warn('[Server] Discord rate limited:', body)
+          await new Promise(resolve => setTimeout(() => resolve(undefined), 5000))
+          continue
         }
-        chunk.push(user)
-        chunkLen += userJson.length + 5
-      }
-      if (chunk.length > 0) {
-        messages.push(`\`\`\`json\n${JSON.stringify(chunk, null, 2)}\n\`\`\``)
-      }
-    }
-
-    // Send each message as a separate simple JSON POST (multipart doesn't work in deployed runtime)
-    console.log(`[Server] Discord webhook: sending ${messages.length} messages for ${users.length} users`)
-    for (let i = 0; i < messages.length; i++) {
-      const res = await fetch(DISCORD_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: messages[i] })
-      })
-      console.log(`[Server] Discord webhook message ${i + 1}/${messages.length} response:`, res.status)
-      if (!res.ok) {
-        const text = await res.text()
-        console.error('[Server] Discord webhook error body:', text)
-      }
-      // Rate limit: wait 1500ms between messages to avoid Discord 429s
-      if (i < messages.length - 1) {
-        await new Promise(resolve => setTimeout(() => resolve(undefined), 1500))
+        if (!res.ok) {
+          const text = await res.text()
+          console.error('[Server] Discord webhook error body:', text)
+          // If multipart fails (e.g. runtime doesn't support it), fall back to text-only
+          if (attempt === 2) {
+            console.log('[Server] Multipart failed after retries, falling back to text-only messages')
+            await sendDiscordFallbackText(summaryText, users)
+          }
+        } else {
+          success = true
+        }
+      } catch (fetchErr) {
+        console.error('[Server] Discord webhook fetch error:', fetchErr)
+        if (attempt === 2) {
+          console.log('[Server] Multipart failed after retries, falling back to text-only messages')
+          await sendDiscordFallbackText(summaryText, users)
+        }
       }
     }
   } catch (err) {
     console.error('[Server] Failed to send Discord webhook:', err)
+  }
+}
+
+// ── Fallback: send report as chunked text messages if multipart fails ──
+async function sendDiscordFallbackText(summary: string, users: Array<{ address: string; name: string; time_seconds: number; stars: number }>): Promise<void> {
+  try {
+    // Send summary first
+    await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: summary + '\n⚠️ _File attachment failed — sending as text._' })
+    })
+
+    // Build compact user lines and chunk them under 1900 chars
+    const lines = users.map(u => {
+      const mins = Math.floor(u.time_seconds / 60)
+      return `\`${u.name}\` ${u.address.slice(0, 10)}… ${mins}m ${u.stars}⭐`
+    })
+
+    let chunk = '```\n'
+    for (const line of lines) {
+      if (chunk.length + line.length + 5 > 1900) {
+        chunk += '```'
+        await fetch(DISCORD_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: chunk })
+        })
+        await new Promise(resolve => setTimeout(() => resolve(undefined), 1000))
+        chunk = '```\n'
+      }
+      chunk += line + '\n'
+    }
+    if (chunk.length > 4) {
+      chunk += '```'
+      await fetch(DISCORD_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: chunk })
+      })
+    }
+    console.log('[Server] ✅ Fallback text report sent')
+  } catch (err) {
+    console.error('[Server] ❌ Fallback text report failed:', err)
   }
 }
 
@@ -665,6 +728,37 @@ async function checkMonthlyVisitorReset(): Promise<void> {
 }
 
 // ── Setup ──
+async function testDiscordFileAttachment(): Promise<void> {
+  console.log('[Server] 🧪 Testing Discord file attachment...')
+  const testData = JSON.stringify({ test: true, timestamp: new Date().toISOString(), message: 'If you can see this file, multipart works!' }, null, 2)
+  const boundary = '----DCLTestBoundary' + Date.now()
+  const body = [
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="payload_json"`,
+    `Content-Type: application/json`,
+    ``,
+    JSON.stringify({ content: '🧪 **Multipart file attachment test** — if a .json file is attached below, it works!' }),
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="files[0]"; filename="test-report.json"`,
+    `Content-Type: application/json`,
+    ``,
+    testData,
+    `--${boundary}--`
+  ].join('\r\n')
+
+  try {
+    const res = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      body
+    })
+    const resText = await res.text()
+    console.log(`[Server] 🧪 Discord test response: ${res.status} — ${resText.slice(0, 200)}`)
+  } catch (err) {
+    console.error('[Server] 🧪 Discord test FAILED:', err)
+  }
+}
+
 export async function setupServer(): Promise<void> {
   console.log('[Server] Starting Flag Tag server...')
 
