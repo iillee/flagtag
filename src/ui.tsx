@@ -576,8 +576,9 @@ function formatUTCDate(): string {
 }
 
 function formatUTCMonth(): string {
-  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-  return months[new Date().getUTCMonth()]
+  const now = new Date()
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
+  return `${mm}/${now.getUTCFullYear()}`
 }
 
 function formatVisitorTime(totalSeconds: number): string {
@@ -1182,7 +1183,6 @@ function DesktopLayout() {
             justifyContent: 'center',
             alignItems: 'center',
           }}
-          onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false; notifyOverlayClosed() }}
         >
           {/* 3-column cards row */}
           <UiEntity
@@ -1537,7 +1537,8 @@ function DesktopLayout() {
               }}>
                 <Label value="#" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: S(32), height: S(28) }} textAlign="middle-left" />
                 <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '18%', height: S(28) }} textAlign="middle-left" />
-                <Label value="Wins" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
+                <Label value="Address" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
+                <Label value="Wins" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(28) }} textAlign="middle-left" />
               </UiEntity>
             )}
 
@@ -1761,7 +1762,7 @@ function DesktopLayout() {
                           justifyContent: 'flex-start',
                         }}
                       >
-                        {(leaderboardTab === 'daily' || leaderboardTab === 'monthly') ? (
+                        {(leaderboardTab === 'daily') ? (
                           <UiEntity uiTransform={{ width: '100%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center' }}>
                             <Label value={`${rank}.`} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ width: S(32), height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
                             <Label value={entry.name} fontSize={S(12)} color={nameColor} font="sans-serif" uiTransform={{ width: '18%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
@@ -2972,7 +2973,7 @@ function MobileLayout() {
                         flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start',
                       }}
                     >
-                      {(leaderboardTab === 'daily' || leaderboardTab === 'monthly') ? (
+                      {(leaderboardTab === 'daily') ? (
                         <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1 }}>
                           {Array.from({ length: entry.roundsWon }, (_, ri) => (
                             <UiEntity key={`m-rw-${ri}`} uiTransform={{ width: 16, height: 16, margin: { right: 2 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
