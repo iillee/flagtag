@@ -52,7 +52,7 @@ let cloneBobPhase = 0                          // Bob animation phase (radians)
 let cloneSpinAngle = 0                         // Spin animation angle (degrees)
 
 const BANNER_SRC = 'assets/models/Banner_Red_02/Banner_Red_02.glb'
-const BOB_BASE_Y = 0.55           // Y offset above name tag anchor (set once on Offset, never changed)
+const BOB_BASE_Y = 2.6            // Y offset above feet (AAPT_POSITION) to float above head
 const BOB_AMP = 0.15
 const BOB_SPEED = 2.1             // radians/sec (~3s cycle)
 const SPIN_SPEED = 50             // degrees/sec (~7.2s full rotation)
@@ -109,11 +109,11 @@ function showClone(carrierId: string): void {
     if (AvatarAttach.has(carryCloneAnchor)) {
       AvatarAttach.deleteFrom(carryCloneAnchor)
     }
-    // Remove stale transform position (was parked offscreen or attached to prev carrier)
+    // Keep Transform (needed for child parenting) but zero it out — AvatarAttach overrides position
     Transform.createOrReplace(carryCloneAnchor, { position: Vector3.Zero() })
     AvatarAttach.create(carryCloneAnchor, {
       avatarId: carrierId,
-      anchorPointId: AvatarAnchorPointType.AAPT_NAME_TAG
+      anchorPointId: AvatarAnchorPointType.AAPT_POSITION
     })
     carryCloneCarrierId = carrierId
     cloneBobPhase = 0
@@ -135,6 +135,7 @@ function hideClone(): void {
     AvatarAttach.deleteFrom(carryCloneAnchor)
   }
   if (carryCloneAnchor) {
+    // Restore Transform to park offscreen (was removed when AvatarAttach was added)
     Transform.createOrReplace(carryCloneAnchor, { position: CLONE_HIDDEN_POS })
   }
   carryCloneCarrierId = null

@@ -7,8 +7,8 @@ import {
   getCurrentFlagCarrierUserId,
   getKnownPlayerName
 } from './gameState/flagHoldTime'
-import { isTrapOnCooldown, getTrapCooldownRemaining } from './systems/trapSystem'
-import { isProjectileOnCooldown, getProjectileCooldownRemaining } from './systems/projectileSystem'
+import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from './systems/trapSystem'
+import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI } from './systems/projectileSystem'
 import { clearMushroomShield } from './systems/mushroomSystem'
 import { isCinematicActive } from './cinematicState'
 import { room } from './shared/messages'
@@ -617,7 +617,7 @@ function DrownBar() {
     <UiEntity
       uiTransform={{
         positionType: 'absolute',
-        position: { bottom: mobile ? 100 : S(110), left: '50%' },
+        position: { bottom: mobile ? 170 : S(110), left: '50%' },
         width: barW + border * 2,
         height: barH + border * 2,
         margin: { left: -(barW + border * 2) / 2 },
@@ -2303,64 +2303,15 @@ function MobileLayout() {
           <UiEntity
             uiTransform={{
               positionType: 'absolute',
-              position: { top: 28, left: '24%' },
-              width: '58%',
+              position: { top: 28 },
+              width: '100%',
               height: 68,
               flexDirection: 'row',
-              justifyContent: 'space-between',
+              justifyContent: 'center',
               alignItems: 'center',
             }}
           >
-            {/* Menu icons (? ★ #) — left */}
-            <UiEntity
-              uiTransform={{
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-            >
-              <UiEntity
-                uiTransform={{
-                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 6 },
-                }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay(); notifyOverlayClosed() }}
-              >
-                <Label value="?" fontSize={36} color={winConditionOverlayVisible ? GOLD : WHITE} font="sans-serif" />
-              </UiEntity>
-              <UiEntity
-                uiTransform={{
-                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 6 },
-                }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
-              >
-                <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible ? GOLD : WHITE }} />
-              </UiEntity>
-              <UiEntity
-                uiTransform={{
-                  width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => {
-                  playClickSound();
-                  setWinConditionOverlayVisible(false);
-                  setLeaderboardOverlayVisible(false);
-                  mobileScoreboardOverlayVisible = false;
-                  visitorScrollOffset = 0;
-                  toggleAnalyticsOverlay();
-                  notifyOverlayClosed();
-                }}
-              >
-                <Label value="#" fontSize={32} color={analyticsOverlayVisible ? GOLD : WHITE} font="sans-serif" />
-              </UiEntity>
-            </UiEntity>
-
-            {/* Timer + Score — center */}
+            {/* Timer + Score + Menu icons — all centered */}
             <UiEntity
               uiTransform={{
                 flexDirection: 'row',
@@ -2415,64 +2366,102 @@ function MobileLayout() {
                   <UiEntity uiTransform={{ width: 22, height: 22, margin: { left: 6 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
                 )}
               </UiEntity>
-            </UiEntity>
 
-            {/* Ability icons — right */}
-            <UiEntity
-              uiTransform={{
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-            >
+              {/* ? icon */}
               <UiEntity
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 6 },
+                  margin: { left: 10 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; toggleWinConditionOverlay(); notifyOverlayClosed() }}
               >
-                <UiEntity
-                  uiTransform={{ width: M_ICON_SIZE, height: M_ICON_SIZE }}
-                  uiBackground={{
-                    textureMode: 'stretch',
-                    texture: { src: 'assets/images/banana-color.png' },
-                    color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
-                  }}
-                />
-                {isTrapOnCooldown() && (
-                  <Label value={`${getTrapCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
-                    uiTransform={{ positionType: 'absolute' }}
-                  />
-                )}
+                <Label value="?" fontSize={36} color={winConditionOverlayVisible ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
 
+              {/* Leaderboard (flag) icon */}
               <UiEntity
                 uiTransform={{
                   width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE,
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  margin: { right: 6 },
+                  margin: { left: 6 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
-                <UiEntity
-                  uiTransform={{ width: (M_ICON_SIZE - 4) * 1.5, height: (M_ICON_SIZE - 4) * 1.5 }}
-                  uiBackground={{
-                    textureMode: 'stretch',
-                    texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
-                    color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
-                  }}
-                />
-                {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && (
-                  <Label value={`${getProjectileCooldownRemaining()}`} fontSize={26} color={WHITE} font="sans-serif"
-                    uiTransform={{ positionType: 'absolute' }}
-                  />
-                )}
-
+                <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible ? GOLD : WHITE }} />
               </UiEntity>
-
             </UiEntity>
+
           </UiEntity>
+        )
+      })()}
+
+      {/* ── Mobile Ability Bar — bottom center, clickable, 2x size ── */}
+      {!isSpectatorMode() && (() => {
+        const AB_SIZE = Math.round(M_CIRCLE_SIZE * 1.5)
+        const AB_ICON = Math.round(M_ICON_SIZE * 1.5)
+        return (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { bottom: 44, left: '50%' },
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: { left: -(AB_SIZE + 10) },
+          }}
+        >
+          {/* Banana */}
+          <UiEntity
+            uiTransform={{
+              width: AB_SIZE, height: AB_SIZE,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              margin: { right: 20 },
+            }}
+            uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+            onMouseDown={() => { triggerTrapFromUI() }}
+          >
+            <UiEntity
+              uiTransform={{ width: AB_ICON, height: AB_ICON }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: 'assets/images/banana-color.png' },
+                color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
+              }}
+            />
+            {isTrapOnCooldown() && (
+              <Label value={`${getTrapCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
+              />
+            )}
+          </UiEntity>
+
+          {/* Boomerang */}
+          <UiEntity
+            uiTransform={{
+              width: AB_SIZE, height: AB_SIZE,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            }}
+            uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+            onMouseDown={() => { triggerProjectileFromUI() }}
+          >
+            <UiEntity
+              uiTransform={{ width: (AB_ICON - 8) * 1.5, height: (AB_ICON - 8) * 1.5 }}
+              uiBackground={{
+                textureMode: 'stretch',
+                texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
+                color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
+              }}
+            />
+            {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && (
+              <Label value={`${getProjectileCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif"
+                uiTransform={{ positionType: 'absolute' }}
+              />
+            )}
+          </UiEntity>
+        </UiEntity>
         )
       })()}
 
