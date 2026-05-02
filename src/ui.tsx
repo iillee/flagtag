@@ -488,6 +488,42 @@ function getSortedLeaderboardEntries(entries: any[]): any[] {
 }
 
 // ═══════════════════════════════════════════════════════════
+// BOT DETECTION & VISITOR SORTING
+// ═══════════════════════════════════════════════════════════
+
+type VisitorEntry = { userId: string; name: string; isOnline: boolean; totalSeconds: number }
+type VisitorOrSeparator = VisitorEntry & { _isSeparator?: boolean }
+
+/** Returns true if a visitor looks like a bot (unnamed/hex-only name AND ≤1s playtime) */
+function isLikelyBot(v: VisitorEntry): boolean {
+  const name = v.name.trim()
+  const isUnnamed = name === '' || /^0x[0-9a-fA-F]+$/i.test(name)
+  return isUnnamed && v.totalSeconds <= 1
+}
+
+/** Sort visitors: real users first (online→offline, alpha), separator, then likely bots (same sub-sort) */
+function sortVisitorsWithBotSection(raw: VisitorEntry[]): VisitorOrSeparator[] {
+  const realUsers: VisitorEntry[] = []
+  const bots: VisitorEntry[] = []
+  for (const v of raw) {
+    if (isLikelyBot(v)) bots.push(v)
+    else realUsers.push(v)
+  }
+  const sorter = (a: VisitorEntry, b: VisitorEntry) => {
+    if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  }
+  realUsers.sort(sorter)
+  bots.sort(sorter)
+  const result: VisitorOrSeparator[] = [...realUsers]
+  if (bots.length > 0) {
+    result.push({ userId: '__sep__', name: '', isOnline: false, totalSeconds: 0, _isSeparator: true })
+    result.push(...bots)
+  }
+  return result
+}
+
+// ═══════════════════════════════════════════════════════════
 // SHARED CONSTANTS & HELPERS
 // ═══════════════════════════════════════════════════════════
 
@@ -617,7 +653,7 @@ function DrownBar() {
     <UiEntity
       uiTransform={{
         positionType: 'absolute',
-        position: { bottom: mobile ? 170 : S(110), left: '50%' },
+        position: { bottom: mobile ? 185 : S(110), left: '50%' },
         width: barW + border * 2,
         height: barH + border * 2,
         margin: { left: -(barW + border * 2) / 2 },
@@ -1045,10 +1081,7 @@ function DesktopLayout() {
   const localUserId = getPlayer()?.userId ?? null
   const rawVisitors = getAllVisitors()
   
-  const allVisitors = [...rawVisitors].sort((a, b) => {
-    if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-  })
+  const allVisitors = sortVisitorsWithBotSection(rawVisitors)
   
   const visitorCount = getTodayVisitorCount()
   const onlineCount = getCurrentOnlineCount()
@@ -1561,7 +1594,7 @@ function DesktopLayout() {
             {/* Column header for Metrics tab - absolutely positioned to match All Time tab */}
             {leaderboardTab === 'metrics' && (() => {
               const metricsVisitors = metricsTab === 'monthly'
-                ? [...getMonthlyVisitors()].sort((a, b) => { if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1; return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) })
+                ? sortVisitorsWithBotSection(getMonthlyVisitors())
                 : allVisitors
               const totalVisitors = metricsVisitors.length
               const metricsHasScroll = totalVisitors > VISITORS_PER_PAGE
@@ -1584,7 +1617,7 @@ function DesktopLayout() {
             {/* Metrics tab content (daily or monthly) */}
             {leaderboardTab === 'metrics' && (() => {
               const metricsVisitors = metricsTab === 'monthly'
-                ? [...getMonthlyVisitors()].sort((a, b) => { if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1; return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) })
+                ? sortVisitorsWithBotSection(getMonthlyVisitors())
                 : allVisitors
               const mVisitorCount = metricsTab === 'monthly' ? getMonthlyVisitorCount() : visitorCount
               const mOnlineCount = metricsTab === 'monthly' ? getMonthlyOnlineCount() : onlineCount
@@ -1610,6 +1643,13 @@ function DesktopLayout() {
                       </UiEntity>
                     ) : (
                       visibleVisitors.map((visitor, i) => (
+                        (visitor as VisitorOrSeparator)._isSeparator ? (
+                          <UiEntity key={`metric-sep-${i}`} uiTransform={{ height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                            <UiEntity uiTransform={{ flexGrow: 1, height: 1, margin: { right: S(8) } }} uiBackground={{ color: Color4.create(0.35, 0.35, 0.4, 0.8) }} />
+                            <Label value="Likely Bots" fontSize={S(11)} color={GREY} font="sans-serif" />
+                            <UiEntity uiTransform={{ flexGrow: 1, height: 1, margin: { left: S(8) } }} uiBackground={{ color: Color4.create(0.35, 0.35, 0.4, 0.8) }} />
+                          </UiEntity>
+                        ) : (
                         <UiEntity
                           key={`metric-visitor-${visitor.userId}-${visitorScrollOffset}-${i}`}
                           uiTransform={{
@@ -1626,6 +1666,7 @@ function DesktopLayout() {
                           <Label value={visitor.userId} fontSize={S(12)} color={MUTED} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
                           <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={S(12)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(_ROW_HEIGHT) }} textAlign="middle-left" />
                         </UiEntity>
+                        )
                       ))
                     )}
                   </UiEntity>
@@ -2281,7 +2322,6 @@ function MobileLayout() {
   const M_CIRCLE_TEXTURE = 'assets/images/UI_circle.png'
   const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 0.8) // 80% opacity for circle PNG
   const M_ICON_SIZE = 50
-  const analyticsOverlayVisible = getAnalyticsOverlayVisible()
 
   return (
     <UiEntity
@@ -2400,8 +2440,8 @@ function MobileLayout() {
 
       {/* ── Mobile Ability Bar — bottom center, clickable, 2x size ── */}
       {!isSpectatorMode() && (() => {
-        const AB_SIZE = Math.round(M_CIRCLE_SIZE * 1.5)
-        const AB_ICON = Math.round(M_ICON_SIZE * 1.5)
+        const AB_SIZE = Math.round(M_CIRCLE_SIZE * 1.65)
+        const AB_ICON = Math.round(M_ICON_SIZE * 1.65)
         return (
         <UiEntity
           uiTransform={{
@@ -2424,7 +2464,7 @@ function MobileLayout() {
             onMouseDown={() => { triggerTrapFromUI() }}
           >
             <UiEntity
-              uiTransform={{ width: AB_ICON, height: AB_ICON }}
+              uiTransform={{ width: Math.round(AB_ICON * 1.25), height: Math.round(AB_ICON * 1.25) }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: 'assets/images/banana-color.png' },
@@ -2448,7 +2488,7 @@ function MobileLayout() {
             onMouseDown={() => { triggerProjectileFromUI() }}
           >
             <UiEntity
-              uiTransform={{ width: (AB_ICON - 8) * 1.5, height: (AB_ICON - 8) * 1.5 }}
+              uiTransform={{ width: (AB_ICON - 8) * 1.5, height: (AB_ICON - 8) * 1.5, margin: { top: -8 } }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
@@ -2812,25 +2852,8 @@ function MobileLayout() {
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 44, flexShrink: 0 }}>
-              <UiEntity
-                uiTransform={{ flexGrow: 1, height: 44, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 8 }}
-                uiBackground={{ color: folderTab === 'leaderboards' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
-                onMouseDown={() => { playClickSound(); folderTab = 'leaderboards'; leaderboardTab = 'daily'; leaderboardScrollOffset = 0 }}
-              >
-                <Label value="Leaderboards" fontSize={18} color={folderTab === 'leaderboards' ? GOLD : MUTED} font="sans-serif" />
-              </UiEntity>
-              <UiEntity uiTransform={{ width: 6 }} />
-              <UiEntity
-                uiTransform={{ flexGrow: 1, height: 44, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 8 }}
-                uiBackground={{ color: folderTab === 'metrics' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
-                onMouseDown={() => { playClickSound(); folderTab = 'metrics'; leaderboardTab = 'metrics'; metricsTab = 'daily'; leaderboardScrollOffset = 0; visitorScrollOffset = 0 }}
-              >
-                <Label value="Metrics" fontSize={18} color={folderTab === 'metrics' ? GOLD : MUTED} font="sans-serif" />
-              </UiEntity>
-            </UiEntity>
-            <UiEntity uiTransform={{ height: 8, flexShrink: 0 }} />
-            {folderTab === 'leaderboards' && (
+            {(() => { folderTab = 'leaderboards'; leaderboardTab = leaderboardTab === 'metrics' ? 'daily' : leaderboardTab; return null })()}
+            {(
             <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 40 }}>
               <UiEntity
                 uiTransform={{ flexGrow: 1, height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 6 }}
@@ -2859,79 +2882,8 @@ function MobileLayout() {
             )}
             <UiEntity uiTransform={{ height: 12 }} />
 
-            {/* Mobile metrics sub-tabs */}
-            {leaderboardTab === 'metrics' && (
-              <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 40, flexShrink: 0, margin: { bottom: 8 } }}>
-                <UiEntity
-                  uiTransform={{ flexGrow: 1, height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 6 }}
-                  uiBackground={{ color: metricsTab === 'daily' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
-                  onMouseDown={() => { playClickSound(); metricsTab = 'daily'; visitorScrollOffset = 0 }}
-                >
-                  <Label value="Daily" fontSize={16} color={metricsTab === 'daily' ? WHITE : MUTED} font="sans-serif" />
-                </UiEntity>
-                <UiEntity uiTransform={{ width: 6 }} />
-                <UiEntity
-                  uiTransform={{ flexGrow: 1, height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 6 }}
-                  uiBackground={{ color: metricsTab === 'monthly' ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
-                  onMouseDown={() => { playClickSound(); metricsTab = 'monthly'; visitorScrollOffset = 0 }}
-                >
-                  <Label value="Monthly" fontSize={16} color={metricsTab === 'monthly' ? WHITE : MUTED} font="sans-serif" />
-                </UiEntity>
-              </UiEntity>
-            )}
-
-            {/* Mobile metrics tab content */}
-            {leaderboardTab === 'metrics' && (() => {
-              const mAllVisitors = metricsTab === 'monthly'
-                ? [...getMonthlyVisitors()].sort((a, b) => { if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1; return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) })
-                : [...getAllVisitors()].sort((a, b) => { if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1; return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) })
-              const mVisitorCount = metricsTab === 'monthly' ? getMonthlyVisitorCount() : getTodayVisitorCount()
-              const mOnlineCount = metricsTab === 'monthly' ? getMonthlyOnlineCount() : getCurrentOnlineCount()
-              const mServerConnected = getServerConnectionStatus()
-              const mPlaytime = Math.floor(mAllVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
-              const emptyMessage = metricsTab === 'monthly' ? 'No visitors this month' : 'No visitors today'
-              const M_VIS_PAGE = 6
-              const mTotalVis = mAllVisitors.length
-              const mMaxOff = Math.max(0, mTotalVis - M_VIS_PAGE)
-              if (visitorScrollOffset > mMaxOff) visitorScrollOffset = mMaxOff
-              if (visitorScrollOffset < 0) visitorScrollOffset = 0
-              const mVisibleVis = mAllVisitors.slice(visitorScrollOffset, visitorScrollOffset + M_VIS_PAGE)
-              const mCanUp = visitorScrollOffset > 0
-              const mCanDown = visitorScrollOffset < mMaxOff
-
-              return (
-              <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
-                <Label value={`Users: ${mVisitorCount}  Online: ${mOnlineCount}  Server: ${mServerConnected}`} fontSize={16} color={LIGHT_GREY} font="sans-serif" />
-                <Label value={`Date: ${formatUTCDate()}  Time: ${formatUTCTime()}  Playtime: ${mPlaytime}m`} fontSize={16} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: 4, bottom: 8 } }} />
-                {mCanUp && (
-                  <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }} onMouseDown={() => { visitorScrollOffset -= 1 }}>
-                    <Label value="▲ More" fontSize={22} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                )}
-                {mTotalVis === 0 ? (
-                  <UiEntity uiTransform={{ height: 44 * 2, justifyContent: 'center', alignItems: 'center' }}>
-                    <Label value={emptyMessage} fontSize={22} color={MUTED} font="sans-serif" />
-                  </UiEntity>
-                ) : (
-                  mVisibleVis.map((visitor, i) => (
-                    <UiEntity key={`m-met-${visitor.userId}-${visitorScrollOffset}-${i}`} uiTransform={{ height: 44, flexDirection: 'row', alignItems: 'center' }}>
-                      <Label value={visitor.isOnline ? "●" : "○"} fontSize={16} color={visitor.isOnline ? WHITE : GREY} font="sans-serif" uiTransform={{ width: 24 }} />
-                      <Label value={visitor.name} fontSize={18} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
-                      <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={18} color={MUTED} font="sans-serif" />
-                    </UiEntity>
-                  ))
-                )}
-                {mCanDown && (
-                  <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }} onMouseDown={() => { visitorScrollOffset += 1 }}>
-                    <Label value="▼ More" fontSize={22} color={WHITE} font="sans-serif" />
-                  </UiEntity>
-                )}
-              </UiEntity>
-              )
-            })()}
-
             {/* Leaderboard content (daily + alltime) */}
-            {leaderboardTab !== 'metrics' && (
+            {(
             <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
             {/* Scroll up */}
             {lbCanScrollUp && (
@@ -3000,136 +2952,7 @@ function MobileLayout() {
         )
       })()}
 
-      {/* ── Analytics overlay — centered (safe area) ── */}
-      {analyticsOverlayVisible && (() => {
-        const allVisitors = [...getAllVisitors()].sort((a, b) => {
-          if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
-          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-        })
-        const visitorCount = getTodayVisitorCount()
-        const onlineCount = getCurrentOnlineCount()
-        const serverConnected = getServerConnectionStatus()
-        const mTotalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
-        const M_VISITORS_PER_PAGE = 6
-        const totalVisitors = allVisitors.length
-        const maxOffset = Math.max(0, totalVisitors - M_VISITORS_PER_PAGE)
-        if (visitorScrollOffset > maxOffset) visitorScrollOffset = maxOffset
-        if (visitorScrollOffset < 0) visitorScrollOffset = 0
-        const visibleVisitors = allVisitors.slice(visitorScrollOffset, visitorScrollOffset + M_VISITORS_PER_PAGE)
-        const canScrollUp = visitorScrollOffset > 0
-        const canScrollDown = visitorScrollOffset < maxOffset
-
-        return (
-        <UiEntity
-          uiTransform={{
-            positionType: 'absolute',
-            position: { left: 0, top: 0 },
-            width: '100%', height: '100%',
-            flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-          }}
-        >
-          <UiEntity
-            uiTransform={{
-              positionType: 'relative',
-              width: '42%',
-              height: '62%',
-              flexDirection: 'column',
-              alignItems: 'stretch',
-              padding: 28,
-              overflow: 'hidden',
-            }}
-            uiBackground={{ color: PANEL_BG }}
-          >
-            {/* Close button */}
-            <UiEntity
-              uiTransform={{
-                positionType: 'absolute',
-                position: { top: 4, right: 4 },
-                width: 88, height: 88,
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-              }}
-              onMouseDown={() => { playClickSound(); setAnalyticsOverlayVisible(false); notifyOverlayClosed() }}
-            >
-              <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
-            </UiEntity>
-            <Label value="Daily Visitors" fontSize={36} color={GOLD} font="sans-serif" uiTransform={{ height: 44, flexShrink: 0 }} />
-            <UiEntity uiTransform={{ height: 4, flexShrink: 0 }} />
-
-            {/* Stats row */}
-            <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', height: 40, flexShrink: 0 }}>
-              <Label value={`Unique: ${visitorCount}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
-              <UiEntity uiTransform={{ width: 16 }} />
-              <Label value={`Online: ${onlineCount}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
-              <UiEntity uiTransform={{ width: 16 }} />
-              <Label value={`Server: ${serverConnected}`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
-              <UiEntity uiTransform={{ width: 16 }} />
-              <Label value={`Playtime: ${mTotalPlaytimeMin}m`} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
-              <UiEntity uiTransform={{ width: 16 }} />
-              <UiEntity
-                uiTransform={{ flexDirection: 'row', alignItems: 'center' }}
-                onMouseDown={() => { playClickSound(); toggleMusicMute() }}
-              >
-                <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={18} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
-              </UiEntity>
-            </UiEntity>
-            <UiEntity uiTransform={{ height: 8, flexShrink: 0 }} />
-
-            {/* Scroll up */}
-            {canScrollUp && (
-              <UiEntity
-                uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
-                uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }}
-                onMouseDown={() => { visitorScrollOffset -= 1 }}
-              >
-                <Label value="▲ More" fontSize={22} color={WHITE} font="sans-serif" />
-              </UiEntity>
-            )}
-
-            <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
-              {totalVisitors === 0 ? (
-                <UiEntity uiTransform={{ height: 44 * 2, justifyContent: 'center', alignItems: 'center' }}>
-                  <Label value="No visitors today" fontSize={22} color={MUTED} font="sans-serif" />
-                </UiEntity>
-              ) : (
-                visibleVisitors.map((visitor, i) => (
-                  <UiEntity
-                    key={`m-vis-${visitor.userId}-${visitorScrollOffset}-${i}`}
-                    uiTransform={{
-                      height: 44,
-                      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                      padding: { left: 4, right: 4 },
-                    }}
-                  >
-                    <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-                      <Label
-                        value={visitor.isOnline ? "●" : "○"}
-                        fontSize={18}
-                        color={visitor.isOnline ? WHITE : GREY}
-                        font="sans-serif"
-                      />
-                      <UiEntity uiTransform={{ width: 8 }} />
-                      <Label value={visitor.name} fontSize={20} color={WHITE} font="sans-serif" />
-                    </UiEntity>
-                    <Label value={formatVisitorTime(visitor.totalSeconds)} fontSize={18} color={LIGHT_GREY} font="sans-serif" />
-                  </UiEntity>
-                ))
-              )}
-            </UiEntity>
-
-            {/* Scroll down */}
-            {canScrollDown && (
-              <UiEntity
-                uiTransform={{ width: '100%', height: 44, flexShrink: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
-                uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }}
-                onMouseDown={() => { visitorScrollOffset += 1 }}
-              >
-                <Label value="▼ More" fontSize={22} color={WHITE} font="sans-serif" />
-              </UiEntity>
-            )}
-          </UiEntity>
-        </UiEntity>
-        )
-      })()}
+      {/* Analytics overlay removed on mobile for simplicity */}
     </UiEntity>
   )
 }
