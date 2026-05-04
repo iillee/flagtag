@@ -27,6 +27,7 @@ import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../cinematicState'
 import { isDrownRespawning } from './waterSystem'
+import { isMobile } from '@dcl/sdk/platform'
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from './combatSystem'
 import { getBoomerangModelSrc, getBoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
 
@@ -34,6 +35,8 @@ import { getBoomerangModelSrc, getBoomerangColor, onBoomerangColorChange } from 
 const CHARGE_TIME_SEC = 1.5      // seconds to full charge = burnout
 const CHARGE_MIN_SPEED = PROJECTILE_SPEED   // tap = 30 m/s
 const GREEN_SPEED = 18                      // green boomerang moves slower
+const GREEN_RANGE = 30                      // green boomerang fixed range
+const GREEN_SCALE = 2                       // green projectile scale
 const CHARGE_MAX_SPEED = 60                  // full charge = 60 m/s
 const CHARGE_MIN_RANGE = 20                  // tap = 20m
 const RED_RANGE = 40                         // red boomerang fixed range
@@ -180,14 +183,15 @@ function updateHandBoomerangVisibility(): void {
     const isGreen = getBoomerangColor() === 'g'
 
     // Green: always show at 3x scale (massive boomerang), shifted down, flipped 180
+    const mobile = isMobile()
     if (shouldShow && isGreen) {
       t.scale = Vector3.create(HAND_BOOMERANG_SCALE.x * 3, HAND_BOOMERANG_SCALE.y * 3, HAND_BOOMERANG_SCALE.z * 3)
-      t.position = Vector3.create(t.position.x, -0.05, -0.1)
+      t.position = mobile ? Vector3.create(-0.02, -0.05, -0.1) : Vector3.create(0.04, -0.05, -0.1)
       t.rotation = Quaternion.fromEulerDegrees(180, 0, 90)
     } else if (shouldShow) {
       t.scale = HAND_BOOMERANG_SCALE
-      t.position = Vector3.create(t.position.x, 0.15, t.position.z)
-      t.rotation = Quaternion.fromEulerDegrees(0, 0, 90)
+      t.position = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
+      t.rotation = Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
     } else {
       t.scale = Vector3.Zero()
     }
@@ -498,7 +502,7 @@ function getRemotePlayerPosition(userId: string): Vector3 | null {
 room.onMessage('shellTriggered', (data) => {
   const pos = Vector3.create(data.x, data.y, data.z)
   // Remove the message-driven projectile visual closest to the hit position
-  removeMsgProjectileVisualNear(data.x, data.y, data.z)
+  removeMsgProjectileVisualNear(data.x, data.y, data.z, !!data.peak)
 
   // Hit a player: particles + hit sound + stagger. Hit a wall: miss sound.
   if (data.victimId && data.victimId !== '') {
@@ -839,7 +843,7 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
   console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1), 'speed:', ((chargeSpeed && chargeSpeed > 0) ? chargeSpeed : PROJECTILE_SPEED))
 }
 
-function removeMsgProjectileVisualNear(x: number, y: number, z: number): void {
+function removeMsgProjectileVisualNear(x: number, y: number, z: number, isPeak: boolean = false): void {
   // Find the closest projectile visual
   let closestIdx = -1
   let closestDist = Infinity
@@ -854,7 +858,12 @@ function removeMsgProjectileVisualNear(x: number, y: number, z: number): void {
 
   const vis = msgProjectileVisuals[closestIdx]
   if (vis.returning) {
-    // Already returning — this is a hit on the return trip, actually remove it
+    if (isPeak) {
+      // Server confirming the turnaround — client already started returning, just ignore
+      console.log('[Projectile] 🎯 Peak message arrived but already returning — ignoring')
+      return
+    }
+    // Already returning — this is a real hit on the return trip, actually remove it
     if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
     releaseProjectileToPool(vis.entity)
     msgProjectileVisuals.splice(closestIdx, 1)
@@ -956,7 +965,7 @@ export function triggerProjectileFromUI(): void {
 
   lastLocalProjectileFireTime = now
   const uiColor = getBoomerangColor()
-  lastThrowExtraCooldown = uiColor === 'g' ? 5 : uiColor === 'y' ? 2 : 0
+  lastThrowExtraCooldown = uiColor === 'g' ? 4 : uiColor === 'y' ? 1 : 0
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
@@ -964,9 +973,9 @@ export function triggerProjectileFromUI(): void {
     console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
-    const uiRange = uiColor === 'r' ? RED_RANGE : uiColor === 'g' ? 30 : CHARGE_MIN_RANGE
+    const uiRange = uiColor === 'r' ? RED_RANGE : uiColor === 'g' ? GREEN_RANGE : CHARGE_MIN_RANGE
     const uiSpeed = uiColor === 'g' ? GREEN_SPEED : CHARGE_MIN_SPEED
-    const uiScale = uiColor === 'g' ? 2 : 1
+    const uiScale = uiColor === 'g' ? GREEN_SCALE : 1
     room.send('requestShell', { dirX, dirZ, color: uiColor, chargeSpeed: uiSpeed, chargeRange: uiRange, chargeScale: uiScale })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
@@ -1083,12 +1092,12 @@ export function projectileClientSystem(dt: number): void {
     const currentColor = getBoomerangColor()
     if (currentColor !== 'b') {
       lastLocalProjectileFireTime = now
-      lastThrowExtraCooldown = currentColor === 'g' ? 5 : currentColor === 'y' ? 2 : 0
+      lastThrowExtraCooldown = currentColor === 'g' ? 4 : currentColor === 'y' ? 1 : 0
       const { dirX, dirZ } = getPlayerForward()
       const serverUp = isServerConnected()
-      const range = currentColor === 'r' ? RED_RANGE : currentColor === 'g' ? 30 : CHARGE_MIN_RANGE
+      const range = currentColor === 'r' ? RED_RANGE : currentColor === 'g' ? GREEN_RANGE : CHARGE_MIN_RANGE
       const speed = currentColor === 'g' ? GREEN_SPEED : CHARGE_MIN_SPEED
-      const scale = currentColor === 'g' ? 2 : 1
+      const scale = currentColor === 'g' ? GREEN_SCALE : 1
       if (serverUp) {
         localThrowActive = true; localThrowSawVisual = false
         updateHandBoomerangVisibility()
@@ -1177,13 +1186,13 @@ export function projectileClientSystem(dt: number): void {
     // Blue: speed + range scale with charge. Green: size scales with charge, speed/range stay base.
     const chargeSpeed = currentColor === 'b' ? chargeToSpeed(chargeFrac) : CHARGE_MIN_SPEED
     const chargeRange = currentColor === 'b' ? chargeToRange(chargeFrac) : CHARGE_MIN_RANGE
-    const chargeScale = currentColor === 'g' ? (1 + chargeFrac * 2) : 1 // green: 1x to 3x size
+    const chargeScale = 1 // only blue reaches here
 
     chargeStartMs = 0
     lastLocalProjectileFireTime = now
     // Extra cooldown: under 1s charge = +1s, over 1s charge = +2s
     const chargeElapsed = chargeFrac * CHARGE_TIME_SEC
-    lastThrowExtraCooldown = chargeElapsed >= 1.0 ? 2 : 1
+    lastThrowExtraCooldown = chargeElapsed >= 1.0 ? 1 : 0
 
     console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, speed:', chargeSpeed.toFixed(0), 'range:', chargeRange.toFixed(0), 'scale:', chargeScale.toFixed(1), 'extraCD:', lastThrowExtraCooldown)
     if (chargeElapsed >= 0.5) playReleaseSound()
