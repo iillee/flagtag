@@ -299,7 +299,7 @@ function attackFlickerSystem(): void {
 let visitorScrollOffset = 0
 let leaderboardScrollOffset = 0
 let leaderboardTab: 'daily' | 'monthly' | 'alltime' | 'metrics' = 'daily'
-let folderTab: 'leaderboards' | 'metrics' = 'leaderboards'
+let folderTab: 'leaderboards' | 'metrics' | 'status' = 'leaderboards'
 let metricsTab: 'daily' | 'monthly' = 'daily'
 
 // ── Round-end splash state ──
@@ -1385,10 +1385,10 @@ function DesktopLayout() {
         const lbNeedsScroll = totalEntries > LEADERBOARD_PER_PAGE
         const lbThumbRatio = totalEntries > 0 ? Math.max(0.15, LEADERBOARD_PER_PAGE / totalEntries) : 1
 
-        const _FOLDER_TAB_WIDTH = 260
+        const _FOLDER_TAB_WIDTH = 270
         const _FOLDER_TAB_HEIGHT = 56
         const _FOLDER_RADIUS = 16
-        const _FOLDER_GAP = 4
+        const _FOLDER_GAP = 5
         const FOLDER_ACTIVE = Color4.create(0.1, 0.1, 0.1, 1)
         const FOLDER_INACTIVE = Color4.create(0.065, 0.065, 0.07, 1)
         return (
@@ -1413,32 +1413,50 @@ function DesktopLayout() {
               alignItems: 'stretch',
             }}
           >
-            {/* Filler patches — cover rounded corner dips where tab meets body */}
-            {/* Left bottom corner of tab */}
+            {/* Filler patches — cover rounded corner dips where active tab meets body */}
+            {/* Left bottom corner of active tab */}
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(_FOLDER_TAB_HEIGHT - 2), left: S(0) },
+                position: { top: S(_FOLDER_TAB_HEIGHT - 2), left: S(folderTab === 'status' ? 0 : folderTab === 'leaderboards' ? (_FOLDER_TAB_WIDTH + _FOLDER_GAP) : (_FOLDER_TAB_WIDTH + _FOLDER_GAP) * 2) },
                 width: S(_FOLDER_RADIUS + 2),
                 height: S(_FOLDER_RADIUS + 4),
               }}
               uiBackground={{ color: FOLDER_ACTIVE }}
             />
-            {/* Right bottom corner of tab */}
+            {/* Right bottom corner of active tab */}
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(_FOLDER_TAB_HEIGHT), left: S(_FOLDER_TAB_WIDTH - _FOLDER_RADIUS) },
+                position: { top: S(_FOLDER_TAB_HEIGHT), left: S((folderTab === 'status' ? 0 : folderTab === 'leaderboards' ? (_FOLDER_TAB_WIDTH + _FOLDER_GAP) : (_FOLDER_TAB_WIDTH + _FOLDER_GAP) * 2) + _FOLDER_TAB_WIDTH - _FOLDER_RADIUS) },
                 width: S(_FOLDER_RADIUS),
                 height: S(_FOLDER_RADIUS),
               }}
               uiBackground={{ color: FOLDER_ACTIVE }}
             />
-            {/* Folder tab 1 — Leaderboards */}
+            {/* Folder tab 1 — Status */}
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: S(0), left: S(0) },
+                width: S(_FOLDER_TAB_WIDTH),
+                height: S(_FOLDER_TAB_HEIGHT + _FOLDER_RADIUS),
+                borderRadius: S(_FOLDER_RADIUS),
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: { bottom: S(_FOLDER_RADIUS) },
+              }}
+              uiBackground={{ color: folderTab === 'status' ? FOLDER_ACTIVE : FOLDER_INACTIVE }}
+              onMouseDown={() => { playClickSound(); folderTab = 'status' }}
+            >
+              <Label value="Status" fontSize={S(28)} color={folderTab === 'status' ? GOLD : MUTED} font="sans-serif" />
+            </UiEntity>
+            {/* Folder tab 2 — Leaderboards */}
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: S(0), left: S(_FOLDER_TAB_WIDTH + _FOLDER_GAP) },
                 width: S(_FOLDER_TAB_WIDTH),
                 height: S(_FOLDER_TAB_HEIGHT + _FOLDER_RADIUS),
                 borderRadius: S(_FOLDER_RADIUS),
@@ -1452,11 +1470,11 @@ function DesktopLayout() {
             >
               <Label value="Leaderboards" fontSize={S(28)} color={folderTab === 'leaderboards' ? GOLD : MUTED} font="sans-serif" />
             </UiEntity>
-            {/* Folder tab 2 — Metrics */}
+            {/* Folder tab 3 — Metrics */}
             <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(0), left: S(_FOLDER_TAB_WIDTH + _FOLDER_GAP) },
+                position: { top: S(0), left: S((_FOLDER_TAB_WIDTH + _FOLDER_GAP) * 2) },
                 width: S(_FOLDER_TAB_WIDTH),
                 height: S(_FOLDER_TAB_HEIGHT + _FOLDER_RADIUS),
                 borderRadius: S(_FOLDER_RADIUS),
@@ -1534,6 +1552,9 @@ function DesktopLayout() {
                   <Label value="Monthly Metrics" fontSize={S(16)} color={metricsTab === 'monthly' ? WHITE : MUTED} font="sans-serif" />
                 </UiEntity>
               )}
+              {folderTab === 'status' && (
+                <UiEntity uiTransform={{ flexGrow: 1, height: S(32) }} />
+              )}
               <UiEntity uiTransform={{ width: S(12) }} />
               <UiEntity
                 uiTransform={{
@@ -1555,7 +1576,7 @@ function DesktopLayout() {
             <UiEntity uiTransform={{ height: S(12) }} />
 
             {/* Column header for Daily tab - absolutely positioned */}
-            {leaderboardTab === 'daily' && totalEntries > 0 && (
+            {folderTab !== 'status' && leaderboardTab === 'daily' && totalEntries > 0 && (
               <UiEntity uiTransform={{
                 positionType: 'absolute',
                 position: { top: S(72), left: S(24), right: S(24 + (totalEntries > LEADERBOARD_PER_PAGE ? 18 : 0)) },
@@ -1570,7 +1591,7 @@ function DesktopLayout() {
             )}
 
             {/* Column header for Monthly tab - absolutely positioned */}
-            {leaderboardTab === 'monthly' && totalEntries > 0 && (
+            {folderTab !== 'status' && leaderboardTab === 'monthly' && totalEntries > 0 && (
               <UiEntity uiTransform={{
                 positionType: 'absolute',
                 position: { top: S(72), left: S(24), right: S(24 + (totalEntries > LEADERBOARD_PER_PAGE ? 18 : 0)) },
@@ -1586,7 +1607,7 @@ function DesktopLayout() {
             )}
 
             {/* Column header for All Time tab - absolutely positioned to stay above data */}
-            {leaderboardTab === 'alltime' && totalEntries > 0 && (
+            {folderTab !== 'status' && leaderboardTab === 'alltime' && totalEntries > 0 && (
               <UiEntity uiTransform={{
                 positionType: 'absolute',
                 position: { top: S(72), left: S(24), right: S(24 + (totalEntries > LEADERBOARD_PER_PAGE ? 18 : 0)) },
@@ -1602,7 +1623,7 @@ function DesktopLayout() {
             )}
 
             {/* Column header for Metrics tab - absolutely positioned to match All Time tab */}
-            {leaderboardTab === 'metrics' && (() => {
+            {folderTab !== 'status' && leaderboardTab === 'metrics' && (() => {
               const metricsVisitors = metricsTab === 'monthly'
                 ? sortVisitorsWithBotSection(getMonthlyVisitors())
                 : allVisitors
@@ -1625,7 +1646,7 @@ function DesktopLayout() {
             })()}
 
             {/* Metrics tab content (daily or monthly) */}
-            {leaderboardTab === 'metrics' && (() => {
+            {folderTab !== 'status' && leaderboardTab === 'metrics' && (() => {
               const metricsVisitors = metricsTab === 'monthly'
                 ? sortVisitorsWithBotSection(getMonthlyVisitors())
                 : allVisitors
@@ -1776,8 +1797,15 @@ function DesktopLayout() {
               )
             })()}
 
+            {/* Status tab content */}
+            {folderTab === 'status' && (
+              <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: { bottom: S(60) } }}>
+                <Label value="Coming soon..." fontSize={S(28)} color={MUTED} font="sans-serif" />
+              </UiEntity>
+            )}
+
             {/* Leaderboard tab content (daily + alltime) */}
-            {leaderboardTab !== 'metrics' && (
+            {leaderboardTab !== 'metrics' && folderTab !== 'status' && (
             <UiEntity
               uiTransform={{
                 width: '100%',
