@@ -617,6 +617,13 @@ function formatUTCMonth(): string {
   return `${mm}/${now.getUTCFullYear()}`
 }
 
+function formatPlaytime(totalMinutes: number): string {
+  if (totalMinutes < 60) return `${totalMinutes}m`
+  const hours = Math.floor(totalMinutes / 60)
+  const mins = totalMinutes % 60
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
+}
+
 function formatVisitorTime(totalSeconds: number): string {
   if (totalSeconds < 60) return `${totalSeconds}s`
   const minutes = Math.floor(totalSeconds / 60)
@@ -1755,7 +1762,7 @@ function DesktopLayout() {
                   <Label value={`${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
                 <UiEntity uiTransform={{ width: '12.5%' }}>
-                  <Label value={`Play: ${mTotalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                  <Label value={`Play: ${formatPlaytime(mTotalPlaytimeMin)}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
                 <UiEntity
                   uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
@@ -1987,7 +1994,7 @@ function DesktopLayout() {
                 <Label value={`${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: '12.5%' }}>
-                <Label value={`Play: ${totalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`Play: ${formatPlaytime(totalPlaytimeMin)}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
               <UiEntity
                 uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}

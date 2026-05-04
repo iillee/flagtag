@@ -779,7 +779,7 @@ async function syncVisitorAnalytics(): Promise<void> {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
     return b.totalSeconds - a.totalSeconds
   })
-  .slice(0, 500) // Limit to top 500
+  .slice(0, 200) // Limit synced display data (full data stays in visitorSessions for Discord reports)
   
   const visitorDataJson = JSON.stringify(visitorData)
   
@@ -815,7 +815,7 @@ async function syncMonthlyVisitorAnalytics(): Promise<void> {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
     return b.totalSeconds - a.totalSeconds
   })
-  .slice(0, 500)
+  .slice(0, 200)
 
   const visitorDataJson = JSON.stringify(visitorData)
   const mutable = MonthlyVisitorAnalytics.getMutable(monthlyVisitorAnalyticsEntity)
