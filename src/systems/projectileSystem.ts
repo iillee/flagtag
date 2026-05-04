@@ -12,9 +12,12 @@ import {
   RaycastQueryType,
   AvatarEmoteCommand,
   type Entity,
-  PlayerIdentityData
+  PlayerIdentityData,
+  Material,
+  MaterialTransparencyMode,
+  MeshRenderer
 } from '@dcl/sdk/ecs'
-import { Vector3, Quaternion } from '@dcl/sdk/math'
+import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Projectile, PROJECTILE_COOLDOWN_SEC, PROJECTILE_LIFETIME_SEC, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE } from '../shared/components'
 
@@ -29,10 +32,13 @@ import { getBoomerangModelSrc, getBoomerangColor, onBoomerangColorChange } from 
 
 // ── Charge mechanic ──
 const CHARGE_TIME_SEC = 1.5      // seconds to full charge = burnout
-const CHARGE_MIN_SCALE = 1.0     // tap = normal size
-const CHARGE_MAX_SCALE = 2.0     // full charge = 2x size
+const CHARGE_MIN_SPEED = PROJECTILE_SPEED   // tap = 30 m/s
+const CHARGE_MAX_SPEED = 60                  // full charge = 60 m/s
+const CHARGE_MIN_RANGE = 20                  // tap = 20m
+const CHARGE_MAX_RANGE = PROJECTILE_MAX_RANGE // full charge = 50m
 let chargeStartMs: number = 0    // 0 = not charging
 let isCharging = false
+let lastChargeGroundY: number = 0 // track Y for airborne detection
 
 /** Returns current charge fraction 0..1 (0 if not charging) */
 export function getChargeFraction(): number {
@@ -50,13 +56,36 @@ export function getChargePhase(): 'charging' | 'none' {
   return 'charging'
 }
 
-/** Compute scale multiplier from charge fraction */
-function chargeToScale(fraction: number): number {
-  return CHARGE_MIN_SCALE + fraction * (CHARGE_MAX_SCALE - CHARGE_MIN_SCALE)
+function applyChargeSlow(): void {
+  // Disable jumping and sprinting while charging — player can still walk
+  InputModifier.createOrReplace(engine.PlayerEntity, {
+    mode: InputModifier.Mode.Standard({
+      disableRun: true,
+      disableJump: true,
+      disableGliding: true,
+    })
+  })
+}
+
+function removeChargeSlow(): void {
+  if (InputModifier.has(engine.PlayerEntity)) {
+    InputModifier.deleteFrom(engine.PlayerEntity)
+  }
+}
+
+/** Compute speed from charge fraction */
+function chargeToSpeed(fraction: number): number {
+  return CHARGE_MIN_SPEED + fraction * (CHARGE_MAX_SPEED - CHARGE_MIN_SPEED)
+}
+
+/** Compute range from charge fraction */
+function chargeToRange(fraction: number): number {
+  return CHARGE_MIN_RANGE + fraction * (CHARGE_MAX_RANGE - CHARGE_MIN_RANGE)
 }
 
 // Hand boomerang visibility
 let handBoomerangEntity: Entity | null = null
+let handGlowEntity: Entity | null = null
 let emoteActive = false
 let lastPlayerPos: Vector3 | null = null
 const EMOTE_MOVE_THRESHOLD = 0.1 // player must move this far to cancel emote hide
@@ -67,6 +96,21 @@ let localThrowSawVisual = false // set true once msgProjectileVisuals was non-em
 
 export function setHandBoomerangEntity(e: Entity) {
   handBoomerangEntity = e
+
+  // Create glow child entity
+  handGlowEntity = engine.addEntity()
+  Transform.create(handGlowEntity, {
+    position: Vector3.create(0, 0, 0),
+    scale: Vector3.Zero(), // hidden by default
+    parent: e
+  })
+  MeshRenderer.setSphere(handGlowEntity)
+  Material.setPbrMaterial(handGlowEntity, {
+    albedoColor: Color4.create(1, 1, 1, 0),
+    emissiveColor: Color3.create(0.3, 0.6, 1),
+    emissiveIntensity: 0,
+    transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+  })
   // Listen for emotes on the local player
   AvatarEmoteCommand.onChange(engine.PlayerEntity, (cmd) => {
     if (cmd && !cmd.emoteUrn?.includes('getHit')) {
@@ -100,13 +144,28 @@ function updateHandBoomerangVisibility(): void {
     if (currentlyVisible !== shouldShow) {
       console.log(`[HandBoomerang] ${shouldShow ? 'SHOW' : 'HIDE'} | localThrowActive=${localThrowActive} localProj=${localProjectiles.length} msgVis=${msgProjectileVisuals.length} emote=${emoteActive} cinematic=${isCinematicActive()}`)
     }
-    if (shouldShow && isCharging) {
-      // Pulse scale up during charge: 1.0 → 1.4x
-      const cf = getChargeFraction()
-      const s = 1.0 + cf * 0.4
-      t.scale = Vector3.create(HAND_BOOMERANG_SCALE.x * s, HAND_BOOMERANG_SCALE.y * s, HAND_BOOMERANG_SCALE.z * s)
-    } else {
-      t.scale = shouldShow ? HAND_BOOMERANG_SCALE : Vector3.Zero()
+    t.scale = shouldShow ? HAND_BOOMERANG_SCALE : Vector3.Zero()
+
+    // Update glow during charge
+    if (handGlowEntity && Transform.has(handGlowEntity)) {
+      if (shouldShow && isCharging) {
+        const cf = getChargeFraction()
+        // Glow sphere grows and brightens with charge
+        const glowSize = 0.3 + cf * 0.7
+        Transform.getMutable(handGlowEntity).scale = Vector3.create(glowSize, glowSize, glowSize)
+        // Shift color from blue to red near burnout
+        const r = cf > 0.75 ? 1.0 : 0.3
+        const g = cf > 0.75 ? 0.2 : 0.6
+        const b = cf > 0.75 ? 0.1 : 1.0
+        Material.setPbrMaterial(handGlowEntity, {
+          albedoColor: Color4.create(1, 1, 1, 0),
+          emissiveColor: Color3.create(r, g, b),
+          emissiveIntensity: 2 + cf * 8,
+          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+        })
+      } else {
+        Transform.getMutable(handGlowEntity).scale = Vector3.Zero()
+      }
     }
   }
 }
@@ -124,6 +183,32 @@ const GROUND_RAY_INTERVAL = 0.05 // seconds between ground raycasts for moving p
 let projectileStaggerUntil = 0
 
 // ── Sound ──
+const CHARGE_SOUND_SRC = 'assets/sounds/charge.mp3'
+let chargeSoundEntity: Entity | null = null
+
+function playChargeSound(): void {
+  if (!chargeSoundEntity) {
+    chargeSoundEntity = engine.addEntity()
+    Transform.create(chargeSoundEntity, {})
+  }
+  AudioSource.createOrReplace(chargeSoundEntity, {
+    audioClipUrl: CHARGE_SOUND_SRC,
+    playing: true,
+    loop: false,
+    volume: 0.5,
+    global: true,
+    pitch: 0.6
+  })
+}
+
+function stopChargeSound(): void {
+  if (chargeSoundEntity && AudioSource.has(chargeSoundEntity)) {
+    const a = AudioSource.getMutable(chargeSoundEntity)
+    a.playing = false
+    a.volume = 0
+  }
+}
+
 const PROJECTILE_SOUND_SRC = 'assets/sounds/boomerang2.mp3'
 
 /** Attach a looping spatial projectile sound directly to a projectile entity. */
@@ -283,7 +368,7 @@ function updateServerProjectileGroundRaycasts(dt: number): void {
 room.onMessage('shellDropped', (data) => {
   // Create visual from message bus (instant, no CRDT dependency).
   // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
-  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeScale)
+  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange)
 })
 
 /** Look up a remote player's position by wallet address (case-insensitive). */
@@ -345,6 +430,7 @@ interface LocalProjectile {
   dirZ: number
   distanceTraveled: number
   maxDistance: number
+  speed: number
   // Wall raycast
   wallRayEntity: Entity | null
   // Gravity + ground tracking
@@ -360,7 +446,7 @@ interface LocalProjectile {
 }
 const localProjectiles: LocalProjectile[] = []
 
-function fireProjectileLocally(scaleMul: number = CHARGE_MIN_SCALE): void {
+function fireProjectileLocally(speed: number = CHARGE_MIN_SPEED, maxDist: number = CHARGE_MIN_RANGE): void {
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
   const { dirX, dirZ } = getPlayerForward()
@@ -371,11 +457,10 @@ function fireProjectileLocally(scaleMul: number = CHARGE_MIN_SCALE): void {
     playerPos.z + dirZ * 1.0
   )
 
-  const chargedScale = Vector3.create(PROJECTILE_SCALE.x * scaleMul, PROJECTILE_SCALE.y * scaleMul, PROJECTILE_SCALE.z * scaleMul)
   const shellEntity = engine.addEntity()
   Transform.create(shellEntity, {
     position: spawnPos,
-    scale: chargedScale,
+    scale: PROJECTILE_SCALE,
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
   })
   GltfContainer.create(shellEntity, {
@@ -389,7 +474,7 @@ function fireProjectileLocally(scaleMul: number = CHARGE_MIN_SCALE): void {
   Transform.create(wallRayEntity, { position: spawnPos })
   Raycast.create(wallRayEntity, {
     direction: { $case: 'globalDirection', globalDirection: Vector3.create(dirX, 0, dirZ) },
-    maxDistance: PROJECTILE_MAX_RANGE,
+    maxDistance: maxDist,
     queryType: RaycastQueryType.RQT_HIT_FIRST,
     continuous: false
   })
@@ -406,7 +491,8 @@ function fireProjectileLocally(scaleMul: number = CHARGE_MIN_SCALE): void {
     dirX,
     dirZ,
     distanceTraveled: 0,
-    maxDistance: PROJECTILE_MAX_RANGE,
+    maxDistance: maxDist,
+    speed,
     wallRayEntity,
     currentY: spawnPos.y,
     fallVelocity: 0,
@@ -418,7 +504,7 @@ function fireProjectileLocally(scaleMul: number = CHARGE_MIN_SCALE): void {
     returning: false,
     returnDistance: 0,
   })
-  console.log('[Projectile] 🎯 LOCAL projectile fired dir:', dirX.toFixed(2), dirZ.toFixed(2))
+  console.log('[Projectile] 🎯 LOCAL projectile fired dir:', dirX.toFixed(2), dirZ.toFixed(2), 'speed:', speed, 'range:', maxDist)
   updateHandBoomerangVisibility()
 }
 
@@ -460,7 +546,7 @@ function updateLocalProjectiles(dt: number): void {
     }
 
     // Move forward or return to player's current position
-    const moveDistance = PROJECTILE_SPEED * clampedDt
+    const moveDistance = projectile.speed * clampedDt
     if (!projectile.returning) {
       projectile.distanceTraveled += moveDistance
       if (projectile.distanceTraveled >= projectile.maxDistance) {
@@ -583,6 +669,7 @@ interface MsgProjectileVisual {
   createdAtMs: number
   distanceTraveled: number
   maxDistance: number
+  speed: number
   currentY: number
   fallVelocity: number
   groundY: number
@@ -595,14 +682,13 @@ interface MsgProjectileVisual {
 }
 const msgProjectileVisuals: MsgProjectileVisual[] = []
 
-function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeScale?: number): void {
+function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeSpeed?: number, chargeRange?: number): void {
   const localEntity = acquireProjectileFromPool()
   if (!localEntity) return
 
-  const sm = (chargeScale && chargeScale > 0) ? chargeScale : 1.0
   const t = Transform.getMutable(localEntity)
   t.position = Vector3.create(x, y, z)
-  t.scale = Vector3.create(PROJECTILE_SCALE.x * sm, PROJECTILE_SCALE.y * sm, PROJECTILE_SCALE.z * sm)
+  t.scale = PROJECTILE_SCALE
   t.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
 
   // Set the correct color model for this projectile
@@ -621,7 +707,8 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
     dirX, dirZ,
     createdAtMs: Date.now(),
     distanceTraveled: 0,
-    maxDistance: PROJECTILE_MAX_RANGE,
+    maxDistance: (chargeRange && chargeRange > 0) ? chargeRange : PROJECTILE_MAX_RANGE,
+    speed: (chargeSpeed && chargeSpeed > 0) ? chargeSpeed : PROJECTILE_SPEED,
     currentY: y,
     fallVelocity: 0,
     groundY: 0,
@@ -632,7 +719,7 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
     returning: false,
     returnDistance: 0,
   })
-  console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1), 'scale:', sm.toFixed(2) + 'x')
+  console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1), 'speed:', ((chargeSpeed && chargeSpeed > 0) ? chargeSpeed : PROJECTILE_SPEED))
 }
 
 function removeMsgProjectileVisualNear(x: number, y: number, z: number): void {
@@ -677,7 +764,7 @@ function updateMsgProjectileVisuals(dt: number): void {
     }
 
     // Move forward or return to player's CURRENT position
-    const moveDist = PROJECTILE_SPEED * clampedDt
+    const moveDist = vis.speed * clampedDt
     if (!vis.returning) {
       vis.distanceTraveled += moveDist
       if (vis.distanceTraveled >= vis.maxDistance) {
@@ -750,26 +837,25 @@ export function triggerProjectileFromUI(): void {
   if (now - lastLocalProjectileFireTime < PROJECTILE_COOLDOWN_SEC * 1000) { playErrorSound(); return }
   if (localThrowActive || localProjectiles.length > 0) return
 
-  const scaleMul = CHARGE_MIN_SCALE // UI tap = normal size
   lastLocalProjectileFireTime = now
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
   if (serverUp) {
-    console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server), scale:', scaleMul)
+    console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
-    room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeScale: scaleMul })
+    room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeSpeed: CHARGE_MIN_SPEED, chargeRange: CHARGE_MIN_RANGE })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
       fireWallRaycast(spawnPos, dirX, dirZ)
     }
   } else {
-    console.log('[Projectile] 🎯 UI tap — firing projectile locally (no server), scale:', scaleMul)
+    console.log('[Projectile] 🎯 UI tap — firing projectile locally (no server)')
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
-    fireProjectileLocally(scaleMul)
+    fireProjectileLocally()
   }
 }
 
@@ -777,6 +863,11 @@ export function triggerProjectileFromUI(): void {
 export function projectileClientSystem(dt: number): void {
   updateHandBoomerangVisibility()
   const now = Date.now()
+
+  // Track player Y for airborne detection (smoothed per-frame)
+  if (!isCharging && Transform.has(engine.PlayerEntity)) {
+    lastChargeGroundY = Transform.get(engine.PlayerEntity).position.y
+  }
   const serverUp = isServerConnected()
 
   // During cinematic, cancel any active projectile stagger
@@ -844,9 +935,22 @@ export function projectileClientSystem(dt: number): void {
     // Also block charging if a boomerang is already in flight
     if (localThrowActive || localProjectiles.length > 0) return
 
+    // Block charging while airborne (gliding/jumping/falling)
+    if (Transform.has(engine.PlayerEntity)) {
+      const playerY = Transform.get(engine.PlayerEntity).position.y
+      if (Math.abs(playerY - lastChargeGroundY) > 0.15) {
+        // Y is changing — player is airborne
+        lastChargeGroundY = playerY
+        return
+      }
+      lastChargeGroundY = playerY
+    }
+
     // Start charging
     chargeStartMs = now
     isCharging = true
+    playChargeSound()
+    applyChargeSlow()
     console.log('[Projectile] ⚡ E pressed — charging started')
   }
 
@@ -854,6 +958,8 @@ export function projectileClientSystem(dt: number): void {
   if (isCharging && (isSpectatorMode() || isCinematicActive() || isDrownRespawning())) {
     isCharging = false
     chargeStartMs = 0
+    stopChargeSound()
+    removeChargeSlow()
     console.log('[Projectile] ⚡ Charge cancelled (state change)')
   }
 
@@ -862,6 +968,8 @@ export function projectileClientSystem(dt: number): void {
     isCharging = false
     chargeStartMs = 0
     lastLocalProjectileFireTime = now  // trigger cooldown
+    stopChargeSound()
+    removeChargeSlow()
     console.log('[Projectile] 💥 BURNOUT — held too long, self-stun!')
     // Self-stagger — head explode for overcharge
     triggerEmote({ predefinedEmote: 'getHit' })
@@ -869,25 +977,30 @@ export function projectileClientSystem(dt: number): void {
       mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
     })
     projectileStaggerUntil = now + PROJECTILE_STAGGER_MS
-    playErrorSound()
+    if (Transform.has(engine.PlayerEntity)) {
+      playHitSound(Transform.get(engine.PlayerEntity).position)
+    }
   }
 
   // E key released — fire with charged size
   if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_UP) && isCharging) {
     isCharging = false
+    stopChargeSound()
+    removeChargeSlow()
     const chargeFrac = Math.min(1, (now - chargeStartMs) / 1000 / CHARGE_TIME_SEC)
-    const scaleMul = chargeToScale(chargeFrac)
+    const chargeSpeed = chargeToSpeed(chargeFrac)
+    const chargeRange = chargeToRange(chargeFrac)
     chargeStartMs = 0
     lastLocalProjectileFireTime = now
 
-    console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, scale:', scaleMul.toFixed(2) + 'x')
+    console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, speed:', chargeSpeed.toFixed(0), 'range:', chargeRange.toFixed(0))
 
     const { dirX, dirZ } = getPlayerForward()
 
     if (serverUp) {
       localThrowActive = true; localThrowSawVisual = false
       updateHandBoomerangVisibility()
-      room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeScale: scaleMul })
+      room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeSpeed, chargeRange })
 
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position
@@ -897,7 +1010,7 @@ export function projectileClientSystem(dt: number): void {
     } else {
       localThrowActive = true; localThrowSawVisual = false
       updateHandBoomerangVisibility()
-      fireProjectileLocally(scaleMul)
+      fireProjectileLocally(chargeSpeed, chargeRange)
     }
   }
 }

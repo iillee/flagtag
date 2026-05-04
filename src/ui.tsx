@@ -2127,7 +2127,7 @@ function DesktopLayout() {
             uiTransform={{
               width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE),
               flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              borderRadius: { topLeft: S(0), topRight: S(38), bottomLeft: S(38), bottomRight: S(38) },
+              borderRadius: S(4),
               margin: { right: S(8) },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
@@ -2135,8 +2135,27 @@ function DesktopLayout() {
             <Label value="E" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif"
               uiTransform={{ positionType: 'absolute', position: { top: S(-2), left: S(5) } }}
             />
+            {/* Charge fill — behind icon, in front of background */}
+            {getIsCharging() && (() => {
+              const cf = getChargeFraction()
+              const fillPct = Math.round(cf * 100)
+              const fillColor = cf > 0.75
+                ? Color4.create(1, 0.2 - (cf - 0.75) * 0.8, 0.1, 0.7)
+                : Color4.create(1, 1, 1, 0.5)
+              const inset = S(6)
+              return (
+                <UiEntity uiTransform={{
+                  positionType: 'absolute',
+                  position: { bottom: inset, left: inset, right: inset },
+                  height: `${fillPct}%`,
+                  maxHeight: S(_ABILITY_BTN_SIZE) - inset * 2,
+                }}
+                uiBackground={{ color: fillColor }}
+                />
+              )
+            })()}
             <UiEntity
-              uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, margin: { top: S(-2) } }}
+              uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, margin: { top: S(-2) }, positionType: 'absolute' }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
@@ -2148,24 +2167,6 @@ function DesktopLayout() {
                 uiTransform={{ positionType: 'absolute' }}
               />
             )}
-            {/* Charge fill overlay — fills from bottom, turns red near top */}
-            {getIsCharging() && (() => {
-              const cf = getChargeFraction()
-              const fillPct = Math.round(cf * 100)
-              // Blue → red as it approaches burnout
-              const fillColor = cf > 0.75
-                ? Color4.create(1, 0.2 - (cf - 0.75) * 0.8, 0.1, 0.6)
-                : Color4.create(0.2, 0.6, 1, 0.5)
-              return (
-                <UiEntity uiTransform={{
-                  positionType: 'absolute',
-                  position: { bottom: 0, left: 0, right: 0 },
-                  height: `${fillPct}%`,
-                }}
-                uiBackground={{ color: fillColor }}
-                />
-              )
-            })()}
 
 
           </UiEntity>
@@ -2175,7 +2176,7 @@ function DesktopLayout() {
             uiTransform={{
               width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE),
               flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              borderRadius: { topLeft: S(0), topRight: S(38), bottomLeft: S(38), bottomRight: S(38) },
+              borderRadius: S(4),
               margin: { left: S(8) },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
