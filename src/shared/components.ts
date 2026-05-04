@@ -259,6 +259,47 @@ export function getNextProjectileSyncId(): number {
   return PROJECTILE_SYNC_ID_BASE + (projectileIdCounter++)
 }
 
+// ── Zombie ──
+
+export const Zombie = engine.defineComponent('ctf-zombie', {
+  hp: Schemas.Int,
+  spawnX: Schemas.Float,
+  spawnY: Schemas.Float,
+  spawnZ: Schemas.Float,
+  active: Schemas.Boolean,
+  targetX: Schemas.Float,
+  targetY: Schemas.Float,
+  targetZ: Schemas.Float,
+}, {
+  hp: 1,
+  spawnX: 0, spawnY: 0, spawnZ: 0,
+  active: true,
+  targetX: 0, targetY: 0, targetZ: 0,
+})
+
+Zombie.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
+/** Zombie detection radius (meters) — starts homing when player is within this. */
+export const ZOMBIE_DETECT_RADIUS = 20
+/** Zombie base speed (m/s). */
+export const ZOMBIE_SPEED = 3
+/** Zombie fast speed when close (m/s). */
+export const ZOMBIE_FAST_SPEED = 5
+/** Distance at which zombie speeds up (meters). */
+export const ZOMBIE_FAST_DIST = 8
+/** Zombie hit radius — staggers player on contact (meters). */
+export const ZOMBIE_HIT_RADIUS = 1.5
+/** Zombie spawn interval (seconds). */
+export const ZOMBIE_SPAWN_INTERVAL = 20
+/** Max active zombies. */
+export const ZOMBIE_MAX_ACTIVE = 5
+
+const ZOMBIE_SYNC_ID_BASE = 3000000
+let zombieIdCounter = 0
+export function getNextZombieSyncId(): number {
+  return ZOMBIE_SYNC_ID_BASE + (zombieIdCounter++)
+}
+
 export enum SyncIds {
   FLAG = 1,
   COUNTDOWN = 200,

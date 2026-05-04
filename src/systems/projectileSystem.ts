@@ -1185,7 +1185,8 @@ export function projectileClientSystem(dt: number): void {
     updateMsgProjectileVisuals(dt)
 
     // Clear local throw flag when projectile visual has appeared and then gone
-    if (localThrowActive) {
+    // Skip during green orbit — orbit manages localThrowActive itself via stopOrbitVisual()
+    if (localThrowActive && !orbitActive) {
       const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
       const hasLocalVisual = msgProjectileVisuals.some(v => v.firedBy === localUserId || v.firedBy === '')
       if (hasLocalVisual) {

@@ -134,6 +134,7 @@ export enum EntityNames {
   Sit_Spot_2_8 = "Sit Spot 2_8",
   Sit_Spot_2_9 = "Sit Spot 2_9",
   Skull_Chain_02 = "Skull Chain 02",
+  Solid_Black = "Solid Black",
   Solid_Blue = "Solid Blue",
   Solid_Green = "Solid Green",
   Solid_Red = "Solid Red",

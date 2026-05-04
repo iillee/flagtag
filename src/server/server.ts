@@ -6,6 +6,7 @@ import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState, VisitorAnalytics, MonthlyVisitorAnalytics,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
+  Zombie, ZOMBIE_DETECT_RADIUS, ZOMBIE_SPEED, ZOMBIE_FAST_SPEED, ZOMBIE_FAST_DIST, ZOMBIE_HIT_RADIUS, ZOMBIE_SPAWN_INTERVAL, ZOMBIE_MAX_ACTIVE, getNextZombieSyncId,
   getHoldTimeEntityEnumId, getNextTrapSyncId, getNextProjectileSyncId,
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString
 } from '../shared/components'
@@ -1168,6 +1169,7 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(safeSystem('shellServerSystem', shellServerSystem))
   engine.addSystem(safeSystem('orbitServerSystem', orbitServerSystem))
   engine.addSystem(safeSystem('updraftServerSystem', updraftServerSystem))
+  // engine.addSystem(safeSystem('zombieServerSystem', zombieServerSystem)) // DISABLED — ghost system WIP
 
   // ── Spawn mushrooms ──
   spawnMushrooms()
@@ -1794,6 +1796,29 @@ function bananaServerSystem(dt: number): void {
 
     // Trigger check — any player (except the dropper) walks over it
     const trapPos = Transform.get(trap.entity).position
+    let trapConsumed = false
+
+    // Check ghost-trap collision
+    for (let gi = activeZombies.length - 1; gi >= 0; gi--) {
+      const z = activeZombies[gi]
+      const dx = z.posX - trapPos.x
+      const dy = z.posY - trapPos.y
+      const dz = z.posZ - trapPos.z
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (dist < TRAP_TRIGGER_RADIUS) {
+        console.log('[Server] 🪤👻 Trap hit ghost! Killing ghost.')
+        room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
+        room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
+        engine.removeEntity(z.entity)
+        activeZombies.splice(gi, 1)
+        engine.removeEntity(trap.entity)
+        activeTraps.splice(i, 1)
+        trapConsumed = true
+        break
+      }
+    }
+    if (trapConsumed) continue
+
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       const addr = identity.address.toLowerCase()
       // Self-hit: immune for 2 seconds after dropping, then fair game
@@ -2921,4 +2946,190 @@ function spawnMushrooms(): void {
   console.log('[Server] 🍄 Spawned', MUSHROOM_COUNT, 'mushrooms')
   const positions = activeMushrooms.map(mushroomToPayload)
   room.send('mushroomPositions', { mushroomsJson: JSON.stringify(positions), fullReset: true })
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Zombie Server System ──
+// ══════════════════════════════════════════════════════════════════════════════
+
+const ZOMBIE_SPAWN_POS = Vector3.create(203.5, 12.25, 276) // Black cube location
+
+interface ActiveZombie {
+  entity: Entity
+  hp: number
+  posX: number
+  posY: number
+  posZ: number
+  spawnedAtMs: number
+  lastStaggerTime: Map<string, number> // prevent rapid re-stagger per player
+  lastHitMs: number // prevent multiple hits from same projectile pass
+}
+
+const activeZombies: ActiveZombie[] = []
+let zombieSpawnTimer = 10 // first spawn after 10s
+const ZOMBIE_STAGGER_COOLDOWN_MS = 3000 // can only stagger same player every 3s
+const ZOMBIE_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
+
+// Listen for zombie hit reports from clients
+room.onMessage('zombieHit', (data, sender) => {
+  // Validate: find the zombie entity, reduce HP
+  for (let i = activeZombies.length - 1; i >= 0; i--) {
+    const z = activeZombies[i]
+    // Match by entity ID sent as zombieId (we use entity number)
+    if ((z.entity as number) === data.zombieId) {
+      z.hp--
+      console.log('[Server] 🧟 Zombie hit! HP:', z.hp)
+      if (z.hp <= 0) {
+        // Kill zombie
+        console.log('[Server] 🧟 Zombie killed!')
+        room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
+        engine.removeEntity(z.entity)
+        activeZombies.splice(i, 1)
+      }
+      break
+    }
+  }
+})
+
+function zombieServerSystem(dt: number): void {
+  const clampedDt = Math.min(dt, 0.1)
+  const now = Date.now()
+
+  // ── Spawn timer ──
+  zombieSpawnTimer -= clampedDt
+  if (zombieSpawnTimer <= 0 && activeZombies.length < ZOMBIE_MAX_ACTIVE) {
+    spawnZombie()
+    zombieSpawnTimer = ZOMBIE_SPAWN_INTERVAL
+  }
+
+  // ── Update each zombie ──
+  for (let i = activeZombies.length - 1; i >= 0; i--) {
+    const z = activeZombies[i]
+
+    // Find nearest player
+    let nearestDist = Infinity
+    let nearestPos: Vector3 | null = null
+    let nearestId = ''
+
+    for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      const pPos = transform.position
+      const dx = pPos.x - z.posX
+      const dz = pPos.z - z.posZ
+      const dist = Math.sqrt(dx * dx + dz * dz)
+      if (dist < nearestDist) {
+        nearestDist = dist
+        nearestPos = pPos
+        nearestId = identity.address.toLowerCase()
+      }
+    }
+
+    if (nearestPos && nearestDist < ZOMBIE_DETECT_RADIUS) {
+      // Move toward player
+      const speed = nearestDist < ZOMBIE_FAST_DIST ? ZOMBIE_FAST_SPEED : ZOMBIE_SPEED
+      const dx = nearestPos.x - z.posX
+      const dz = nearestPos.z - z.posZ
+      const dist2d = Math.sqrt(dx * dx + dz * dz)
+      if (dist2d > 0.1) {
+        z.posX += (dx / dist2d) * speed * clampedDt
+        z.posZ += (dz / dist2d) * speed * clampedDt
+      }
+      // Match target Y (float above ground at player level)
+      z.posY += (nearestPos.y - z.posY) * 2.0 * clampedDt
+
+      // Check contact → stagger + flag drop
+      if (nearestDist < ZOMBIE_HIT_RADIUS) {
+        const lastStagger = z.lastStaggerTime.get(nearestId) || 0
+        if (now - lastStagger > ZOMBIE_STAGGER_COOLDOWN_MS) {
+          z.lastStaggerTime.set(nearestId, now)
+          room.send('zombieStagger', { victimId: nearestId })
+          room.send('hitVfx', { x: z.posX, y: z.posY + 1, z: z.posZ })
+          // Drop flag if victim is carrying it
+          const flag = Flag.getOrNull(flagEntity)
+          if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === nearestId) {
+            console.log('[Server] 🧟 Zombie forced flag drop from', nearestId.slice(0, 8))
+            handleDrop(nearestId)
+          }
+          console.log('[Server] 🧟 Zombie staggered player', nearestId.slice(0, 8))
+        }
+      }
+    } else {
+      // Idle: slow orbit around spawn point
+      const elapsed = (now - z.spawnedAtMs) / 1000
+      const angle = elapsed * ZOMBIE_IDLE_ORBIT_SPEED
+      const orbitRadius = 3
+      const targetX = ZOMBIE_SPAWN_POS.x + Math.cos(angle) * orbitRadius
+      const targetZ = ZOMBIE_SPAWN_POS.z + Math.sin(angle) * orbitRadius
+      z.posX += (targetX - z.posX) * 2.0 * clampedDt
+      z.posZ += (targetZ - z.posZ) * 2.0 * clampedDt
+      z.posY += (ZOMBIE_SPAWN_POS.y - z.posY) * 2.0 * clampedDt
+    }
+
+    // Update transform (synced to clients via CRDT)
+    const t = Transform.getMutable(z.entity)
+    t.position = Vector3.create(z.posX, z.posY, z.posZ)
+  }
+
+  // ── Check projectile-zombie collisions ──
+  const HIT_COOLDOWN_MS = 500 // prevent same projectile hitting multiple times per pass
+  for (const proj of activeProjectiles) {
+    const projPos = Transform.get(proj.entity).position
+    for (let i = activeZombies.length - 1; i >= 0; i--) {
+      const z = activeZombies[i]
+      if (now - z.lastHitMs < HIT_COOLDOWN_MS) continue
+      const dx = projPos.x - z.posX
+      const dy = projPos.y - z.posY
+      const dz = projPos.z - z.posZ
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (dist < PROJECTILE_HIT_RADIUS * (proj.chargeScale || 1)) {
+        z.hp--
+        z.lastHitMs = now
+        console.log('[Server] 🧟 Projectile hit zombie! HP:', z.hp)
+        room.send('hitVfx', { x: z.posX, y: z.posY + 1, z: z.posZ })
+        if (z.hp <= 0) {
+          console.log('[Server] 🧟 Zombie killed by projectile!')
+          room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
+          engine.removeEntity(z.entity)
+          activeZombies.splice(i, 1)
+        }
+        // Trigger boomerang return (same as hitting a player)
+        if (!proj.returning) {
+          proj.returning = true
+          proj.returnX = projPos.x
+          proj.returnY = projPos.y
+          proj.returnZ = projPos.z
+          room.send('shellTriggered', { x: projPos.x, y: projPos.y, z: projPos.z, victimId: '', peak: true })
+          console.log('[Server] 🧟 Projectile rebounding off zombie')
+        }
+        break
+      }
+    }
+  }
+}
+
+function spawnZombie(): void {
+  const entity = engine.addEntity()
+  const pos = ZOMBIE_SPAWN_POS
+  Transform.create(entity, {
+    position: Vector3.create(pos.x, pos.y, pos.z),
+    scale: Vector3.create(1, 1, 1)
+  })
+  Zombie.create(entity, {
+    hp: 2,
+    spawnX: pos.x, spawnY: pos.y, spawnZ: pos.z,
+    active: true,
+    targetX: pos.x, targetY: pos.y, targetZ: pos.z,
+  })
+  syncEntity(entity, [Transform.componentId, Zombie.componentId], getNextZombieSyncId())
+
+  activeZombies.push({
+    entity,
+    hp: 1,
+    posX: pos.x,
+    posY: pos.y,
+    posZ: pos.z,
+    spawnedAtMs: Date.now(),
+    lastStaggerTime: new Map(),
+    lastHitMs: 0,
+  })
+  console.log('[Server] 🧟 Zombie spawned at', pos.x, pos.y, pos.z)
 }

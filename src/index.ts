@@ -25,6 +25,7 @@ import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { setupRemoteBoomerangs, cleanupRemoteBoomerang } from './systems/remoteBoomerangSystem'
 import { getBoomerangColor, onBoomerangColorChange } from './gameState/boomerangColor'
 import { setupLadder } from './systems/ladderSystem'
+import { zombieClientSystem } from './systems/zombieSystem'
 import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 // sceneTime removed — visitor tracking is fully server-side via VisitorAnalytics
@@ -567,6 +568,7 @@ export async function main() {
   engine.addSystem(projectileClientSystem)
   engine.addSystem(mushroomClientSystem)
   engine.addSystem(shieldSystem)
+  // engine.addSystem(zombieClientSystem) // DISABLED — ghost system WIP
   engine.addSystem(updateHoldTimeInterpolation)
 
   // ── Day/Night Cycle ──

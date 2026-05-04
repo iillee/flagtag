@@ -237,6 +237,11 @@ room.onMessage('stagger', (data) => {
   if (me && data.victimId === me) pendingStagger = true
 })
 
+room.onMessage('zombieStagger', (data) => {
+  const me = getPlayerData()?.userId?.toLowerCase()
+  if (me && data.victimId === me) pendingStagger = true
+})
+
 export function combatClientSystem(_dt: number): void {
   const now = Date.now()
   initPools()
