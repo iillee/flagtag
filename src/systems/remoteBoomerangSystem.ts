@@ -12,6 +12,7 @@ import {
   MeshRenderer,
   Material,
   MaterialTransparencyMode,
+  PlayerIdentityData,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
@@ -31,6 +32,14 @@ interface RemoteChargeState {
   particles: Entity[]
 }
 
+interface RemoteOrbitState {
+  entity: Entity
+  startTime: number
+  durationMs: number
+  endTime: number  // can be shortened on hit
+  angle: number
+}
+
 interface RemoteBoomerang {
   anchor: Entity
   model: Entity
@@ -38,6 +47,7 @@ interface RemoteBoomerang {
   charge?: RemoteChargeState
   leftAnchor?: Entity
   leftModel?: Entity
+  orbit?: RemoteOrbitState
 }
 
 const remoteBoomerangs = new Map<string, RemoteBoomerang>()
@@ -85,19 +95,13 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
         visibleMeshesCollisionMask: 0,
         invisibleMeshesCollisionMask: 0
       })
-      // Reset scale and transform based on color
+      // Reset scale and transform
       if (Transform.has(rb.model)) {
         const t = Transform.getMutable(rb.model)
         const mobile = isMobile()
-        if (color === 'g') {
-          t.scale = Vector3.create(3, 4.5, 3)
-          t.position = mobile ? Vector3.create(-0.02, -0.05, -0.1) : Vector3.create(0.04, -0.05, -0.1)
-          t.rotation = Quaternion.fromEulerDegrees(180, 0, 90)
-        } else {
-          t.scale = Vector3.create(1, 1.5, 1)
-          t.position = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
-          t.rotation = Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
-        }
+        t.scale = Vector3.create(1, 1.5, 1)
+        t.position = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
+        t.rotation = Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
       }
     }
     ensureLeftHand(playerId, rb)
@@ -113,16 +117,11 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
 
   const model = engine.addEntity()
   const mobile = isMobile()
-  const isGreen = color === 'g'
   Transform.create(model, {
     parent: anchor,
-    position: isGreen
-      ? (mobile ? Vector3.create(-0.02, -0.05, -0.1) : Vector3.create(0.04, -0.05, -0.1))
-      : (mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)),
-    scale: isGreen ? Vector3.create(3, 4.5, 3) : Vector3.create(1, 1.5, 1),
-    rotation: isGreen
-      ? Quaternion.fromEulerDegrees(180, 0, 90)
-      : Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
+    position: mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1),
+    scale: Vector3.create(1, 1.5, 1),
+    rotation: Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
   })
   GltfContainer.create(model, {
     src: `assets/models/boomerang.${color}.glb`,
@@ -139,6 +138,9 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
 function removeRemoteBoomerang(playerId: string): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb) return
+  if (rb.orbit) {
+    engine.removeEntity(rb.orbit.entity)
+  }
   if (rb.charge) {
     engine.removeEntity(rb.charge.glow)
     for (const p of rb.charge.particles) engine.removeEntity(p)
@@ -245,6 +247,106 @@ function remoteChargeAnimSystem(_dt: number): void {
   })
 }
 
+const REMOTE_ORBIT_VIS_RADIUS = 4.0
+const REMOTE_ORBIT_FULL_ROTATIONS = 3
+const REMOTE_ORBIT_DURATION_MS = 3500
+const REMOTE_ORBIT_VIS_SPEED = (REMOTE_ORBIT_FULL_ROTATIONS * 360) / (REMOTE_ORBIT_DURATION_MS / 1000)
+const REMOTE_ORBIT_PROJ_SCALE = Vector3.create(2.5, 4.5, 2.5)
+
+function startRemoteOrbit(playerId: string, durationMs: number): void {
+  const rb = remoteBoomerangs.get(playerId)
+  if (!rb) return
+  if (rb.orbit) return // already orbiting
+
+  const orbitEnt = engine.addEntity()
+  Transform.create(orbitEnt, { position: Vector3.Zero(), scale: Vector3.Zero() })
+  GltfContainer.create(orbitEnt, {
+    src: `assets/models/boomerang.${rb.color}.glb`,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
+
+  const now = Date.now()
+  rb.orbit = { entity: orbitEnt, startTime: now, durationMs, endTime: now + durationMs, angle: 0 }
+  // Hide hand model during orbit
+  if (Transform.has(rb.model)) {
+    Transform.getMutable(rb.model).scale = Vector3.Zero()
+  }
+  console.log(`[RemoteBoomerang] Orbit started for ${playerId}`)
+}
+
+function stopRemoteOrbit(playerId: string): void {
+  const rb = remoteBoomerangs.get(playerId)
+  if (!rb || !rb.orbit) return
+  engine.removeEntity(rb.orbit.entity)
+  rb.orbit = undefined
+  // Restore hand model
+  if (Transform.has(rb.model)) {
+    Transform.getMutable(rb.model).scale = Vector3.create(1, 1.5, 1)
+  }
+  console.log(`[RemoteBoomerang] Orbit ended for ${playerId}`)
+}
+
+/** Trigger early ramp-down for remote orbit */
+function endRemoteOrbitEarly(playerId: string): void {
+  const rb = remoteBoomerangs.get(playerId)
+  if (!rb || !rb.orbit) return
+  const now = Date.now()
+  const remaining = rb.orbit.endTime - now
+  if (remaining <= REMOTE_ORBIT_RAMP_MS) return
+  rb.orbit.endTime = now + REMOTE_ORBIT_RAMP_MS
+}
+
+const REMOTE_ORBIT_RAMP_MS = 400
+
+function remoteOrbitAnimSystem(_dt: number): void {
+  const now = Date.now()
+  remoteBoomerangs.forEach((rb, playerId) => {
+    if (!rb.orbit) return
+
+    const elapsed = now - rb.orbit.startTime
+    // Finished (past endTime)
+    if (now > rb.orbit.endTime) {
+      stopRemoteOrbit(playerId)
+      return
+    }
+
+    // Find remote player position via PlayerIdentityData
+    let playerPos: Vector3 | null = null
+    for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      if (identity.address.toLowerCase() === playerId) {
+        playerPos = Transform.get(entity).position
+        break
+      }
+    }
+    if (!playerPos) return
+
+    // Radius ramps up at start and back down at end
+    const timeUntilEnd = rb.orbit.endTime - now
+    let radiusFrac = 1.0
+    if (elapsed < REMOTE_ORBIT_RAMP_MS) {
+      radiusFrac = elapsed / REMOTE_ORBIT_RAMP_MS
+    } else if (timeUntilEnd < REMOTE_ORBIT_RAMP_MS) {
+      radiusFrac = timeUntilEnd / REMOTE_ORBIT_RAMP_MS
+    }
+    radiusFrac = radiusFrac * radiusFrac * (3 - 2 * radiusFrac)
+    const radius = REMOTE_ORBIT_VIS_RADIUS * radiusFrac
+
+    const currentAngle = REMOTE_ORBIT_VIS_SPEED * (elapsed / 1000)
+    const radians = currentAngle * (Math.PI / 180)
+    const ox = playerPos.x + Math.sin(radians) * radius
+    const oz = playerPos.z + Math.cos(radians) * radius
+    const oy = playerPos.y + 1.0
+
+    const axialSpin = (elapsed / 1000) * 1440
+
+    const t = Transform.getMutable(rb.orbit.entity)
+    t.position = Vector3.create(ox, oy, oz)
+    t.scale = REMOTE_ORBIT_PROJ_SCALE
+    t.rotation = Quaternion.fromEulerDegrees(0, currentAngle + 90 + axialSpin, 0)
+  })
+}
+
 export function setupRemoteBoomerangs(): void {
   // Listen for color changes from other players
   room.onMessage('playerColorChanged', (data) => {
@@ -283,8 +385,30 @@ export function setupRemoteBoomerangs(): void {
     stopRemoteCharge(playerId)
   })
 
-  // Register animation system
+  // Listen for remote orbit start/end
+  room.onMessage('orbitStarted', (data) => {
+    const playerId = data.playerId?.toLowerCase()
+    if (!playerId) return
+    const localUserId = getPlayerData()?.userId?.toLowerCase()
+    if (localUserId && playerId === localUserId) return
+    // Auto-create remote boomerang if not yet known
+    if (!remoteBoomerangs.has(playerId)) {
+      createRemoteBoomerang(playerId, 'g')
+    }
+    startRemoteOrbit(playerId, data.durationMs || 3500)
+  })
+
+  room.onMessage('orbitEnded', (data) => {
+    const playerId = data.playerId?.toLowerCase()
+    if (!playerId) return
+    const localUserId = getPlayerData()?.userId?.toLowerCase()
+    if (localUserId && playerId === localUserId) return
+    endRemoteOrbitEarly(playerId)
+  })
+
+  // Register animation systems
   engine.addSystem(remoteChargeAnimSystem)
+  engine.addSystem(remoteOrbitAnimSystem)
 }
 
 /** Remove a remote player's hand boomerang when they leave the scene. */

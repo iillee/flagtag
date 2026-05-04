@@ -45,6 +45,12 @@ export const Messages = {
   colorChanged: Schemas.Map({ color: Schemas.String }),
   playerColorChanged: Schemas.Map({ playerId: Schemas.String, color: Schemas.String }),
 
+  // Green orbit mechanic
+  requestOrbit: Schemas.Map({ t: Schemas.Int }),
+  orbitStarted: Schemas.Map({ playerId: Schemas.String, durationMs: Schemas.Int }),
+  orbitHit: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String, attackerId: Schemas.String }),
+  orbitEnded: Schemas.Map({ playerId: Schemas.String }),
+
   // Boomerang charge sync (lightweight: start/stop only)
   chargeStart: Schemas.Map({ t: Schemas.Int }),
   chargeStop: Schemas.Map({ t: Schemas.Int }),

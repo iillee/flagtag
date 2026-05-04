@@ -898,7 +898,7 @@ function PlayerListUi() {
             <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
               {(['r', 'y', 'b', 'g'] as BoomerangColor[]).map((color) => {
                 const selected = getBoomerangColor() === color
-                const label = color === 'r' ? 'Base' : color === 'y' ? 'Dubs' : color === 'b' ? 'Charge' : 'Giant'
+                const label = color === 'r' ? 'Base' : color === 'y' ? 'Dubs' : color === 'b' ? 'Charge' : 'Orbit'
                 return (
                   <UiEntity
                     key={`boom-${color}`}

@@ -34,9 +34,6 @@ import { getBoomerangModelSrc, getBoomerangColor, onBoomerangColorChange } from 
 // ── Charge mechanic ──
 const CHARGE_TIME_SEC = 1.5      // seconds to full charge = burnout
 const CHARGE_MIN_SPEED = PROJECTILE_SPEED   // tap = 30 m/s
-const GREEN_SPEED = 18                      // green boomerang moves slower
-const GREEN_RANGE = 30                      // green boomerang fixed range
-const GREEN_SCALE = 2                       // green projectile scale
 const CHARGE_MAX_SPEED = 60                  // full charge = 60 m/s
 const CHARGE_MIN_RANGE = 20                  // tap = 20m
 const RED_RANGE = 40                         // red boomerang fixed range
@@ -181,14 +178,8 @@ function updateHandBoomerangVisibility(): void {
       console.log(`[HandBoomerang] ${shouldShow ? 'SHOW' : 'HIDE'} | localThrowActive=${localThrowActive} localProj=${localProjectiles.length} msgVis=${msgProjectileVisuals.length} emote=${emoteActive} cinematic=${isCinematicActive()}`)
     }
     const isGreen = getBoomerangColor() === 'g'
-
-    // Green: always show at 3x scale (massive boomerang), shifted down, flipped 180
     const mobile = isMobile()
-    if (shouldShow && isGreen) {
-      t.scale = Vector3.create(HAND_BOOMERANG_SCALE.x * 3, HAND_BOOMERANG_SCALE.y * 3, HAND_BOOMERANG_SCALE.z * 3)
-      t.position = mobile ? Vector3.create(-0.02, -0.05, -0.1) : Vector3.create(0.04, -0.05, -0.1)
-      t.rotation = Quaternion.fromEulerDegrees(180, 0, 90)
-    } else if (shouldShow) {
+    if (shouldShow) {
       t.scale = HAND_BOOMERANG_SCALE
       t.position = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
       t.rotation = Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
@@ -198,7 +189,7 @@ function updateHandBoomerangVisibility(): void {
 
     // Update glow during charge (blue only)
     if (handGlowEntity && Transform.has(handGlowEntity)) {
-      if (shouldShow && isCharging && !isGreen) {
+      if (shouldShow && isCharging && !isGreen) {  // green has orbit, not charge
         const cf = getChargeFraction()
         // Glow sphere grows and brightens with charge
         const glowSize = 0.3 + cf * 0.7
@@ -262,6 +253,118 @@ function updateHandBoomerangVisibility(): void {
       }
     }
   }
+}
+
+// ── Green orbit visual ──
+const ORBIT_VISUAL_RADIUS = 4.0
+const ORBIT_FULL_ROTATIONS = 3   // exact number of full loops
+const ORBIT_DURATION_MS = 3500
+const ORBIT_VISUAL_SPEED = (ORBIT_FULL_ROTATIONS * 360) / (ORBIT_DURATION_MS / 1000)  // ~308°/s
+let orbitEntity: Entity | null = null
+let orbitActive = false
+let orbitStartMs = 0
+let orbitStartAngle = 0  // player's forward angle when orbit begins
+let orbitEndMs = 0        // when the orbit should finish (can be shortened on hit)
+
+/** Returns true if the local player's green orbit is currently active. */
+export function isOrbitActive(): boolean { return orbitActive }
+
+function startOrbitVisual(): void {
+  if (orbitEntity === null) {
+    orbitEntity = engine.addEntity()
+    Transform.create(orbitEntity, { position: Vector3.Zero(), scale: Vector3.Zero() })
+    GltfContainer.create(orbitEntity, {
+      src: getBoomerangModelSrc(),
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0
+    })
+    attachProjectileSound(orbitEntity)
+  } else {
+    // Update model in case color changed
+    if (GltfContainer.has(orbitEntity)) {
+      GltfContainer.getMutable(orbitEntity).src = getBoomerangModelSrc()
+    }
+    attachProjectileSound(orbitEntity)
+  }
+  orbitActive = true
+  orbitStartMs = Date.now()
+  orbitEndMs = orbitStartMs + ORBIT_DURATION_MS
+  // Start from player's forward direction
+  const { dirX, dirZ } = getPlayerForward()
+  orbitStartAngle = Math.atan2(dirX, dirZ) * (180 / Math.PI)
+  // Hide hand boomerang during orbit
+  localThrowActive = true
+  localThrowSawVisual = true
+  updateHandBoomerangVisibility()
+}
+
+/** Trigger early ramp-down — boomerang returns to player over ORBIT_RAMP_MS */
+function endOrbitEarly(): void {
+  if (!orbitActive) return
+  const now = Date.now()
+  const remaining = orbitEndMs - now
+  // If we're already in ramp-down or nearly done, let it finish naturally
+  if (remaining <= ORBIT_RAMP_MS) return
+  // Set end time so ramp-down starts now
+  orbitEndMs = now + ORBIT_RAMP_MS
+}
+
+function stopOrbitVisual(): void {
+  orbitActive = false
+  if (orbitEntity !== null && Transform.has(orbitEntity)) {
+    Transform.getMutable(orbitEntity).scale = Vector3.Zero()
+    stopProjectileSound(orbitEntity)
+  }
+  localThrowActive = false
+  localThrowSawVisual = false
+  updateHandBoomerangVisibility()
+}
+
+const ORBIT_RAMP_MS = 400  // ms to expand out / contract back
+
+function updateOrbitVisual(_dt: number): void {
+  if (!orbitActive || orbitEntity === null) return
+
+  const now = Date.now()
+  const elapsed = now - orbitStartMs
+  const totalDuration = orbitEndMs - orbitStartMs
+  if (now > orbitEndMs) {
+    stopOrbitVisual()
+    return
+  }
+
+  if (!Transform.has(engine.PlayerEntity)) return
+  const playerPos = Transform.get(engine.PlayerEntity).position
+
+  // Radius ramps up at start and back down at end (leaves & returns to hand)
+  const timeUntilEnd = orbitEndMs - now
+  let radiusFrac = 1.0
+  if (elapsed < ORBIT_RAMP_MS) {
+    // Expanding out from hand
+    radiusFrac = elapsed / ORBIT_RAMP_MS
+  } else if (timeUntilEnd < ORBIT_RAMP_MS) {
+    // Contracting back to hand
+    radiusFrac = timeUntilEnd / ORBIT_RAMP_MS
+  }
+  // Smooth easing (ease in-out)
+  radiusFrac = radiusFrac * radiusFrac * (3 - 2 * radiusFrac)
+  const radius = ORBIT_VISUAL_RADIUS * radiusFrac
+
+  // Time-based angle ensures exact full rotations
+  const currentAngle = orbitStartAngle + ORBIT_VISUAL_SPEED * (elapsed / 1000)
+  const radians = currentAngle * (Math.PI / 180)
+
+  const orbitX = playerPos.x + Math.sin(radians) * radius
+  const orbitZ = playerPos.z + Math.cos(radians) * radius
+  const orbitY = playerPos.y + 1.0
+
+  // Fast axial spin (like a real boomerang spinning on its own axis)
+  const axialSpin = (elapsed / 1000) * 1440  // 4 full spins per second
+
+  const t = Transform.getMutable(orbitEntity)
+  t.position = Vector3.create(orbitX, orbitY, orbitZ)
+  t.scale = PROJECTILE_SCALE
+  t.rotation = Quaternion.fromEulerDegrees(0, currentAngle + 90 + axialSpin, 0)
 }
 
 function getProjectileModelSrc(): string {
@@ -363,6 +466,8 @@ export function isProjectileInFlight(): boolean {
 
 /** Returns true if projectile is unavailable — either on cooldown or in flight (for UI). */
 export function isProjectileOnCooldown(): boolean {
+  // Orbit active = unavailable
+  if (orbitActive) return true
   // In flight = unavailable
   if (isProjectileInFlight()) return true
   // Time-based cooldown (if any)
@@ -373,6 +478,7 @@ export function isProjectileOnCooldown(): boolean {
 
 /** Returns cooldown remaining in seconds (0 if ready). -1 if boomerang is in flight. */
 export function getProjectileCooldownRemaining(): number {
+  if (orbitActive) return -1
   if (isProjectileInFlight()) return -1
   if (lastLocalProjectileFireTime === 0) return 0
   const cooldown = PROJECTILE_COOLDOWN_SEC + lastThrowExtraCooldown
@@ -527,6 +633,41 @@ room.onMessage('shellTriggered', (data) => {
   }
 })
 
+// ── Orbit message listeners ──
+room.onMessage('orbitStarted', (data) => {
+  const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+  const playerId = data.playerId?.toLowerCase() || ''
+  if (playerId === localUserId) {
+    // Local player's orbit confirmed by server — start visual
+    startOrbitVisual()
+  }
+  // Remote orbit visuals are handled by remoteBoomerangSystem
+})
+
+room.onMessage('orbitHit', (data) => {
+  const pos = Vector3.create(data.x, data.y, data.z)
+  showHitEffect(pos)
+  playHitSound(pos)
+
+  // Stagger the victim if it's the local player
+  const me = getPlayerData()?.userId?.toLowerCase()
+  if (me && data.victimId === me && !isCinematicActive()) {
+    triggerEmote({ predefinedEmote: 'getHit' })
+    InputModifier.createOrReplace(engine.PlayerEntity, {
+      mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
+    })
+    projectileStaggerUntil = Date.now() + PROJECTILE_STAGGER_MS
+  }
+})
+
+room.onMessage('orbitEnded', (data) => {
+  const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+  const playerId = data.playerId?.toLowerCase() || ''
+  if (playerId === localUserId) {
+    endOrbitEarly()
+  }
+})
+
 // isServerConnected imported from clientUtils
 
 function getPlayerForward(): { dirX: number; dirZ: number } {
@@ -576,10 +717,9 @@ function fireProjectileLocally(speed: number = CHARGE_MIN_SPEED, maxDist: number
   )
 
   const shellEntity = engine.addEntity()
-  const localGreen = getBoomerangColor() === 'g'
   Transform.create(shellEntity, {
     position: spawnPos,
-    scale: localGreen ? Vector3.create(5, 9, 5) : PROJECTILE_SCALE,
+    scale: PROJECTILE_SCALE,
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
   })
   GltfContainer.create(shellEntity, {
@@ -806,10 +946,9 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
   if (!localEntity) return
 
   const scaleMult = (chargeScale && chargeScale > 0) ? chargeScale : 1
-  const isGreenProj = color === 'g'
   const t = Transform.getMutable(localEntity)
   t.position = Vector3.create(x, y, z)
-  t.scale = isGreenProj ? Vector3.create(5, 9, 5) : Vector3.create(PROJECTILE_SCALE.x * scaleMult, PROJECTILE_SCALE.y * scaleMult, PROJECTILE_SCALE.z * scaleMult)
+  t.scale = Vector3.create(PROJECTILE_SCALE.x * scaleMult, PROJECTILE_SCALE.y * scaleMult, PROJECTILE_SCALE.z * scaleMult)
   t.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
 
   // Set the correct color model for this projectile
@@ -965,7 +1104,22 @@ export function triggerProjectileFromUI(): void {
 
   lastLocalProjectileFireTime = now
   const uiColor = getBoomerangColor()
-  lastThrowExtraCooldown = uiColor === 'g' ? 4 : uiColor === 'y' ? 1 : 0
+
+  // Green: orbit mechanic
+  if (uiColor === 'g') {
+    if (orbitActive) return
+    lastThrowExtraCooldown = 5
+    const serverUp = isServerConnected()
+    if (serverUp) {
+      room.send('requestOrbit', { t: now })
+    } else {
+      startOrbitVisual()
+    }
+    console.log('[Projectile] 🌀 UI tap — green orbit requested')
+    return
+  }
+
+  lastThrowExtraCooldown = uiColor === 'y' ? 1 : 0
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
@@ -973,10 +1127,9 @@ export function triggerProjectileFromUI(): void {
     console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
-    const uiRange = uiColor === 'r' ? RED_RANGE : uiColor === 'g' ? GREEN_RANGE : CHARGE_MIN_RANGE
-    const uiSpeed = uiColor === 'g' ? GREEN_SPEED : CHARGE_MIN_SPEED
-    const uiScale = uiColor === 'g' ? GREEN_SCALE : 1
-    room.send('requestShell', { dirX, dirZ, color: uiColor, chargeSpeed: uiSpeed, chargeRange: uiRange, chargeScale: uiScale })
+    const uiRange = uiColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
+    const uiSpeed = CHARGE_MIN_SPEED
+    room.send('requestShell', { dirX, dirZ, color: uiColor, chargeSpeed: uiSpeed, chargeRange: uiRange, chargeScale: 1 })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
@@ -1053,7 +1206,8 @@ export function projectileClientSystem(dt: number): void {
     updateLocalProjectiles(dt)
   }
 
-
+  // Green orbit visual
+  updateOrbitVisual(dt)
 
   // Yellow double-throw: fire second boomerang after delay
   if (yellowSecondThrowAt > 0 && now >= yellowSecondThrowAt) {
@@ -1094,20 +1248,37 @@ export function projectileClientSystem(dt: number): void {
     // Also block if a boomerang is already in flight
     if (localThrowActive || localProjectiles.length > 0) return
 
-    // Only blue has charge mechanics; others fire instantly
+    // Green = orbit, Red/Yellow = instant throw, Blue = charge
     const currentColor = getBoomerangColor()
+
+    // Green: orbit mechanic (no projectile)
+    if (currentColor === 'g') {
+      if (orbitActive) return // already orbiting
+      lastLocalProjectileFireTime = now
+      lastThrowExtraCooldown = 5
+      const serverUp = isServerConnected()
+      if (serverUp) {
+        room.send('requestOrbit', { t: now })
+      } else {
+        // Local test: start orbit visual directly
+        startOrbitVisual()
+      }
+      console.log('[Projectile] 🌀 Green orbit requested')
+      return
+    }
+
+    // Red/Yellow: instant throw (no charge)
     if (currentColor !== 'b') {
       lastLocalProjectileFireTime = now
-      lastThrowExtraCooldown = currentColor === 'g' ? 4 : currentColor === 'y' ? 1 : 0
+      lastThrowExtraCooldown = currentColor === 'y' ? 1 : 0
       const { dirX, dirZ } = getPlayerForward()
       const serverUp = isServerConnected()
-      const range = currentColor === 'r' ? RED_RANGE : currentColor === 'g' ? GREEN_RANGE : CHARGE_MIN_RANGE
-      const speed = currentColor === 'g' ? GREEN_SPEED : CHARGE_MIN_SPEED
-      const scale = currentColor === 'g' ? GREEN_SCALE : 1
+      const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
+      const speed = CHARGE_MIN_SPEED
       if (serverUp) {
         localThrowActive = true; localThrowSawVisual = false
         updateHandBoomerangVisibility()
-        room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: speed, chargeRange: range, chargeScale: scale })
+        room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: speed, chargeRange: range, chargeScale: 1 })
 
         if (Transform.has(engine.PlayerEntity)) {
           const playerPos = Transform.get(engine.PlayerEntity).position

@@ -146,6 +146,19 @@ interface ActiveTrap {
 }
 const activeTraps: ActiveTrap[] = []
 
+// ── Green orbit state ──
+const ORBIT_DURATION_MS = 3500       // 3.5 seconds of spinning
+const ORBIT_RADIUS = 4.0            // meters from player center
+const ORBIT_HIT_RADIUS = 2.0        // how close a victim must be to the orbit ring
+const ORBIT_COOLDOWN_SEC = 7        // total cooldown after orbit ends
+interface ActiveOrbit {
+  playerId: string
+  startedAtMs: number
+  hitPlayers: Set<string>  // each player can only be hit once per orbit
+}
+const activeOrbits: ActiveOrbit[] = []
+const lastOrbitTime = new Map<string, number>()
+
 // ── Projectile state ──
 // PROJECTILE_MODEL_SRC removed — server doesn't create visuals
 // PROJECTILE_GROUND_OFFSET removed — unused on server
@@ -1153,6 +1166,7 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(safeSystem('proximityStealSystem', checkProximitySteal))
   engine.addSystem(safeSystem('bananaServerSystem', bananaServerSystem))
   engine.addSystem(safeSystem('shellServerSystem', shellServerSystem))
+  engine.addSystem(safeSystem('orbitServerSystem', orbitServerSystem))
   engine.addSystem(safeSystem('updraftServerSystem', updraftServerSystem))
 
   // ── Spawn mushrooms ──
@@ -1478,6 +1492,15 @@ function registerHandlers(): void {
 
   // Mushroom reroll removed — candidates are now sent upfront
 
+  // ── Green orbit ──
+  room.onMessage('requestOrbit', (_data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      handleOrbitRequest(from)
+    } catch (err) { console.error('[Server] ❌ requestOrbit handler error:', err) }
+  })
+
   // ── Boomerang color change ──
   room.onMessage('colorChanged', (data, context) => {
     try {
@@ -1783,6 +1806,96 @@ function bananaServerSystem(dt: number): void {
         engine.removeEntity(trap.entity)
         activeTraps.splice(i, 1)
         break // This trap is consumed
+      }
+    }
+  }
+}
+
+function handleOrbitRequest(playerId: string): void {
+  const now = Date.now()
+
+  // Cooldown check
+  const lastOrb = lastOrbitTime.get(playerId) ?? 0
+  if (now - lastOrb < ORBIT_COOLDOWN_SEC * 1000) {
+    console.log('[Server] Orbit denied: cooldown active')
+    return
+  }
+
+  // Can't orbit while already orbiting
+  if (activeOrbits.some(o => o.playerId === playerId)) {
+    console.log('[Server] Orbit denied: already orbiting')
+    return
+  }
+
+  // Can't orbit while a projectile is in flight
+  if (activeProjectiles.some(p => p.firedBy === playerId)) {
+    console.log('[Server] Orbit denied: projectile in flight')
+    return
+  }
+
+  const playerPos = getPlayerPosition(playerId)
+  if (!playerPos) {
+    console.log('[Server] Orbit denied: player position not found')
+    return
+  }
+
+  activeOrbits.push({
+    playerId,
+    startedAtMs: now,
+    hitPlayers: new Set()
+  })
+  lastOrbitTime.set(playerId, now)
+
+  room.send('orbitStarted', { playerId, durationMs: ORBIT_DURATION_MS })
+  console.log('[Server] 🌀 Orbit started by', playerId.slice(0, 8))
+}
+
+/** Server system: check orbit hits and expiry. */
+function orbitServerSystem(_dt: number): void {
+  const now = Date.now()
+
+  for (let i = activeOrbits.length - 1; i >= 0; i--) {
+    const orbit = activeOrbits[i]
+
+    // Expiry
+    if (now - orbit.startedAtMs > ORBIT_DURATION_MS) {
+      console.log('[Server] 🌀 Orbit ended for', orbit.playerId.slice(0, 8))
+      room.send('orbitEnded', { playerId: orbit.playerId })
+      activeOrbits.splice(i, 1)
+      continue
+    }
+
+    // Get orbiter position
+    const orbiterPos = getPlayerPosition(orbit.playerId)
+    if (!orbiterPos) continue
+
+    // Check all players for hits
+    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      const addr = identity.address.toLowerCase()
+      if (addr === orbit.playerId) continue
+      if (orbit.hitPlayers.has(addr)) continue  // already hit this orbit
+
+      const victimPos = getPlayerPosition(addr)
+      if (!victimPos) continue
+
+      const dist = Vector3.distance(orbiterPos, victimPos)
+      // Hit if within orbit radius + hit radius (the boomerang sweeps through)
+      if (dist < ORBIT_RADIUS + ORBIT_HIT_RADIUS && dist > 0.5) {
+        orbit.hitPlayers.add(addr)
+        console.log('[Server] 🌀 Orbit hit player', addr.slice(0, 8), '— ending orbit')
+
+        // Drop flag if victim is carrying
+        const flag = Flag.getOrNull(flagEntity)
+        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
+          console.log('[Server] 🌀 Orbit victim was carrying flag — forcing drop!')
+          handleDrop(addr)
+        }
+
+        room.send('orbitHit', { x: victimPos.x, y: victimPos.y, z: victimPos.z, victimId: addr, attackerId: orbit.playerId })
+        // End orbit on hit — boomerang returns to player
+        room.send('orbitEnded', { playerId: orbit.playerId })
+        activeOrbits.splice(i, 1)
+        break
       }
     }
   }
@@ -2541,13 +2654,19 @@ async function handleRoundEnd(): Promise<void> {
   lastTrapDropTime.clear()
   console.log('[Server] 🪤 All traps cleared for new round')
 
-  // ── 3b. Remove all active projectiles ──
+  // ── 3b. Remove all active projectiles + orbits ──
   for (const projectile of activeProjectiles) {
     engine.removeEntity(projectile.entity)
   }
   activeProjectiles.length = 0
   lastProjectileFireTime.clear()
-  console.log('[Server] 🎯 All projectiles cleared for new round')
+  // Clear active orbits
+  for (const orbit of activeOrbits) {
+    room.send('orbitEnded', { playerId: orbit.playerId })
+  }
+  activeOrbits.length = 0
+  lastOrbitTime.clear()
+  console.log('[Server] 🎯 All projectiles + orbits cleared for new round')
 
   // ── 3c. Clear combat cooldown maps to prevent memory growth ──
   lastStealTime.clear()
