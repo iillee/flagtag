@@ -27,6 +27,34 @@ import { isDrownRespawning } from './waterSystem'
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from './combatSystem'
 import { getBoomerangModelSrc, getBoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
 
+// ── Charge mechanic ──
+const CHARGE_TIME_SEC = 1.5      // seconds to full charge = burnout
+const CHARGE_MIN_SCALE = 1.0     // tap = normal size
+const CHARGE_MAX_SCALE = 2.0     // full charge = 2x size
+let chargeStartMs: number = 0    // 0 = not charging
+let isCharging = false
+
+/** Returns current charge fraction 0..1 (0 if not charging) */
+export function getChargeFraction(): number {
+  if (!isCharging || chargeStartMs === 0) return 0
+  const elapsed = (Date.now() - chargeStartMs) / 1000
+  return Math.min(1, elapsed / CHARGE_TIME_SEC)
+}
+
+/** Returns true if the player is currently charging a throw */
+export function getIsCharging(): boolean { return isCharging }
+
+/** Returns charge phase: 'charging' | 'none' */
+export function getChargePhase(): 'charging' | 'none' {
+  if (!isCharging || chargeStartMs === 0) return 'none'
+  return 'charging'
+}
+
+/** Compute scale multiplier from charge fraction */
+function chargeToScale(fraction: number): number {
+  return CHARGE_MIN_SCALE + fraction * (CHARGE_MAX_SCALE - CHARGE_MIN_SCALE)
+}
+
 // Hand boomerang visibility
 let handBoomerangEntity: Entity | null = null
 let emoteActive = false
@@ -72,7 +100,14 @@ function updateHandBoomerangVisibility(): void {
     if (currentlyVisible !== shouldShow) {
       console.log(`[HandBoomerang] ${shouldShow ? 'SHOW' : 'HIDE'} | localThrowActive=${localThrowActive} localProj=${localProjectiles.length} msgVis=${msgProjectileVisuals.length} emote=${emoteActive} cinematic=${isCinematicActive()}`)
     }
-    t.scale = shouldShow ? HAND_BOOMERANG_SCALE : Vector3.Zero()
+    if (shouldShow && isCharging) {
+      // Pulse scale up during charge: 1.0 → 1.4x
+      const cf = getChargeFraction()
+      const s = 1.0 + cf * 0.4
+      t.scale = Vector3.create(HAND_BOOMERANG_SCALE.x * s, HAND_BOOMERANG_SCALE.y * s, HAND_BOOMERANG_SCALE.z * s)
+    } else {
+      t.scale = shouldShow ? HAND_BOOMERANG_SCALE : Vector3.Zero()
+    }
   }
 }
 
@@ -248,7 +283,7 @@ function updateServerProjectileGroundRaycasts(dt: number): void {
 room.onMessage('shellDropped', (data) => {
   // Create visual from message bus (instant, no CRDT dependency).
   // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
-  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy)
+  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeScale)
 })
 
 /** Look up a remote player's position by wallet address (case-insensitive). */
@@ -325,7 +360,7 @@ interface LocalProjectile {
 }
 const localProjectiles: LocalProjectile[] = []
 
-function fireProjectileLocally(): void {
+function fireProjectileLocally(scaleMul: number = CHARGE_MIN_SCALE): void {
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
   const { dirX, dirZ } = getPlayerForward()
@@ -336,10 +371,11 @@ function fireProjectileLocally(): void {
     playerPos.z + dirZ * 1.0
   )
 
+  const chargedScale = Vector3.create(PROJECTILE_SCALE.x * scaleMul, PROJECTILE_SCALE.y * scaleMul, PROJECTILE_SCALE.z * scaleMul)
   const shellEntity = engine.addEntity()
   Transform.create(shellEntity, {
     position: spawnPos,
-    scale: PROJECTILE_SCALE,
+    scale: chargedScale,
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
   })
   GltfContainer.create(shellEntity, {
@@ -559,13 +595,14 @@ interface MsgProjectileVisual {
 }
 const msgProjectileVisuals: MsgProjectileVisual[] = []
 
-function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string): void {
+function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeScale?: number): void {
   const localEntity = acquireProjectileFromPool()
   if (!localEntity) return
 
+  const sm = (chargeScale && chargeScale > 0) ? chargeScale : 1.0
   const t = Transform.getMutable(localEntity)
   t.position = Vector3.create(x, y, z)
-  t.scale = PROJECTILE_SCALE
+  t.scale = Vector3.create(PROJECTILE_SCALE.x * sm, PROJECTILE_SCALE.y * sm, PROJECTILE_SCALE.z * sm)
   t.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
 
   // Set the correct color model for this projectile
@@ -595,7 +632,7 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
     returning: false,
     returnDistance: 0,
   })
-  console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))
+  console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1), 'scale:', sm.toFixed(2) + 'x')
 }
 
 function removeMsgProjectileVisualNear(x: number, y: number, z: number): void {
@@ -711,26 +748,28 @@ export function triggerProjectileFromUI(): void {
   if (!userId) return
 
   if (now - lastLocalProjectileFireTime < PROJECTILE_COOLDOWN_SEC * 1000) { playErrorSound(); return }
+  if (localThrowActive || localProjectiles.length > 0) return
 
+  const scaleMul = CHARGE_MIN_SCALE // UI tap = normal size
   lastLocalProjectileFireTime = now
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
   if (serverUp) {
-    console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
+    console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server), scale:', scaleMul)
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
-    room.send('requestShell', { dirX, dirZ, color: getBoomerangColor() })
+    room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeScale: scaleMul })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
       fireWallRaycast(spawnPos, dirX, dirZ)
     }
   } else {
-    console.log('[Projectile] 🎯 UI tap — firing projectile locally (no server)')
+    console.log('[Projectile] 🎯 UI tap — firing projectile locally (no server), scale:', scaleMul)
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
-    fireProjectileLocally()
+    fireProjectileLocally(scaleMul)
   }
 }
 
@@ -788,7 +827,7 @@ export function projectileClientSystem(dt: number): void {
 
 
 
-  // E key — fire projectile (disabled in spectator mode)
+  // E key — charge on press, fire on release (disabled in spectator mode)
   if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
@@ -802,14 +841,53 @@ export function projectileClientSystem(dt: number): void {
       return
     }
 
+    // Also block charging if a boomerang is already in flight
+    if (localThrowActive || localProjectiles.length > 0) return
+
+    // Start charging
+    chargeStartMs = now
+    isCharging = true
+    console.log('[Projectile] ⚡ E pressed — charging started')
+  }
+
+  // Cancel charge if player enters spectator/cinematic/drown
+  if (isCharging && (isSpectatorMode() || isCinematicActive() || isDrownRespawning())) {
+    isCharging = false
+    chargeStartMs = 0
+    console.log('[Projectile] ⚡ Charge cancelled (state change)')
+  }
+
+  // Burnout — held too long, self-stun
+  if (isCharging && chargeStartMs > 0 && (now - chargeStartMs) / 1000 >= CHARGE_TIME_SEC) {
+    isCharging = false
+    chargeStartMs = 0
+    lastLocalProjectileFireTime = now  // trigger cooldown
+    console.log('[Projectile] 💥 BURNOUT — held too long, self-stun!')
+    // Self-stagger — head explode for overcharge
+    triggerEmote({ predefinedEmote: 'getHit' })
+    InputModifier.createOrReplace(engine.PlayerEntity, {
+      mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
+    })
+    projectileStaggerUntil = now + PROJECTILE_STAGGER_MS
+    playErrorSound()
+  }
+
+  // E key released — fire with charged size
+  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_UP) && isCharging) {
+    isCharging = false
+    const chargeFrac = Math.min(1, (now - chargeStartMs) / 1000 / CHARGE_TIME_SEC)
+    const scaleMul = chargeToScale(chargeFrac)
+    chargeStartMs = 0
     lastLocalProjectileFireTime = now
+
+    console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, scale:', scaleMul.toFixed(2) + 'x')
+
     const { dirX, dirZ } = getPlayerForward()
 
     if (serverUp) {
-      console.log('[Projectile] 🎯 E pressed — requesting projectile fire (server)')
       localThrowActive = true; localThrowSawVisual = false
       updateHandBoomerangVisibility()
-      room.send('requestShell', { dirX, dirZ, color: getBoomerangColor() })
+      room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeScale: scaleMul })
 
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position
@@ -817,10 +895,9 @@ export function projectileClientSystem(dt: number): void {
         fireWallRaycast(spawnPos, dirX, dirZ)
       }
     } else {
-      console.log('[Projectile] 🎯 E pressed — firing projectile locally (no server)')
       localThrowActive = true; localThrowSawVisual = false
       updateHandBoomerangVisibility()
-      fireProjectileLocally()
+      fireProjectileLocally(scaleMul)
     }
   }
 }

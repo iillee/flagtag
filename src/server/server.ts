@@ -175,6 +175,8 @@ interface ActiveProjectile {
   returnX: number  // current position during return
   returnY: number
   returnZ: number
+  // Charge scale (1.0 = tap, 2.0 = full charge)
+  chargeScale: number
 }
 const activeProjectiles: ActiveProjectile[] = []
 const PROJECTILE_SYNC_INTERVAL = 0.1 // seconds between Projectile component CRDT writes
@@ -1351,7 +1353,9 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r')
+      // Accept optional chargeScale from charge mechanic, clamped to valid range (1x–2x)
+      const chargeScale = typeof data.chargeScale === 'number' ? Math.max(1.0, Math.min(2.0, data.chargeScale)) : 1.0
+      handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r', chargeScale)
     } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
   room.onMessage('reportShellWallDist', (data, context) => {
@@ -1768,7 +1772,7 @@ function bananaServerSystem(dt: number): void {
   }
 }
 
-function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r'): void {
+function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r', chargeScale: number = 1.0): void {
   const now = Date.now()
 
   // Cooldown check
@@ -1857,11 +1861,12 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     returnX: spawnPos.x,
     returnY: spawnPos.y,
     returnZ: spawnPos.z,
+    chargeScale,
 
   })
   lastProjectileFireTime.set(playerId, now)
 
-  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ, color, firedBy: playerId })
+  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ, color, firedBy: playerId, chargeScale })
   console.log('[Server] 🎯 Projectile fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 
@@ -1960,8 +1965,9 @@ function shellServerSystem(dt: number): void {
       if (!playerPos) continue
 
       const dist = Vector3.distance(playerPos, projectilePos)
-      if (dist < PROJECTILE_HIT_RADIUS) {
-        console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)')
+      const scaledHitRadius = PROJECTILE_HIT_RADIUS * (projectile.chargeScale || 1.0)
+      if (dist < scaledHitRadius) {
+        console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)', 'hitRadius:', scaledHitRadius.toFixed(1))
 
         // Drop the flag if the victim is carrying it
         const flag = Flag.getOrNull(flagEntity)
@@ -1995,7 +2001,8 @@ function shellServerSystem(dt: number): void {
       const trap = activeTraps[j]
       const trapPos = Transform.get(trap.entity).position
       const dist = Vector3.distance(projectilePos, trapPos)
-      if (dist < PROJECTILE_HIT_RADIUS) {
+      const scaledTrapHitRadius = PROJECTILE_HIT_RADIUS * (projectile.chargeScale || 1.0)
+      if (dist < scaledTrapHitRadius) {
         console.log('[Server] 🎯🪤 Projectile hit trap!', projectile.returning ? 'Both destroyed.' : 'Trap destroyed, projectile returning.')
         room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '' })
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })

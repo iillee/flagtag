@@ -8,7 +8,7 @@ import {
   getKnownPlayerName
 } from './gameState/flagHoldTime'
 import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from './systems/trapSystem'
-import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI } from './systems/projectileSystem'
+import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, getChargeFraction, getIsCharging } from './systems/projectileSystem'
 import { clearMushroomShield } from './systems/mushroomSystem'
 import { isCinematicActive } from './cinematicState'
 import { room } from './shared/messages'
@@ -2148,6 +2148,25 @@ function DesktopLayout() {
                 uiTransform={{ positionType: 'absolute' }}
               />
             )}
+            {/* Charge fill overlay — fills from bottom, turns red near top */}
+            {getIsCharging() && (() => {
+              const cf = getChargeFraction()
+              const fillPct = Math.round(cf * 100)
+              // Blue → red as it approaches burnout
+              const fillColor = cf > 0.75
+                ? Color4.create(1, 0.2 - (cf - 0.75) * 0.8, 0.1, 0.6)
+                : Color4.create(0.2, 0.6, 1, 0.5)
+              return (
+                <UiEntity uiTransform={{
+                  positionType: 'absolute',
+                  position: { bottom: 0, left: 0, right: 0 },
+                  height: `${fillPct}%`,
+                }}
+                uiBackground={{ color: fillColor }}
+                />
+              )
+            })()}
+
 
           </UiEntity>
 
