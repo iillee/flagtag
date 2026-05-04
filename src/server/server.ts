@@ -775,7 +775,7 @@ async function syncVisitorAnalytics(): Promise<void> {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
     return b.totalSeconds - a.totalSeconds
   })
-  .slice(0, 100) // Limit to top 100
+  .slice(0, 500) // Limit to top 500
   
   const visitorDataJson = JSON.stringify(visitorData)
   
@@ -811,7 +811,7 @@ async function syncMonthlyVisitorAnalytics(): Promise<void> {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
     return b.totalSeconds - a.totalSeconds
   })
-  .slice(0, 100)
+  .slice(0, 500)
 
   const visitorDataJson = JSON.stringify(visitorData)
   const mutable = MonthlyVisitorAnalytics.getMutable(monthlyVisitorAnalyticsEntity)
