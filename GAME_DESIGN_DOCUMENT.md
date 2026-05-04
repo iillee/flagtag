@@ -111,7 +111,11 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 - **Trap Interaction:** Boomerang destroys bananas on contact, then returns
 - **Cooldown:** 0.45s after catch (prevents close-range spam while feeling natural)
 - **Max Active:** 1 per player
-- **Customization:** 4 colors (Red, Yellow, Blue, Green) — selected via chest UI, synced to all players, visible on hand model
+- **Customization:** 4 color variants selected via chest UI, synced to all players, visible on hand model:
+  - **Red ("Base"):** Instant fire, 40m range, no extra cooldown
+  - **Yellow ("Dubs"):** Instant fire, 20m range, fires a 2nd boomerang 250ms later, +1s extra cooldown
+  - **Blue ("Charge"):** Hold E to charge (1.5s max). Speed scales 30→60 m/s, range scales 20→50m. Overcharge = burnout self-stun. Extra cooldown +1s (<1s charge) or +2s (≥1s charge)
+  - **Green ("Giant"):** Instant fire, 18 m/s speed, 30m range, 3x size projectile, massive hand model, +5s extra cooldown
 - **Visual:** Client-side local entity with spinning animation; remote players see synced position via `Projectile` component data
 - **Note:** Transform is NOT synced for projectiles (to avoid CRDT saturation); clients position visuals from component start/direction/distance data
 
@@ -394,8 +398,13 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 | Pickup Radius | 3m | `server.ts` |
 | Proximity Steal Radius | 2m | `server.ts` |
 | Steal Immunity | 3 seconds | `server.ts` |
-| Boomerang Speed | 30 m/s | `components.ts` |
-| Boomerang Range | 50m | `components.ts` |
+| Boomerang Speed (Red/Yellow) | 30 m/s | `projectileSystem.ts` |
+| Boomerang Speed (Green) | 18 m/s | `projectileSystem.ts` |
+| Boomerang Speed (Blue max) | 60 m/s | `projectileSystem.ts` |
+| Boomerang Range (Red) | 40m | `projectileSystem.ts` |
+| Boomerang Range (Yellow) | 20m | `projectileSystem.ts` |
+| Boomerang Range (Blue max) | 50m | `projectileSystem.ts` |
+| Boomerang Range (Green) | 30m | `projectileSystem.ts` |
 | Boomerang Hit Radius | 2m | `components.ts` |
 | Boomerang Cooldown | 0.45s (post-catch) | `components.ts` |
 | Banana Lifetime | 15s | `components.ts` |

@@ -872,17 +872,19 @@ function PlayerListUi() {
             <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
               {(['r', 'y', 'b', 'g'] as BoomerangColor[]).map((color) => {
                 const selected = getBoomerangColor() === color
+                const label = color === 'r' ? 'Base' : color === 'y' ? 'Dubs' : color === 'b' ? 'Charge' : 'Giant'
                 return (
                   <UiEntity
                     key={`boom-${color}`}
                     uiTransform={{
                       width: mobile ? 80 : S(80),
-                      height: mobile ? 80 : S(80),
+                      height: mobile ? 105 : S(105),
                       margin: { left: mobile ? 6 : S(6), right: mobile ? 6 : S(6) },
                       padding: mobile ? 4 : S(4),
                       borderRadius: mobile ? 12 : S(12),
                       justifyContent: 'center',
                       alignItems: 'center',
+                      flexDirection: 'column',
                     }}
                     uiBackground={{ color: selected ? Color4.create(0.45, 0.38, 0.1, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
                     onMouseDown={() => { playClickSound(); setBoomerangColor(color) }}
@@ -891,6 +893,7 @@ function PlayerListUi() {
                       uiTransform={{ width: mobile ? 60 : S(60), height: mobile ? 60 : S(60) }}
                       uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${color}.png` } }}
                     />
+                    <Label value={label} fontSize={mobile ? 18 : S(15)} color={selected ? GOLD : LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 2 : S(2) } }} />
                   </UiEntity>
                 )
               })}

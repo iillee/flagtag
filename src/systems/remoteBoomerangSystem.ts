@@ -103,7 +103,7 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
   Transform.create(model, {
     parent: anchor,
     position: isMobile() ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1),
-    scale: Vector3.create(1, 1.5, 1),
+    scale: color === 'g' ? Vector3.create(3, 4.5, 3) : Vector3.create(1, 1.5, 1),
     rotation: Quaternion.fromEulerDegrees(isMobile() ? 15 : 0, isMobile() ? 180 : 0, 90)
   })
   GltfContainer.create(model, {
@@ -136,13 +136,8 @@ function startRemoteCharge(playerId: string): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb || rb.charge) return // no boomerang or already charging
 
-  // Green boomerang: no glow/orbit VFX, just scale the model (handled in anim system)
-  if (rb.color === 'g') {
-    rb.charge = { startTime: Date.now(), glow: engine.addEntity(), particles: [] }
-    // Hidden dummy glow entity (no visuals needed)
-    Transform.create(rb.charge.glow, { position: Vector3.Zero(), scale: Vector3.Zero(), parent: rb.model })
-    return
-  }
+  // Green boomerang: no charge mechanic
+  if (rb.color === 'g') return
 
   const glow = engine.addEntity()
   Transform.create(glow, { position: Vector3.Zero(), scale: Vector3.Zero(), parent: rb.model })
@@ -184,24 +179,15 @@ function remoteChargeAnimSystem(_dt: number): void {
   const now = Date.now()
   remoteBoomerangs.forEach((rb) => {
     if (!rb.charge) {
-      // Reset model scale when not charging
+      // Green: always 3x scale
       if (rb.color === 'g' && Transform.has(rb.model)) {
         const s = Transform.get(rb.model).scale
-        if (s.x !== 1) Transform.getMutable(rb.model).scale = Vector3.One()
+        if (s.x !== 3) Transform.getMutable(rb.model).scale = Vector3.create(3, 4.5, 3)
       }
       return
     }
     const elapsed = (now - rb.charge.startTime) / 1000
     const cf = Math.min(1, elapsed / REMOTE_CHARGE_TIME)
-
-    // Green: scale the model, no particles
-    if (rb.color === 'g') {
-      if (Transform.has(rb.model)) {
-        const scaleMult = 1 + cf * 2 // 1x to 3x
-        Transform.getMutable(rb.model).scale = Vector3.create(scaleMult, scaleMult * 1.5, scaleMult)
-      }
-      return
-    }
 
     // Blue: glow + orbit particles
     if (Transform.has(rb.charge.glow)) {

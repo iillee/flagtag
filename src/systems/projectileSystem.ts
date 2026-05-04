@@ -33,6 +33,7 @@ import { getBoomerangModelSrc, getBoomerangColor, onBoomerangColorChange } from 
 // ── Charge mechanic ──
 const CHARGE_TIME_SEC = 1.5      // seconds to full charge = burnout
 const CHARGE_MIN_SPEED = PROJECTILE_SPEED   // tap = 30 m/s
+const GREEN_SPEED = 18                      // green boomerang moves slower
 const CHARGE_MAX_SPEED = 60                  // full charge = 60 m/s
 const CHARGE_MIN_RANGE = 20                  // tap = 20m
 const RED_RANGE = 40                         // red boomerang fixed range
@@ -178,13 +179,17 @@ function updateHandBoomerangVisibility(): void {
     }
     const isGreen = getBoomerangColor() === 'g'
 
-    // Green charging: scale up the hand boomerang model itself
-    if (shouldShow && isCharging && isGreen) {
-      const cf = getChargeFraction()
-      const scaleMult = 1 + cf * 2 // 1x to 3x
-      t.scale = Vector3.create(HAND_BOOMERANG_SCALE.x * scaleMult, HAND_BOOMERANG_SCALE.y * scaleMult, HAND_BOOMERANG_SCALE.z * scaleMult)
+    // Green: always show at 3x scale (massive boomerang), shifted down, flipped 180
+    if (shouldShow && isGreen) {
+      t.scale = Vector3.create(HAND_BOOMERANG_SCALE.x * 3, HAND_BOOMERANG_SCALE.y * 3, HAND_BOOMERANG_SCALE.z * 3)
+      t.position = Vector3.create(t.position.x, -0.05, -0.1)
+      t.rotation = Quaternion.fromEulerDegrees(180, 0, 90)
+    } else if (shouldShow) {
+      t.scale = HAND_BOOMERANG_SCALE
+      t.position = Vector3.create(t.position.x, 0.15, t.position.z)
+      t.rotation = Quaternion.fromEulerDegrees(0, 0, 90)
     } else {
-      t.scale = shouldShow ? HAND_BOOMERANG_SCALE : Vector3.Zero()
+      t.scale = Vector3.Zero()
     }
 
     // Update glow during charge (blue only)
@@ -549,9 +554,10 @@ function fireProjectileLocally(speed: number = CHARGE_MIN_SPEED, maxDist: number
   )
 
   const shellEntity = engine.addEntity()
+  const localGreen = getBoomerangColor() === 'g'
   Transform.create(shellEntity, {
     position: spawnPos,
-    scale: PROJECTILE_SCALE,
+    scale: localGreen ? Vector3.create(5, 9, 5) : PROJECTILE_SCALE,
     rotation: Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
   })
   GltfContainer.create(shellEntity, {
@@ -778,9 +784,10 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
   if (!localEntity) return
 
   const scaleMult = (chargeScale && chargeScale > 0) ? chargeScale : 1
+  const isGreenProj = color === 'g'
   const t = Transform.getMutable(localEntity)
   t.position = Vector3.create(x, y, z)
-  t.scale = Vector3.create(PROJECTILE_SCALE.x * scaleMult, PROJECTILE_SCALE.y * scaleMult, PROJECTILE_SCALE.z * scaleMult)
+  t.scale = isGreenProj ? Vector3.create(5, 9, 5) : Vector3.create(PROJECTILE_SCALE.x * scaleMult, PROJECTILE_SCALE.y * scaleMult, PROJECTILE_SCALE.z * scaleMult)
   t.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
 
   // Set the correct color model for this projectile
@@ -930,7 +937,8 @@ export function triggerProjectileFromUI(): void {
   if (localThrowActive || localProjectiles.length > 0) return
 
   lastLocalProjectileFireTime = now
-  lastThrowExtraCooldown = 0 // no extra cooldown for uncharged throws
+  const uiColor = getBoomerangColor()
+  lastThrowExtraCooldown = uiColor === 'g' ? 5 : uiColor === 'y' ? 1 : 0
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
@@ -938,8 +946,10 @@ export function triggerProjectileFromUI(): void {
     console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
-    const uiRange = getBoomerangColor() === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
-    room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeSpeed: CHARGE_MIN_SPEED, chargeRange: uiRange, chargeScale: 1 })
+    const uiRange = uiColor === 'r' ? RED_RANGE : uiColor === 'g' ? 30 : CHARGE_MIN_RANGE
+    const uiSpeed = uiColor === 'g' ? GREEN_SPEED : CHARGE_MIN_SPEED
+    const uiScale = uiColor === 'g' ? 2 : 1
+    room.send('requestShell', { dirX, dirZ, color: uiColor, chargeSpeed: uiSpeed, chargeRange: uiRange, chargeScale: uiScale })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
@@ -1051,18 +1061,20 @@ export function projectileClientSystem(dt: number): void {
     // Also block if a boomerang is already in flight
     if (localThrowActive || localProjectiles.length > 0) return
 
-    // Only blue and green have charge mechanics; others fire instantly
+    // Only blue has charge mechanics; others fire instantly
     const currentColor = getBoomerangColor()
-    if (currentColor !== 'b' && currentColor !== 'g') {
+    if (currentColor !== 'b') {
       lastLocalProjectileFireTime = now
-      lastThrowExtraCooldown = 0
+      lastThrowExtraCooldown = currentColor === 'g' ? 5 : currentColor === 'y' ? 1 : 0
       const { dirX, dirZ } = getPlayerForward()
       const serverUp = isServerConnected()
-      const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
+      const range = currentColor === 'r' ? RED_RANGE : currentColor === 'g' ? 30 : CHARGE_MIN_RANGE
+      const speed = currentColor === 'g' ? GREEN_SPEED : CHARGE_MIN_SPEED
+      const scale = currentColor === 'g' ? 2 : 1
       if (serverUp) {
-        room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: CHARGE_MIN_SPEED, chargeRange: range, chargeScale: 1 })
+        room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: speed, chargeRange: range, chargeScale: scale })
       } else {
-        fireProjectileLocally(CHARGE_MIN_SPEED, range)
+        fireProjectileLocally(speed, range)
       }
       // Yellow: schedule a second throw after a short delay
       if (currentColor === 'y') {

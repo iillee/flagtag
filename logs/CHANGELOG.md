@@ -14,6 +14,21 @@ All major changes to the Flag Tag project are documented here in reverse chronol
 
 ---
 
+## [2026-05-04] - Green Boomerang Rework ("Giant")
+### Removed charge mechanic from green boomerang; now instant-fire with permanent 3x size
+**Justification:** Green charge felt redundant alongside blue charge. Giving green a unique identity as a slow, massive boomerang creates better color differentiation.
+**Changes:**
+- Green fires instantly (no hold-to-charge), 18 m/s speed, 30m range, 3x scale projectile
+- Hand-attached model always shows at 3x scale, flipped 180° on X axis, positioned lower
+- 5-second post-catch cooldown (high risk/reward)
+- Yellow gets +1s extra cooldown for balance
+- Added labels below chest UI buttons: Base (red), Dubs (yellow), Charge (blue), Giant (green)
+- Removed all green charge VFX (glow, orbit particles, scale-up animation) from local + remote systems
+**Files Modified:** `src/systems/projectileSystem.ts`, `src/systems/remoteBoomerangSystem.ts`, `src/ui.tsx`, `GAME_DESIGN_DOCUMENT.md`
+**Impact:** Simplifies green boomerang gameplay; creates 4 distinct playstyles
+
+---
+
 ## [2026-04-22] - Boomerang Post-Catch Cooldown (450ms)
 ### Added 0.45s cooldown after boomerang catch to prevent close-range spam
 **Justification:** Players could spam boomerang at close range creating an inescapable stun-lock. The cooldown starts on catch (not throw), giving a natural "wind-up" feel.
