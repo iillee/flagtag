@@ -7,7 +7,7 @@ import { setupUi, setCinematicFade, setCinematicShowing, setNextRoundStartingVis
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem, initPools as initCombatPools } from './systems/combatSystem'
 import { trapClientSystem, initTrapPool } from './systems/trapSystem'
-import { projectileClientSystem, setHandBoomerangEntity, initProjectilePool } from './systems/projectileSystem'
+import { projectileClientSystem, setHandBoomerangEntity, initProjectilePool, getChargeFraction, getChargePhase } from './systems/projectileSystem'
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
@@ -89,6 +89,67 @@ export async function main() {
     invisibleMeshesCollisionMask: 0
   })
   setHandBoomerangEntity(boomerangModel)
+
+  // ── Charging torus ring — small spheres arranged in a circle ──
+  const RING_SEGMENTS = 16
+  const RING_RADIUS = 0.35
+  const RING_BEAD_SIZE = 0.06
+  const ringParent = engine.addEntity()
+  Transform.create(ringParent, {
+    parent: boomerangHand,
+    position: Vector3.create(0, 0.15, 0),
+    scale: Vector3.Zero() // hidden by default
+  })
+  const ringBeads: Entity[] = []
+  for (let i = 0; i < RING_SEGMENTS; i++) {
+    const angle = (i * 2 * Math.PI) / RING_SEGMENTS
+    const bead = engine.addEntity()
+    Transform.create(bead, {
+      parent: ringParent,
+      position: Vector3.create(Math.cos(angle) * RING_RADIUS, 0, Math.sin(angle) * RING_RADIUS),
+      scale: Vector3.create(RING_BEAD_SIZE, RING_BEAD_SIZE, RING_BEAD_SIZE)
+    })
+    MeshRenderer.setSphere(bead)
+    Material.setPbrMaterial(bead, {
+      albedoColor: Color4.create(1, 0.85, 0, 0.5),
+      emissiveColor: Color3.create(1, 0.8, 0),
+      emissiveIntensity: 5,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+    })
+    ringBeads.push(bead)
+  }
+
+  // Update charge ring each frame — grows + spins
+  engine.addSystem((dt: number) => {
+    if (getChargePhase() === 'charging' && getChargeFraction() > 0.15) {
+      const cf = getChargeFraction()
+      const size = 0.375 + cf * 0.75
+      // Spin the ring parent
+      const rot = Transform.getMutable(ringParent).rotation ?? Quaternion.fromEulerDegrees(0, 0, 0)
+      const spinSpeed = 120 + cf * 360 // degrees/sec
+      Transform.getMutable(ringParent).scale = Vector3.create(size, size, size)
+      Transform.getMutable(ringParent).rotation = Quaternion.multiply(
+        Quaternion.fromEulerDegrees(0, spinSpeed * dt, 0),
+        Transform.get(ringParent).rotation
+      )
+      // Update bead color/intensity
+      const r = cf > 0.75 ? 1.0 : 1.0
+      const g = cf > 0.75 ? 0.3 : 0.8
+      const b = cf > 0.75 ? 0.1 : 0.0
+      for (const bead of ringBeads) {
+        Material.setPbrMaterial(bead, {
+          albedoColor: Color4.create(1, 0.85, 0, 0.3 + cf * 0.4),
+          emissiveColor: Color3.create(r, g, b),
+          emissiveIntensity: 3 + cf * 12,
+          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+        })
+      }
+    } else {
+      if (Transform.has(ringParent)) {
+        Transform.getMutable(ringParent).scale = Vector3.Zero()
+      }
+    }
+  })
 
   // Set up remote player boomerang hand models (synced via messages)
   setupRemoteBoomerangs()

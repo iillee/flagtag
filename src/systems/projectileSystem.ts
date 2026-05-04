@@ -86,6 +86,12 @@ function chargeToRange(fraction: number): number {
 // Hand boomerang visibility
 let handBoomerangEntity: Entity | null = null
 let handGlowEntity: Entity | null = null
+
+// ── Charge orbit ring effect ──
+const ORBIT_PARTICLE_COUNT = 6
+const ORBIT_RADIUS = 0.5
+let orbitParticles: Entity[] = []
+let orbitAngle = 0 // current rotation angle in radians
 let emoteActive = false
 let lastPlayerPos: Vector3 | null = null
 const EMOTE_MOVE_THRESHOLD = 0.1 // player must move this far to cancel emote hide
@@ -111,6 +117,25 @@ export function setHandBoomerangEntity(e: Entity) {
     emissiveIntensity: 0,
     transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
   })
+  // Create orbiting charge particles
+  orbitParticles = []
+  for (let i = 0; i < ORBIT_PARTICLE_COUNT; i++) {
+    const p = engine.addEntity()
+    Transform.create(p, {
+      position: Vector3.Zero(),
+      scale: Vector3.Zero(), // hidden by default
+      parent: e
+    })
+    MeshRenderer.setSphere(p)
+    Material.setPbrMaterial(p, {
+      albedoColor: Color4.create(1, 1, 1, 0),
+      emissiveColor: Color3.create(0.3, 0.6, 1),
+      emissiveIntensity: 5,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+    })
+    orbitParticles.push(p)
+  }
+
   // Listen for emotes on the local player
   AvatarEmoteCommand.onChange(engine.PlayerEntity, (cmd) => {
     if (cmd && !cmd.emoteUrn?.includes('getHit')) {
@@ -167,6 +192,41 @@ function updateHandBoomerangVisibility(): void {
         Transform.getMutable(handGlowEntity).scale = Vector3.Zero()
       }
     }
+
+    // Update orbit particles
+    if (shouldShow && isCharging) {
+      const cf = getChargeFraction()
+      // Advance angle once (not per-particle), use real time
+      const speed = 2 * Math.PI * (1 + cf * 5)
+      orbitAngle = ((Date.now() - chargeStartMs) / 1000) * speed
+      const radius = ORBIT_RADIUS * (0.5 + cf * 0.5)
+      const particleSize = 0.1 + cf * 0.15
+      const pr = cf > 0.75 ? 1.0 : 0.3
+      const pg = cf > 0.75 ? 0.2 : 0.6
+      const pb = cf > 0.75 ? 0.1 : 1.0
+      for (let i = 0; i < orbitParticles.length; i++) {
+        const op = orbitParticles[i]
+        if (!Transform.has(op)) continue
+        const angle = orbitAngle + (i * 2 * Math.PI) / ORBIT_PARTICLE_COUNT
+        Transform.getMutable(op).position = Vector3.create(
+          Math.cos(angle) * radius,
+          Math.sin(angle) * radius * 0.4,
+          Math.sin(angle) * radius * 0.6
+        )
+        Transform.getMutable(op).scale = Vector3.create(particleSize, particleSize, particleSize)
+        Material.setPbrMaterial(op, {
+          albedoColor: Color4.create(1, 1, 1, 0),
+          emissiveColor: Color3.create(pr, pg, pb),
+          emissiveIntensity: 3 + cf * 7,
+          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+        })
+      }
+    } else {
+      for (let i = 0; i < orbitParticles.length; i++) {
+        const op = orbitParticles[i]
+        if (Transform.has(op)) Transform.getMutable(op).scale = Vector3.Zero()
+      }
+    }
   }
 }
 
@@ -195,7 +255,7 @@ function playChargeSound(): void {
     audioClipUrl: CHARGE_SOUND_SRC,
     playing: true,
     loop: false,
-    volume: 0.5,
+    volume: 0.25,
     global: true,
     pitch: 0.6
   })
@@ -949,6 +1009,7 @@ export function projectileClientSystem(dt: number): void {
     // Start charging
     chargeStartMs = now
     isCharging = true
+    orbitAngle = 0
     playChargeSound()
     applyChargeSlow()
     console.log('[Projectile] ⚡ E pressed — charging started')
@@ -978,7 +1039,9 @@ export function projectileClientSystem(dt: number): void {
     })
     projectileStaggerUntil = now + PROJECTILE_STAGGER_MS
     if (Transform.has(engine.PlayerEntity)) {
-      playHitSound(Transform.get(engine.PlayerEntity).position)
+      const pos = Transform.get(engine.PlayerEntity).position
+      showHitEffect(pos)
+      playHitSound(pos)
     }
   }
 

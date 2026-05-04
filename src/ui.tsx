@@ -1619,7 +1619,8 @@ function DesktopLayout() {
               const metricsVisitors = metricsTab === 'monthly'
                 ? sortVisitorsWithBotSection(getMonthlyVisitors())
                 : allVisitors
-              const mVisitorCount = metricsTab === 'monthly' ? getMonthlyVisitorCount() : visitorCount
+              const mBotCount = metricsVisitors.filter(v => !('_isSeparator' in v && v._isSeparator) && isLikelyBot(v)).length
+              const mVisitorCount = metricsVisitors.filter(v => !('_isSeparator' in v && v._isSeparator)).length - mBotCount
               const mOnlineCount = metricsTab === 'monthly' ? getMonthlyOnlineCount() : onlineCount
               const mTotalPlaytimeMin = Math.floor(metricsVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
               const emptyMessage = metricsTab === 'monthly' ? 'No visitors this month' : 'No visitors today'
@@ -1725,44 +1726,41 @@ function DesktopLayout() {
                   flexShrink: 0,
                 }}
               >
-                <UiEntity uiTransform={{ width: '18%' }}>
-                  <Label value={`Unique Users: ${mVisitorCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                <UiEntity uiTransform={{ width: '12.5%' }}>
+                  <Label value={`Users: ${mVisitorCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ width: '12%' }}>
+                <UiEntity uiTransform={{ width: '12.5%' }}>
+                  <Label value={`Bots: ${mBotCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ width: '12.5%' }}>
                   <Label value={`Online: ${mOnlineCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ width: '11%' }}>
+                <UiEntity uiTransform={{ width: '12.5%' }}>
                   <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
-                <UiEntity uiTransform={{ width: '16%' }}>
-                  <Label value={metricsTab === 'monthly' ? `Month: ${formatUTCMonth()}` : `Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                </UiEntity>
-                <UiEntity uiTransform={{ width: '20%' }}>
-                  <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                </UiEntity>
-                <UiEntity uiTransform={{ width: '15%' }}>
-                  <Label value={`Playtime: ${mTotalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
-                </UiEntity>
-                <UiEntity
-                  uiTransform={{ width: '8%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-                  onMouseDown={() => { playClickSound(); toggleMusicMute() }}
-                >
-                  <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
-                </UiEntity>
-                {/* Admin Discord report button — only visible to admin */}
-                {localUserId !== null && localUserId.toLowerCase() === ADMIN_ADDRESS && (
-                <UiEntity
-                  uiTransform={{ width: S(24), height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-                  onMouseDown={() => {
+                <UiEntity uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center' }}
+                  onMouseDown={localUserId !== null && localUserId.toLowerCase() === ADMIN_ADDRESS ? () => {
                     playClickSound()
                     room.send('testDiscord', { t: Date.now() })
                     discordReportSent = true
                     setTimeout(() => { discordReportSent = false }, 200)
-                  }}
+                  } : undefined}
                 >
-                  <Label value="⏍" fontSize={S(13)} color={discordReportSent ? GOLD : WHITE} font="sans-serif" />
+                  <Label value={metricsTab === 'monthly' ? `${formatUTCMonth()}` : `${formatUTCDate()}`} fontSize={S(13)} color={discordReportSent ? GOLD : LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
-                )}
+                <UiEntity uiTransform={{ width: '12.5%' }}>
+                  <Label value={`${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity uiTransform={{ width: '12.5%' }}>
+                  <Label value={`Play: ${mTotalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+                <UiEntity
+                  uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                  onMouseDown={() => { playClickSound(); toggleMusicMute() }}
+                >
+                  <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+
               </UiEntity>
               </UiEntity>
               )
@@ -1960,26 +1958,36 @@ function DesktopLayout() {
                 alignItems: 'center',
               }}
             >
-              <UiEntity uiTransform={{ width: '18%' }}>
-                <Label value={`Unique Users: ${visitorCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ width: '12.5%' }}>
+                <Label value={`Users: ${allVisitors.filter(v => !isLikelyBot(v)).length}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '12%' }}>
+              <UiEntity uiTransform={{ width: '12.5%' }}>
+                <Label value={`Bots: ${allVisitors.filter(v => isLikelyBot(v)).length}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+              </UiEntity>
+              <UiEntity uiTransform={{ width: '12.5%' }}>
                 <Label value={`Online: ${onlineCount}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '11%' }}>
+              <UiEntity uiTransform={{ width: '12.5%' }}>
                 <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '16%' }}>
-                <Label value={`Date: ${formatUTCDate()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center' }}
+                onMouseDown={localUserId !== null && localUserId.toLowerCase() === ADMIN_ADDRESS ? () => {
+                  playClickSound()
+                  room.send('testDiscord', { t: Date.now() })
+                  discordReportSent = true
+                  setTimeout(() => { discordReportSent = false }, 200)
+                } : undefined}
+              >
+                <Label value={`${formatUTCDate()}`} fontSize={S(13)} color={discordReportSent ? GOLD : LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '20%' }}>
-                <Label value={`Time (UTC): ${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ width: '12.5%' }}>
+                <Label value={`${formatUTCTime()}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ width: '15%' }}>
-                <Label value={`Playtime: ${totalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
+              <UiEntity uiTransform={{ width: '12.5%' }}>
+                <Label value={`Play: ${totalPlaytimeMin}m`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
               <UiEntity
-                uiTransform={{ width: '8%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
                 onMouseDown={() => { playClickSound(); toggleMusicMute() }}
               >
                 <Label value={`Mute: ${musicMuted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicMuted ? GOLD : LIGHT_GREY} font="sans-serif" />
