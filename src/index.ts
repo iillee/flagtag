@@ -1,5 +1,5 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType, inputSystem, InputAction, PointerEventType } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType, inputSystem, InputAction, PointerEventType, SkyboxTime } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
@@ -568,6 +568,18 @@ export async function main() {
   engine.addSystem(mushroomClientSystem)
   engine.addSystem(shieldSystem)
   engine.addSystem(updateHoldTimeInterpolation)
+
+  // ── Day/Night Cycle ──
+  // Full cycle = 72000 units. 10-minute cycle → 120 units/sec.
+  // All players see the same time because we derive it from wall-clock time.
+  const DAY_NIGHT_CYCLE_DURATION_SEC = 600 // 10 minutes per full cycle
+  const DAY_NIGHT_SPEED = 72000 / DAY_NIGHT_CYCLE_DURATION_SEC // 120 units/sec
+  engine.addSystem(function dayNightCycleSystem(_dt: number) {
+    // Use wall-clock so all players stay in sync
+    const nowSec = Date.now() / 1000
+    const skyTime = (nowSec * DAY_NIGHT_SPEED) % 72000
+    SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: skyTime })
+  })
 
   // Helper: wait until player Y stops changing (grounded), then trigger emote
   let pendingEmote: { emote: string } | null = null

@@ -225,9 +225,9 @@ function updateHandBoomerangVisibility(): void {
         if (!Transform.has(op)) continue
         const angle = orbitAngle + (i * 2 * Math.PI) / ORBIT_PARTICLE_COUNT
         Transform.getMutable(op).position = Vector3.create(
-          Math.cos(angle) * radius,
-          Math.sin(angle) * radius * 0.4,
-          Math.sin(angle) * radius * 0.6
+          0,
+          Math.sin(angle) * radius,
+          Math.cos(angle) * radius
         )
         Transform.getMutable(op).scale = Vector3.create(particleSize, particleSize, particleSize)
         Material.setPbrMaterial(op, {
@@ -1110,6 +1110,8 @@ export function triggerProjectileFromUI(): void {
     lastThrowExtraCooldown = 4
     const serverUp = isServerConnected()
     if (serverUp) {
+      localThrowActive = true; localThrowSawVisual = false
+      updateHandBoomerangVisibility()
       room.send('requestOrbit', { t: now })
     } else {
       startOrbitVisual()
@@ -1257,6 +1259,8 @@ export function projectileClientSystem(dt: number): void {
       lastThrowExtraCooldown = 4
       const serverUp = isServerConnected()
       if (serverUp) {
+        localThrowActive = true; localThrowSawVisual = false
+        updateHandBoomerangVisibility()
         room.send('requestOrbit', { t: now })
       } else {
         // Local test: start orbit visual directly
