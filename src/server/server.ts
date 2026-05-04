@@ -1501,6 +1501,19 @@ function registerHandlers(): void {
     } catch (err) { console.error('[Server] ❌ requestOrbit handler error:', err) }
   })
 
+  // ── Green orbit wall hit ──
+  room.onMessage('orbitHitWall', (_data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      const idx = activeOrbits.findIndex(o => o.playerId === from)
+      if (idx === -1) return
+      console.log('[Server] 🌀 Orbit hit wall for', from.slice(0, 8), '— ending orbit')
+      room.send('orbitEnded', { playerId: from })
+      activeOrbits.splice(idx, 1)
+    } catch (err) { console.error('[Server] ❌ orbitHitWall handler error:', err) }
+  })
+
   // ── Boomerang color change ──
   room.onMessage('colorChanged', (data, context) => {
     try {

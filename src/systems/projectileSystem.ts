@@ -256,7 +256,7 @@ function updateHandBoomerangVisibility(): void {
 }
 
 // ── Green orbit visual ──
-const ORBIT_VISUAL_RADIUS = 4.0
+const ORBIT_VISUAL_RADIUS = 3.0
 const ORBIT_FULL_ROTATIONS = 3   // exact number of full loops
 const ORBIT_DURATION_MS = 3500
 const ORBIT_VISUAL_SPEED = (ORBIT_FULL_ROTATIONS * 360) / (ORBIT_DURATION_MS / 1000)  // ~308°/s
@@ -265,6 +265,7 @@ let orbitActive = false
 let orbitStartMs = 0
 let orbitStartAngle = 0  // player's forward angle when orbit begins
 let orbitEndMs = 0        // when the orbit should finish (can be shortened on hit)
+let orbitWallRayEntity: Entity | null = null  // persistent ray entity for wall checks
 
 /** Returns true if the local player's green orbit is currently active. */
 export function isOrbitActive(): boolean { return orbitActive }
@@ -315,12 +316,19 @@ function stopOrbitVisual(): void {
     Transform.getMutable(orbitEntity).scale = Vector3.Zero()
     stopProjectileSound(orbitEntity)
   }
+  if (orbitWallRayEntity !== null) {
+    engine.removeEntity(orbitWallRayEntity)
+    orbitWallRayEntity = null
+  }
   localThrowActive = false
   localThrowSawVisual = false
+  // Start cooldown NOW (after orbit ends), not when it was thrown
+  lastLocalProjectileFireTime = Date.now()
+  lastThrowExtraCooldown = 3 // 1s base + 3s extra = 4s total post-catch cooldown
   updateHandBoomerangVisibility()
 }
 
-const ORBIT_RAMP_MS = 400  // ms to expand out / contract back
+const ORBIT_RAMP_MS = 0  // no ramp — instant appear/disappear
 
 function updateOrbitVisual(_dt: number): void {
   if (!orbitActive || orbitEntity === null) return
@@ -336,19 +344,8 @@ function updateOrbitVisual(_dt: number): void {
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
 
-  // Radius ramps up at start and back down at end (leaves & returns to hand)
-  const timeUntilEnd = orbitEndMs - now
-  let radiusFrac = 1.0
-  if (elapsed < ORBIT_RAMP_MS) {
-    // Expanding out from hand
-    radiusFrac = elapsed / ORBIT_RAMP_MS
-  } else if (timeUntilEnd < ORBIT_RAMP_MS) {
-    // Contracting back to hand
-    radiusFrac = timeUntilEnd / ORBIT_RAMP_MS
-  }
-  // Smooth easing (ease in-out)
-  radiusFrac = radiusFrac * radiusFrac * (3 - 2 * radiusFrac)
-  const radius = ORBIT_VISUAL_RADIUS * radiusFrac
+  // Clean circle — constant radius throughout
+  const radius = ORBIT_VISUAL_RADIUS
 
   // Time-based angle ensures exact full rotations
   const currentAngle = orbitStartAngle + ORBIT_VISUAL_SPEED * (elapsed / 1000)
@@ -365,6 +362,8 @@ function updateOrbitVisual(_dt: number): void {
   t.position = Vector3.create(orbitX, orbitY, orbitZ)
   t.scale = PROJECTILE_SCALE
   t.rotation = Quaternion.fromEulerDegrees(0, currentAngle + 90 + axialSpin, 0)
+
+  // Wall collision removed — orbit is a close-range ability, no need to check walls
 }
 
 function getProjectileModelSrc(): string {
@@ -1108,7 +1107,7 @@ export function triggerProjectileFromUI(): void {
   // Green: orbit mechanic
   if (uiColor === 'g') {
     if (orbitActive) return
-    lastThrowExtraCooldown = 5
+    lastThrowExtraCooldown = 4
     const serverUp = isServerConnected()
     if (serverUp) {
       room.send('requestOrbit', { t: now })
@@ -1255,7 +1254,7 @@ export function projectileClientSystem(dt: number): void {
     if (currentColor === 'g') {
       if (orbitActive) return // already orbiting
       lastLocalProjectileFireTime = now
-      lastThrowExtraCooldown = 5
+      lastThrowExtraCooldown = 4
       const serverUp = isServerConnected()
       if (serverUp) {
         room.send('requestOrbit', { t: now })
@@ -1338,6 +1337,10 @@ export function projectileClientSystem(dt: number): void {
     removeChargeSlow()
     room.send('chargeStop', { t: now })
     console.log('[Projectile] 💥 BURNOUT — held too long, self-stun!')
+    // Force flag drop if carrying
+    if (isServerConnected()) {
+      room.send('requestDrop', { t: 0 })
+    }
     // Self-stagger — head explode for overcharge
     triggerEmote({ predefinedEmote: 'getHit' })
     InputModifier.createOrReplace(engine.PlayerEntity, {
