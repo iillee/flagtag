@@ -2204,8 +2204,8 @@ function DesktopLayout() {
             {getIsCharging() && (() => {
               const cf = getChargeFraction()
               const fillPct = Math.round(cf * 100)
-              const fillColor = cf > 0.75
-                ? Color4.create(1, 0.2 - (cf - 0.75) * 0.8, 0.1, 0.7)
+              const fillColor = cf >= 1.25 / 1.5
+                ? Color4.create(1, 0.84, 0, 0.85)
                 : Color4.create(1, 1, 1, 0.5)
               const inset = S(6)
               return (

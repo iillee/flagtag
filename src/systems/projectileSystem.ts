@@ -205,8 +205,8 @@ function updateHandBoomerangVisibility(): void {
         Transform.getMutable(handGlowEntity).scale = Vector3.create(glowSize, glowSize, glowSize)
         // Shift color from blue to red near burnout
         const r = cf > 0.75 ? 1.0 : 0.3
-        const g = cf > 0.75 ? 0.2 : 0.6
-        const b = cf > 0.75 ? 0.1 : 1.0
+        const g = cf > 0.75 ? 0.84 : 0.6
+        const b = cf > 0.75 ? 0.0 : 1.0
         Material.setPbrMaterial(handGlowEntity, {
           albedoColor: Color4.create(1, 1, 1, 0),
           emissiveColor: Color3.create(r, g, b),
@@ -227,8 +227,8 @@ function updateHandBoomerangVisibility(): void {
       const radius = ORBIT_RADIUS * (0.5 + cf * 0.5)
       const particleSize = 0.1 + cf * 0.15
       const pr = cf > 0.75 ? 1.0 : 0.3
-      const pg = cf > 0.75 ? 0.2 : 0.6
-      const pb = cf > 0.75 ? 0.1 : 1.0
+      const pg = cf > 0.75 ? 0.84 : 0.6
+      const pb = cf > 0.75 ? 0.0 : 1.0
       for (let i = 0; i < orbitParticles.length; i++) {
         const op = orbitParticles[i]
         if (!Transform.has(op)) continue
@@ -315,7 +315,7 @@ function playReleaseSound(): void {
     audioClipUrl: RELEASE_SOUND_SRC,
     playing: true,
     loop: false,
-    volume: 0.35,
+    volume: 0.175,
     global: true,
     pitch: 1.0
   })
@@ -1201,7 +1201,7 @@ export function projectileClientSystem(dt: number): void {
     lastThrowExtraCooldown = chargeElapsed >= 1.0 ? 1 : 0
 
     console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, speed:', chargeSpeed.toFixed(0), 'range:', chargeRange.toFixed(0), 'scale:', chargeScale.toFixed(1), 'extraCD:', lastThrowExtraCooldown)
-    if (chargeElapsed >= 0.5) playReleaseSound()
+    if (chargeElapsed >= 1.25) playReleaseSound()
 
     const { dirX, dirZ } = getPlayerForward()
 
