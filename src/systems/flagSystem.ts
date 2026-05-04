@@ -30,6 +30,7 @@ import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
+import { setConfirmedCarrier, clearConfirmedCarrier } from '../gameState/flagHoldTime'
 
 // Visual clone system for smooth flag carrying
 //
@@ -253,9 +254,20 @@ let pendingPickupUntil = 0                       // Suppress flag-visual restore
 const PENDING_PICKUP_TIMEOUT_MS = 1500           // Give up waiting for confirmation after 1.5s
 let confirmedCarrierId: string | null = null     // Set by pickupConfirmed message, consumed by system
 
+// Post-confirmation grace period — trust the server message over CRDT until CRDT catches up.
+// During this window, the safety net will NOT hide the clone even if CRDT still shows non-Carried.
+let confirmedGraceUntil = 0                      // Timestamp: don't let safety net override until this
+let confirmedGraceCarrier = ''                   // Who the server confirmed as carrier
+const CONFIRMED_GRACE_MS = 3000                  // 3s grace — CRDT should arrive well within this
+
 // Listen for fast server confirmation (arrives before CRDT sync)
 room.onMessage('pickupConfirmed', (data) => {
   confirmedCarrierId = data.playerId
+  // Start grace period — trust this over CRDT until CRDT catches up
+  confirmedGraceUntil = Date.now() + CONFIRMED_GRACE_MS
+  confirmedGraceCarrier = data.playerId
+  // Also tell the interpolation system who the carrier is so scoreboard doesn't reset
+  setConfirmedCarrier(data.playerId)
 })
 
 
@@ -417,10 +429,17 @@ export function flagClientSystem(dt: number): void {
         break
       }
     }
+    // Also trust the server-confirmed grace period — if the server confirmed us as
+    // carrier but CRDT hasn't caught up yet, we should still be able to drop
+    if (!amCarrying && Date.now() < confirmedGraceUntil && confirmedGraceCarrier === userId) {
+      amCarrying = true
+    }
     if (amCarrying) {
       playDropSound()
       skipNextDropSound = true
       lastDropTimeMs = Date.now()
+      confirmedGraceUntil = 0
+      confirmedGraceCarrier = ''
       hideShieldForPlayer(userId)
       room.send('requestDrop', { t: 0 })
     }
@@ -438,6 +457,8 @@ export function flagClientSystem(dt: number): void {
     if (carryCloneCarrierId !== carrier || !cloneVisible) {
       showClone(carrier)
     }
+    // Note: confirmedGraceUntil/confirmedGraceCarrier remain set — they protect the
+    // clone from the safety net until CRDT catches up with the Carried state.
   }
 
   // ── Pending pickup timeout: server didn't confirm — roll back ──
@@ -467,10 +488,23 @@ export function flagClientSystem(dt: number): void {
     )
 
     if (needsCloneCreate) {
-      // Play pickup sound (skip if we already played it in auto-pickup)
+      // CRDT now confirms Carried — clear the grace period (no longer needed)
+      if (confirmedGraceCarrier === flag.carrierPlayerId) {
+        confirmedGraceUntil = 0
+        confirmedGraceCarrier = ''
+      }
+      // CRDT caught up — interpolation can now read carrier from CRDT directly
+      clearConfirmedCarrier()
+
+      // Play pickup sound (skip if we already played it in auto-pickup OR
+      // if the grace period already handled this pickup via pickupConfirmed)
       if (!isFirstFrame) {
+        // If clone is already showing for the correct carrier (from Phase 1/2),
+        // this is just CRDT catching up — don't replay the sound
         if (skipNextPickupSound) {
           skipNextPickupSound = false
+        } else if (cloneVisible && carryCloneCarrierId === flag.carrierPlayerId) {
+          // Clone already showing from pickupConfirmed — suppress duplicate sound
         } else {
           playPickupSound()
         }
@@ -484,6 +518,11 @@ export function flagClientSystem(dt: number): void {
       }
 
     } else if (needsCloneRemove) {
+      // CRDT confirms flag is no longer carried — clear any grace period
+      confirmedGraceUntil = 0
+      confirmedGraceCarrier = ''
+      clearConfirmedCarrier()
+
       if (!isFirstFrame) {
         // Check if this drop is caused by round end (flag forced back from carrier)
         let isRoundEndDrop = false
@@ -529,8 +568,10 @@ export function flagClientSystem(dt: number): void {
     }
     
     // 2. Flag is NOT carried — hide any lingering clone + restore flag visual
-    //    Guards with pendingPickupUntil to avoid flickering during pickup request window
-    if (flag.state !== FlagState.Carried && pendingPickupUntil === 0) {
+    //    Guards with pendingPickupUntil AND confirmedGraceUntil to avoid flickering
+    //    during the window between server confirmation and CRDT propagation.
+    const inGracePeriod = Date.now() < confirmedGraceUntil
+    if (flag.state !== FlagState.Carried && pendingPickupUntil === 0 && !inGracePeriod) {
       if (cloneVisible) {
         console.log('[Flag] ⚠️ Safety net: hiding orphaned clone (flag not carried)')
         hideClone()

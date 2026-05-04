@@ -97,6 +97,23 @@ let lastCarrierId = ''
 let lastCarrierSyncedSeconds = 0
 let interpolationStartTime = 0
 
+// Server-confirmed carrier — used as fallback when CRDT Flag state is stale.
+// Set by flagSystem when pickupConfirmed arrives, cleared when CRDT catches up or drop confirmed.
+let confirmedCarrierIdForInterpolation = ''
+let confirmedCarrierTimestamp = 0
+
+/** Called by flagSystem when pickupConfirmed message arrives. */
+export function setConfirmedCarrier(carrierId: string): void {
+  confirmedCarrierIdForInterpolation = carrierId.toLowerCase()
+  confirmedCarrierTimestamp = Date.now()
+}
+
+/** Called by flagSystem when CRDT confirms Carried state or a drop is confirmed. */
+export function clearConfirmedCarrier(): void {
+  confirmedCarrierIdForInterpolation = ''
+  confirmedCarrierTimestamp = 0
+}
+
 /**
  * Called every frame (from a system) to keep interpolation state fresh.
  * Tracks when the carrier or their synced seconds change.
@@ -109,6 +126,18 @@ export function updateHoldTimeInterpolation(): void {
       currentCarrierId = flag.carrierPlayerId.toLowerCase()
     }
     break
+  }
+
+  // If CRDT doesn't show a carrier but the server confirmed one recently (< 3s ago),
+  // trust the confirmation so interpolation doesn't reset during the CRDT gap.
+  if (!currentCarrierId && confirmedCarrierIdForInterpolation) {
+    if (Date.now() - confirmedCarrierTimestamp < 3000) {
+      currentCarrierId = confirmedCarrierIdForInterpolation
+    } else {
+      // Grace expired — clear stale confirmation
+      confirmedCarrierIdForInterpolation = ''
+      confirmedCarrierTimestamp = 0
+    }
   }
 
   if (currentCarrierId !== lastCarrierId) {
