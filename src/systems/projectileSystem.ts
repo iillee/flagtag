@@ -299,6 +299,24 @@ function stopChargeSound(): void {
   }
 }
 
+const RELEASE_SOUND_SRC = 'assets/sounds/release.mp3'
+let releaseSoundEntity: Entity | null = null
+
+function playReleaseSound(): void {
+  if (!releaseSoundEntity) {
+    releaseSoundEntity = engine.addEntity()
+    Transform.create(releaseSoundEntity, {})
+  }
+  AudioSource.createOrReplace(releaseSoundEntity, {
+    audioClipUrl: RELEASE_SOUND_SRC,
+    playing: true,
+    loop: false,
+    volume: 0.35,
+    global: true,
+    pitch: 1.0
+  })
+}
+
 const PROJECTILE_SOUND_SRC = 'assets/sounds/boomerang2.mp3'
 
 /** Attach a looping spatial projectile sound directly to a projectile entity. */
@@ -938,7 +956,7 @@ export function triggerProjectileFromUI(): void {
 
   lastLocalProjectileFireTime = now
   const uiColor = getBoomerangColor()
-  lastThrowExtraCooldown = uiColor === 'g' ? 5 : uiColor === 'y' ? 1 : 0
+  lastThrowExtraCooldown = uiColor === 'g' ? 5 : uiColor === 'y' ? 2 : 0
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
@@ -1065,15 +1083,25 @@ export function projectileClientSystem(dt: number): void {
     const currentColor = getBoomerangColor()
     if (currentColor !== 'b') {
       lastLocalProjectileFireTime = now
-      lastThrowExtraCooldown = currentColor === 'g' ? 5 : currentColor === 'y' ? 1 : 0
+      lastThrowExtraCooldown = currentColor === 'g' ? 5 : currentColor === 'y' ? 2 : 0
       const { dirX, dirZ } = getPlayerForward()
       const serverUp = isServerConnected()
       const range = currentColor === 'r' ? RED_RANGE : currentColor === 'g' ? 30 : CHARGE_MIN_RANGE
       const speed = currentColor === 'g' ? GREEN_SPEED : CHARGE_MIN_SPEED
       const scale = currentColor === 'g' ? 2 : 1
       if (serverUp) {
+        localThrowActive = true; localThrowSawVisual = false
+        updateHandBoomerangVisibility()
         room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: speed, chargeRange: range, chargeScale: scale })
+
+        if (Transform.has(engine.PlayerEntity)) {
+          const playerPos = Transform.get(engine.PlayerEntity).position
+          const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
+          fireWallRaycast(spawnPos, dirX, dirZ)
+        }
       } else {
+        localThrowActive = true; localThrowSawVisual = false
+        updateHandBoomerangVisibility()
         fireProjectileLocally(speed, range)
       }
       // Yellow: schedule a second throw after a short delay
@@ -1158,6 +1186,7 @@ export function projectileClientSystem(dt: number): void {
     lastThrowExtraCooldown = chargeElapsed >= 1.0 ? 2 : 1
 
     console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, speed:', chargeSpeed.toFixed(0), 'range:', chargeRange.toFixed(0), 'scale:', chargeScale.toFixed(1), 'extraCD:', lastThrowExtraCooldown)
+    if (chargeElapsed >= 0.5) playReleaseSound()
 
     const { dirX, dirZ } = getPlayerForward()
 
