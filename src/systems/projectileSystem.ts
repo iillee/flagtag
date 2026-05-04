@@ -1061,6 +1061,12 @@ export function projectileClientSystem(dt: number): void {
     const serverUp = isServerConnected()
     if (serverUp) {
       room.send('requestShell', { dirX: yellowSecondThrowDir.dirX, dirZ: yellowSecondThrowDir.dirZ, color: 'y', chargeSpeed: CHARGE_MIN_SPEED, chargeRange: CHARGE_MIN_RANGE, chargeScale: 1 })
+      // Fire wall raycast for 2nd throw so it bounces off walls like the 1st
+      if (Transform.has(engine.PlayerEntity)) {
+        const playerPos = Transform.get(engine.PlayerEntity).position
+        const spawnPos = Vector3.create(playerPos.x + yellowSecondThrowDir.dirX * 1.0, playerPos.y + 0.8, playerPos.z + yellowSecondThrowDir.dirZ * 1.0)
+        fireWallRaycast(spawnPos, yellowSecondThrowDir.dirX, yellowSecondThrowDir.dirZ)
+      }
     } else {
       fireProjectileLocally(CHARGE_MIN_SPEED, CHARGE_MIN_RANGE)
     }

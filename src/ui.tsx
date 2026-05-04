@@ -1605,7 +1605,7 @@ function DesktopLayout() {
               }}>
                 <Label value="#" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: S(32), height: S(28) }} textAlign="middle-left" />
                 <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '18%', height: S(28) }} textAlign="middle-left" />
-                <Label value="Wins" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
+                <Label value={`Wins (${leaderboardEntries.reduce((s, e) => s + (e.roundsWon || 0), 0)})`} fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
               </UiEntity>
             )}
 
@@ -1621,7 +1621,7 @@ function DesktopLayout() {
                 <Label value="#" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: S(32), height: S(28) }} textAlign="middle-left" />
                 <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '18%', height: S(28) }} textAlign="middle-left" />
                 <Label value="Address" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
-                <Label value="Wins" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(28) }} textAlign="middle-left" />
+                <Label value={`Wins (${leaderboardEntries.reduce((s, e) => s + (e.roundsWon || 0), 0)})`} fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(28) }} textAlign="middle-left" />
               </UiEntity>
             )}
 
@@ -1637,7 +1637,7 @@ function DesktopLayout() {
                 <Label value="#" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: S(32), height: S(28) }} textAlign="middle-left" />
                 <Label value="Player" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '18%', height: S(28) }} textAlign="middle-left" />
                 <Label value="Address" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(28) }} textAlign="middle-left" />
-                <Label value="Wins" fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(28) }} textAlign="middle-left" />
+                <Label value={`Wins (${leaderboardEntries.reduce((s, e) => s + (e.roundsWon || 0), 0)})`} fontSize={S(16)} color={WHITE} font="sans-serif" uiTransform={{ width: '12%', height: S(28) }} textAlign="middle-left" />
               </UiEntity>
             )}
 
