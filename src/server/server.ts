@@ -177,6 +177,8 @@ interface ActiveProjectile {
   returnZ: number
   // Charge speed (30 = tap, 60 = full charge)
   chargeSpeed: number
+  // Charge scale (1 = normal, up to 3 for green boomerang)
+  chargeScale: number
 }
 const activeProjectiles: ActiveProjectile[] = []
 const PROJECTILE_SYNC_INTERVAL = 0.1 // seconds between Projectile component CRDT writes
@@ -1356,7 +1358,8 @@ function registerHandlers(): void {
       // Accept optional chargeSpeed/chargeRange from charge mechanic, clamped to valid ranges
       const chargeSpeed = typeof data.chargeSpeed === 'number' ? Math.max(PROJECTILE_SPEED, Math.min(60, data.chargeSpeed)) : PROJECTILE_SPEED
       const chargeRange = typeof data.chargeRange === 'number' ? Math.max(20, Math.min(PROJECTILE_MAX_RANGE, data.chargeRange)) : 20
-      handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r', chargeSpeed, chargeRange)
+      const chargeScale = typeof data.chargeScale === 'number' ? Math.max(1, Math.min(3, data.chargeScale)) : 1
+      handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r', chargeSpeed, chargeRange, chargeScale)
     } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
   room.onMessage('reportShellWallDist', (data, context) => {
@@ -1486,6 +1489,18 @@ function registerHandlers(): void {
       // Broadcast to ALL clients (including sender, so they can confirm)
       room.send('playerColorChanged', { playerId: from, color })
     } catch (err) { console.error('[Server] ❌ colorChanged handler error:', err) }
+  })
+
+  // ── Boomerang charge sync ──
+  room.onMessage('chargeStart', (data, context) => {
+    if (!context) return
+    const from = context.from.toLowerCase()
+    room.send('playerChargeStart', { playerId: from, t: data.t || 0 })
+  })
+  room.onMessage('chargeStop', (data, context) => {
+    if (!context) return
+    const from = context.from.toLowerCase()
+    room.send('playerChargeStop', { playerId: from, t: data.t || 0 })
   })
 
   // ── Updraft location request ──
@@ -1773,20 +1788,23 @@ function bananaServerSystem(dt: number): void {
   }
 }
 
-function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r', chargeSpeed: number = PROJECTILE_SPEED, chargeRange: number = 20): void {
+function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r', chargeSpeed: number = PROJECTILE_SPEED, chargeRange: number = 20, chargeScale: number = 1): void {
   const now = Date.now()
 
   // Cooldown check
   const lastFire = lastProjectileFireTime.get(playerId) ?? 0
   const shellCd = PROJECTILE_COOLDOWN_SEC
-  if (now - lastFire < shellCd * 1000) {
+  // Yellow gets a shorter cooldown window to allow the rapid 2nd throw
+  const effectiveCd = color === 'y' ? 0.2 : shellCd
+  if (now - lastFire < effectiveCd * 1000) {
     console.log('[Server] Projectile denied: cooldown active')
     return
   }
 
-  // Max active check
+  // Max active check (yellow allows 2)
   const playerProjectiles = activeProjectiles.filter(s => s.firedBy === playerId)
-  if (playerProjectiles.length >= PROJECTILE_MAX_ACTIVE) {
+  const maxActive = color === 'y' ? 2 : PROJECTILE_MAX_ACTIVE
+  if (playerProjectiles.length >= maxActive) {
     console.log('[Server] Projectile denied: max active projectiles reached')
     return
   }
@@ -1863,11 +1881,12 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     returnY: spawnPos.y,
     returnZ: spawnPos.z,
     chargeSpeed,
+    chargeScale,
 
   })
   lastProjectileFireTime.set(playerId, now)
 
-  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ, color, firedBy: playerId, chargeSpeed, chargeRange })
+  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ, color, firedBy: playerId, chargeSpeed, chargeRange, chargeScale })
   console.log('[Server] 🎯 Projectile fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 
@@ -1966,7 +1985,7 @@ function shellServerSystem(dt: number): void {
       if (!playerPos) continue
 
       const dist = Vector3.distance(playerPos, projectilePos)
-      if (dist < PROJECTILE_HIT_RADIUS) {
+      if (dist < PROJECTILE_HIT_RADIUS * projectile.chargeScale) {
         console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)')
 
         // Drop the flag if the victim is carrying it
@@ -2001,7 +2020,7 @@ function shellServerSystem(dt: number): void {
       const trap = activeTraps[j]
       const trapPos = Transform.get(trap.entity).position
       const dist = Vector3.distance(projectilePos, trapPos)
-      if (dist < PROJECTILE_HIT_RADIUS) {
+      if (dist < PROJECTILE_HIT_RADIUS * projectile.chargeScale) {
         console.log('[Server] 🎯🪤 Projectile hit trap!', projectile.returning ? 'Both destroyed.' : 'Trap destroyed, projectile returning.')
         room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '' })
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })

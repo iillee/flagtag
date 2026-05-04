@@ -35,6 +35,7 @@ const CHARGE_TIME_SEC = 1.5      // seconds to full charge = burnout
 const CHARGE_MIN_SPEED = PROJECTILE_SPEED   // tap = 30 m/s
 const CHARGE_MAX_SPEED = 60                  // full charge = 60 m/s
 const CHARGE_MIN_RANGE = 20                  // tap = 20m
+const RED_RANGE = 40                         // red boomerang fixed range
 const CHARGE_MAX_RANGE = PROJECTILE_MAX_RANGE // full charge = 50m
 let chargeStartMs: number = 0    // 0 = not charging
 let isCharging = false
@@ -86,6 +87,12 @@ function chargeToRange(fraction: number): number {
 // Hand boomerang visibility
 let handBoomerangEntity: Entity | null = null
 let handGlowEntity: Entity | null = null
+let leftHandBoomerangEntity: Entity | null = null
+const LEFT_HAND_SCALE = Vector3.create(1, 1.5, 1)
+
+export function setLeftHandBoomerangEntity(e: Entity) {
+  leftHandBoomerangEntity = e
+}
 
 // ── Charge orbit ring effect ──
 const ORBIT_PARTICLE_COUNT = 6
@@ -169,11 +176,20 @@ function updateHandBoomerangVisibility(): void {
     if (currentlyVisible !== shouldShow) {
       console.log(`[HandBoomerang] ${shouldShow ? 'SHOW' : 'HIDE'} | localThrowActive=${localThrowActive} localProj=${localProjectiles.length} msgVis=${msgProjectileVisuals.length} emote=${emoteActive} cinematic=${isCinematicActive()}`)
     }
-    t.scale = shouldShow ? HAND_BOOMERANG_SCALE : Vector3.Zero()
+    const isGreen = getBoomerangColor() === 'g'
 
-    // Update glow during charge
+    // Green charging: scale up the hand boomerang model itself
+    if (shouldShow && isCharging && isGreen) {
+      const cf = getChargeFraction()
+      const scaleMult = 1 + cf * 2 // 1x to 3x
+      t.scale = Vector3.create(HAND_BOOMERANG_SCALE.x * scaleMult, HAND_BOOMERANG_SCALE.y * scaleMult, HAND_BOOMERANG_SCALE.z * scaleMult)
+    } else {
+      t.scale = shouldShow ? HAND_BOOMERANG_SCALE : Vector3.Zero()
+    }
+
+    // Update glow during charge (blue only)
     if (handGlowEntity && Transform.has(handGlowEntity)) {
-      if (shouldShow && isCharging) {
+      if (shouldShow && isCharging && !isGreen) {
         const cf = getChargeFraction()
         // Glow sphere grows and brightens with charge
         const glowSize = 0.3 + cf * 0.7
@@ -193,8 +209,8 @@ function updateHandBoomerangVisibility(): void {
       }
     }
 
-    // Update orbit particles
-    if (shouldShow && isCharging) {
+    // Update orbit particles (blue only)
+    if (shouldShow && isCharging && !isGreen) {
       const cf = getChargeFraction()
       // Advance angle once (not per-particle), use real time
       const speed = 2 * Math.PI * (1 + cf * 5)
@@ -225,6 +241,15 @@ function updateHandBoomerangVisibility(): void {
       for (let i = 0; i < orbitParticles.length; i++) {
         const op = orbitParticles[i]
         if (Transform.has(op)) Transform.getMutable(op).scale = Vector3.Zero()
+      }
+    }
+
+    // Left-hand boomerang: show when yellow, ready, and no pending 2nd throw
+    if (leftHandBoomerangEntity && Transform.has(leftHandBoomerangEntity)) {
+      const showLeft = shouldShow && getBoomerangColor() === 'y' && yellowSecondThrowAt === 0
+      const leftVisible = Transform.get(leftHandBoomerangEntity).scale.x > 0
+      if (showLeft !== leftVisible) {
+        Transform.getMutable(leftHandBoomerangEntity).scale = showLeft ? LEFT_HAND_SCALE : Vector3.Zero()
       }
     }
   }
@@ -297,6 +322,12 @@ function stopProjectileSound(entity: Entity): void {
 
 // ── Client cooldown tracking ──
 let lastLocalProjectileFireTime = 0
+let lastThrowExtraCooldown = 0 // extra seconds added for charged throws
+
+// ── Yellow double-throw ──
+const YELLOW_SECOND_THROW_DELAY_MS = 250 // ms between 1st and 2nd throw
+let yellowSecondThrowAt = 0 // timestamp when 2nd throw should fire (0 = none pending)
+let yellowSecondThrowDir = { dirX: 0, dirZ: 0 }
 
 /** Returns true if a boomerang is currently in flight (local or server-driven). */
 export function isProjectileInFlight(): boolean {
@@ -309,7 +340,7 @@ export function isProjectileOnCooldown(): boolean {
   if (isProjectileInFlight()) return true
   // Time-based cooldown (if any)
   if (lastLocalProjectileFireTime === 0) return false
-  const cooldown = PROJECTILE_COOLDOWN_SEC
+  const cooldown = PROJECTILE_COOLDOWN_SEC + lastThrowExtraCooldown
   return (Date.now() - lastLocalProjectileFireTime) < cooldown * 1000
 }
 
@@ -317,7 +348,7 @@ export function isProjectileOnCooldown(): boolean {
 export function getProjectileCooldownRemaining(): number {
   if (isProjectileInFlight()) return -1
   if (lastLocalProjectileFireTime === 0) return 0
-  const cooldown = PROJECTILE_COOLDOWN_SEC
+  const cooldown = PROJECTILE_COOLDOWN_SEC + lastThrowExtraCooldown
   const elapsed = Date.now() - lastLocalProjectileFireTime
   const remaining = cooldown * 1000 - elapsed
   return remaining > 0 ? Math.ceil(remaining / 1000) : 0
@@ -428,7 +459,7 @@ function updateServerProjectileGroundRaycasts(dt: number): void {
 room.onMessage('shellDropped', (data) => {
   // Create visual from message bus (instant, no CRDT dependency).
   // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
-  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange)
+  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale)
 })
 
 /** Look up a remote player's position by wallet address (case-insensitive). */
@@ -742,13 +773,14 @@ interface MsgProjectileVisual {
 }
 const msgProjectileVisuals: MsgProjectileVisual[] = []
 
-function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeSpeed?: number, chargeRange?: number): void {
+function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeSpeed?: number, chargeRange?: number, chargeScale?: number): void {
   const localEntity = acquireProjectileFromPool()
   if (!localEntity) return
 
+  const scaleMult = (chargeScale && chargeScale > 0) ? chargeScale : 1
   const t = Transform.getMutable(localEntity)
   t.position = Vector3.create(x, y, z)
-  t.scale = PROJECTILE_SCALE
+  t.scale = Vector3.create(PROJECTILE_SCALE.x * scaleMult, PROJECTILE_SCALE.y * scaleMult, PROJECTILE_SCALE.z * scaleMult)
   t.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
 
   // Set the correct color model for this projectile
@@ -894,10 +926,11 @@ export function triggerProjectileFromUI(): void {
   const userId = getPlayerData()?.userId
   if (!userId) return
 
-  if (now - lastLocalProjectileFireTime < PROJECTILE_COOLDOWN_SEC * 1000) { playErrorSound(); return }
+  if (now - lastLocalProjectileFireTime < (PROJECTILE_COOLDOWN_SEC + lastThrowExtraCooldown) * 1000) { playErrorSound(); return }
   if (localThrowActive || localProjectiles.length > 0) return
 
   lastLocalProjectileFireTime = now
+  lastThrowExtraCooldown = 0 // no extra cooldown for uncharged throws
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
@@ -905,7 +938,8 @@ export function triggerProjectileFromUI(): void {
     console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
-    room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeSpeed: CHARGE_MIN_SPEED, chargeRange: CHARGE_MIN_RANGE })
+    const uiRange = getBoomerangColor() === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
+    room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeSpeed: CHARGE_MIN_SPEED, chargeRange: uiRange, chargeScale: 1 })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
@@ -916,6 +950,12 @@ export function triggerProjectileFromUI(): void {
     localThrowActive = true; localThrowSawVisual = false
     updateHandBoomerangVisibility()
     fireProjectileLocally()
+  }
+
+  // Yellow: schedule second throw from UI tap too
+  if (getBoomerangColor() === 'y') {
+    yellowSecondThrowAt = now + YELLOW_SECOND_THROW_DELAY_MS
+    yellowSecondThrowDir = { dirX, dirZ }
   }
 }
 
@@ -978,13 +1018,29 @@ export function projectileClientSystem(dt: number): void {
 
 
 
-  // E key — charge on press, fire on release (disabled in spectator mode)
+  // Yellow double-throw: fire second boomerang after delay
+  if (yellowSecondThrowAt > 0 && now >= yellowSecondThrowAt) {
+    yellowSecondThrowAt = 0
+    const serverUp = isServerConnected()
+    if (serverUp) {
+      room.send('requestShell', { dirX: yellowSecondThrowDir.dirX, dirZ: yellowSecondThrowDir.dirZ, color: 'y', chargeSpeed: CHARGE_MIN_SPEED, chargeRange: CHARGE_MIN_RANGE, chargeScale: 1 })
+    } else {
+      fireProjectileLocally(CHARGE_MIN_SPEED, CHARGE_MIN_RANGE)
+    }
+    // Hide left-hand boomerang
+    if (leftHandBoomerangEntity && Transform.has(leftHandBoomerangEntity)) {
+      Transform.getMutable(leftHandBoomerangEntity).scale = Vector3.Zero()
+    }
+    console.log('[Projectile] 🎯 Yellow 2nd throw fired')
+  }
+
+  // E key — charge on press (blue only), instant fire for other colors
   if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 
     // Client-side cooldown check
-    const projectileCd = PROJECTILE_COOLDOWN_SEC
+    const projectileCd = PROJECTILE_COOLDOWN_SEC + lastThrowExtraCooldown
     if (now - lastLocalProjectileFireTime < projectileCd * 1000) {
       const remaining = ((projectileCd * 1000 - (now - lastLocalProjectileFireTime)) / 1000).toFixed(1)
       console.log('[Projectile] E pressed but cooldown active —', remaining, 's remaining')
@@ -992,27 +1048,49 @@ export function projectileClientSystem(dt: number): void {
       return
     }
 
-    // Also block charging if a boomerang is already in flight
+    // Also block if a boomerang is already in flight
     if (localThrowActive || localProjectiles.length > 0) return
 
-    // Block charging while airborne (gliding/jumping/falling)
+    // Only blue and green have charge mechanics; others fire instantly
+    const currentColor = getBoomerangColor()
+    if (currentColor !== 'b' && currentColor !== 'g') {
+      lastLocalProjectileFireTime = now
+      lastThrowExtraCooldown = 0
+      const { dirX, dirZ } = getPlayerForward()
+      const serverUp = isServerConnected()
+      const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
+      if (serverUp) {
+        room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: CHARGE_MIN_SPEED, chargeRange: range, chargeScale: 1 })
+      } else {
+        fireProjectileLocally(CHARGE_MIN_SPEED, range)
+      }
+      // Yellow: schedule a second throw after a short delay
+      if (currentColor === 'y') {
+        yellowSecondThrowAt = now + YELLOW_SECOND_THROW_DELAY_MS
+        yellowSecondThrowDir = { dirX, dirZ }
+      }
+      console.log('[Projectile] 🎯 Instant throw (non-charge color)')
+      return
+    }
+
+    // Blue only: block charging while airborne (gliding/jumping/falling)
     if (Transform.has(engine.PlayerEntity)) {
       const playerY = Transform.get(engine.PlayerEntity).position.y
       if (Math.abs(playerY - lastChargeGroundY) > 0.15) {
-        // Y is changing — player is airborne
         lastChargeGroundY = playerY
         return
       }
       lastChargeGroundY = playerY
     }
 
-    // Start charging
+    // Start charging (blue boomerang only)
     chargeStartMs = now
     isCharging = true
     orbitAngle = 0
     playChargeSound()
     applyChargeSlow()
-    console.log('[Projectile] ⚡ E pressed — charging started')
+    room.send('chargeStart', { t: now })
+    console.log('[Projectile] ⚡ E pressed — charging started (blue)')
   }
 
   // Cancel charge if player enters spectator/cinematic/drown
@@ -1021,6 +1099,7 @@ export function projectileClientSystem(dt: number): void {
     chargeStartMs = 0
     stopChargeSound()
     removeChargeSlow()
+    room.send('chargeStop', { t: now })
     console.log('[Projectile] ⚡ Charge cancelled (state change)')
   }
 
@@ -1031,6 +1110,7 @@ export function projectileClientSystem(dt: number): void {
     lastLocalProjectileFireTime = now  // trigger cooldown
     stopChargeSound()
     removeChargeSlow()
+    room.send('chargeStop', { t: now })
     console.log('[Projectile] 💥 BURNOUT — held too long, self-stun!')
     // Self-stagger — head explode for overcharge
     triggerEmote({ predefinedEmote: 'getHit' })
@@ -1050,20 +1130,29 @@ export function projectileClientSystem(dt: number): void {
     isCharging = false
     stopChargeSound()
     removeChargeSlow()
+    room.send('chargeStop', { t: now })
     const chargeFrac = Math.min(1, (now - chargeStartMs) / 1000 / CHARGE_TIME_SEC)
-    const chargeSpeed = chargeToSpeed(chargeFrac)
-    const chargeRange = chargeToRange(chargeFrac)
+    const currentColor = getBoomerangColor()
+
+    // Blue: speed + range scale with charge. Green: size scales with charge, speed/range stay base.
+    const chargeSpeed = currentColor === 'b' ? chargeToSpeed(chargeFrac) : CHARGE_MIN_SPEED
+    const chargeRange = currentColor === 'b' ? chargeToRange(chargeFrac) : CHARGE_MIN_RANGE
+    const chargeScale = currentColor === 'g' ? (1 + chargeFrac * 2) : 1 // green: 1x to 3x size
+
     chargeStartMs = 0
     lastLocalProjectileFireTime = now
+    // Extra cooldown: under 1s charge = +1s, over 1s charge = +2s
+    const chargeElapsed = chargeFrac * CHARGE_TIME_SEC
+    lastThrowExtraCooldown = chargeElapsed >= 1.0 ? 2 : 1
 
-    console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, speed:', chargeSpeed.toFixed(0), 'range:', chargeRange.toFixed(0))
+    console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, speed:', chargeSpeed.toFixed(0), 'range:', chargeRange.toFixed(0), 'scale:', chargeScale.toFixed(1), 'extraCD:', lastThrowExtraCooldown)
 
     const { dirX, dirZ } = getPlayerForward()
 
     if (serverUp) {
       localThrowActive = true; localThrowSawVisual = false
       updateHandBoomerangVisibility()
-      room.send('requestShell', { dirX, dirZ, color: getBoomerangColor(), chargeSpeed, chargeRange })
+      room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed, chargeRange, chargeScale })
 
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position

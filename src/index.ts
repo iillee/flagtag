@@ -7,7 +7,7 @@ import { setupUi, setCinematicFade, setCinematicShowing, setNextRoundStartingVis
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem, initPools as initCombatPools } from './systems/combatSystem'
 import { trapClientSystem, initTrapPool } from './systems/trapSystem'
-import { projectileClientSystem, setHandBoomerangEntity, initProjectilePool, getChargeFraction, getChargePhase } from './systems/projectileSystem'
+import { projectileClientSystem, setHandBoomerangEntity, setLeftHandBoomerangEntity, initProjectilePool, getChargeFraction, getChargePhase } from './systems/projectileSystem'
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
@@ -23,7 +23,7 @@ import { waterSplashSystem } from './systems/waterSplashSystem'
 import { setupLightning, lightningSystem, setupLightningMessages, cancelLightningRespawn } from './systems/lightningSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { setupRemoteBoomerangs, cleanupRemoteBoomerang } from './systems/remoteBoomerangSystem'
-import { getBoomerangColor } from './gameState/boomerangColor'
+import { getBoomerangColor, onBoomerangColorChange } from './gameState/boomerangColor'
 import { setupLadder } from './systems/ladderSystem'
 import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
@@ -90,6 +90,37 @@ export async function main() {
   })
   setHandBoomerangEntity(boomerangModel)
 
+  // ── Left-hand boomerang (yellow only) ──
+  const leftHandAnchor = engine.addEntity()
+  AvatarAttach.create(leftHandAnchor, {
+    anchorPointId: AvatarAnchorPointType.AAPT_LEFT_HAND
+  })
+  Transform.create(leftHandAnchor, { position: Vector3.Zero(), scale: Vector3.One() })
+  const leftBoomerangModel = engine.addEntity()
+  Transform.create(leftBoomerangModel, {
+    parent: leftHandAnchor,
+    position: isMobile() ? Vector3.create(0.12, 0.01, -0.13) : Vector3.create(0.05, 0.03, 0.1),
+    scale: getBoomerangColor() === 'y' ? Vector3.create(1, 1.5, 1) : Vector3.Zero(),
+    rotation: Quaternion.fromEulerDegrees(isMobile() ? 15 : 0, isMobile() ? 180 : 0, -90)
+  })
+  GltfContainer.create(leftBoomerangModel, {
+    src: `assets/models/boomerang.${getBoomerangColor()}.glb`,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
+
+  // Show/hide left hand boomerang when color changes
+  onBoomerangColorChange((color) => {
+    if (Transform.has(leftBoomerangModel)) {
+      Transform.getMutable(leftBoomerangModel).scale = color === 'y' ? Vector3.create(1, 1.5, 1) : Vector3.Zero()
+    }
+    if (GltfContainer.has(leftBoomerangModel)) {
+      GltfContainer.getMutable(leftBoomerangModel).src = `assets/models/boomerang.${color}.glb`
+    }
+  })
+
+  setLeftHandBoomerangEntity(leftBoomerangModel)
+
   // ── Charging torus ring — small spheres arranged in a circle ──
   const RING_SEGMENTS = 16
   const RING_RADIUS = 0.35
@@ -121,7 +152,7 @@ export async function main() {
 
   // Update charge ring each frame — grows + spins
   engine.addSystem((dt: number) => {
-    if (getChargePhase() === 'charging' && getChargeFraction() > 0.15) {
+    if (getChargePhase() === 'charging' && getChargeFraction() > 0.15 && getBoomerangColor() !== 'g') {
       const cf = getChargeFraction()
       const size = 0.375 + cf * 0.75
       // Spin the ring parent
