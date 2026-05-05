@@ -57,8 +57,6 @@ export const Messages = {
   chargeStart: Schemas.Map({ t: Schemas.Int }),
   chargeStop: Schemas.Map({ t: Schemas.Int }),
   chargeBurnout: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
-  chargeVfx: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, cf: Schemas.Float }),
-  playerChargeVfx: Schemas.Map({ playerId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, cf: Schemas.Float }),
   playerChargeStart: Schemas.Map({ playerId: Schemas.String, t: Schemas.Int }),
   playerChargeStop: Schemas.Map({ playerId: Schemas.String, t: Schemas.Int }),
 

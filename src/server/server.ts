@@ -1546,12 +1546,7 @@ function registerHandlers(): void {
     const from = context.from.toLowerCase()
     room.send('playerChargeStop', { playerId: from, t: data.t || 0 })
   })
-  room.onMessage('chargeVfx', (data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    console.log(`[Server] chargeVfx from ${from} cf=${data.cf}`)
-    room.send('playerChargeVfx', { playerId: from, x: data.x || 0, y: data.y || 0, z: data.z || 0, cf: data.cf || 0 })
-  })
+
 
   // ── Updraft location request ──
   room.onMessage('requestUpdraftLocation', (_data, _context) => {

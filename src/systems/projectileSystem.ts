@@ -1206,13 +1206,6 @@ export function projectileClientSystem(dt: number): void {
     }
   }
 
-  // Broadcast charge fraction to other players while charging (VFX parented to their hand model)
-  if (isCharging && serverUp && Transform.has(engine.PlayerEntity)) {
-    const pos = Transform.get(engine.PlayerEntity).position
-    const cf = getChargeFraction()
-    room.send('chargeVfx', { x: pos.x, y: pos.y + 1.0, z: pos.z, cf })
-  }
-
   if (serverUp) {
     // Process wall raycasts
     processWallRaycasts()

@@ -23,12 +23,15 @@ import { BoomerangColor, onBoomerangColorChange } from '../gameState/boomerangCo
 
 // ── Remote charge VFX (parented to hand boomerang, same as local) ──
 const REMOTE_ORBIT_PARTICLE_COUNT = 20
-const REMOTE_ORBIT_RADIUS = 0.5
+const REMOTE_ORBIT_RADIUS = 0.375
+const REMOTE_CHARGE_TIME_SEC = 1.5 // must match CHARGE_TIME_SEC in projectileSystem
+const REMOTE_CHARGE_PROXIMITY = 16 // meters — only render VFX within this distance
 
 interface RemoteChargeState {
   glow: Entity
   particles: Entity[]
-  cf: number  // current charge fraction, updated via message
+  startTime: number  // Date.now() when charge started — cf computed client-side
+  visible: boolean // proximity-based visibility
 }
 
 interface RemoteOrbitState {
@@ -168,13 +171,13 @@ function startRemoteCharge(playerId: string): void {
   for (let i = 0; i < REMOTE_ORBIT_PARTICLE_COUNT; i++) {
     const p = engine.addEntity()
     Transform.create(p, {
-      position: modelPos,
+      position: Vector3.Zero(),
       scale: Vector3.Zero(),
-      parent: rb.anchor
+      parent: rb.model
     })
     MeshRenderer.setSphere(p)
     Material.setPbrMaterial(p, {
-      albedoColor: Color4.create(0.3, 0.6, 1, 0.12),
+      albedoColor: Color4.create(0.045, 0.09, 0.15, 1.0),
       emissiveColor: Color3.create(0.3, 0.6, 1),
       emissiveIntensity: 5,
       transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
@@ -182,9 +185,7 @@ function startRemoteCharge(playerId: string): void {
     particles.push(p)
   }
 
-  rb.charge = { glow: engine.addEntity(), particles, cf: 0 }
-  // glow is a dummy entity (not rendered) to keep interface compatible
-  console.log(`[RemoteBoomerang] Created charge VFX for ${playerId} (parented to hand anchor)`)
+  rb.charge = { glow: engine.addEntity(), particles, startTime: Date.now(), visible: true }
 }
 
 // Track when charge was stopped to ignore stale chargeVfx messages
@@ -200,43 +201,49 @@ function stopRemoteCharge(playerId: string): void {
   chargeStoppedAt.set(playerId, Date.now())
 }
 
-/** Update remote charge VFX with new charge fraction (called from combatSystem message handler) */
-export function updateRemoteChargeVfx(playerId: string, cf: number): void {
-  // Ignore stale chargeVfx messages that arrive after chargeStop
-  const stoppedAt = chargeStoppedAt.get(playerId) || 0
-  if (Date.now() - stoppedAt < CHARGE_STOP_COOLDOWN_MS) return
-
-  // Auto-create boomerang + charge if needed
-  if (!remoteBoomerangs.has(playerId)) {
-    createRemoteBoomerang(playerId, 'b')
-  }
-  const rb = remoteBoomerangs.get(playerId)
-  if (!rb) return
-  if (!rb.charge) {
-    startRemoteCharge(playerId)
-  }
-  if (rb.charge) {
-    rb.charge.cf = cf
-  }
-}
-
 /** Stop remote charge VFX for a player (called from combatSystem message handler) */
 export function stopRemoteChargeVfxForPlayer(playerId: string): void {
   stopRemoteCharge(playerId)
 }
 
-// Animate remote charge effects each frame — same math as local (projectileSystem)
+// Animate remote charge effects each frame — cf computed client-side from startTime
 function remoteChargeAnimSystem(_dt: number): void {
   const now = Date.now()
-  const mobile = isMobile()
-  // Model offset from anchor — particles orbit around this point
-  const modelPos = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
+  // Get local player position for proximity check
+  let localPos: Vector3 | null = null
+  if (Transform.has(engine.PlayerEntity)) {
+    localPos = Transform.get(engine.PlayerEntity).position
+  }
 
-  remoteBoomerangs.forEach((rb) => {
+  remoteBoomerangs.forEach((rb, playerId) => {
     if (!rb.charge) return
-    const cf = rb.charge.cf
+    const cf = Math.min(1, (now - rb.charge.startTime) / 1000 / REMOTE_CHARGE_TIME_SEC)
 
-    // Orbit particles — exact same math as local (projectileSystem updateHandBoomerangVisibility)
+    // Proximity check — find remote player position
+    let inRange = false
+    if (localPos) {
+      for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+        if (identity.address.toLowerCase() === playerId) {
+          const rp = Transform.get(entity).position
+          const dx = localPos.x - rp.x, dy = localPos.y - rp.y, dz = localPos.z - rp.z
+          inRange = (dx * dx + dy * dy + dz * dz) <= REMOTE_CHARGE_PROXIMITY * REMOTE_CHARGE_PROXIMITY
+          break
+        }
+      }
+    }
+
+    // Hide/show particles based on proximity
+    if (!inRange && rb.charge.visible) {
+      for (const p of rb.charge.particles) {
+        if (Transform.has(p)) Transform.getMutable(p).scale = Vector3.Zero()
+      }
+      rb.charge.visible = false
+      return
+    }
+    if (!inRange) return
+    rb.charge.visible = true
+
+    // Orbit particles — full material update each frame to match local look
     const speed = 2 * Math.PI * (1 + cf * 5)
     const angle = (now / 1000) * speed
     const radius = REMOTE_ORBIT_RADIUS * (0.5 + cf * 0.5)
@@ -248,14 +255,11 @@ function remoteChargeAnimSystem(_dt: number): void {
       const p = rb.charge.particles[i]
       if (!Transform.has(p)) continue
       const a = angle + (i * 2 * Math.PI) / REMOTE_ORBIT_PARTICLE_COUNT
-      Transform.getMutable(p).position = Vector3.create(
-        modelPos.x,
-        modelPos.y + Math.sin(a) * radius,
-        modelPos.z + Math.cos(a) * radius
-      )
-      Transform.getMutable(p).scale = Vector3.create(particleSize, particleSize, particleSize)
+      const t = Transform.getMutable(p)
+      t.position = Vector3.create(0, Math.sin(a) * radius, Math.cos(a) * radius)
+      t.scale = Vector3.create(particleSize, particleSize, particleSize)
       Material.setPbrMaterial(p, {
-        albedoColor: Color4.create(pr, pg, pb, 0.12),
+        albedoColor: Color4.create(pr * 0.15, pg * 0.15, pb * 0.15, 1.0),
         emissiveColor: Color3.create(pr, pg, pb),
         emissiveIntensity: 3 + cf * 7,
         transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,

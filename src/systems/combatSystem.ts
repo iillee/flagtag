@@ -9,6 +9,8 @@ import {
   TweenSequence,
   EasingFunction,
   MaterialTransparencyMode,
+  AvatarAttach,
+  AvatarAnchorPointType,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
@@ -226,18 +228,23 @@ const pendingHitPositions: Vector3[] = []
 const pendingMissPositions: Vector3[] = []
 
 // Register message listeners
-// ── Remote charge VFX + sound — delegated to remoteBoomerangSystem ──
-import { updateRemoteChargeVfx, stopRemoteChargeVfxForPlayer } from './remoteBoomerangSystem'
+// ── Remote charge sound — triggered on chargeStart, stopped on chargeStop ──
+import { stopRemoteChargeVfxForPlayer } from './remoteBoomerangSystem'
 
-// ── Remote charge sound ──
 const CHARGE_SOUND_SRC = 'assets/sounds/charge.mp3'
 const remoteChargeSounds = new Map<string, Entity>()
 
-function playRemoteChargeSound(playerId: string, pos: Vector3): void {
+function playRemoteChargeSound(playerId: string): void {
   let e = remoteChargeSounds.get(playerId)
+  // Position will be updated by AvatarAttach; we just need to start the sound
   if (!e) {
     e = engine.addEntity()
-    Transform.create(e, { position: pos })
+    Transform.create(e, { position: Vector3.Zero() })
+    // Attach to player so sound follows them without per-frame position updates
+    AvatarAttach.create(e, {
+      avatarId: playerId,
+      anchorPointId: AvatarAnchorPointType.AAPT_POSITION
+    })
     AudioSource.create(e, {
       audioClipUrl: CHARGE_SOUND_SRC,
       playing: true,
@@ -248,7 +255,6 @@ function playRemoteChargeSound(playerId: string, pos: Vector3): void {
     })
     remoteChargeSounds.set(playerId, e)
   } else {
-    Transform.getMutable(e).position = pos
     const a = AudioSource.getMutable(e)
     if (!a.playing) {
       a.playing = true
@@ -266,13 +272,13 @@ function stopRemoteChargeSound(playerId: string): void {
   }
 }
 
-room.onMessage('playerChargeVfx', (data) => {
+// Charge start/stop — triggers sound + VFX (no per-frame messages needed)
+room.onMessage('playerChargeStart', (data) => {
   const playerId = data.playerId?.toLowerCase()
   if (!playerId) return
   const localUserId = getPlayerData()?.userId?.toLowerCase()
   if (localUserId && playerId === localUserId) return
-  updateRemoteChargeVfx(playerId, data.cf)
-  playRemoteChargeSound(playerId, Vector3.create(data.x, data.y, data.z))
+  playRemoteChargeSound(playerId)
 })
 
 room.onMessage('playerChargeStop', (data) => {
