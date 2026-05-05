@@ -19,6 +19,7 @@ import { chestSystem } from './systems/chestSystem'
 import { updateWorldTime } from './shared/dayNight'
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
+import { coinBobSpinSystem } from './systems/coinBobSpinSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
 import { setupLightning, lightningSystem, setupLightningMessages } from './systems/lightningSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
@@ -345,6 +346,7 @@ export async function main() {
   // Water slowdown — disable running in water
   engine.addSystem(waterSystem)
   engine.addSystem(waterBobSystem)
+  engine.addSystem(coinBobSpinSystem)
   engine.addSystem(waterSplashSystem)
 
   // Lightning bolt system (probability-based, synced via messages)

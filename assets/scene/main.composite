@@ -3407,6 +3407,48 @@
             },
             "parent": 0
           }
+        },
+        "681": {
+          "json": {
+            "position": {
+              "x": 261,
+              "y": 43.5,
+              "z": 315.5
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "682": {
+          "json": {
+            "position": {
+              "x": 271.5,
+              "y": 56.5,
+              "z": 324.5
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
         }
       }
     },
@@ -4463,6 +4505,20 @@
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
+        },
+        "681": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "682": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
         }
       }
     },
@@ -5262,6 +5318,16 @@
         "680": {
           "json": {
             "value": "Loot Trunk_3"
+          }
+        },
+        "681": {
+          "json": {
+            "value": "Doubloon"
+          }
+        },
+        "682": {
+          "json": {
+            "value": "Doubloon_2"
           }
         }
       }
@@ -6328,7 +6394,7 @@
         "serializationType": "map"
       },
       "data": {
-        "680": {
+        "681": {
           "json": {
             "gizmo": 1
           }
@@ -6472,7 +6538,9 @@
                   670,
                   672,
                   679,
-                  680
+                  680,
+                  681,
+                  682
                 ]
               },
               {
@@ -7213,6 +7281,14 @@
               {
                 "entity": 680,
                 "children": []
+              },
+              {
+                "entity": 681,
+                "children": []
+              },
+              {
+                "entity": 682,
+                "children": []
               }
             ]
           }
@@ -7522,6 +7598,12 @@
           "json": {}
         },
         "680": {
+          "json": {}
+        },
+        "681": {
+          "json": {}
+        },
+        "682": {
           "json": {}
         }
       }
