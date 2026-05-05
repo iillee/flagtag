@@ -368,6 +368,43 @@ export function setupRemoteBoomerangs(): void {
     room.send('colorChanged', { color })
   })
 
+  // Hide remote player's hand boomerang when they throw
+  room.onMessage('shellDropped', (data) => {
+    const playerId = data.firedBy?.toLowerCase()
+    if (!playerId) return
+    const localUserId = getPlayerData()?.userId?.toLowerCase()
+    if (localUserId && playerId === localUserId) return
+    const rb = remoteBoomerangs.get(playerId)
+    if (rb && Transform.has(rb.model)) {
+      Transform.getMutable(rb.model).scale = Vector3.Zero()
+    }
+    if (rb && rb.leftModel && Transform.has(rb.leftModel)) {
+      Transform.getMutable(rb.leftModel).scale = Vector3.Zero()
+    }
+  })
+
+  // Restore remote player's hand boomerang when their projectile returns/expires
+  room.onMessage('shellReturned', (data) => {
+    const playerId = data.firedBy?.toLowerCase()
+    if (!playerId) return
+    const localUserId = getPlayerData()?.userId?.toLowerCase()
+    if (localUserId && playerId === localUserId) return
+    const rb = remoteBoomerangs.get(playerId)
+    if (!rb) return
+    // Restore right hand
+    if (Transform.has(rb.model)) {
+      const mobile = isMobile()
+      const t = Transform.getMutable(rb.model)
+      t.scale = Vector3.create(1, 1.5, 1)
+      t.position = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
+      t.rotation = Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
+    }
+    // Restore left hand for yellow
+    if (rb.leftModel && Transform.has(rb.leftModel)) {
+      Transform.getMutable(rb.leftModel).scale = rb.color === 'y' ? Vector3.create(1, 1.5, 1) : Vector3.Zero()
+    }
+  })
+
   // Listen for remote charge start/stop
   room.onMessage('playerChargeStart', (data) => {
     const playerId = data.playerId?.toLowerCase()

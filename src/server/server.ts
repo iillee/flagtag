@@ -2052,6 +2052,7 @@ function shellServerSystem(dt: number): void {
     // Safety expiry (time-based)
     if (now - projectile.firedAtMs > PROJECTILE_LIFETIME_SEC * 1000) {
       console.log('[Server] 🎯 Projectile expired (timeout)')
+      room.send('shellReturned', { firedBy: projectile.firedBy })
       engine.removeEntity(projectile.entity)
       activeProjectiles.splice(i, 1)
       continue
@@ -2097,8 +2098,9 @@ function shellServerSystem(dt: number): void {
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
 
       if (dist < PROJECTILE_HIT_RADIUS) {
-        // Returned to shooter — remove silently
+        // Returned to shooter — remove and notify clients
         console.log('[Server] 🎯 Projectile returned to shooter')
+        room.send('shellReturned', { firedBy: projectile.firedBy })
         engine.removeEntity(projectile.entity)
         activeProjectiles.splice(i, 1)
         continue
@@ -2150,6 +2152,7 @@ function shellServerSystem(dt: number): void {
 
         if (projectile.returning) {
           // On return: consumed on hit
+          room.send('shellReturned', { firedBy: projectile.firedBy })
           engine.removeEntity(projectile.entity)
           activeProjectiles.splice(i, 1)
           shellConsumed = true
@@ -2180,6 +2183,7 @@ function shellServerSystem(dt: number): void {
 
         if (projectile.returning) {
           // On return: consumed
+          room.send('shellReturned', { firedBy: projectile.firedBy })
           engine.removeEntity(projectile.entity)
           activeProjectiles.splice(i, 1)
           shellConsumed = true
