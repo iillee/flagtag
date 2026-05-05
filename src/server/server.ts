@@ -14,7 +14,7 @@ import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
 import {
   CoinState, PlayerWallet, COIN_STATE_SYNC_ID, COIN_RESPAWN_SEC, COIN_PICKUP_RADIUS,
-  ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND,
+  ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
   getWalletSyncId
 } from '../shared/coins'
 
@@ -1221,7 +1221,7 @@ async function setPlayerCoinBalance(walletAddress: string, amount: number): Prom
 
 async function addPlayerCoins(walletAddress: string, amount: number): Promise<number> {
   const current = await loadPlayerCoinBalance(walletAddress)
-  const newBalance = current + amount
+  const newBalance = Math.min(current + amount, MAX_COINS)
   await setPlayerCoinBalance(walletAddress, newBalance)
   return newBalance
 }

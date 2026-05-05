@@ -14,7 +14,7 @@ import { AUTH_SERVER_PEER_ID } from '@dcl/sdk/network/message-bus-sync'
 // ── Constants ──
 
 /** Seconds before a picked-up coin respawns */
-export const COIN_RESPAWN_SEC = 10
+export const COIN_RESPAWN_SEC = 60
 
 /** Radius in meters for coin pickup detection (server-side) */
 export const COIN_PICKUP_RADIUS = 2.5
@@ -24,6 +24,9 @@ export const ROUND_PARTICIPATION_COINS = 1
 
 /** Bonus coins for top 3 placements at round end */
 export const ROUND_PLACEMENT_BONUS = [5, 3, 1] as const  // 1st, 2nd, 3rd
+
+/** Maximum coins a player can hold (upgradeable in future) */
+export const MAX_COINS = 1000
 
 /** Coins per second of flag hold time (fractional, floored at round end) */
 export const COINS_PER_HOLD_SECOND = 0.1
