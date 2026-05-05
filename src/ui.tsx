@@ -193,7 +193,6 @@ let earnedUiPhase: 'idle' | 'text' | 'coins' | 'fly' | 'done' = 'idle'
 const EARNED_TEXT_DELAY = 0.6   // seconds before showing text
 const EARNED_COIN_DELAY = 1.2   // seconds after text before coins start flying
 const EARNED_FLY_DURATION = 1.0 // seconds for coin fly animation
-const EARNED_HOLD_DURATION = 2.5 // seconds to hold the full display before fading
 let earnedCoinsFlyProgress = 0  // 0 to 1
 let earnedSoundPlayed = false
 
@@ -254,10 +253,8 @@ engine.addSystem((dt: number) => {
       earnedUiPhase = 'fly'
       earnedUiTimer = 0
     }
-  } else if (earnedUiPhase === 'fly' && earnedUiTimer >= EARNED_HOLD_DURATION) {
-    earnedUiPhase = 'done'
-    earnedUiVisible = false
-    activeRoundEarnings = null
+  } else if (earnedUiPhase === 'fly') {
+    // Stay visible for entire credits duration — cleared when credits screen hides
   }
 })
 
@@ -690,25 +687,25 @@ function PlayerListUi() {
           {(noScorersCreditsVisible || (nextRoundStartingVisible && !cinematicShowing)) && (
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%' }}>
               
-              {/* "You Earned" coin breakdown — center of screen */}
+              {/* "You Earned" coin breakdown — upper area */}
               {activeRoundEarnings && (
-                <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '20%' }, flexDirection: 'column', alignItems: 'center' }}>
-                  <Label value="You Earned" fontSize={mobile ? 56 : S(34)} color={GOLD} font="sans-serif" />
-                  <UiEntity uiTransform={{ height: mobile ? 16 : S(12) }} />
+                <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '15%' }, flexDirection: 'column', alignItems: 'center' }}>
+                  <Label value="You Earned" fontSize={mobile ? 72 : S(46)} color={GOLD} font="sans-serif" />
+                  <UiEntity uiTransform={{ height: mobile ? 24 : S(18) }} />
                   <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
                     <UiEntity
-                      uiTransform={{ width: mobile ? 40 : S(32), height: mobile ? 40 : S(32), margin: { right: mobile ? 12 : S(10) } }}
+                      uiTransform={{ width: mobile ? 56 : S(48), height: mobile ? 56 : S(48), margin: { right: mobile ? 16 : S(14) } }}
                       uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
                     />
-                    <Label value={`+${activeRoundEarnings.total}`} fontSize={mobile ? 72 : S(44)} color={GOLD} font="sans-serif" />
+                    <Label value={`+${activeRoundEarnings.total}`} fontSize={mobile ? 96 : S(62)} color={GOLD} font="sans-serif" />
                   </UiEntity>
-                  <UiEntity uiTransform={{ height: mobile ? 20 : S(14) }} />
-                  <Label value={`Participation: +${activeRoundEarnings.participation}`} fontSize={mobile ? 28 : S(17)} color={LIGHT_GREY} font="sans-serif" />
+                  <UiEntity uiTransform={{ height: mobile ? 28 : S(20) }} />
+                  <Label value={`Participation: +${activeRoundEarnings.participation}`} fontSize={mobile ? 34 : S(21)} color={LIGHT_GREY} font="sans-serif" />
                   {activeRoundEarnings.holdTime > 0 && (
-                    <Label value={`Flag Hold Time: +${activeRoundEarnings.holdTime}`} fontSize={mobile ? 28 : S(17)} color={LIGHT_GREY} font="sans-serif" />
+                    <Label value={`Flag Hold Time: +${activeRoundEarnings.holdTime}`} fontSize={mobile ? 34 : S(21)} color={LIGHT_GREY} font="sans-serif" />
                   )}
                   {activeRoundEarnings.placement > 0 && (
-                    <Label value={`${activeRoundEarnings.rank === 1 ? '1st' : activeRoundEarnings.rank === 2 ? '2nd' : '3rd'} Place Bonus: +${activeRoundEarnings.placement}`} fontSize={mobile ? 28 : S(17)} color={activeRoundEarnings.rank === 1 ? GOLD : activeRoundEarnings.rank === 2 ? SILVER : BRONZE} font="sans-serif" />
+                    <Label value={`${activeRoundEarnings.rank === 1 ? '1st' : activeRoundEarnings.rank === 2 ? '2nd' : '3rd'} Place Bonus: +${activeRoundEarnings.placement}`} fontSize={mobile ? 34 : S(21)} color={activeRoundEarnings.rank === 1 ? GOLD : activeRoundEarnings.rank === 2 ? SILVER : BRONZE} font="sans-serif" />
                   )}
 
                   {/* Flying coins animation */}
@@ -743,8 +740,8 @@ function PlayerListUi() {
                 </UiEntity>
               )}
 
-              {/* Credits — lower area */}
-              <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { bottom: '18%' }, flexDirection: 'column', alignItems: 'center' }}>
+              {/* Credits — lower area, title fixed */}
+              <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '60%' }, flexDirection: 'column', alignItems: 'center' }}>
                 <Label value="Special Thanks to:" fontSize={mobile ? 42 : S(28)} color={GOLD} font="sans-serif" />
                 <UiEntity uiTransform={{ height: mobile ? 12 : S(10) }} />
                 {creditLines.slice(0, creditLineIndex + 1).map((line, i) => (
