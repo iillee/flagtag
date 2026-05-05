@@ -14,6 +14,7 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { CoinState, COIN_PICKUP_RADIUS } from '../shared/coins'
 import { room } from '../shared/messages'
+import { setPendingRoundEarnings } from '../gameState/roundEarnings'
 
 // ── Types ──
 
@@ -157,6 +158,11 @@ export function getCoinBalance(): number {
   return walletBalance
 }
 
+/** Apply deferred round-end balance (called when coin animation triggers) */
+export function applyDeferredBalance(newBalance: number): void {
+  walletBalance = newBalance
+}
+
 /** Generate a deterministic coin ID from position */
 function coinIdFromPosition(x: number, y: number, z: number): string {
   // Round to 1 decimal to handle floating point, gives unique ID per placed coin
@@ -247,6 +253,23 @@ export function setupCoinMessages(): void {
   room.onMessage('walletBalance', (data) => {
     walletBalance = data.coins
     console.log('[CoinPickup] Wallet balance loaded:', walletBalance)
+  })
+
+  // Round-end coin earnings breakdown (personalized)
+  room.onMessage('roundCoinsEarned', (data) => {
+    const player = getPlayer()
+    if (!player) return
+    if (data.playerId !== player.userId.toLowerCase()) return
+    // Don't update walletBalance yet — defer until coin animation plays
+    setPendingRoundEarnings({
+      total: data.total,
+      participation: data.participation,
+      holdTime: data.holdTime,
+      placement: data.placement,
+      rank: data.rank,
+      newBalance: data.newBalance
+    })
+    console.log('[CoinPickup] Round earnings received:', data.total, 'coins (deferred until animation)')
   })
 }
 

@@ -268,6 +268,9 @@ room.onMessage('pickupConfirmed', (data) => {
   confirmedGraceCarrier = data.playerId
   // Also tell the interpolation system who the carrier is so scoreboard doesn't reset
   setConfirmedCarrier(data.playerId)
+  // Play pickup sound now that server confirmed (prevents repeated sounds on rejected pickups)
+  playPickupSound()
+  skipNextPickupSound = true  // skip the CRDT-triggered sound since we already played it
 })
 
 
@@ -403,9 +406,8 @@ export function flagClientSystem(dt: number): void {
         if (flag.state === FlagState.Carried) continue
         const dist = Vector3.distance(myPos, Transform.get(flagEnt).position)
         if (dist <= AUTO_PICKUP_RADIUS) {
-          // Instant: hide flag + play sound + show clone above our head (no server wait)
-          playPickupSound()
-          skipNextPickupSound = true
+          // Send pickup request — visual+sound deferred until server confirms (pickupConfirmed)
+          // to prevent repeated sounds when server rejects due to missing position data
           if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
           showClone(userId)
           pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
@@ -467,6 +469,8 @@ export function flagClientSystem(dt: number): void {
     pendingPickupUntil = 0
     hideClone()
     if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
+    // Apply a longer cooldown to prevent rapid re-pickup attempts when server keeps rejecting
+    lastAutoPickupRequestMs = Date.now() + 2000  // won't retry for 2.5s (cooldown is 500ms, so 2000 + 500)
   }
 
   // Handle flag state changes with clone system
