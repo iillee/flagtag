@@ -17,6 +17,7 @@ import { mailboxSystem } from './systems/mailboxSystem'
 import { chestSystem } from './systems/chestSystem'
 
 import { setCinematicActive } from './cinematicState'
+import { getCurrentSkyTime } from './shared/dayNight'
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
@@ -574,12 +575,8 @@ export async function main() {
   // ── Day/Night Cycle ──
   // Full cycle = 72000 units. 10-minute cycle → 120 units/sec.
   // All players see the same time because we derive it from wall-clock time.
-  const DAY_NIGHT_CYCLE_DURATION_SEC = 600 // 10 minutes per full cycle
-  const DAY_NIGHT_SPEED = 72000 / DAY_NIGHT_CYCLE_DURATION_SEC // 120 units/sec
   engine.addSystem(function dayNightCycleSystem(_dt: number) {
-    // Use wall-clock so all players stay in sync
-    const nowSec = Date.now() / 1000
-    const skyTime = (nowSec * DAY_NIGHT_SPEED) % 72000
+    const skyTime = getCurrentSkyTime()
     SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: skyTime })
   })
 

@@ -13,6 +13,7 @@ import { Zombie } from '../shared/components'
 import { room } from '../shared/messages'
 import { showHitEffect, initPools as initCombatPools } from './combatSystem'
 import { isCinematicActive } from '../cinematicState'
+import { isNightTime } from '../shared/dayNight'
 
 // ── Visual constants ──
 const GHOST_MODEL_SRC = 'models/ghost.glb'
@@ -134,6 +135,16 @@ room.onMessage('zombieKilled', (data) => {
 export function zombieClientSystem(dt: number): void {
   initCombatPools()
   ensureGhostDeathSound()
+
+  // Ghost only appears at night — hide all visuals during daytime
+  if (!isNightTime()) {
+    for (const [entity, cz] of clientZombies) {
+      destroyZombieVisual(cz)
+      clientZombies.delete(entity)
+    }
+    ghostTouchingThisFrame = false
+    return
+  }
 
   // ── Scare meter: drain while ghost is touching, recharge when safe ──
   if (ghostDeathRespawnDelay <= 0) {

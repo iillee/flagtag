@@ -11,6 +11,7 @@ import {
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString
 } from '../shared/components'
 import { room } from '../shared/messages'
+import { isNightTime } from '../shared/dayNight'
 
 // ── Constants ──
 const PICKUP_RADIUS = 3
@@ -3007,9 +3008,27 @@ room.onMessage('zombieHit', (data, sender) => {
   }
 })
 
+function despawnAllZombies(): void {
+  for (const z of activeZombies) {
+    Zombie.deleteFrom(z.entity)
+    engine.removeEntity(z.entity)
+  }
+  activeZombies.length = 0
+}
+
 function zombieServerSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   const now = Date.now()
+
+  // ── Ghost only spawns at night ──
+  if (!isNightTime()) {
+    if (activeZombies.length > 0) {
+      despawnAllZombies()
+      console.log('[Server] ☀️ Dawn — despawning ghost')
+    }
+    zombieSpawnTimer = 5 // ready to spawn quickly when night falls
+    return
+  }
 
   // ── Spawn timer (single ghost, 30s respawn cooldown after death) ──
   if (zombieRespawnCooldown > 0) {
