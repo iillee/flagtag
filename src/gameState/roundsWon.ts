@@ -17,23 +17,36 @@ function isHiddenFromLeaderboard(entry: LeaderboardEntry): boolean {
   return HIDDEN_LEADERBOARD_ADDRESSES.includes(entry.userId.toLowerCase())
 }
 
-/** Read leaderboard from the synced LeaderboardState component (server writes it).
- *  Names are resolved server-side via AvatarBase scanning and persisted name directory. */
+// ── Cache: parse + sort only when the raw JSON changes ──
+let _dailyCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
+let _monthlyCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
+let _allTimeCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
+
+function parseAndSort(json: string, cache: { json: string; result: LeaderboardEntry[] }): LeaderboardEntry[] {
+  if (json === cache.json) return cache.result
+  if (!json) { cache.json = json; cache.result = []; return [] }
+  try {
+    const entries: LeaderboardEntry[] = JSON.parse(json)
+    const visible = entries.filter(e => !isHiddenFromLeaderboard(e))
+    const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
+    visible.sort((a, b) => {
+      if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon
+      return (originalIndex.get(a.userId) ?? 0) - (originalIndex.get(b.userId) ?? 0)
+    })
+    cache.json = json
+    cache.result = visible
+    return visible
+  } catch {
+    cache.json = json
+    cache.result = []
+    return []
+  }
+}
+
+/** Read leaderboard from the synced LeaderboardState component (server writes it). */
 export function getLeaderboardEntries(): LeaderboardEntry[] {
   for (const [, lb] of engine.getEntitiesWith(LeaderboardState)) {
-    if (!lb.json) return []
-    try {
-      const entries: LeaderboardEntry[] = JSON.parse(lb.json)
-      const visible = entries.filter(e => !isHiddenFromLeaderboard(e))
-      const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
-      visible.sort((a, b) => {
-        if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon
-        return (originalIndex.get(a.userId) ?? 0) - (originalIndex.get(b.userId) ?? 0)
-      })
-      return visible
-    } catch {
-      return []
-    }
+    return parseAndSort(lb.json, _dailyCache)
   }
   return []
 }
@@ -41,19 +54,7 @@ export function getLeaderboardEntries(): LeaderboardEntry[] {
 /** Read monthly leaderboard from the synced MonthlyLeaderboardState component. */
 export function getMonthlyLeaderboardEntries(): LeaderboardEntry[] {
   for (const [, lb] of engine.getEntitiesWith(MonthlyLeaderboardState)) {
-    if (!lb.json) return []
-    try {
-      const entries: LeaderboardEntry[] = JSON.parse(lb.json)
-      const visible = entries.filter(e => !isHiddenFromLeaderboard(e))
-      const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
-      visible.sort((a, b) => {
-        if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon
-        return (originalIndex.get(a.userId) ?? 0) - (originalIndex.get(b.userId) ?? 0)
-      })
-      return visible
-    } catch {
-      return []
-    }
+    return parseAndSort(lb.json, _monthlyCache)
   }
   return []
 }
@@ -61,19 +62,7 @@ export function getMonthlyLeaderboardEntries(): LeaderboardEntry[] {
 /** Read all-time leaderboard from the synced AllTimeLeaderboardState component. */
 export function getAllTimeLeaderboardEntries(): LeaderboardEntry[] {
   for (const [, lb] of engine.getEntitiesWith(AllTimeLeaderboardState)) {
-    if (!lb.json) return []
-    try {
-      const entries: LeaderboardEntry[] = JSON.parse(lb.json)
-      const visible = entries.filter(e => !isHiddenFromLeaderboard(e))
-      const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
-      visible.sort((a, b) => {
-        if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon
-        return (originalIndex.get(a.userId) ?? 0) - (originalIndex.get(b.userId) ?? 0)
-      })
-      return visible
-    } catch {
-      return []
-    }
+    return parseAndSort(lb.json, _allTimeCache)
   }
   return []
 }

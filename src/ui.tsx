@@ -1,7 +1,6 @@
 import { Color4, Vector3 } from '@dcl/sdk/math'
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
-import { UiCanvasInformation } from '@dcl/sdk/ecs'
 import {
   getPlayersWithHoldTimes,
   getCurrentFlagCarrierUserId,
@@ -19,6 +18,20 @@ import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventT
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
 import { getBoomerangColor, setBoomerangColor, type BoomerangColor } from './gameState/boomerangColor'
+import {
+  WHITE, BRIGHT_WHITE, MUTED, LIGHT_GREY, GREY, CLOSE_GREY,
+  GOLD, BRIGHT_GOLD, SILVER, BRONZE, CORAL_RED,
+  PANEL_BG, PANEL_BG_SEMI,
+  S, getUIScale, getUIScaleLabel, cycleUIScale, getServerConnectionStatus,
+  formatCountdown, formatUTCTime, formatUTCDate, formatUTCMonth, formatPlaytime, formatVisitorTime,
+  _PANEL_WIDTH, _ROW_HEIGHT, VISITORS_PER_PAGE, LEADERBOARD_PER_PAGE,
+  _TITLE_FONT, _ROW_FONT, _PADDING, _BORDER_RADIUS,
+  _ICON_FONT_QUESTION, _ICON_FONT_ANALYTICS,
+  _ABILITY_BTN_SIZE, _ABILITY_ICON_SIZE,
+  _OVERLAY_PANEL_WIDTH, _OVERLAY_PANEL_HEIGHT,
+  sortVisitorsWithBotSection, getSortedLeaderboardEntries,
+  isLikelyBot, type VisitorEntry, type VisitorOrSeparator,
+} from './ui/uiConstants'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 import { musicEntity } from './index'
 import { isMobile } from '@dcl/sdk/platform'
@@ -470,192 +483,7 @@ engine.addSystem(() => {
   }
 })
 
-// Tie-breaking tracking for stable leaderboard sorting
-const roundWinAchievementTime = new Map<string, number>() // userId -> timestamp when they first achieved current win count
-let lastKnownWins = new Map<string, number>() // userId -> last known round wins
-
-// Stable sorting for leaderboard with tie-breaking
-function getSortedLeaderboardEntries(entries: any[]): any[] {
-  const now = Date.now()
-  
-  // Track achievement times for round wins
-  entries.forEach(entry => {
-    const key = entry.userId
-    const currentWins = entry.roundsWon
-    
-    // Check if this is a new win level for this player
-    const lastKnown = lastKnownWins.get(key) || 0
-    if (currentWins > lastKnown) {
-      roundWinAchievementTime.set(key, now)
-      lastKnownWins.set(key, currentWins)
-    }
-    
-    if (!roundWinAchievementTime.has(key)) {
-      roundWinAchievementTime.set(key, now)
-    }
-  })
-  
-  // Sort: Primary by wins (desc), secondary by achievement time (asc = earlier first)
-  return [...entries].sort((a, b) => {
-    if (a.roundsWon !== b.roundsWon) {
-      return b.roundsWon - a.roundsWon // Higher wins first
-    }
-    // Tie-breaker: earlier achievement time first
-    const timeA = roundWinAchievementTime.get(a.userId) || now
-    const timeB = roundWinAchievementTime.get(b.userId) || now
-    return timeA - timeB
-  })
-}
-
-// ═══════════════════════════════════════════════════════════
-// BOT DETECTION & VISITOR SORTING
-// ═══════════════════════════════════════════════════════════
-
-type VisitorEntry = { userId: string; name: string; isOnline: boolean; totalSeconds: number }
-type VisitorOrSeparator = VisitorEntry & { _isSeparator?: boolean }
-
-/** Returns true if a visitor looks like a bot (unnamed/hex-only name AND ≤1s playtime) */
-function isLikelyBot(v: VisitorEntry): boolean {
-  const name = v.name.trim()
-  const isUnnamed = name === '' || /^0x[0-9a-fA-F]+$/i.test(name)
-  return isUnnamed && v.totalSeconds <= 1
-}
-
-/** Sort visitors: real users first (online→offline, alpha), separator, then likely bots (same sub-sort) */
-function sortVisitorsWithBotSection(raw: VisitorEntry[]): VisitorOrSeparator[] {
-  const realUsers: VisitorEntry[] = []
-  const bots: VisitorEntry[] = []
-  for (const v of raw) {
-    if (isLikelyBot(v)) bots.push(v)
-    else realUsers.push(v)
-  }
-  const sorter = (a: VisitorEntry, b: VisitorEntry) => {
-    if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-  }
-  realUsers.sort(sorter)
-  bots.sort(sorter)
-  const result: VisitorOrSeparator[] = [...realUsers]
-  if (bots.length > 0) {
-    result.push({ userId: '__sep__', name: '', isOnline: false, totalSeconds: 0, _isSeparator: true })
-    result.push(...bots)
-  }
-  return result
-}
-
-// ═══════════════════════════════════════════════════════════
-// SHARED CONSTANTS & HELPERS
-// ═══════════════════════════════════════════════════════════
-
-// Enhanced Color Palette
-const WHITE = Color4.create(1, 1, 1, 1)
-const BRIGHT_WHITE = Color4.create(1, 1, 1, 1)
-const MUTED = Color4.create(0.82, 0.82, 0.85, 1)
-const LIGHT_GREY = Color4.create(0.72, 0.72, 0.75, 1)
-const GREY = Color4.create(0.62, 0.62, 0.68, 1)
-const CLOSE_GREY = Color4.create(0.4, 0.4, 0.45, 1)
-
-// Theme Colors
-const GOLD = Color4.create(1, 0.84, 0, 1)
-const BRIGHT_GOLD = Color4.create(1, 0.9, 0.1, 1)
-const SILVER = Color4.create(0.75, 0.78, 0.82, 1)
-const BRONZE = Color4.create(0.8, 0.5, 0.2, 1)
-
-// Accent Colors
-// LIGHT_BLUE removed — unused
-const CORAL_RED = Color4.create(1, 0.5, 0.45, 1)
-
-// Background Colors
-const PANEL_BG = Color4.create(0.1, 0.1, 0.1, 0.92)
-const PANEL_BG_SEMI = Color4.create(0.08, 0.08, 0.1, 0.87)
-
-// ═══════════════════════════════════════════════════════════
-// UI SCALE — auto-detects from screen size, press 1 to fine-tune
-// Base scale = screenWidth / 1920 (clamped 0.6–1.6)
-// Manual adjustment adds -15% / 0% / +20% on top
-// ═══════════════════════════════════════════════════════════
-const UI_ADJUST_PRESETS = [
-  { label: 'Small',  mult: 0.85 },
-  { label: 'Medium', mult: 1.0  },
-  { label: 'Large',  mult: 1.2  },
-]
-let uiAdjustIndex = 0 // default Small
-
-let autoBaseScale = 1.0 // updated each frame from canvas info
-
-// System that reads screen size and computes auto base scale
-engine.addSystem(() => {
-  const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
-  if (canvas && canvas.width > 0) {
-    // Use logical width (accounting for device pixel ratio)
-    const logicalWidth = canvas.width
-    const raw = logicalWidth / 1920
-    autoBaseScale = Math.max(0.6, Math.min(1.6, raw))
-  }
-})
-
-function getUIScale(): number { return autoBaseScale * UI_ADJUST_PRESETS[uiAdjustIndex].mult }
-function getUIScaleLabel(): string { return UI_ADJUST_PRESETS[uiAdjustIndex].label }
-function cycleUIScale() {
-  uiAdjustIndex = (uiAdjustIndex + 1) % UI_ADJUST_PRESETS.length
-}
-
-/** Scale a pixel value by current UI scale. Use for all desktop sizes/fonts/margins. */
-function S(px: number): number {
-  return Math.round(px * getUIScale())
-}
-
-function getServerConnectionStatus(): 'Y' | 'N' {
-  const flagCount = [...engine.getEntitiesWith(Flag)].length
-  return flagCount > 0 ? 'Y' : 'N'
-}
-
-function formatCountdown(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = seconds % 60
-  if (h === 0) return `${m}:${s.toString().padStart(2, '0')}`
-  return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-}
-
-function formatUTCTime(): string {
-  const now = new Date()
-  return now.toUTCString().slice(17, 25)
-}
-
-function formatUTCDate(): string {
-  const now = new Date()
-  const month = (now.getUTCMonth() + 1).toString().padStart(2, '0')
-  const day = now.getUTCDate().toString().padStart(2, '0')
-  const year = now.getUTCFullYear().toString().slice(2)
-  return `${month}/${day}/${year}`
-}
-
-function formatUTCMonth(): string {
-  const now = new Date()
-  const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
-  return `${mm}/${now.getUTCFullYear()}`
-}
-
-function formatPlaytime(totalMinutes: number): string {
-  if (totalMinutes < 60) return `${totalMinutes}m`
-  const hours = Math.floor(totalMinutes / 60)
-  const mins = totalMinutes % 60
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
-}
-
-function formatVisitorTime(totalSeconds: number): string {
-  if (totalSeconds < 60) return `${totalSeconds}s`
-  const minutes = Math.floor(totalSeconds / 60)
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return `${hours}h ${remainingMinutes}m`
-}
-
-// ═══════════════════════════════════════════════════════════
-// ROOT UI — switches between desktop and mobile
-// ═══════════════════════════════════════════════════════════
+// Constants, colors, formatters, sorting imported from ./ui/uiConstants
 
 // ═══════════════════════════════════════════════════════════
 // DROWN BAR — 2D screen-space air meter
@@ -1164,22 +992,7 @@ function PlayerListUi() {
 // DESKTOP LAYOUT (unchanged from original)
 // ═══════════════════════════════════════════════════════════
 
-// Desktop layout base values (scaled at render time via S())
-const _PANEL_WIDTH = 240
-const _ROW_HEIGHT = 32
-const VISITORS_PER_PAGE = 9
-const LEADERBOARD_PER_PAGE = 12
-const _TITLE_FONT = 20
-const _ROW_FONT = 15
-const _PADDING = 14
-const _BORDER_RADIUS = 18
-// _ICON_FONT_SQUARE removed — unused
-const _ICON_FONT_QUESTION = 22
-const _ICON_FONT_ANALYTICS = 20
-const _ABILITY_BTN_SIZE = 74
-const _ABILITY_ICON_SIZE = 54
-const _OVERLAY_PANEL_WIDTH = 820
-const _OVERLAY_PANEL_HEIGHT = 476
+// Desktop layout constants imported from ./ui/uiConstants
 
 function DesktopLayout() {
   const rawPlayers = getPlayersWithHoldTimes()

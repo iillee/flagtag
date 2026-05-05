@@ -406,6 +406,41 @@ async function checkMonthlyLeaderboardReset(): Promise<void> {
 // Snapshots daily data before reset so the report can be sent on next server startup
 // even if no one was online at report time.
 
+/** Build the daily analytics report object (shared by snapshot + live send). */
+function buildDailyReport(leaderboardJson: string): any {
+  const now = Date.now()
+  const winsMap = new Map<string, number>()
+  try {
+    const entries = JSON.parse(leaderboardJson) as Array<{ userId: string; roundsWon: number }>
+    for (const e of entries) winsMap.set(e.userId.toLowerCase(), e.roundsWon)
+  } catch { /* ignore */ }
+
+  const users = Array.from(visitorSessions.entries()).map(([userId, data]) => {
+    let totalSeconds = data.totalMinutesToday * 60
+    if (data.sessionStartMs > 0) {
+      totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
+    }
+    return {
+      address: userId,
+      name: data.name || userId.slice(0, 8),
+      time_seconds: totalSeconds,
+      flags: winsMap.get(userId) || 0
+    }
+  }).sort((a, b) => b.time_seconds - a.time_seconds)
+
+  const totalSeconds = users.reduce((sum, u) => sum + u.time_seconds, 0)
+  return {
+    scene: 'flagtag.dcl.eth',
+    date: lastVisitorResetDay,
+    unique_users: users.length,
+    playtime: `${Math.floor(totalSeconds / 60)} minutes`,
+    total_time_seconds: totalSeconds,
+    peak_concurrent: { count: peakConcurrent, time: peakConcurrentTime },
+    hourly_peak: hourlyPeakConcurrent.map((count, hour) => `${hour}:00 - ${count}`),
+    users
+  }
+}
+
 async function snapshotPendingReport(leaderboardJson: string): Promise<void> {
   try {
     // Don't overwrite an existing pending report that hasn't been sent yet
@@ -421,40 +456,9 @@ async function snapshotPendingReport(leaderboardJson: string): Promise<void> {
       return
     }
 
-    const now = Date.now()
-    const winsMap = new Map<string, number>()
-    try {
-      const entries = JSON.parse(leaderboardJson) as Array<{ userId: string; roundsWon: number }>
-      for (const e of entries) winsMap.set(e.userId.toLowerCase(), e.roundsWon)
-    } catch { /* ignore */ }
-
-    const users = Array.from(visitorSessions.entries()).map(([userId, data]) => {
-      let totalSeconds = data.totalMinutesToday * 60
-      if (data.sessionStartMs > 0) {
-        totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
-      }
-      return {
-        address: userId,
-        name: data.name || userId.slice(0, 8),
-        time_seconds: totalSeconds,
-        flags: winsMap.get(userId) || 0
-      }
-    }).sort((a, b) => b.time_seconds - a.time_seconds)
-
-    const totalSeconds = users.reduce((sum, u) => sum + u.time_seconds, 0)
-    const snapshot = {
-      scene: 'flagtag.dcl.eth',
-      date: lastVisitorResetDay,
-      unique_users: users.length,
-      playtime: `${Math.floor(totalSeconds / 60)} minutes`,
-      total_time_seconds: totalSeconds,
-      peak_concurrent: { count: peakConcurrent, time: peakConcurrentTime },
-      hourly_peak: hourlyPeakConcurrent.map((count, hour) => `${hour}:00 - ${count}`),
-      users
-    }
-
-    await Storage.set('pendingReport', JSON.stringify(snapshot))
-    console.log('[Server] 📸 Snapshot saved for deferred report:', lastVisitorResetDay, `(${users.length} users)`)
+    const report = buildDailyReport(leaderboardJson)
+    await Storage.set('pendingReport', JSON.stringify(report))
+    console.log('[Server] 📸 Snapshot saved for deferred report:', lastVisitorResetDay, `(${report.users.length} users)`)
   } catch (err) {
     console.error('[Server] Failed to snapshot pending report:', err)
   }
@@ -532,43 +536,10 @@ async function sendDailyAnalyticsToDiscord(): Promise<void> {
     }
 
     console.log('[Server] Discord report: visitorSessions.size =', visitorSessions.size)
-    const now = Date.now()
 
-    // Build per-user data: address, time spent, flags (wins)
-    const winsMap = new Map<string, number>()
     const lb = LeaderboardState.getOrNull(leaderboardEntity)
-    if (lb && lb.json) {
-      try {
-        const entries = JSON.parse(lb.json) as Array<{ userId: string; roundsWon: number }>
-        for (const e of entries) winsMap.set(e.userId.toLowerCase(), e.roundsWon)
-      } catch { /* ignore */ }
-    }
-
-    const users = Array.from(visitorSessions.entries()).map(([userId, data]) => {
-      let totalSeconds = data.totalMinutesToday * 60
-      if (data.sessionStartMs > 0) {
-        totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
-      }
-      return {
-        address: userId,
-        name: data.name || userId.slice(0, 8),
-        time_seconds: totalSeconds,
-        flags: winsMap.get(userId) || 0
-      }
-    }).sort((a, b) => b.time_seconds - a.time_seconds)
-
-    // Build structured JSON report for AI agent consumption
-    const totalSeconds = users.reduce((sum, u) => sum + u.time_seconds, 0)
-    const report = {
-      scene: 'flagtag.dcl.eth',
-      date: lastVisitorResetDay,
-      unique_users: users.length,
-      playtime: `${Math.floor(totalSeconds / 60)} minutes`,
-      total_time_seconds: totalSeconds,
-      peak_concurrent: { count: peakConcurrent, time: peakConcurrentTime },
-      hourly_peak: hourlyPeakConcurrent.map((count, hour) => `${hour}:00 - ${count}`),
-      users
-    }
+    const report = buildDailyReport(lb?.json || '[]')
+    const { users } = report
 
     // Build a short summary for the Discord message text
     const summaryLines = [
@@ -855,36 +826,6 @@ async function checkMonthlyVisitorReset(): Promise<void> {
 }
 
 // ── Setup ──
-async function testDiscordFileAttachment(): Promise<void> {
-  console.log('[Server] 🧪 Testing Discord file attachment...')
-  const testData = JSON.stringify({ test: true, timestamp: new Date().toISOString(), message: 'If you can see this file, multipart works!' }, null, 2)
-  const boundary = '----DCLTestBoundary' + Date.now()
-  const body = [
-    `--${boundary}`,
-    `Content-Disposition: form-data; name="payload_json"`,
-    `Content-Type: application/json`,
-    ``,
-    JSON.stringify({ content: '🧪 **Multipart file attachment test** — if a .json file is attached below, it works!' }),
-    `--${boundary}`,
-    `Content-Disposition: form-data; name="files[0]"; filename="test-report.json"`,
-    `Content-Type: application/json`,
-    ``,
-    testData,
-    `--${boundary}--`
-  ].join('\r\n')
-
-  try {
-    const res = await fetch(DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-      body
-    })
-    const resText = await res.text()
-    console.log(`[Server] 🧪 Discord test response: ${res.status} — ${resText.slice(0, 200)}`)
-  } catch (err) {
-    console.error('[Server] 🧪 Discord test FAILED:', err)
-  }
-}
 
 export async function setupServer(): Promise<void> {
   console.log('[Server] Starting Flag Tag server...')
@@ -971,24 +912,7 @@ export async function setupServer(): Promise<void> {
   } catch (err) {
     console.error('[Server] Failed to load leaderboard from storage:', err)
   }
-  let leaderboardJson = savedLeaderboard || '[]'
-  
-  // Patch leaderboard entries with persisted real names (fix stale 0x... from prior sessions)
-  try {
-    const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(leaderboardJson)
-    let patched = false
-    for (const entry of entries) {
-      const knownName = playerNames.get(entry.userId.toLowerCase())
-      if (knownName && isRealName(knownName) && entry.name !== knownName) {
-        entry.name = knownName
-        patched = true
-      }
-    }
-    if (patched) {
-      leaderboardJson = JSON.stringify(entries)
-      console.log('[Server] Patched leaderboard names from persisted name directory')
-    }
-  } catch { /* ignore */ }
+  let leaderboardJson = patchAllLeaderboardNames(savedLeaderboard || '[]', 'leaderboard')
 
   leaderboardEntity = engine.addEntity()
   LeaderboardState.create(leaderboardEntity, { json: leaderboardJson, date: '' })
@@ -1001,24 +925,7 @@ export async function setupServer(): Promise<void> {
   } catch (err) {
     console.error('[Server] Failed to load all-time leaderboard from storage:', err)
   }
-  let allTimeJson = savedAllTime || '[]'
-
-  // Patch all-time names too
-  try {
-    const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(allTimeJson)
-    let patched = false
-    for (const entry of entries) {
-      const knownName = playerNames.get(entry.userId.toLowerCase())
-      if (knownName && isRealName(knownName) && entry.name !== knownName) {
-        entry.name = knownName
-        patched = true
-      }
-    }
-    if (patched) {
-      allTimeJson = JSON.stringify(entries)
-      console.log('[Server] Patched all-time leaderboard names from persisted name directory')
-    }
-  } catch { /* ignore */ }
+  let allTimeJson = patchAllLeaderboardNames(savedAllTime || '[]', 'all-time leaderboard')
 
   allTimeLeaderboardEntity = engine.addEntity()
   AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: allTimeJson })
@@ -1035,24 +942,10 @@ export async function setupServer(): Promise<void> {
   }
   const currentMonth = getCurrentMonthString()
   // Reset if stored month doesn't match current month
-  let monthlyJson = (savedMonthlyMonth === currentMonth && savedMonthly) ? savedMonthly : '[]'
-
-  // Patch monthly names
-  try {
-    const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(monthlyJson)
-    let patched = false
-    for (const entry of entries) {
-      const knownName = playerNames.get(entry.userId.toLowerCase())
-      if (knownName && isRealName(knownName) && entry.name !== knownName) {
-        entry.name = knownName
-        patched = true
-      }
-    }
-    if (patched) {
-      monthlyJson = JSON.stringify(entries)
-      console.log('[Server] Patched monthly leaderboard names from persisted name directory')
-    }
-  } catch { /* ignore */ }
+  let monthlyJson = patchAllLeaderboardNames(
+    (savedMonthlyMonth === currentMonth && savedMonthly) ? savedMonthly : '[]',
+    'monthly leaderboard'
+  )
 
   monthlyLeaderboardEntity = engine.addEntity()
   MonthlyLeaderboardState.create(monthlyLeaderboardEntity, { json: monthlyJson, month: currentMonth })
@@ -1246,67 +1139,25 @@ function updatePlayerName(userId: string, name: string): boolean {
     monthlyVisitor.name = name
   }
   
-  // Update leaderboard entries
-  const lb = LeaderboardState.getOrNull(leaderboardEntity)
-  if (lb && lb.json) {
-    try {
-      const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(lb.json)
-      let changed = false
-      for (const entry of entries) {
-        if (entry.userId.toLowerCase() === key && entry.name !== name) {
-          entry.name = name
-          changed = true
-        }
-      }
-      if (changed) {
-        const json = JSON.stringify(entries)
-        const mutable = LeaderboardState.getMutable(leaderboardEntity)
-        mutable.json = json
-        persistLeaderboard(json).catch(e => console.error('[Server] persistLeaderboard error:', e))
-      }
-    } catch { /* ignore parse errors */ }
-  }
-
-  // Update all-time leaderboard entries
-  const atLb = AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)
-  if (atLb && atLb.json) {
-    try {
-      const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(atLb.json)
-      let changed = false
-      for (const entry of entries) {
-        if (entry.userId.toLowerCase() === key && entry.name !== name) {
-          entry.name = name
-          changed = true
-        }
-      }
-      if (changed) {
-        const json = JSON.stringify(entries)
-        const atMutable = AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity)
-        atMutable.json = json
-        persistAllTimeLeaderboard(json).catch(e => console.error('[Server] persistAllTimeLeaderboard error:', e))
-      }
-    } catch { /* ignore parse errors */ }
-  }
-
-  // Update monthly leaderboard entries
-  const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)
-  if (mlLb && mlLb.json) {
-    try {
-      const entries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(mlLb.json)
-      let changed = false
-      for (const entry of entries) {
-        if (entry.userId.toLowerCase() === key && entry.name !== name) {
-          entry.name = name
-          changed = true
-        }
-      }
-      if (changed) {
-        const json = JSON.stringify(entries)
-        const mlMutable = MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity)
-        mlMutable.json = json
-        persistMonthlyLeaderboard(json).catch(e => console.error('[Server] persistMonthlyLeaderboard error:', e))
-      }
-    } catch { /* ignore parse errors */ }
+  // Update all three leaderboards
+  const leaderboards: Array<{
+    getState: () => { json?: string } | null
+    getMutable: () => { json: string }
+    persist: (json: string) => Promise<void>
+  }> = [
+    { getState: () => LeaderboardState.getOrNull(leaderboardEntity), getMutable: () => LeaderboardState.getMutable(leaderboardEntity), persist: persistLeaderboard },
+    { getState: () => AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity), getMutable: () => AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity), persist: persistAllTimeLeaderboard },
+    { getState: () => MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity), getMutable: () => MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity), persist: persistMonthlyLeaderboard },
+  ]
+  for (const lb of leaderboards) {
+    const state = lb.getState()
+    if (!state?.json) continue
+    const entries = parseLeaderboardJson(state.json)
+    if (patchLeaderboardNames(entries, userId, name)) {
+      const json = JSON.stringify(entries)
+      lb.getMutable().json = json
+      lb.persist(json).catch(e => console.error('[Server] persist leaderboard error:', e))
+    }
   }
   
   return true
@@ -1592,6 +1443,76 @@ function updraftServerSystem(dt: number) {
     room.send('updraftLocation', { index: updraftActiveIndex })
     console.log('[Server] 💨 Updraft moved to chimney', updraftActiveIndex)
   }
+}
+
+// ── Leaderboard helpers (deduplicated) ──
+
+type LeaderboardEntry = { userId: string; name: string; roundsWon: number }
+
+/** Parse a leaderboard JSON string into entries (safe — returns [] on error). */
+function parseLeaderboardJson(json: string | undefined | null): LeaderboardEntry[] {
+  if (!json) return []
+  try { return JSON.parse(json) } catch { return [] }
+}
+
+/**
+ * Increment roundsWon for each winning player in a leaderboard entry array.
+ * Mutates in place for efficiency.
+ */
+function incrementLeaderboardWins(
+  entries: LeaderboardEntry[],
+  winners: { userId: string; seconds: number }[],
+  maxSeconds: number
+): void {
+  for (const p of winners) {
+    if (p.seconds < maxSeconds) continue
+    const pKey = p.userId.toLowerCase()
+    const existing = entries.find((e) => e.userId.toLowerCase() === pKey)
+    if (existing) {
+      existing.roundsWon += 1
+      const displayName = playerNames.get(pKey)
+      if (displayName) existing.name = displayName
+    } else {
+      const displayName = playerNames.get(pKey) || pKey.slice(0, 8)
+      entries.push({ userId: pKey, name: displayName, roundsWon: 1 })
+    }
+  }
+}
+
+/**
+ * Patch a single player's name in a leaderboard entry array. Returns true if any changed.
+ */
+function patchLeaderboardNames(entries: LeaderboardEntry[], userId: string, name: string): boolean {
+  const key = userId.toLowerCase()
+  let changed = false
+  for (const entry of entries) {
+    if (entry.userId.toLowerCase() === key && entry.name !== name) {
+      entry.name = name
+      changed = true
+    }
+  }
+  return changed
+}
+
+/**
+ * Patch ALL entries in a leaderboard JSON string using the persisted playerNames directory.
+ * Returns the (possibly updated) JSON string.
+ */
+function patchAllLeaderboardNames(json: string, label: string): string {
+  const entries = parseLeaderboardJson(json)
+  let patched = false
+  for (const entry of entries) {
+    const knownName = playerNames.get(entry.userId.toLowerCase())
+    if (knownName && isRealName(knownName) && entry.name !== knownName) {
+      entry.name = knownName
+      patched = true
+    }
+  }
+  if (patched) {
+    console.log(`[Server] Patched ${label} names from persisted name directory`)
+    return JSON.stringify(entries)
+  }
+  return json
 }
 
 function handlePickup(playerId: string): void {
@@ -2532,6 +2453,9 @@ function playerTrackingSystem(): void {
         monthlyVisitor.sessionStartMs = 0
       }
 
+      // Clean up per-player maps to prevent unbounded growth
+      playerBoomerangColors.delete(userKey)
+
       changed = true
     }
   }
@@ -2775,79 +2699,27 @@ async function handleRoundEnd(): Promise<void> {
   await checkLeaderboardDailyReset()
   await checkMonthlyLeaderboardReset()
 
-  // ── 7. Update leaderboard (async persistence is safe now) ──
+  // ── 7. Update all three leaderboards (async persistence is safe now) ──
   if (maxSeconds > 0) {
-    const lb = LeaderboardState.getOrNull(leaderboardEntity)
-    let entries: { userId: string; name: string; roundsWon: number }[] = []
+    // Daily
+    const dailyEntries = parseLeaderboardJson(LeaderboardState.getOrNull(leaderboardEntity)?.json)
+    incrementLeaderboardWins(dailyEntries, players, maxSeconds)
+    const dailyJson = JSON.stringify(dailyEntries)
+    LeaderboardState.getMutable(leaderboardEntity).json = dailyJson
+    await persistLeaderboard(dailyJson)
 
-    if (lb && lb.json) {
-      try { entries = JSON.parse(lb.json) } catch { entries = [] }
-    }
-
-    for (const p of players) {
-      if (p.seconds < maxSeconds) continue
-      const pKey = p.userId.toLowerCase()
-      const existing = entries.find((e) => e.userId.toLowerCase() === pKey)
-      if (existing) {
-        existing.roundsWon += 1
-        const displayName = playerNames.get(pKey)
-        if (displayName) existing.name = displayName
-      } else {
-        const displayName = playerNames.get(pKey) || pKey.slice(0, 8)
-        entries.push({ userId: pKey, name: displayName, roundsWon: 1 })
-      }
-    }
-
-    const json = JSON.stringify(entries)
-    const mutable = LeaderboardState.getMutable(leaderboardEntity)
-    mutable.json = json
-    await persistLeaderboard(json)
-
-    // ── 7b. Update all-time leaderboard ──
-    const atLb = AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)
-    let atEntries: { userId: string; name: string; roundsWon: number }[] = []
-    if (atLb && atLb.json) {
-      try { atEntries = JSON.parse(atLb.json) } catch { atEntries = [] }
-    }
-    for (const p of players) {
-      if (p.seconds < maxSeconds) continue
-      const pKey = p.userId.toLowerCase()
-      const existing = atEntries.find((e) => e.userId.toLowerCase() === pKey)
-      if (existing) {
-        existing.roundsWon += 1
-        const displayName = playerNames.get(pKey)
-        if (displayName) existing.name = displayName
-      } else {
-        const displayName = playerNames.get(pKey) || pKey.slice(0, 8)
-        atEntries.push({ userId: pKey, name: displayName, roundsWon: 1 })
-      }
-    }
+    // All-time
+    const atEntries = parseLeaderboardJson(AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)?.json)
+    incrementLeaderboardWins(atEntries, players, maxSeconds)
     const atJson = JSON.stringify(atEntries)
-    const atMutable = AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity)
-    atMutable.json = atJson
+    AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = atJson
     await persistAllTimeLeaderboard(atJson)
 
-    // ── 7c. Update monthly leaderboard ──
+    // Monthly
     const currentMonth = getCurrentMonthString()
     const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)
-    let mlEntries: { userId: string; name: string; roundsWon: number }[] = []
-    if (mlLb && mlLb.json && mlLb.month === currentMonth) {
-      try { mlEntries = JSON.parse(mlLb.json) } catch { mlEntries = [] }
-    }
-    // If month changed, start fresh
-    for (const p of players) {
-      if (p.seconds < maxSeconds) continue
-      const pKey = p.userId.toLowerCase()
-      const existing = mlEntries.find((e) => e.userId.toLowerCase() === pKey)
-      if (existing) {
-        existing.roundsWon += 1
-        const displayName = playerNames.get(pKey)
-        if (displayName) existing.name = displayName
-      } else {
-        const displayName = playerNames.get(pKey) || pKey.slice(0, 8)
-        mlEntries.push({ userId: pKey, name: displayName, roundsWon: 1 })
-      }
-    }
+    const mlEntries = (mlLb?.month === currentMonth) ? parseLeaderboardJson(mlLb?.json) : []
+    incrementLeaderboardWins(mlEntries, players, maxSeconds)
     const mlJson = JSON.stringify(mlEntries)
     const mlMutable = MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity)
     mlMutable.json = mlJson

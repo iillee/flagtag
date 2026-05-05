@@ -1,9 +1,9 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType, inputSystem, InputAction, PointerEventType } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource, MeshRenderer, Material, MaterialTransparencyMode, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, GltfContainer, AvatarAttach, AvatarAnchorPointType, inputSystem, InputAction, PointerEventType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
-import { setupUi, setCinematicFade, setCinematicShowing, setNextRoundStartingVisible, setCreditsCountdown, setNoScorersCreditsVisible, hideMailboxPopup, hideChestPopup } from './ui'
+import { setupUi } from './ui'
 import { flagClientSystem } from './systems/flagSystem'
 import { combatClientSystem, initPools as initCombatPools } from './systems/combatSystem'
 import { trapClientSystem, initTrapPool } from './systems/trapSystem'
@@ -11,31 +11,31 @@ import { projectileClientSystem, setHandBoomerangEntity, setLeftHandBoomerangEnt
 import { mushroomClientSystem } from './systems/mushroomSystem'
 import { shieldSystem } from './systems/shieldSystem'
 import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
-import { setupSpectator, exitSpectatorMode } from './systems/spectatorSystem'
-import { waterSystem, cancelDrownRespawn } from './systems/waterSystem'
+import { setupSpectator } from './systems/spectatorSystem'
+import { waterSystem } from './systems/waterSystem'
 import { mailboxSystem } from './systems/mailboxSystem'
 import { chestSystem } from './systems/chestSystem'
 
-import { setCinematicActive } from './cinematicState'
 import { updateWorldTime } from './shared/dayNight'
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
-import { setupLightning, lightningSystem, setupLightningMessages, cancelLightningRespawn } from './systems/lightningSystem'
+import { setupLightning, lightningSystem, setupLightningMessages } from './systems/lightningSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
 import { setupRemoteBoomerangs, cleanupRemoteBoomerang } from './systems/remoteBoomerangSystem'
 import { getBoomerangColor, onBoomerangColorChange } from './gameState/boomerangColor'
 import { setupLadder } from './systems/ladderSystem'
+import { setupBoundaryWalls } from './systems/boundaryWalls'
+import { setupTeleportOrbs } from './systems/teleportOrbs'
+import { setupCinematicSystem } from './systems/cinematicSystem'
 import { zombieClientSystem } from './systems/zombieSystem'
 import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 // sceneTime removed — visitor tracking is fully server-side via VisitorAnalytics
-import { createWinConditionOverlayEntity, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
-import { createLeaderboardOverlayEntity, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
-import { createAnalyticsOverlayEntity, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
-import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
+import { createWinConditionOverlayEntity } from './components/winConditionOverlayState'
+import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayState'
+import { createAnalyticsOverlayEntity } from './components/analyticsOverlayState'
 import './shared/components'
-import { CountdownTimer } from './shared/components'
 import { room } from './shared/messages'
 
 export let musicEntity: ReturnType<typeof engine.addEntity>
@@ -261,205 +261,11 @@ export async function main() {
     excludeIds: []
   })
 
-  // Cylindrical boundary wall centered on castle — faceted planes with gradient fade
-  {
-    const BOUNDARY_CX = 250.75
-    const BOUNDARY_CZ = 255.5
-    const BOUNDARY_RADIUS = 128
-    const BOUNDARY_HEIGHT = 200
-    const BOUNDARY_SEGMENTS = 48
-    const BOUNDARY_SHOW_DIST = 40 // meters — planes fade in when player is this close
-    const angleStep = (Math.PI * 2) / BOUNDARY_SEGMENTS
-    const planeWidth = 2 * BOUNDARY_RADIUS * Math.sin(angleStep / 2) + 0.2
-    const BOUNDARY_TEX = Material.Texture.Common({ src: 'assets/images/boundary-rgba.png' })
+  // Boundary walls (cylindrical collider + proximity-fade visuals)
+  setupBoundaryWalls()
 
-    const boundaryPlanes: { entity: Entity; px: number; pz: number; lastAlpha: number }[] = []
-
-    for (let i = 0; i < BOUNDARY_SEGMENTS; i++) {
-      const angle = angleStep * i + angleStep / 2
-      const px = BOUNDARY_CX + Math.cos(angle) * BOUNDARY_RADIUS
-      const pz = BOUNDARY_CZ + Math.sin(angle) * BOUNDARY_RADIUS
-      const rotY = -angle * (180 / Math.PI) + 90
-      const py = BOUNDARY_HEIGHT / 2
-
-      // Invisible collider wall — stacked 10m segments for reliable physics
-      const WALL_SEGMENT_H = 10
-      const WALL_SEGMENTS = Math.ceil(BOUNDARY_HEIGHT / WALL_SEGMENT_H)
-      for (let s = 0; s < WALL_SEGMENTS; s++) {
-        const wall = engine.addEntity()
-        const segY = WALL_SEGMENT_H / 2 + s * WALL_SEGMENT_H
-        Transform.create(wall, {
-          position: Vector3.create(px, segY, pz),
-          scale: Vector3.create(planeWidth, WALL_SEGMENT_H, 4),
-          rotation: Quaternion.fromEulerDegrees(0, rotY, 0)
-        })
-        MeshCollider.setBox(wall, ColliderLayer.CL_PHYSICS)
-      }
-
-      // Visual plane — fades in/out based on proximity
-      const plane = engine.addEntity()
-      Transform.create(plane, {
-        position: Vector3.create(px, py, pz),
-        scale: Vector3.create(planeWidth, BOUNDARY_HEIGHT, 1),
-        rotation: Quaternion.fromEulerDegrees(0, rotY, 0)
-      })
-      MeshRenderer.setPlane(plane)
-      Material.setPbrMaterial(plane, {
-        texture: BOUNDARY_TEX,
-        albedoColor: Color4.White(),
-        emissiveColor: Color3.create(0.6, 0.1, 0.0),
-        emissiveIntensity: 1.5,
-        transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-        castShadows: false
-      })
-      VisibilityComponent.create(plane, { visible: false })
-      boundaryPlanes.push({ entity: plane, px, pz, lastAlpha: 0 })
-    }
-
-    // Fade boundary planes based on player proximity
-    engine.addSystem(() => {
-      const playerPos = Transform.getOrNull(engine.PlayerEntity)
-      if (!playerPos) return
-      const playerX = playerPos.position.x
-      const playerZ = playerPos.position.z
-
-      for (const bp of boundaryPlanes) {
-        const dx = playerX - bp.px
-        const dz = playerZ - bp.pz
-        const dist = Math.sqrt(dx * dx + dz * dz)
-
-        const alpha = dist < BOUNDARY_SHOW_DIST ? 1.0 - (dist / BOUNDARY_SHOW_DIST) : 0
-
-        if (Math.abs(alpha - bp.lastAlpha) < 0.05) continue
-        bp.lastAlpha = alpha
-
-        const vis = VisibilityComponent.getMutable(bp.entity)
-        if (alpha < 0.01) {
-          vis.visible = false
-        } else {
-          vis.visible = true
-          Material.setPbrMaterial(bp.entity, {
-            texture: BOUNDARY_TEX,
-            albedoColor: Color4.create(1, 1, 1, alpha),
-            emissiveColor: Color3.create(0.6, 0.1, 0.0),
-            emissiveIntensity: 1.5,
-            transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-            castShadows: false
-          })
-        }
-      }
-    })
-  }
-
-  // ── Teleport Orb Pairs ──
-  // Reusable helper to create a pair of glowing orbs that teleport the player between them
-  const ORB_TRIGGER_RADIUS = 1.5
-  const ORB_LAND_OFFSET = 3
-  const TELEPORT_COOLDOWN = 1.0
-  const ORB_BASE_SCALE = 1.2
-  const ORB_PULSE_SPEED = 3.0
-  const ORB_PULSE_RANGE = 0.15
-
-  interface OrbPair {
-    positions: { x: number; y: number; z: number }[]
-    orbEntities: Entity[]
-    soundEntities: Entity[]
-    wasInside: boolean[]
-    cooldown: number
-  }
-
-  function createOrbPair(
-    positions: { x: number; y: number; z: number }[],
-    color: Color3,
-    albedo: Color4
-  ): OrbPair {
-    const orbEntities: Entity[] = []
-    const soundEntities: Entity[] = []
-
-    for (const pos of positions) {
-      const baseY = pos.y + 1
-      const orb = engine.addEntity()
-      Transform.create(orb, {
-        position: Vector3.create(pos.x, baseY, pos.z),
-        scale: Vector3.create(ORB_BASE_SCALE, ORB_BASE_SCALE, ORB_BASE_SCALE)
-      })
-      MeshRenderer.setSphere(orb)
-      Material.setPbrMaterial(orb, {
-        albedoColor: albedo,
-        emissiveColor: color,
-        emissiveIntensity: 4.0,
-        roughness: 0.2,
-        metallic: 0.0,
-        transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
-      })
-      const light = engine.addEntity()
-      Transform.create(light, { parent: orb, position: Vector3.Zero() })
-      LightSource.create(light, { type: LightSource.Type.Point({}), color, intensity: 150, range: 12 })
-      orbEntities.push(orb)
-
-      const snd = engine.addEntity()
-      Transform.create(snd, { position: Vector3.create(pos.x, baseY, pos.z) })
-      AudioSource.create(snd, { audioClipUrl: 'assets/sounds/teleport.mp3', playing: false, loop: false, volume: 1, global: false })
-      soundEntities.push(snd)
-    }
-
-    return { positions, orbEntities, soundEntities, wasInside: positions.map(() => false), cooldown: 0 }
-  }
-
-  const orbPairs: OrbPair[] = [
-    createOrbPair(
-      [{ x: 290.5, y: 2.6, z: 254.7 }, { x: 276.56, y: 52.25, z: 301.5 }],
-      Color3.create(1.0, 0.45, 0.05),   // Orange
-      Color4.create(1.0, 0.4, 0.0, 0.85)
-    ),
-    createOrbPair(
-      [{ x: 224, y: 2.0, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
-      Color3.create(0.05, 0.3, 1.0),    // Blue
-      Color4.create(0.0, 0.2, 1.0, 0.85)
-    ),
-  ]
-
-  // Teleportation + pulse system for all orb pairs
-  let orbPulseTime = 0
-  engine.addSystem((dt: number) => {
-    if (!Transform.has(engine.PlayerEntity)) return
-    const playerPos = Transform.get(engine.PlayerEntity).position
-
-    for (const pair of orbPairs) {
-      if (pair.cooldown > 0) pair.cooldown -= dt
-
-      for (let i = 0; i < pair.positions.length; i++) {
-        const orbPos = pair.positions[i]
-        const dist = Vector3.distance(playerPos, Vector3.create(orbPos.x, orbPos.y + 1, orbPos.z))
-        const isInside = dist < ORB_TRIGGER_RADIUS
-
-        if (isInside && !pair.wasInside[i] && pair.cooldown <= 0) {
-          const destIndex = i === 0 ? 1 : 0
-          const dest = pair.positions[destIndex]
-          for (const snd of pair.soundEntities) {
-            const a = AudioSource.getMutable(snd)
-            a.currentTime = 0
-            a.playing = true
-          }
-          pair.cooldown = TELEPORT_COOLDOWN
-          void movePlayerTo({ newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z) })
-        }
-        pair.wasInside[i] = isInside
-      }
-    }
-
-    // Pulse all orbs
-    orbPulseTime += dt
-    const pulse = 1 + ORB_PULSE_RANGE * Math.sin(orbPulseTime * ORB_PULSE_SPEED)
-    const s = ORB_BASE_SCALE * pulse
-    for (const pair of orbPairs) {
-      for (const orb of pair.orbEntities) {
-        if (Transform.has(orb)) {
-          Transform.getMutable(orb).scale = Vector3.create(s, s, s)
-        }
-      }
-    }
-  })
+  // Teleport orbs
+  setupTeleportOrbs()
 
   // ── Reload drop: if we were carrying the flag when /reload happened, drop it ──
   // Flag CRDT data arrives after a few frames, so we poll briefly on startup.
@@ -579,310 +385,6 @@ export async function main() {
     updateWorldTime()
   })
 
-  // Helper: wait until player Y stops changing (grounded), then trigger emote
-  let pendingEmote: { emote: string } | null = null
-  const STABLE_EPSILON = 0.01   // Y change per frame below this = stable
-  const STABLE_FRAMES = 5       // must be stable for this many consecutive frames
-  const EMOTE_TIMEOUT = 6.0     // give up after this many seconds
-  const EMOTE_MIN_DELAY = 0.5   // minimum wait before checking (let teleport settle)
-  let stableCount = 0
-  let emoteElapsed = 0
-  let lastPlayerY = 0
-
-  function waitForGroundedEmote(emote: string, _targetY: number) {
-    pendingEmote = { emote }
-    stableCount = 0
-    emoteElapsed = 0
-    lastPlayerY = -9999
-  }
-
-  engine.addSystem((dt: number) => {
-    if (!pendingEmote) return
-    emoteElapsed += dt
-
-    if (emoteElapsed >= EMOTE_TIMEOUT) {
-      console.log('[Client] ⏰ Emote grounded check timed out, forcing emote')
-      void triggerEmote({ predefinedEmote: pendingEmote.emote }).catch(() => {})
-      pendingEmote = null
-      return
-    }
-
-    // Wait a minimum delay for the teleport to take effect
-    if (emoteElapsed < EMOTE_MIN_DELAY) return
-
-    const playerY = Transform.get(engine.PlayerEntity).position.y
-    const deltaY = Math.abs(playerY - lastPlayerY)
-    lastPlayerY = playerY
-
-    if (deltaY < STABLE_EPSILON) {
-      stableCount++
-      if (stableCount >= STABLE_FRAMES) {
-        console.log(`[Client] ✅ Player grounded (Y stable at ${playerY.toFixed(2)} for ${STABLE_FRAMES} frames), triggering emote: ${pendingEmote.emote}`)
-        void triggerEmote({ predefinedEmote: pendingEmote.emote }).catch(() => {})
-        pendingEmote = null
-      }
-    } else {
-      stableCount = 0
-    }
-  })
-
-  // ── Round-end cinematic camera ──
-  // Camera at green cube looking toward red cube
-  const GREEN_CUBE_POS = Vector3.create(258.78, 19.25, 227.81)
-  const RED_CUBE_POS = Vector3.create(265.57, 19.51, 219.65)
-
-  const cinematicCam = engine.addEntity()
-  Transform.create(cinematicCam, {
-    position: GREEN_CUBE_POS,
-  })
-
-  const lookTarget = engine.addEntity()
-  Transform.create(lookTarget, { position: RED_CUBE_POS })
-
-  VirtualCamera.create(cinematicCam, {
-    lookAtEntity: lookTarget,
-    defaultTransition: {
-      transitionMode: VirtualCamera.Transition.Time(0.01)
-    }
-  })
-
-  let cinematicTimer = 0
-  let isWinnerLocalPlayer = false
-  let isPodiumPlayer = false // true for 1st, 2nd, or 3rd place
-  let noScorersRound = false // true when no one scored — short fade, no cinematic camera
-
-  // Fade state machine: 0=idle, 1=fading in (to black), 2=holding black, 3=fading out (reveal), 4=showing, 5=end fade in, 6=end hold black, 7=end fade out
-  let fadePhase = 0
-  let fadeTimer = 0
-  const FADE_IN_DUR = 1.5    // fade to black
-  const FADE_HOLD_DUR = 0.3  // hold black while teleport settles
-  const FADE_OUT_DUR = 1.0   // reveal cinematic
-  const END_FADE_IN_DUR = 0.8  // fade to black at end
-  const END_FADE_HOLD_DUR = 0.3
-  const END_FADE_OUT_DUR = 0.8 // reveal gameplay
-
-  engine.addSystem((dt: number) => {
-    // ── Fade overlay system ──
-    if (fadePhase > 0) {
-      fadeTimer -= dt
-      if (fadePhase === 1) {
-        // Fading to black
-        const progress = 1 - Math.max(0, fadeTimer / FADE_IN_DUR)
-        setCinematicFade(progress)
-        if (fadeTimer <= 0) {
-          setCinematicFade(1)
-          fadePhase = 2
-          fadeTimer = FADE_HOLD_DUR
-        }
-      } else if (fadePhase === 2) {
-        // Hold black — camera is already active, teleport already done
-        setCinematicFade(1)
-        if (fadeTimer <= 0) {
-          setCinematicShowing(true)
-          if (noScorersRound) {
-            // No scorers: stay on black screen, skip fade-out reveal
-            setNoScorersCreditsVisible(true)
-            fadePhase = 4
-          } else {
-            fadePhase = 3
-            fadeTimer = FADE_OUT_DUR
-          }
-        }
-      } else if (fadePhase === 3) {
-        // Fading from black to reveal cinematic
-        const progress = Math.max(0, fadeTimer / FADE_OUT_DUR)
-        setCinematicFade(progress)
-        if (fadeTimer <= 0) {
-          setCinematicFade(0)
-          fadePhase = 4 // now just wait for cinematicTimer to expire
-        }
-      } else if (fadePhase === 4) {
-        // Showing cinematic — wait for cinematicTimer
-        if (noScorersRound) setCreditsCountdown(Math.max(0, cinematicTimer))
-      } else if (fadePhase === 5) {
-        // End: fading to black
-        const progress = 1 - Math.max(0, fadeTimer / END_FADE_IN_DUR)
-        setCinematicFade(progress)
-        if (fadeTimer <= 0) {
-          setCinematicFade(1)
-          setCinematicShowing(false)
-          // Release camera and restore movement while black
-          MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
-          if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
-          console.log('[Client] 🎬 Cinematic camera released, movement restored')
-
-          if (isPodiumPlayer) {
-            isWinnerLocalPlayer = false
-            isPodiumPlayer = false
-            const spawnX = 261.75 + Math.random() * 3
-            const spawnZ = 296.5 + Math.random() * 3
-            void movePlayerTo({
-              newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
-            })
-            console.log('[Client] 📍 Podium player returned to spawn')
-          }
-
-          fadePhase = 6
-          fadeTimer = 15.0 // show "Next Round Starting..." credits for 15 seconds
-          setNextRoundStartingVisible(true)
-        }
-      } else if (fadePhase === 6) {
-        // End: hold black — show credits countdown
-        setCinematicFade(1)
-        setCreditsCountdown(Math.max(0, fadeTimer))
-        if (fadeTimer <= 0) {
-          setNextRoundStartingVisible(false)
-          setCreditsCountdown(0)
-          fadePhase = 7
-          fadeTimer = END_FADE_OUT_DUR
-        }
-      } else if (fadePhase === 7) {
-        // End: fade from black to gameplay
-        const progress = Math.max(0, fadeTimer / END_FADE_OUT_DUR)
-        setCinematicFade(progress)
-        if (fadeTimer <= 0) {
-          setCinematicFade(0)
-          fadePhase = 0
-          setCinematicActive(false)
-          console.log('[Client] 🎬 Cinematic sequence complete')
-        }
-      }
-    }
-
-    // ── Cinematic timer (how long to show the podium view) ──
-    if (cinematicTimer <= 0) return
-    cinematicTimer -= dt
-    if (cinematicTimer <= 0 && fadePhase === 4) {
-      if (noScorersRound) {
-        // No scorers: screen is already black — skip end-fade, go straight to fade-out reveal
-        setCinematicShowing(false)
-        setNoScorersCreditsVisible(false)
-        setCreditsCountdown(0)
-        if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
-        fadePhase = 7
-        fadeTimer = END_FADE_OUT_DUR
-        console.log('[Client] 🎬 No scorers — skipping to fade-out')
-        return
-      }
-      // Start end-fade sequence
-      fadePhase = 5
-      fadeTimer = END_FADE_IN_DUR
-    }
-  })
-
-  // Respawn all players at spawn point when round ends
-  room.onMessage('respawnPlayers', (data) => {
-    const localPlayer = getPlayer()
-    const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
-
-    // Read top 3 directly from message (no CRDT race)
-    let topPlayers: Array<{ userId: string; seconds: number }> = []
-    if (data.winnersJson) {
-      try {
-        const parsed = JSON.parse(data.winnersJson) as Array<{ userId?: string; seconds: number }>
-        topPlayers = parsed
-          .filter(d => d.userId && d.seconds > 0)
-          .map(d => ({ userId: d.userId!.toLowerCase(), seconds: d.seconds }))
-      } catch { /* ignore */ }
-    }
-
-    const place1 = topPlayers[0]?.userId ?? null
-    const place2 = topPlayers[1]?.userId ?? null
-    const place3 = topPlayers[2]?.userId ?? null
-
-    isWinnerLocalPlayer = !!(place1 && place1 === localUserId)
-    const isSecondPlace = !!(place2 && place2 === localUserId)
-    const isThirdPlace = !!(place3 && place3 === localUserId)
-    isPodiumPlayer = isWinnerLocalPlayer || isSecondPlace || isThirdPlace
-    noScorersRound = topPlayers.length === 0
-    console.log('[Client] Top 3:', place1, place2, place3, '| Local:', localUserId, '| noScorers:', noScorersRound)
-
-    const GREEN_CUBE = { x: 258.78, y: 19.25, z: 227.81 }
-
-    // Freeze movement IMMEDIATELY
-    InputModifier.createOrReplace(engine.PlayerEntity, {
-      mode: InputModifier.Mode.Standard({
-        disableWalk: true,
-        disableRun: true,
-        disableJump: true,
-        disableJog: true,
-        disableGliding: true,
-        disableDoubleJump: true,
-        // disableEmote intentionally omitted — allow players to override celebration emotes
-      })
-    })
-
-    // Gliding/jumping cancelled by movePlayerTo teleport below
-
-    // Cancel any active death respawns so cinematic can take over
-    cancelDrownRespawn()
-    cancelLightningRespawn()
-
-    // Start fade to black FIRST — then teleport once fully black
-    fadePhase = 1
-    fadeTimer = FADE_IN_DUR
-    setCinematicActive(true)
-
-    // No scorers: short 3-second interstitial, no cinematic camera
-    // With scorers: full 10-second podium cinematic
-    cinematicTimer = noScorersRound ? 15 : 15
-
-    // Close all open UIs when cinematic begins
-    setWinConditionOverlayVisible(false)
-    setLeaderboardOverlayVisible(false)
-    setAnalyticsOverlayVisible(false)
-    hideMailboxPopup()
-    hideChestPopup()
-    exitSpectatorMode()
-
-    // Delay teleport + camera until screen is fully black
-    setTimeout(() => {
-    if (noScorersRound) {
-      // No scorers — just respawn at spawn, no cinematic camera
-      const spawnX = 261.75 + Math.random() * 3
-      const spawnZ = 296.5 + Math.random() * 3
-      void movePlayerTo({
-        newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
-      })
-      // No cinematic camera — just show the black overlay with "Round Over" text
-      console.log('[Client] 📍 No scorers — skipping podium cinematic')
-    } else if (isWinnerLocalPlayer) {
-      void movePlayerTo({
-        newRelativePosition: { x: 265.57, y: 19.51, z: 219.65 },
-        cameraTarget: GREEN_CUBE,
-      })
-      waitForGroundedEmote('handsair', 19.51)
-      console.log('[Client] 🏆 1st place teleported to red cube!')
-    } else if (isSecondPlace) {
-      void movePlayerTo({
-        newRelativePosition: { x: 266.97, y: 18.85, z: 220.87 },
-        cameraTarget: GREEN_CUBE,
-      })
-      waitForGroundedEmote('clap', 18.85)
-      console.log('[Client] 🥈 2nd place teleported to gold cube!')
-    } else if (isThirdPlace) {
-      void movePlayerTo({
-        newRelativePosition: { x: 264.25, y: 18.16, z: 218.57 },
-        cameraTarget: GREEN_CUBE,
-      })
-      waitForGroundedEmote('clap', 18.16)
-      console.log('[Client] 🥉 3rd place teleported to blue cube!')
-    } else {
-      const spawnX = 261.75 + Math.random() * 3
-      const spawnZ = 296.5 + Math.random() * 3
-      void movePlayerTo({
-        newRelativePosition: { x: spawnX, y: 47.48, z: spawnZ },
-      })
-    }
-
-      // Activate cinematic camera only if there are scorers
-      if (!noScorersRound) {
-        MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
-      }
-      console.log('[Client] 📍 Round ended — players repositioned')
-    }, FADE_IN_DUR * 1000 + 50) // wait for fade to complete + small buffer
-
-    console.log(`[Client] 🎬 Cinematic fade sequence started (${noScorersRound ? 3 : 10} seconds)`)
-  })
-
+  // Cinematic system (round-end camera, fade state machine, respawnPlayers handler)
+  setupCinematicSystem()
 }

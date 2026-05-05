@@ -6,7 +6,7 @@ export const Messages = {
   registerName: Schemas.Map({ name: Schemas.String }),
   requestPickup: Schemas.Map({ t: Schemas.Int }),
   requestDrop: Schemas.Map({ t: Schemas.Int }),
-  requestAttack: Schemas.Map({ t: Schemas.Int }),
+  // requestAttack removed — proximity steal replaced melee attack
   reportGroundY: Schemas.Map({ y: Schemas.Float }),
   requestBanana: Schemas.Map({ t: Schemas.Int }),
   reportBananaGroundY: Schemas.Map({ bananaX: Schemas.Float, bananaZ: Schemas.Float, groundY: Schemas.Float }),
@@ -74,8 +74,7 @@ export const Messages = {
   // Zombie messages
   zombieHit: Schemas.Map({ zombieId: Schemas.Float }),          // Client → Server: boomerang hit a zombie
   zombieKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: zombie died (VFX)
-  zombieStagger: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: zombie touched a player (legacy)
-  ghostDeath: Schemas.Map({ victimId: Schemas.String }),        // Server → Client: ghost killed a player (legacy)
+  // zombieStagger and ghostDeath removed — replaced by ghostTouching + scare meter
   ghostTouching: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: ghost is touching a player this frame
 
 

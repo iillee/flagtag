@@ -1,22 +1,37 @@
 import { engine } from '@dcl/sdk/ecs'
 import { VisitorAnalytics, MonthlyVisitorAnalytics } from '../shared/components'
 
-/** Read visitor data from server-synced VisitorAnalytics component. */
+export type VisitorRecord = { userId: string; name: string; isOnline: boolean; totalSeconds: number }
 
-export function getAllVisitors(): Array<{userId: string, name: string, isOnline: boolean, totalSeconds: number}> {
+// ── Cache: parse only when the raw JSON changes ──
+let _dailyVisitorCache: { json: string; result: VisitorRecord[] } = { json: '', result: [] }
+let _monthlyVisitorCache: { json: string; result: VisitorRecord[] } = { json: '', result: [] }
+
+function parseVisitors(json: string, cache: { json: string; result: VisitorRecord[] }): VisitorRecord[] {
+  if (json === cache.json) return cache.result
+  try {
+    const raw = JSON.parse(json)
+    const result: VisitorRecord[] = raw.map((v: any) => ({
+      userId: v.userId,
+      name: v.name,
+      isOnline: v.isOnline,
+      totalSeconds: v.totalSeconds ?? (v.totalMinutes ? v.totalMinutes * 60 : 0)
+    }))
+    cache.json = json
+    cache.result = result
+    return result
+  } catch (e) {
+    console.error('[Client] Failed to parse visitor data:', e)
+    cache.json = json
+    cache.result = []
+    return []
+  }
+}
+
+/** Read visitor data from server-synced VisitorAnalytics component. */
+export function getAllVisitors(): VisitorRecord[] {
   for (const [, analytics] of engine.getEntitiesWith(VisitorAnalytics)) {
-    try {
-      const visitorData = JSON.parse(analytics.visitorDataJson)
-      return visitorData.map((v: any) => ({
-        userId: v.userId,
-        name: v.name,
-        isOnline: v.isOnline,
-        totalSeconds: v.totalSeconds ?? (v.totalMinutes ? v.totalMinutes * 60 : 0)
-      }))
-    } catch (e) {
-      console.error('[Client] Failed to parse visitor data:', e)
-      return []
-    }
+    return parseVisitors(analytics.visitorDataJson, _dailyVisitorCache)
   }
   return []
 }
@@ -37,20 +52,9 @@ export function getCurrentOnlineCount(): number {
 
 // ── Monthly visitor data ──
 
-export function getMonthlyVisitors(): Array<{userId: string, name: string, isOnline: boolean, totalSeconds: number}> {
+export function getMonthlyVisitors(): VisitorRecord[] {
   for (const [, analytics] of engine.getEntitiesWith(MonthlyVisitorAnalytics)) {
-    try {
-      const visitorData = JSON.parse(analytics.visitorDataJson)
-      return visitorData.map((v: any) => ({
-        userId: v.userId,
-        name: v.name,
-        isOnline: v.isOnline,
-        totalSeconds: v.totalSeconds ?? (v.totalMinutes ? v.totalMinutes * 60 : 0)
-      }))
-    } catch (e) {
-      console.error('[Client] Failed to parse monthly visitor data:', e)
-      return []
-    }
+    return parseVisitors(analytics.visitorDataJson, _monthlyVisitorCache)
   }
   return []
 }
