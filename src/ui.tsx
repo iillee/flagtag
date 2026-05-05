@@ -34,6 +34,7 @@ import {
 } from './ui/uiConstants'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 import { musicEntity } from './index'
+import { getCoinBalance } from './systems/coinPickupSystem'
 import { isMobile } from '@dcl/sdk/platform'
 
 // ── Music mute state ──
@@ -2231,10 +2232,22 @@ function DesktopLayout() {
             height: S(_ROW_HEIGHT),
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'flex-start',
+            justifyContent: 'space-between',
           }}
         >
           <Label value="Scoreboard" fontSize={S(_TITLE_FONT)} color={MUTED} font="sans-serif" />
+          <UiEntity
+            uiTransform={{
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}
+          >
+            <UiEntity
+              uiTransform={{ width: S(16), height: S(16), margin: { right: S(4) } }}
+              uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
+            />
+            <Label value={`${getCoinBalance()}`} fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" />
+          </UiEntity>
         </UiEntity>
         {players.length === 0 ? (
           <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>
@@ -2432,6 +2445,37 @@ function MobileLayout() {
           </UiEntity>
         )
       })()}
+
+      {/* ── Coin Wallet — below top bar, centered ── */}
+      {!isCinematicActive() && cinematicFadeOpacity === 0 && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: 106 },
+            width: '100%',
+            flexDirection: 'row',
+            justifyContent: 'center',
+          }}
+        >
+          <UiEntity
+            uiTransform={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 44,
+              padding: { left: 14, right: 18 },
+              borderRadius: 22,
+            }}
+            uiBackground={{ color: Color4.create(0.1, 0.08, 0.05, 0.75) }}
+          >
+            <UiEntity
+              uiTransform={{ width: 28, height: 28, margin: { right: 8 } }}
+              uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
+            />
+            <Label value={`${getCoinBalance()}`} fontSize={24} color={GOLD} font="sans-serif" />
+          </UiEntity>
+        </UiEntity>
+      )}
 
       {/* ── Mobile Ability Bar — bottom center, clickable, 2x size ── */}
       {!isSpectatorMode() && (() => {

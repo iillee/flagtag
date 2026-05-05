@@ -71,6 +71,13 @@ export const Messages = {
   // Admin: trigger Discord report manually
   testDiscord: Schemas.Map({ t: Schemas.Int }),
 
+  // Coin messages
+  requestCoinPickup: Schemas.Map({ coinId: Schemas.String }),           // Client → Server: player wants to pick up a coin
+  coinPickedUp: Schemas.Map({ coinId: Schemas.String, playerId: Schemas.String, newBalance: Schemas.Int }),  // Server → Client: coin was picked up
+  coinRespawned: Schemas.Map({ coinId: Schemas.String }),               // Server → Client: coin is back
+  requestWalletBalance: Schemas.Map({ t: Schemas.Int }),                // Client → Server: request current balance on join
+  walletBalance: Schemas.Map({ coins: Schemas.Int }),                   // Server → Client: your current balance
+
   // Zombie messages
   zombieHit: Schemas.Map({ zombieId: Schemas.Float }),          // Client → Server: boomerang hit a zombie
   zombieKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: zombie died (VFX)

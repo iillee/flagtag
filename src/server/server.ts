@@ -12,6 +12,11 @@ import {
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
+import {
+  CoinState, PlayerWallet, COIN_STATE_SYNC_ID, COIN_RESPAWN_SEC, COIN_PICKUP_RADIUS,
+  ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND,
+  getWalletSyncId
+} from '../shared/coins'
 
 // ── Constants ──
 const PICKUP_RADIUS = 3
@@ -42,6 +47,15 @@ interface ServerMushroom {
 const activeMushrooms: ServerMushroom[] = []
 let mushroomIdCounter = 0
 // mushroomShieldActive removed — mushrooms no longer block hits
+
+// ── Coin state ──
+let coinStateEntity: Entity
+/** Map of coinId → respawn timestamp (ms). Coins in this map are hidden. */
+const coinCooldowns = new Map<string, number>()
+/** Map of wallet address → coin balance (in-memory cache, persisted to Storage) */
+const playerCoinBalances = new Map<string, number>()
+/** Map of wallet address → wallet entity */
+const walletEntities = new Map<string, Entity>()
 
 // ── Server state ──
 let flagEntity: Entity
@@ -1043,6 +1057,12 @@ export async function setupServer(): Promise<void> {
     console.log('[Server] Reconciled', reconciledCount, 'stale hold-time entities from previous server lifetime')
   }
 
+  // ── Initialize coin state entity ──
+  coinStateEntity = engine.addEntity()
+  CoinState.create(coinStateEntity, { cooldownJson: '{}' })
+  syncEntity(coinStateEntity, [CoinState.componentId], COIN_STATE_SYNC_ID)
+  console.log('[Server] Coin state entity initialized')
+
   // Register message handlers
   registerHandlers()
 
@@ -1064,6 +1084,7 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(safeSystem('orbitServerSystem', orbitServerSystem))
   engine.addSystem(safeSystem('updraftServerSystem', updraftServerSystem))
   engine.addSystem(safeSystem('zombieServerSystem', zombieServerSystem)) // Ghost system enabled
+  engine.addSystem(safeSystem('coinServerSystem', coinServerSystem))
 
   // ── Spawn mushrooms ──
   spawnMushrooms()
@@ -1161,6 +1182,119 @@ function updatePlayerName(userId: string, name: string): boolean {
   }
   
   return true
+}
+
+// ── Coin helpers ──
+
+async function loadPlayerCoinBalance(walletAddress: string): Promise<number> {
+  const key = walletAddress.toLowerCase()
+  // Check in-memory cache first
+  const cached = playerCoinBalances.get(key)
+  if (cached !== undefined) return cached
+
+  try {
+    const saved = await Storage.get<string>(`coins:${key}`)
+    const balance = saved ? parseInt(saved, 10) : 0
+    playerCoinBalances.set(key, balance)
+    return balance
+  } catch (err) {
+    console.error('[Coins] Failed to load balance for', key.slice(0, 8), err)
+    return 0
+  }
+}
+
+async function setPlayerCoinBalance(walletAddress: string, amount: number): Promise<void> {
+  const key = walletAddress.toLowerCase()
+  playerCoinBalances.set(key, amount)
+  
+  // Update synced wallet entity
+  const walletEntity = getOrCreateWalletEntity(key)
+  PlayerWallet.getMutable(walletEntity).coins = amount
+  
+  // Persist
+  try {
+    await Storage.set(`coins:${key}`, String(amount))
+  } catch (err) {
+    console.error('[Coins] Failed to persist balance for', key.slice(0, 8), err)
+  }
+}
+
+async function addPlayerCoins(walletAddress: string, amount: number): Promise<number> {
+  const current = await loadPlayerCoinBalance(walletAddress)
+  const newBalance = current + amount
+  await setPlayerCoinBalance(walletAddress, newBalance)
+  return newBalance
+}
+
+function getOrCreateWalletEntity(walletAddress: string): Entity {
+  const key = walletAddress.toLowerCase()
+  let entity = walletEntities.get(key)
+  if (entity) return entity
+
+  entity = engine.addEntity()
+  const balance = playerCoinBalances.get(key) ?? 0
+  PlayerWallet.create(entity, { playerId: key, coins: balance })
+  syncEntity(entity, [PlayerWallet.componentId], getWalletSyncId(key))
+  walletEntities.set(key, entity)
+  console.log('[Coins] Created wallet entity for', key.slice(0, 8), 'balance:', balance)
+  return entity
+}
+
+function updateCoinStateCRDT(): void {
+  const obj: Record<string, number> = {}
+  for (const [coinId, respawnAt] of coinCooldowns) {
+    obj[coinId] = respawnAt
+  }
+  CoinState.getMutable(coinStateEntity).cooldownJson = JSON.stringify(obj)
+}
+
+/** Server system: respawn coins whose cooldown has expired */
+function coinServerSystem(_dt: number): void {
+  if (coinCooldowns.size === 0) return
+  
+  const now = Date.now()
+  let changed = false
+  
+  for (const [coinId, respawnAt] of coinCooldowns) {
+    if (now >= respawnAt) {
+      coinCooldowns.delete(coinId)
+      room.send('coinRespawned', { coinId })
+      changed = true
+      console.log('[Coins] Coin respawned:', coinId)
+    }
+  }
+  
+  if (changed) {
+    updateCoinStateCRDT()
+  }
+}
+
+/** Award coins to players at end of round based on hold time and placement */
+async function awardRoundCoins(players: { userId: string; seconds: number }[]): Promise<void> {
+  if (players.length === 0) return
+  
+  // Sort by seconds descending for placement
+  const sorted = [...players].sort((a, b) => b.seconds - a.seconds)
+  
+  for (let i = 0; i < sorted.length; i++) {
+    const p = sorted[i]
+    let coins = ROUND_PARTICIPATION_COINS
+    
+    // Hold time coins
+    coins += Math.floor(p.seconds * COINS_PER_HOLD_SECOND)
+    
+    // Placement bonus (1st, 2nd, 3rd)
+    if (i < ROUND_PLACEMENT_BONUS.length && p.seconds > 0) {
+      coins += ROUND_PLACEMENT_BONUS[i]
+    }
+    
+    if (coins > 0) {
+      const newBalance = await addPlayerCoins(p.userId, coins)
+      // Send balance update to the specific player
+      room.send('walletBalance', { coins: newBalance })
+      console.log('[Coins] Awarded', coins, 'coins to', p.userId.slice(0, 8), '(new balance:', newBalance, ')')
+    }
+  }
 }
 
 // ── Message handlers ──
@@ -1410,6 +1544,40 @@ function registerHandlers(): void {
 
   // Admin: manually trigger Discord analytics report
   const ADMIN_ADDRESSES = ['0x1e93e534c5e26b01ed242410b43ae23dd0faa52b']
+  // ── Coin message handlers ──
+  
+  room.onMessage('requestCoinPickup', (data, context) => {
+    if (!context || !data.coinId) return
+    const from = context.from.toLowerCase()
+    const coinId = data.coinId
+    
+    // Check if coin is already on cooldown
+    if (coinCooldowns.has(coinId)) {
+      console.log('[Coins] Pickup rejected — coin on cooldown:', coinId)
+      return
+    }
+    
+    // Put coin on cooldown
+    const respawnAt = Date.now() + COIN_RESPAWN_SEC * 1000
+    coinCooldowns.set(coinId, respawnAt)
+    updateCoinStateCRDT()
+    
+    // Award coin to player
+    addPlayerCoins(from, 1).then(newBalance => {
+      room.send('coinPickedUp', { coinId, playerId: from, newBalance })
+      console.log('[Coins] Coin picked up:', coinId, 'by', from.slice(0, 8), 'balance:', newBalance)
+    }).catch(err => console.error('[Coins] Error awarding coin:', err))
+  })
+  
+  room.onMessage('requestWalletBalance', async (_data, context) => {
+    if (!context) return
+    const from = context.from.toLowerCase()
+    const balance = await loadPlayerCoinBalance(from)
+    getOrCreateWalletEntity(from)  // ensure wallet entity exists and is synced
+    room.send('walletBalance', { coins: balance })
+    console.log('[Coins] Sent wallet balance to', from.slice(0, 8), ':', balance)
+  })
+
   room.onMessage('testDiscord', (_data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
@@ -2390,6 +2558,11 @@ function playerTrackingSystem(): void {
 
       // Create synced hold time entity if this is a new player
       getOrCreateHoldTimeEntity(userKey)
+      
+      // Load coin balance and create wallet entity
+      loadPlayerCoinBalance(userKey).then(() => {
+        getOrCreateWalletEntity(userKey)
+      }).catch(err => console.error('[Coins] Error loading wallet for', userKey.slice(0, 8), err))
 
       // Start/restart visitor session — use persisted name if available
       const playerName = playerNames.get(userKey) || userKey.slice(0, 8)
@@ -2694,6 +2867,9 @@ async function handleRoundEnd(): Promise<void> {
   timerMutable.roundWinnerJson = winnersJson
   
   console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
+
+  // ── 5b. Award coins for round participation & placement ──
+  await awardRoundCoins(players)
 
   // ── 6. Check for daily/monthly leaderboard reset ──
   await checkLeaderboardDailyReset()
