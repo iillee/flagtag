@@ -47,9 +47,9 @@ export const Messages = {
   playerColorChanged: Schemas.Map({ playerId: Schemas.String, color: Schemas.String }),
 
   // Green orbit mechanic
-  requestOrbit: Schemas.Map({ t: Schemas.Int }),
+  requestOrbit: Schemas.Map({ t: Schemas.Int, startAngle: Schemas.Float }),
   orbitHitWall: Schemas.Map({ t: Schemas.Int }),
-  orbitStarted: Schemas.Map({ playerId: Schemas.String, durationMs: Schemas.Int }),
+  orbitStarted: Schemas.Map({ playerId: Schemas.String, durationMs: Schemas.Int, startAngle: Schemas.Float }),
   orbitHit: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String, attackerId: Schemas.String }),
   orbitEnded: Schemas.Map({ playerId: Schemas.String }),
 

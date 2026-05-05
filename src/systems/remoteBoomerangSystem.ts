@@ -13,6 +13,7 @@ import {
   Material,
   MaterialTransparencyMode,
   PlayerIdentityData,
+  AudioSource,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
@@ -268,13 +269,13 @@ function remoteChargeAnimSystem(_dt: number): void {
   })
 }
 
-const REMOTE_ORBIT_VIS_RADIUS = 4.0
+const REMOTE_ORBIT_VIS_RADIUS = 3.0
 const REMOTE_ORBIT_FULL_ROTATIONS = 3
 const REMOTE_ORBIT_DURATION_MS = 3500
 const REMOTE_ORBIT_VIS_SPEED = (REMOTE_ORBIT_FULL_ROTATIONS * 360) / (REMOTE_ORBIT_DURATION_MS / 1000)
 const REMOTE_ORBIT_PROJ_SCALE = Vector3.create(2.5, 4.5, 2.5)
 
-function startRemoteOrbit(playerId: string, durationMs: number): void {
+function startRemoteOrbit(playerId: string, durationMs: number, startAngle: number = 0): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb) return
   if (rb.orbit) return // already orbiting
@@ -287,8 +288,18 @@ function startRemoteOrbit(playerId: string, durationMs: number): void {
     invisibleMeshesCollisionMask: 0
   })
 
+  // Attach looping spatial sound so other players hear the orbit
+  AudioSource.create(orbitEnt, {
+    audioClipUrl: 'assets/sounds/boomerang2.mp3',
+    playing: true,
+    loop: true,
+    volume: 1.0,
+    global: false,
+    pitch: 1.3
+  })
+
   const now = Date.now()
-  rb.orbit = { entity: orbitEnt, startTime: now, durationMs, endTime: now + durationMs, angle: 0 }
+  rb.orbit = { entity: orbitEnt, startTime: now, durationMs, endTime: now + durationMs, angle: startAngle }
   // Hide hand model during orbit
   if (Transform.has(rb.model)) {
     Transform.getMutable(rb.model).scale = Vector3.Zero()
@@ -299,6 +310,13 @@ function startRemoteOrbit(playerId: string, durationMs: number): void {
 function stopRemoteOrbit(playerId: string): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb || !rb.orbit) return
+  // Stop sound before removing
+  if (AudioSource.has(rb.orbit.entity)) {
+    const a = AudioSource.getMutable(rb.orbit.entity)
+    a.playing = false
+    a.volume = 0
+    a.loop = false
+  }
   engine.removeEntity(rb.orbit.entity)
   rb.orbit = undefined
   // Restore hand model
@@ -353,13 +371,13 @@ function remoteOrbitAnimSystem(_dt: number): void {
     radiusFrac = radiusFrac * radiusFrac * (3 - 2 * radiusFrac)
     const radius = REMOTE_ORBIT_VIS_RADIUS * radiusFrac
 
-    const currentAngle = REMOTE_ORBIT_VIS_SPEED * (elapsed / 1000)
+    const currentAngle = rb.orbit.angle + REMOTE_ORBIT_VIS_SPEED * (elapsed / 1000)
     const radians = currentAngle * (Math.PI / 180)
     const ox = playerPos.x + Math.sin(radians) * radius
     const oz = playerPos.z + Math.cos(radians) * radius
     const oy = playerPos.y + 1.0
 
-    const axialSpin = (elapsed / 1000) * 1440
+    const axialSpin = (elapsed / 1000) * 1080
 
     const t = Transform.getMutable(rb.orbit.entity)
     t.position = Vector3.create(ox, oy, oz)
@@ -454,7 +472,7 @@ export function setupRemoteBoomerangs(): void {
     if (!remoteBoomerangs.has(playerId)) {
       createRemoteBoomerang(playerId, 'g')
     }
-    startRemoteOrbit(playerId, data.durationMs || 3500)
+    startRemoteOrbit(playerId, data.durationMs || 3500, data.startAngle || 0)
   })
 
   room.onMessage('orbitEnded', (data) => {

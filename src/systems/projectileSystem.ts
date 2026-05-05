@@ -328,7 +328,7 @@ function stopOrbitVisual(): void {
   updateHandBoomerangVisibility()
 }
 
-const ORBIT_RAMP_MS = 0  // no ramp — instant appear/disappear
+const ORBIT_RAMP_MS = 400  // ramp up/down duration to match remote visual
 
 function updateOrbitVisual(_dt: number): void {
   if (!orbitActive || orbitEntity === null) return
@@ -344,8 +344,16 @@ function updateOrbitVisual(_dt: number): void {
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
 
-  // Clean circle — constant radius throughout
-  const radius = ORBIT_VISUAL_RADIUS
+  // Radius ramps up at start and back down at end (matches remote visual)
+  const timeUntilEnd = orbitEndMs - now
+  let radiusFrac = 1.0
+  if (elapsed < ORBIT_RAMP_MS) {
+    radiusFrac = elapsed / ORBIT_RAMP_MS
+  } else if (timeUntilEnd < ORBIT_RAMP_MS) {
+    radiusFrac = timeUntilEnd / ORBIT_RAMP_MS
+  }
+  radiusFrac = radiusFrac * radiusFrac * (3 - 2 * radiusFrac) // smoothstep
+  const radius = ORBIT_VISUAL_RADIUS * radiusFrac
 
   // Time-based angle ensures exact full rotations
   const currentAngle = orbitStartAngle + ORBIT_VISUAL_SPEED * (elapsed / 1000)
@@ -356,7 +364,7 @@ function updateOrbitVisual(_dt: number): void {
   const orbitY = playerPos.y + 1.0
 
   // Fast axial spin (like a real boomerang spinning on its own axis)
-  const axialSpin = (elapsed / 1000) * 1440  // 4 full spins per second
+  const axialSpin = (elapsed / 1000) * 1080  // 3 full spins per second
 
   const t = Transform.getMutable(orbitEntity)
   t.position = Vector3.create(orbitX, orbitY, orbitZ)
@@ -1139,11 +1147,13 @@ export function triggerProjectileFromUI(): void {
   if (uiColor === 'g') {
     if (orbitActive) return
     lastThrowExtraCooldown = 4
+    const { dirX: oaDirX, dirZ: oaDirZ } = getPlayerForward()
+    const uiOrbitAngle = Math.atan2(oaDirX, oaDirZ) * (180 / Math.PI)
     const serverUp = isServerConnected()
     if (serverUp) {
       localThrowActive = true; localThrowSawVisual = false
       updateHandBoomerangVisibility()
-      room.send('requestOrbit', { t: now })
+      room.send('requestOrbit', { t: now, startAngle: uiOrbitAngle })
     } else {
       startOrbitVisual()
     }
@@ -1289,11 +1299,13 @@ export function projectileClientSystem(dt: number): void {
       if (orbitActive) return // already orbiting
       lastLocalProjectileFireTime = now
       lastThrowExtraCooldown = 4
+      const { dirX: eaDirX, dirZ: eaDirZ } = getPlayerForward()
+      const eOrbitAngle = Math.atan2(eaDirX, eaDirZ) * (180 / Math.PI)
       const serverUp = isServerConnected()
       if (serverUp) {
         localThrowActive = true; localThrowSawVisual = false
         updateHandBoomerangVisibility()
-        room.send('requestOrbit', { t: now })
+        room.send('requestOrbit', { t: now, startAngle: eOrbitAngle })
       } else {
         // Local test: start orbit visual directly
         startOrbitVisual()

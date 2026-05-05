@@ -1499,7 +1499,8 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      handleOrbitRequest(from)
+      const startAngle = typeof _data.startAngle === 'number' ? _data.startAngle : 0
+      handleOrbitRequest(from, startAngle)
     } catch (err) { console.error('[Server] ❌ requestOrbit handler error:', err) }
   })
 
@@ -1856,7 +1857,7 @@ function bananaServerSystem(dt: number): void {
   }
 }
 
-function handleOrbitRequest(playerId: string): void {
+function handleOrbitRequest(playerId: string, startAngle: number = 0): void {
   const now = Date.now()
 
   // Cooldown check
@@ -1891,7 +1892,7 @@ function handleOrbitRequest(playerId: string): void {
   })
   lastOrbitTime.set(playerId, now)
 
-  room.send('orbitStarted', { playerId, durationMs: ORBIT_DURATION_MS })
+  room.send('orbitStarted', { playerId, durationMs: ORBIT_DURATION_MS, startAngle })
   console.log('[Server] 🌀 Orbit started by', playerId.slice(0, 8))
 }
 
