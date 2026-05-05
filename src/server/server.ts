@@ -1169,7 +1169,7 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(safeSystem('shellServerSystem', shellServerSystem))
   engine.addSystem(safeSystem('orbitServerSystem', orbitServerSystem))
   engine.addSystem(safeSystem('updraftServerSystem', updraftServerSystem))
-  // engine.addSystem(safeSystem('zombieServerSystem', zombieServerSystem)) // DISABLED — ghost system WIP
+  engine.addSystem(safeSystem('zombieServerSystem', zombieServerSystem)) // Ghost system enabled
 
   // ── Spawn mushrooms ──
   spawnMushrooms()
@@ -1819,6 +1819,7 @@ function bananaServerSystem(dt: number): void {
         room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
         engine.removeEntity(z.entity)
         activeZombies.splice(gi, 1)
+        zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
         engine.removeEntity(trap.entity)
         activeTraps.splice(i, 1)
         trapConsumed = true
@@ -2964,7 +2965,7 @@ function spawnMushrooms(): void {
 // ── Zombie Server System ──
 // ══════════════════════════════════════════════════════════════════════════════
 
-const ZOMBIE_SPAWN_POS = Vector3.create(203.5, 12.25, 276) // Black cube location
+const ZOMBIE_SPAWN_POS = Vector3.create(225, 1.25, 287) // Black cube location
 
 interface ActiveZombie {
   entity: Entity
@@ -2979,6 +2980,8 @@ interface ActiveZombie {
 
 const activeZombies: ActiveZombie[] = []
 let zombieSpawnTimer = 10 // first spawn after 10s
+let zombieRespawnCooldown = 0 // cooldown after ghost is killed
+const ZOMBIE_RESPAWN_COOLDOWN = 30 // seconds before respawn after death
 const ZOMBIE_STAGGER_COOLDOWN_MS = 3000 // can only stagger same player every 3s
 const ZOMBIE_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
 
@@ -2997,6 +3000,7 @@ room.onMessage('zombieHit', (data, sender) => {
         room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
         engine.removeEntity(z.entity)
         activeZombies.splice(i, 1)
+        zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
       }
       break
     }
@@ -3007,11 +3011,16 @@ function zombieServerSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   const now = Date.now()
 
-  // ── Spawn timer ──
-  zombieSpawnTimer -= clampedDt
-  if (zombieSpawnTimer <= 0 && activeZombies.length < ZOMBIE_MAX_ACTIVE) {
-    spawnZombie()
-    zombieSpawnTimer = ZOMBIE_SPAWN_INTERVAL
+  // ── Spawn timer (single ghost, 30s respawn cooldown after death) ──
+  if (zombieRespawnCooldown > 0) {
+    zombieRespawnCooldown -= clampedDt
+  }
+  if (activeZombies.length === 0 && zombieRespawnCooldown <= 0) {
+    zombieSpawnTimer -= clampedDt
+    if (zombieSpawnTimer <= 0) {
+      spawnZombie()
+      zombieSpawnTimer = 0
+    }
   }
 
   // ── Update each zombie ──
@@ -3026,8 +3035,10 @@ function zombieServerSystem(dt: number): void {
     for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       const pPos = transform.position
       const dx = pPos.x - z.posX
+      const dy = Math.abs(pPos.y - z.posY)
       const dz = pPos.z - z.posZ
       const dist = Math.sqrt(dx * dx + dz * dz)
+      if (dy > 20) continue // ignore players too far above/below
       if (dist < nearestDist) {
         nearestDist = dist
         nearestPos = pPos
@@ -3053,7 +3064,7 @@ function zombieServerSystem(dt: number): void {
         const lastStagger = z.lastStaggerTime.get(nearestId) || 0
         if (now - lastStagger > ZOMBIE_STAGGER_COOLDOWN_MS) {
           z.lastStaggerTime.set(nearestId, now)
-          room.send('zombieStagger', { victimId: nearestId })
+          room.send('ghostDeath', { victimId: nearestId })
           room.send('hitVfx', { x: z.posX, y: z.posY + 1, z: z.posZ })
           // Drop flag if victim is carrying it
           const flag = Flag.getOrNull(flagEntity)
@@ -3102,6 +3113,7 @@ function zombieServerSystem(dt: number): void {
           room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
           engine.removeEntity(z.entity)
           activeZombies.splice(i, 1)
+          zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
         }
         // Trigger boomerang return (same as hitting a player)
         if (!proj.returning) {

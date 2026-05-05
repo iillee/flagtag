@@ -74,7 +74,8 @@ export const Messages = {
   // Zombie messages
   zombieHit: Schemas.Map({ zombieId: Schemas.Float }),          // Client → Server: boomerang hit a zombie
   zombieKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: zombie died (VFX)
-  zombieStagger: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: zombie touched a player
+  zombieStagger: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: zombie touched a player (legacy)
+  ghostDeath: Schemas.Map({ victimId: Schemas.String }),        // Server → Client: ghost killed a player
 
 
 }

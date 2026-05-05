@@ -51,6 +51,7 @@ export enum EntityNames {
   Doubloon = "Doubloon",
   Flower_Sprouts = "Flower Sprouts",
   Gold = "Gold",
+  Grave__20 = "Grave  20",
   Lilypad = "Lilypad",
   Lilypad_10 = "Lilypad_10",
   Lilypad_11 = "Lilypad_11",

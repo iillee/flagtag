@@ -3219,27 +3219,6 @@
             "parent": 0
           }
         },
-        "663": {
-          "json": {
-            "position": {
-              "x": 203.5,
-              "y": 12.25,
-              "z": 276
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "parent": 0
-          }
-        },
         "664": {
           "json": {
             "position": {
@@ -3278,6 +3257,27 @@
               "y": 0.2587999999523163,
               "z": 0,
               "w": 0.9659000039100647
+            },
+            "parent": 0
+          }
+        },
+        "670": {
+          "json": {
+            "position": {
+              "x": 221.9272918701172,
+              "y": 2,
+              "z": 286.53668212890625
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.6629688143730164,
+              "z": 0,
+              "w": -0.7486470341682434
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
             "parent": 0
           }
@@ -4422,13 +4422,6 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "663": {
-          "json": {
-            "src": "assets/asset-packs/solid_black/solid_black.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "664": {
           "json": {
             "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
@@ -4440,6 +4433,13 @@
           "json": {
             "src": "assets/models/mound.glb",
             "visibleMeshesCollisionMask": 3,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "670": {
+          "json": {
+            "src": "assets/asset-packs/grave__20/HWN20_Grave_20.glb",
+            "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
         },
@@ -5247,11 +5247,6 @@
             "value": "drawer.glb_3"
           }
         },
-        "663": {
-          "json": {
-            "value": "Solid Black"
-          }
-        },
         "664": {
           "json": {
             "value": "Doubloon"
@@ -5260,6 +5255,11 @@
         "669": {
           "json": {
             "value": "mound.glb"
+          }
+        },
+        "670": {
+          "json": {
+            "value": "Grave  20"
           }
         },
         "671": {
@@ -6361,7 +6361,7 @@
         "serializationType": "map"
       },
       "data": {
-        "517": {
+        "0": {
           "json": {
             "gizmo": 2
           }
@@ -6505,8 +6505,8 @@
                   632,
                   631,
                   633,
-                  663,
-                  664
+                  664,
+                  670
                 ]
               },
               {
@@ -7245,11 +7245,11 @@
                 "children": []
               },
               {
-                "entity": 663,
+                "entity": 664,
                 "children": []
               },
               {
-                "entity": 664,
+                "entity": 670,
                 "children": []
               }
             ]
@@ -7523,9 +7523,6 @@
         "662": {
           "json": {}
         },
-        "663": {
-          "json": {}
-        },
         "664": {
           "json": {}
         },
@@ -7542,6 +7539,9 @@
           "json": {}
         },
         "669": {
+          "json": {}
+        },
+        "670": {
           "json": {}
         },
         "671": {

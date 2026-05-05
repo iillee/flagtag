@@ -41,6 +41,7 @@ function toggleMusicMute() {
 import { isSpectatorMode, isSpectatorTransitioning, exitSpectatorMode } from './systems/spectatorSystem'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
+import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible } from './systems/zombieSystem'
 import { signedFetch } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
@@ -998,6 +999,32 @@ function PlayerListUi() {
           )}
           {isLightningTextVisible() && (
             <Label value={`Respawning in ${Math.ceil(getLightningRespawnCountdown())}...`} fontSize={mobile ? 36 : S(20)} color={LIGHT_GREY} font="sans-serif" />
+          )}
+        </UiEntity>
+      )}
+
+      {/* Ghost death overlay */}
+      {isGhostDeathRespawning() && (
+        <UiEntity
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: S(0), left: S(0) },
+            width: '100%',
+            height: '100%',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          uiBackground={{ color: Color4.create(0, 0, 0, getGhostDeathFadeOpacity()) }}
+        >
+          {isGhostDeathTextVisible() && (
+            <Label value="You were scared to death!" fontSize={mobile ? 72 : S(42)} color={CORAL_RED} font="sans-serif" />
+          )}
+          {isGhostDeathTextVisible() && (
+            <UiEntity uiTransform={{ height: S(12) }} />
+          )}
+          {isGhostDeathTextVisible() && (
+            <Label value={`Respawning in ${Math.ceil(getGhostDeathRespawnCountdown())}...`} fontSize={mobile ? 36 : S(20)} color={LIGHT_GREY} font="sans-serif" />
           )}
         </UiEntity>
       )}

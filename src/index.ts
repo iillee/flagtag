@@ -568,7 +568,7 @@ export async function main() {
   engine.addSystem(projectileClientSystem)
   engine.addSystem(mushroomClientSystem)
   engine.addSystem(shieldSystem)
-  // engine.addSystem(zombieClientSystem) // DISABLED — ghost system WIP
+  engine.addSystem(zombieClientSystem) // Ghost system enabled
   engine.addSystem(updateHoldTimeInterpolation)
 
   // ── Day/Night Cycle ──
