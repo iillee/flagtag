@@ -13,7 +13,7 @@ import { Zombie } from '../shared/components'
 import { room } from '../shared/messages'
 import { showHitEffect, initPools as initCombatPools } from './combatSystem'
 import { isCinematicActive } from '../cinematicState'
-import { isNightTime } from '../shared/dayNight'
+import { isNightTime, updateWorldTime } from '../shared/dayNight'
 
 // ── Visual constants ──
 const GHOST_MODEL_SRC = 'models/ghost.glb'
@@ -42,7 +42,7 @@ const GHOST_SOUND_INTERVAL = 5.0 // seconds between sound replays (clip length +
 let ghostSoundTimer = 0
 
 // ── Scare meter ──
-const SCARE_TIME = 2.0         // seconds of ghost contact before death
+const SCARE_TIME = 3.0         // seconds of ghost contact before death
 const SCARE_RECHARGE_TIME = 4.0 // seconds to fully recharge when not touched
 const SCARE_RECHARGE_DELAY = 3.0 // seconds after last touch before recharge begins
 
@@ -136,6 +136,9 @@ export function zombieClientSystem(dt: number): void {
   initCombatPools()
   ensureGhostDeathSound()
 
+  // Keep world time cache fresh
+  updateWorldTime()
+
   // Ghost only appears at night — hide all visuals during daytime
   if (!isNightTime()) {
     for (const [entity, cz] of clientZombies) {
@@ -167,7 +170,9 @@ export function zombieClientSystem(dt: number): void {
           a.playing = true
         }
         ghostDeathRespawnDelay = GHOST_RESPAWN_DURATION
+        scareRemaining = 0
         scareBarVisible = false
+        lastTouchedTimer = SCARE_RECHARGE_DELAY + 1
         console.log('[Ghost] 👻 You were scared to death!')
       }
     } else {

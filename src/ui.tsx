@@ -944,7 +944,7 @@ function PlayerListUi() {
               <Label value="×" fontSize={mobile ? 52 : S(44)} color={closeChestHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
             <Label value="Chest" fontSize={mobile ? 36 : S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 4 : S(4) } }} />
-            <Label value="Choose your boomerang color" fontSize={mobile ? 20 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 24 : S(28) }, width: mobile ? '90%' : S(360) }} textAlign="middle-center" />
+            <Label value="Choose your boomerang" fontSize={mobile ? 20 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 24 : S(28) }, width: mobile ? '90%' : S(360) }} textAlign="middle-center" />
             <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
               {(['r', 'y', 'b', 'g'] as BoomerangColor[]).map((color) => {
                 const selected = getBoomerangColor() === color

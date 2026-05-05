@@ -11,7 +11,7 @@ import {
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString
 } from '../shared/components'
 import { room } from '../shared/messages'
-import { isNightTime } from '../shared/dayNight'
+import { isNightTime, updateWorldTime } from '../shared/dayNight'
 
 // ── Constants ──
 const PICKUP_RADIUS = 3
@@ -794,7 +794,7 @@ async function syncVisitorAnalytics(): Promise<void> {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
     return b.totalSeconds - a.totalSeconds
   })
-  .slice(0, 200) // Limit synced display data (full data stays in visitorSessions for Discord reports)
+  .slice(0, 100) // Limit synced display data — >100 can exceed CRDT string size limits
   
   const visitorDataJson = JSON.stringify(visitorData)
   
@@ -830,7 +830,7 @@ async function syncMonthlyVisitorAnalytics(): Promise<void> {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
     return b.totalSeconds - a.totalSeconds
   })
-  .slice(0, 200)
+  .slice(0, 100) // Limit synced display data — >100 can exceed CRDT string size limits
 
   const visitorDataJson = JSON.stringify(visitorData)
   const mutable = MonthlyVisitorAnalytics.getMutable(monthlyVisitorAnalyticsEntity)
@@ -3019,6 +3019,9 @@ function despawnAllZombies(): void {
 function zombieServerSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   const now = Date.now()
+
+  // Keep world time cache fresh for night detection
+  updateWorldTime()
 
   // ── Ghost only spawns at night ──
   if (!isNightTime()) {

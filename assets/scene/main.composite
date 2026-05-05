@@ -2694,27 +2694,6 @@
             "parent": 0
           }
         },
-        "638": {
-          "json": {
-            "position": {
-              "x": 270.3861083984375,
-              "y": 47.5014762878418,
-              "z": 301.25
-            },
-            "scale": {
-              "x": 5,
-              "y": 5,
-              "z": 5
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0.09369652718305588,
-              "z": 0,
-              "w": 0.9956007599830627
-            },
-            "parent": 0
-          }
-        },
         "639": {
           "json": {
             "position": {
@@ -3114,27 +3093,6 @@
             "parent": 0
           }
         },
-        "658": {
-          "json": {
-            "position": {
-              "x": 240.5,
-              "y": 2.454143524169922,
-              "z": 192.9005126953125
-            },
-            "scale": {
-              "x": 5,
-              "y": 5,
-              "z": 5
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0.03848147392272949,
-              "z": 0,
-              "w": 0.9992592930793762
-            },
-            "parent": 0
-          }
-        },
         "659": {
           "json": {
             "position": {
@@ -3198,48 +3156,6 @@
             "parent": 0
           }
         },
-        "662": {
-          "json": {
-            "position": {
-              "x": 265.75,
-              "y": 12.467744827270508,
-              "z": 280.75
-            },
-            "scale": {
-              "x": 5,
-              "y": 5,
-              "z": 5
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0.34214073419570923,
-              "z": 0,
-              "w": 0.9396486878395081
-            },
-            "parent": 0
-          }
-        },
-        "664": {
-          "json": {
-            "position": {
-              "x": 195.75,
-              "y": 15.25,
-              "z": 275.25
-            },
-            "rotation": {
-              "x": -0.09229595214128494,
-              "y": -0.7010573744773865,
-              "z": 0.7010573744773865,
-              "w": 0.09229595214128494
-            },
-            "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
-            },
-            "parent": 0
-          }
-        },
         "669": {
           "json": {
             "position": {
@@ -3299,6 +3215,27 @@
               "y": 0.33869999647140503,
               "z": 0,
               "w": -0.9409000277519226
+            },
+            "parent": 0
+          }
+        },
+        "672": {
+          "json": {
+            "position": {
+              "x": 240.29983520507812,
+              "y": 2.4818625450134277,
+              "z": 193.11587524414062
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.7168851494789124,
+              "z": 0,
+              "w": -0.6971912384033203
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
             },
             "parent": 0
           }
@@ -3425,6 +3362,48 @@
               "y": -0.7615768313407898,
               "z": 0,
               "w": 0.6480746269226074
+            },
+            "parent": 0
+          }
+        },
+        "679": {
+          "json": {
+            "position": {
+              "x": 266.0498352050781,
+              "y": 12.480938911437988,
+              "z": 280.68145751953125
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.41598764061927795,
+              "z": 0,
+              "w": -0.9093702435493469
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "parent": 0
+          }
+        },
+        "680": {
+          "json": {
+            "position": {
+              "x": 269.8831787109375,
+              "y": 47.501583099365234,
+              "z": 300.64080810546875
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.6664996147155762,
+              "z": 0,
+              "w": -0.7455053925514221
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
             },
             "parent": 0
           }
@@ -4268,13 +4247,6 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "638": {
-          "json": {
-            "src": "assets/models/drawer.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "639": {
           "json": {
             "src": "assets/models/mound.glb",
@@ -4387,13 +4359,6 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "658": {
-          "json": {
-            "src": "assets/models/drawer.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "659": {
           "json": {
             "src": "assets/models/ladder.glb",
@@ -4415,20 +4380,6 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "662": {
-          "json": {
-            "src": "assets/models/drawer.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "664": {
-          "json": {
-            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "669": {
           "json": {
             "src": "assets/models/mound.glb",
@@ -4446,6 +4397,13 @@
         "671": {
           "json": {
             "src": "assets/models/TNT Box Closed.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "672": {
+          "json": {
+            "src": "assets/asset-packs/loot_trunk/Trunk_01/Trunk_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -4488,6 +4446,20 @@
         "678": {
           "json": {
             "src": "assets/models/solid_green.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "679": {
+          "json": {
+            "src": "assets/asset-packs/loot_trunk/Trunk_01/Trunk_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "680": {
+          "json": {
+            "src": "assets/asset-packs/loot_trunk/Trunk_01/Trunk_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -5127,11 +5099,6 @@
             "value": "Flower Sprouts"
           }
         },
-        "638": {
-          "json": {
-            "value": "drawer.glb"
-          }
-        },
         "639": {
           "json": {
             "value": "mound.glb_2"
@@ -5222,11 +5189,6 @@
             "value": "TNT Box Closed_8"
           }
         },
-        "658": {
-          "json": {
-            "value": "drawer.glb_2"
-          }
-        },
         "659": {
           "json": {
             "value": "ladder.glb"
@@ -5242,16 +5204,6 @@
             "value": "ladder.glb_2"
           }
         },
-        "662": {
-          "json": {
-            "value": "drawer.glb_3"
-          }
-        },
-        "664": {
-          "json": {
-            "value": "Doubloon"
-          }
-        },
         "669": {
           "json": {
             "value": "mound.glb"
@@ -5265,6 +5217,11 @@
         "671": {
           "json": {
             "value": "TNT Box Closed_3"
+          }
+        },
+        "672": {
+          "json": {
+            "value": "Loot Trunk"
           }
         },
         "673": {
@@ -5295,6 +5252,16 @@
         "678": {
           "json": {
             "value": "Solid Green"
+          }
+        },
+        "679": {
+          "json": {
+            "value": "Loot Trunk_2"
+          }
+        },
+        "680": {
+          "json": {
+            "value": "Loot Trunk_3"
           }
         }
       }
@@ -6361,9 +6328,9 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "660": {
           "json": {
-            "gizmo": 2
+            "gizmo": 1
           }
         }
       }
@@ -6499,14 +6466,13 @@
                   654,
                   655,
                   656,
-                  638,
-                  658,
-                  662,
                   632,
                   631,
                   633,
-                  664,
-                  670
+                  670,
+                  672,
+                  679,
+                  680
                 ]
               },
               {
@@ -7221,18 +7187,6 @@
                 "children": []
               },
               {
-                "entity": 638,
-                "children": []
-              },
-              {
-                "entity": 658,
-                "children": []
-              },
-              {
-                "entity": 662,
-                "children": []
-              },
-              {
                 "entity": 632,
                 "children": []
               },
@@ -7245,11 +7199,19 @@
                 "children": []
               },
               {
-                "entity": 664,
+                "entity": 670,
                 "children": []
               },
               {
-                "entity": 670,
+                "entity": 672,
+                "children": []
+              },
+              {
+                "entity": 679,
+                "children": []
+              },
+              {
+                "entity": 680,
                 "children": []
               }
             ]
@@ -7457,9 +7419,6 @@
         "637": {
           "json": {}
         },
-        "638": {
-          "json": {}
-        },
         "639": {
           "json": {}
         },
@@ -7508,9 +7467,6 @@
         "656": {
           "json": {}
         },
-        "658": {
-          "json": {}
-        },
         "659": {
           "json": {}
         },
@@ -7518,12 +7474,6 @@
           "json": {}
         },
         "661": {
-          "json": {}
-        },
-        "662": {
-          "json": {}
-        },
-        "664": {
           "json": {}
         },
         "665": {
@@ -7547,6 +7497,9 @@
         "671": {
           "json": {}
         },
+        "672": {
+          "json": {}
+        },
         "673": {
           "json": {}
         },
@@ -7563,6 +7516,12 @@
           "json": {}
         },
         "678": {
+          "json": {}
+        },
+        "679": {
+          "json": {}
+        },
+        "680": {
           "json": {}
         }
       }

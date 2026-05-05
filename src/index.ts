@@ -1,5 +1,5 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType, inputSystem, InputAction, PointerEventType, SkyboxTime } from '@dcl/sdk/ecs'
+import { engine, Entity, Transform, AudioSource, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, LightSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, VirtualCamera, MainCamera, InputModifier, GltfContainer, AvatarAttach, AvatarAnchorPointType, inputSystem, InputAction, PointerEventType } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
@@ -17,7 +17,7 @@ import { mailboxSystem } from './systems/mailboxSystem'
 import { chestSystem } from './systems/chestSystem'
 
 import { setCinematicActive } from './cinematicState'
-import { getCurrentSkyTime } from './shared/dayNight'
+import { updateWorldTime } from './shared/dayNight'
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
@@ -573,11 +573,10 @@ export async function main() {
   engine.addSystem(updateHoldTimeInterpolation)
 
   // ── Day/Night Cycle ──
-  // Full cycle = 72000 units. 10-minute cycle → 120 units/sec.
-  // All players see the same time because we derive it from wall-clock time.
-  engine.addSystem(function dayNightCycleSystem(_dt: number) {
-    const skyTime = getCurrentSkyTime()
-    SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: skyTime })
+  // No SkyboxTime override — uses Decentraland's default skybox.
+  // We poll getWorldTime() to keep ghost/night logic in sync with the lights.
+  engine.addSystem(function dayNightPollSystem(_dt: number) {
+    updateWorldTime()
   })
 
   // Helper: wait until player Y stops changing (grounded), then trigger emote

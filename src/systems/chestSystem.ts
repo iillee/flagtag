@@ -37,7 +37,7 @@ export function chestSystem() {
 
   for (const [entity] of engine.getEntitiesWith(GltfContainer)) {
     const gltf = GltfContainer.get(entity)
-    if (gltf.src.includes('drawer') && !attachedEntities.has(entity)) {
+    if ((gltf.src.includes('drawer') || gltf.src.includes('Trunk_01')) && !attachedEntities.has(entity)) {
       const mutableGltf = GltfContainer.getMutable(entity)
       mutableGltf.visibleMeshesCollisionMask = ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS
       mutableGltf.invisibleMeshesCollisionMask = ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS
