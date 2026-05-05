@@ -3059,21 +3059,9 @@ function zombieServerSystem(dt: number): void {
       // Match target Y (float above ground at player level)
       z.posY += (nearestPos.y - z.posY) * 2.0 * clampedDt
 
-      // Check contact → stagger + flag drop
+      // Check contact → send ghostTouching (scare meter fills on client)
       if (nearestDist < ZOMBIE_HIT_RADIUS) {
-        const lastStagger = z.lastStaggerTime.get(nearestId) || 0
-        if (now - lastStagger > ZOMBIE_STAGGER_COOLDOWN_MS) {
-          z.lastStaggerTime.set(nearestId, now)
-          room.send('ghostDeath', { victimId: nearestId })
-          room.send('hitVfx', { x: z.posX, y: z.posY + 1, z: z.posZ })
-          // Drop flag if victim is carrying it
-          const flag = Flag.getOrNull(flagEntity)
-          if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === nearestId) {
-            console.log('[Server] 🧟 Zombie forced flag drop from', nearestId.slice(0, 8))
-            handleDrop(nearestId)
-          }
-          console.log('[Server] 🧟 Zombie staggered player', nearestId.slice(0, 8))
-        }
+        room.send('ghostTouching', { victimId: nearestId })
       }
     } else {
       // Idle: slow orbit around spawn point

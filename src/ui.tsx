@@ -41,7 +41,7 @@ function toggleMusicMute() {
 import { isSpectatorMode, isSpectatorTransitioning, exitSpectatorMode } from './systems/spectatorSystem'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
-import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible } from './systems/zombieSystem'
+import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/zombieSystem'
 import { signedFetch } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
@@ -710,6 +710,55 @@ function DrownBar() {
   )
 }
 
+function ScareBar() {
+  const mobile = isMobile()
+  const fraction = getScareFraction()
+  const fillColor = fraction > 0.75
+    ? Color4.create(1, 0.3, 0.3, 0.95)
+    : Color4.create(0.55, 0.55, 0.55, 0.95)
+  const barW = mobile ? 280 : S(DROWN_BAR_WIDTH_BASE)
+  const barH = mobile ? 18 : S(DROWN_BAR_HEIGHT_BASE)
+  const border = mobile ? 3 : S(DROWN_BORDER_BASE)
+
+  // Position above the drown bar if both are visible
+  const bottomOffset = isDrownBarVisible()
+    ? (mobile ? 215 : S(128))
+    : (mobile ? 185 : S(110))
+
+  return (
+    <UiEntity
+      uiTransform={{
+        positionType: 'absolute',
+        position: { bottom: bottomOffset, left: '50%' },
+        width: barW + border * 2,
+        height: barH + border * 2,
+        margin: { left: -(barW + border * 2) / 2 },
+        borderRadius: (barH + border * 2) / 2,
+        padding: border,
+      }}
+      uiBackground={{ color: PANEL_BG_SEMI }}
+    >
+      <UiEntity
+        uiTransform={{
+          width: '100%',
+          height: '100%',
+          borderRadius: barH / 2,
+        }}
+        uiBackground={{ color: Color4.create(0, 0, 0, 0) }}
+      >
+        <UiEntity
+          uiTransform={{
+            width: `${Math.max(0, Math.min(100, fraction * 100))}%`,
+            height: '100%',
+            borderRadius: barH / 2,
+          }}
+          uiBackground={{ color: fillColor }}
+        />
+      </UiEntity>
+    </UiEntity>
+  )
+}
+
 function PlayerListUi() {
   const mobile = isMobile()
   return (
@@ -930,6 +979,7 @@ function PlayerListUi() {
       )}
       {/* Drown bar — screen-space, always on top */}
       {isDrownBarVisible() && <DrownBar />}
+      {isScareBarVisible() && <ScareBar />}
 
       {/* UI Scale toast */}
       {getUIScaleFlash() && (

@@ -18,6 +18,10 @@ import { isCinematicActive } from '../cinematicState'
 const GHOST_MODEL_SRC = 'models/ghost.glb'
 
 // ── Client-side zombie tracking ──
+const SPAWN_RISE_DURATION = 2.0  // seconds to rise from ground
+const SPAWN_SINK_DURATION = 1.5  // seconds to sink into ground
+const SPAWN_DEPTH = 3.0          // how far below ground to start/end
+
 interface ClientZombie {
   entity: Entity
   modelEntity: Entity    // GLB model
@@ -25,6 +29,9 @@ interface ClientZombie {
   lastServerPos: Vector3 // last known server position
   renderPos: Vector3     // interpolated render position
   dead: boolean
+  spawnTimer: number     // counts up from 0 to SPAWN_RISE_DURATION
+  sinkTimer: number      // counts up from 0 to SPAWN_SINK_DURATION (0 = not sinking)
+  sinking: boolean       // true when death sink is active
 }
 
 const clientZombies = new Map<Entity, ClientZombie>()
@@ -32,6 +39,16 @@ const clientZombies = new Map<Entity, ClientZombie>()
 // ── Ghost sound replay timer ──
 const GHOST_SOUND_INTERVAL = 5.0 // seconds between sound replays (clip length + gap)
 let ghostSoundTimer = 0
+
+// ── Scare meter ──
+const SCARE_TIME = 2.0         // seconds of ghost contact before death
+const SCARE_RECHARGE_TIME = 4.0 // seconds to fully recharge when not touched
+const SCARE_RECHARGE_DELAY = 3.0 // seconds after last touch before recharge begins
+
+let scareRemaining = 0
+let scareBarVisible = false
+let lastTouchedTimer = SCARE_RECHARGE_DELAY + 1 // time since last ghost touch (start high so no bar on load)
+let ghostTouchingThisFrame = false
 
 // ── Ghost death respawn ──
 const GHOST_DEATH_EMOTE = 'urn:decentraland:matic:collections-v2:0x7bdc37ff3e8dca2d69f01a3dc34f3ad82e2e1870:0'
@@ -42,7 +59,6 @@ const GHOST_SPAWN_POSITION = Vector3.create(263, 48, 298)
 
 let ghostDeathRespawnDelay = 0
 let ghostDeathSoundEntity: Entity | null = null
-let pendingGhostDeath = false
 
 function ensureGhostDeathSound() {
   if (ghostDeathSoundEntity) return
@@ -55,6 +71,16 @@ function ensureGhostDeathSound() {
     volume: 1.0,
     global: true
   })
+}
+
+/** Returns 0..1 fraction of scare filled (0 = safe, 1 = dead) */
+export function getScareFraction(): number {
+  return Math.max(0, Math.min(1, scareRemaining / SCARE_TIME))
+}
+
+/** Returns true if the scare meter should be displayed */
+export function isScareBarVisible(): boolean {
+  return scareBarVisible
 }
 
 export function isGhostDeathRespawning(): boolean {
@@ -81,13 +107,15 @@ export function isGhostDeathTextVisible(): boolean {
 export function cancelGhostDeathRespawn(): void {
   if (ghostDeathRespawnDelay <= 0) return
   ghostDeathRespawnDelay = 0
+  scareRemaining = 0
+  scareBarVisible = false
   console.log('[Ghost] Death respawn cancelled')
 }
 
-room.onMessage('ghostDeath', (data) => {
+room.onMessage('ghostTouching', (data) => {
   const me = getPlayerData()?.userId?.toLowerCase()
   if (me && data.victimId === me) {
-    pendingGhostDeath = true
+    ghostTouchingThisFrame = true
   }
 })
 
@@ -107,27 +135,56 @@ export function zombieClientSystem(dt: number): void {
   initCombatPools()
   ensureGhostDeathSound()
 
-  // ── Ghost death: trigger ──
-  if (pendingGhostDeath && ghostDeathRespawnDelay <= 0) {
-    pendingGhostDeath = false
-    room.send('requestDrop', { t: 0 })
-    void triggerEmote({ predefinedEmote: GHOST_DEATH_EMOTE })
-    InputModifier.createOrReplace(engine.PlayerEntity, {
-      mode: InputModifier.Mode.Standard({ disableAll: true })
-    })
-    if (ghostDeathSoundEntity) {
-      const a = AudioSource.getMutable(ghostDeathSoundEntity)
-      a.currentTime = 0
-      a.playing = true
+  // ── Scare meter: drain while ghost is touching, recharge when safe ──
+  if (ghostDeathRespawnDelay <= 0) {
+    if (ghostTouchingThisFrame) {
+      lastTouchedTimer = 0
+      scareRemaining += dt
+      if (scareRemaining > SCARE_TIME) scareRemaining = SCARE_TIME
+      scareBarVisible = true
+
+      // Death!
+      if (scareRemaining >= SCARE_TIME) {
+        room.send('requestDrop', { t: 0 })
+        void triggerEmote({ predefinedEmote: GHOST_DEATH_EMOTE })
+        InputModifier.createOrReplace(engine.PlayerEntity, {
+          mode: InputModifier.Mode.Standard({ disableAll: true })
+        })
+        if (ghostDeathSoundEntity) {
+          const a = AudioSource.getMutable(ghostDeathSoundEntity)
+          a.currentTime = 0
+          a.playing = true
+        }
+        ghostDeathRespawnDelay = GHOST_RESPAWN_DURATION
+        scareBarVisible = false
+        console.log('[Ghost] 👻 You were scared to death!')
+      }
+    } else {
+      lastTouchedTimer += dt
+      // Drain back down after delay
+      if (scareRemaining > 0) {
+        if (lastTouchedTimer >= SCARE_RECHARGE_DELAY) {
+          scareRemaining -= (SCARE_TIME / SCARE_RECHARGE_TIME) * dt
+          if (scareRemaining <= 0) {
+            scareRemaining = 0
+            scareBarVisible = false
+          } else {
+            scareBarVisible = true
+          }
+        } else {
+          scareBarVisible = true // still show bar during delay
+        }
+      }
     }
-    ghostDeathRespawnDelay = GHOST_RESPAWN_DURATION
-    console.log('[Ghost] 👻 You were scared to death!')
   }
+  ghostTouchingThisFrame = false
 
   // ── Ghost death: respawn countdown ──
   if (ghostDeathRespawnDelay > 0) {
     if (isCinematicActive()) {
       ghostDeathRespawnDelay = 0
+      scareRemaining = 0
+      scareBarVisible = false
       return
     }
     const prevDelay = ghostDeathRespawnDelay
@@ -175,6 +232,16 @@ export function zombieClientSystem(dt: number): void {
     cz.time += dt
     cz.lastServerPos = Vector3.create(serverTransform.position.x, serverTransform.position.y, serverTransform.position.z)
 
+    // Spawn rise animation
+    if (cz.spawnTimer < SPAWN_RISE_DURATION) {
+      cz.spawnTimer += dt
+      if (cz.spawnTimer > SPAWN_RISE_DURATION) cz.spawnTimer = SPAWN_RISE_DURATION
+    }
+    const spawnProgress = Math.min(1, cz.spawnTimer / SPAWN_RISE_DURATION)
+    // Ease-out curve for smooth rise
+    const spawnEase = 1 - (1 - spawnProgress) * (1 - spawnProgress)
+    const spawnYOffset = -SPAWN_DEPTH * (1 - spawnEase)
+
     // Replay ghost sound on interval
     ghostSoundTimer += dt
     if (ghostSoundTimer >= GHOST_SOUND_INTERVAL) {
@@ -188,14 +255,15 @@ export function zombieClientSystem(dt: number): void {
     const lerpSpeed = 5.0
     cz.renderPos = Vector3.lerp(cz.renderPos, cz.lastServerPos, Math.min(1, lerpSpeed * dt))
 
-    // Add floaty bob and lateral drift
-    const bobY = Math.sin(cz.time * 3.14) * 0.3
-    const driftX = Math.sin(cz.time * 1.7) * 0.3
-    const driftZ = Math.cos(cz.time * 1.3) * 0.3
+    // Add floaty bob and lateral drift (only after spawn completes)
+    const animBlend = spawnEase // 0 during rise, 1 when fully spawned
+    const bobY = Math.sin(cz.time * 3.14) * 0.3 * animBlend
+    const driftX = Math.sin(cz.time * 1.7) * 0.3 * animBlend
+    const driftZ = Math.cos(cz.time * 1.3) * 0.3 * animBlend
 
     const finalPos = Vector3.create(
       cz.renderPos.x + driftX,
-      cz.renderPos.y + bobY + 1.0, // float above ground
+      cz.renderPos.y + bobY + 1.0 + spawnYOffset,
       cz.renderPos.z + driftZ
     )
 
@@ -216,11 +284,32 @@ export function zombieClientSystem(dt: number): void {
     modelT.scale = Vector3.create(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
   }
 
-  // Clean up visuals for zombies that no longer exist
+  // Clean up visuals for zombies that no longer exist — start sinking
   for (const [entity, cz] of clientZombies) {
     if (!activeZombieEntities.has(entity)) {
-      destroyZombieVisual(cz)
-      clientZombies.delete(entity)
+      if (!cz.sinking) {
+        // Start sinking animation
+        cz.sinking = true
+        cz.sinkTimer = 0
+      }
+      cz.sinkTimer += dt
+      const sinkProgress = Math.min(1, cz.sinkTimer / SPAWN_SINK_DURATION)
+      // Ease-in curve for accelerating sink
+      const sinkEase = sinkProgress * sinkProgress
+      const sinkYOffset = -SPAWN_DEPTH * sinkEase
+
+      // Update position (keep last known pos, just sink down)
+      const modelT = Transform.getMutable(cz.modelEntity)
+      modelT.position = Vector3.create(
+        cz.renderPos.x,
+        cz.renderPos.y + 1.0 + sinkYOffset,
+        cz.renderPos.z
+      )
+      // Remove once fully sunk
+      if (sinkProgress >= 1) {
+        destroyZombieVisual(cz)
+        clientZombies.delete(entity)
+      }
     }
   }
 }
@@ -245,7 +334,10 @@ function createZombieVisual(serverEntity: Entity, pos: Vector3): ClientZombie {
     time: Math.random() * 10,
     lastServerPos: Vector3.create(pos.x, pos.y, pos.z),
     renderPos: Vector3.create(pos.x, pos.y, pos.z),
-    dead: false
+    dead: false,
+    spawnTimer: 0,
+    sinkTimer: 0,
+    sinking: false
   }
 }
 
