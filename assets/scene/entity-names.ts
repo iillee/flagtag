@@ -48,6 +48,7 @@ export enum EntityNames {
   Classic_Bench_8 = "Classic Bench_8",
   Classic_Bench_9 = "Classic Bench_9",
   Clay_Pot = "Clay Pot",
+  Doubloon = "Doubloon",
   Flower_Sprouts = "Flower Sprouts",
   Gold = "Gold",
   Lilypad = "Lilypad",

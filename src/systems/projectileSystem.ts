@@ -423,6 +423,29 @@ function playReleaseSound(): void {
   })
 }
 
+/** Play the release sound spatially at a world position (for remote players' charged throws). */
+function playReleaseSoundAt(pos: Vector3): void {
+  const e = engine.addEntity()
+  Transform.create(e, { position: pos })
+  AudioSource.create(e, {
+    audioClipUrl: RELEASE_SOUND_SRC,
+    playing: true,
+    loop: false,
+    volume: 0.35,
+    global: false,
+    pitch: 1.0
+  })
+  // Clean up after sound finishes (~2s)
+  const createdAt = Date.now()
+  const cleanup = () => {
+    if (Date.now() - createdAt > 2000) {
+      engine.removeEntity(e)
+      engine.removeSystem(cleanup)
+    }
+  }
+  engine.addSystem(cleanup)
+}
+
 const PROJECTILE_SOUND_SRC = 'assets/sounds/boomerang2.mp3'
 
 /** Attach a looping spatial projectile sound directly to a projectile entity. */
@@ -592,6 +615,14 @@ room.onMessage('shellDropped', (data) => {
   // Create visual from message bus (instant, no CRDT dependency).
   // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
   createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale)
+
+  // Play release sound for remote blue charged throws so everyone hears it
+  // Local player already plays it in the E-key-up handler — skip for self
+  const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+  const throwerId = (data.firedBy || '').toLowerCase()
+  if (throwerId && throwerId !== localUserId && data.color === 'b' && data.chargeSpeed >= 55) {
+    playReleaseSoundAt(Vector3.create(data.x, data.y, data.z))
+  }
 })
 
 /** Look up a remote player's position by wallet address (case-insensitive). */
@@ -1175,6 +1206,13 @@ export function projectileClientSystem(dt: number): void {
     }
   }
 
+  // Broadcast charge fraction to other players while charging (VFX parented to their hand model)
+  if (isCharging && serverUp && Transform.has(engine.PlayerEntity)) {
+    const pos = Transform.get(engine.PlayerEntity).position
+    const cf = getChargeFraction()
+    room.send('chargeVfx', { x: pos.x, y: pos.y + 1.0, z: pos.z, cf })
+  }
+
   if (serverUp) {
     // Process wall raycasts
     processWallRaycasts()
@@ -1354,8 +1392,8 @@ export function projectileClientSystem(dt: number): void {
     projectileStaggerUntil = now + PROJECTILE_STAGGER_MS
     if (Transform.has(engine.PlayerEntity)) {
       const pos = Transform.get(engine.PlayerEntity).position
-      showHitEffect(pos)
-      playHitSound(pos)
+      // Broadcast burnout VFX — server will send hitVfx back to ALL clients (including us)
+      room.send('chargeBurnout', { x: pos.x, y: pos.y, z: pos.z })
     }
   }
 

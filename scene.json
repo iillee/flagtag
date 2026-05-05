@@ -1076,9 +1076,12 @@
   ],
   "featureToggles": {
     "voiceChat": "enabled",
-    "portableExperiences": "disabled"
+    "portableExperiences": "disabled",
+    "nearbyVoiceChat": "enabled"
   },
-  "logsPermissions": ["0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b"],
+  "logsPermissions": [
+    "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b"
+  ],
   "creator": "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b",
   "skyboxConfig": {},
   "source": {

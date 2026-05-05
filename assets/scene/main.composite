@@ -3233,9 +3233,30 @@
               "w": 1
             },
             "scale": {
-              "x": 0,
-              "y": 0,
-              "z": 0
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "664": {
+          "json": {
+            "position": {
+              "x": 195.75,
+              "y": 15.25,
+              "z": 275.25
+            },
+            "rotation": {
+              "x": -0.09229595214128494,
+              "y": -0.7010573744773865,
+              "z": 0.7010573744773865,
+              "w": 0.09229595214128494
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
             },
             "parent": 0
           }
@@ -4408,6 +4429,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "664": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "669": {
           "json": {
             "src": "assets/models/mound.glb",
@@ -5222,6 +5250,11 @@
         "663": {
           "json": {
             "value": "Solid Black"
+          }
+        },
+        "664": {
+          "json": {
+            "value": "Doubloon"
           }
         },
         "669": {
@@ -6328,9 +6361,9 @@
         "serializationType": "map"
       },
       "data": {
-        "660": {
+        "517": {
           "json": {
-            "gizmo": 1
+            "gizmo": 2
           }
         }
       }
@@ -6472,7 +6505,8 @@
                   632,
                   631,
                   633,
-                  663
+                  663,
+                  664
                 ]
               },
               {
@@ -7213,6 +7247,10 @@
               {
                 "entity": 663,
                 "children": []
+              },
+              {
+                "entity": 664,
+                "children": []
               }
             ]
           }
@@ -7486,6 +7524,9 @@
           "json": {}
         },
         "663": {
+          "json": {}
+        },
+        "664": {
           "json": {}
         },
         "665": {
