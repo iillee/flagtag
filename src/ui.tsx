@@ -198,13 +198,18 @@ let earnedSoundPlayed = false
 
 
 let pendingEarningsLocal: RoundEarnings | null = null
+let displayedWins: number | null = null  // cached win count, frozen during round-end
+let winsFrozen = false
 let wasNextRoundVisible = false
 
 // System to manage "You Earned" UI timing (shown during credits/next-round screen)
 engine.addSystem((dt: number) => {
   // Check for new earnings from server
   const pending = consumePendingRoundEarnings()
-  if (pending) pendingEarningsLocal = pending
+  if (pending) {
+    pendingEarningsLocal = pending
+    winsFrozen = true  // freeze displayed wins until coin animation
+  }
   
   // Detect credits screen appearing (nextRoundStartingVisible becomes true)
   const creditsShowing = nextRoundStartingVisible && !cinematicShowing
@@ -237,6 +242,8 @@ engine.addSystem((dt: number) => {
     if (!earnedSoundPlayed) {
       earnedSoundPlayed = true
       applyDeferredBalance(activeRoundEarnings.newBalance)
+      winsFrozen = false  // unfreeze wins display
+      displayedWins = null  // reset so it reads live value
       const snd = engine.addEntity()
       Transform.create(snd, { position: Vector3.Zero() })
       AudioSource.create(snd, {
@@ -711,6 +718,9 @@ function PlayerListUi() {
                   {activeRoundEarnings.placement > 0 && (
                     <Label value={`${activeRoundEarnings.rank === 1 ? '1st' : activeRoundEarnings.rank === 2 ? '2nd' : '3rd'} Place Bonus: +${activeRoundEarnings.placement}`} fontSize={mobile ? 34 : S(21)} color={activeRoundEarnings.rank === 1 ? GOLD : activeRoundEarnings.rank === 2 ? SILVER : BRONZE} font="sans-serif" />
                   )}
+                  {activeRoundEarnings.rank === 1 && (
+                    <Label value={`🏁 Winning: +1 Flag`} fontSize={mobile ? 34 : S(21)} color={GOLD} font="sans-serif" />
+                  )}
                 </UiEntity>
 
                   {/* Flying coins animation */}
@@ -746,11 +756,11 @@ function PlayerListUi() {
               )}
 
               {/* Credits — lower area, title fixed */}
-              <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '60%' }, flexDirection: 'column', alignItems: 'center' }}>
-                <Label value="Special Thanks to:" fontSize={mobile ? 42 : S(28)} color={GOLD} font="sans-serif" />
-                <UiEntity uiTransform={{ height: mobile ? 12 : S(10) }} />
+              <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '50%' }, flexDirection: 'column', alignItems: 'center' }}>
+                <Label value="Special Thanks to:" fontSize={mobile ? 52 : S(34)} color={GOLD} font="sans-serif" />
+                <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
                 {creditLines.slice(0, creditLineIndex + 1).map((line, i) => (
-                  <Label key={i} value={line} fontSize={mobile ? 26 : S(16)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 4 : S(3) } }} />
+                  <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 6 : S(4) } }} />
                 ))}
               </UiEntity>
 
@@ -2354,31 +2364,35 @@ function DesktopLayout() {
         </UiEntity>
         {/* ── Stats square — coin + flag win counters ── */}
         {(() => {
-          const sqSize = S(2 * _ROW_HEIGHT + 2 * _PADDING)
+          const panelH = S(2 * _ROW_HEIGHT + 2 * _PADDING)
+          const panelW = S(3 * _ROW_HEIGHT + 2 * _PADDING)
           const localId = getPlayer()?.userId?.toLowerCase() ?? ''
-          const myWins = getLeaderboardEntries().find(e => e.userId.toLowerCase() === localId)?.roundsWon ?? 0
+          const liveWins = getLeaderboardEntries().find(e => e.userId.toLowerCase() === localId)?.roundsWon ?? 0
+          if (!winsFrozen) displayedWins = liveWins
+          const myWins = displayedWins ?? liveWins
           return (
             <UiEntity
               uiTransform={{
-                width: sqSize, height: sqSize,
+                width: panelW, height: panelH,
                 flexDirection: 'column',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 justifyContent: 'center',
+                padding: { left: S(_PADDING) },
                 margin: { right: S(4) },
                 borderRadius: S(_BORDER_RADIUS),
               }}
               uiBackground={{ color: PANEL_BG }}
             >
               {/* Coin counter */}
-              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(2) } }}>
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(0) } }}>
                 <UiEntity
                   uiTransform={{ width: S(20), height: S(20), margin: { right: S(6) } }}
                   uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
                 />
-                <Label value={`${getCoinBalance()}`} fontSize={S(18)} color={GOLD} font="sans-serif" />
+                <Label value={`${getCoinBalance()}`} fontSize={S(18)} color={WHITE} font="sans-serif" />
               </UiEntity>
               {/* Flag wins counter */}
-              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { top: S(2) } }}>
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { top: S(0) } }}>
                 <UiEntity
                   uiTransform={{ width: S(18), height: S(18), margin: { right: S(6) } }}
                   uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }}
@@ -2408,18 +2422,6 @@ function DesktopLayout() {
           }}
         >
           <Label value="Scoreboard" fontSize={S(_TITLE_FONT)} color={MUTED} font="sans-serif" />
-          <UiEntity
-            uiTransform={{
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}
-          >
-            <UiEntity
-              uiTransform={{ width: S(16), height: S(16), margin: { right: S(4) } }}
-              uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
-            />
-            <Label value={`${getCoinBalance()}`} fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" />
-          </UiEntity>
         </UiEntity>
         {players.length === 0 ? (
           <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>
