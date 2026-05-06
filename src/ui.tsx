@@ -2383,8 +2383,11 @@ function DesktopLayout() {
               <UiEntity
                 uiTransform={{ positionType: 'absolute', position: { right: 0, top: 0 }, width: S(140), height: S(_ROW_HEIGHT + _PADDING - 2), borderRadius: S(_BORDER_RADIUS), flexDirection: 'row', alignItems: 'center' }}
                 uiBackground={{ color: PANEL_BG }}
+                onMouseEnter={() => { squareIconHovered = true }}
+                onMouseLeave={() => { squareIconHovered = false }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
-                <Label value="Menus" fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(100), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
+                <Label value="Menus" fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(94), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
               </UiEntity>
             )}
             <UiEntity
@@ -2403,8 +2406,11 @@ function DesktopLayout() {
               <UiEntity
                 uiTransform={{ positionType: 'absolute', position: { right: 0, top: 0 }, width: S(140), height: S(_ROW_HEIGHT + _PADDING - 2), borderRadius: S(_BORDER_RADIUS), flexDirection: 'row', alignItems: 'center' }}
                 uiBackground={{ color: PANEL_BG }}
+                onMouseEnter={() => { questionIconHovered = true }}
+                onMouseLeave={() => { questionIconHovered = false }}
+                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
               >
-                <Label value="Help" fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(100), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
+                <Label value="Help" fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(94), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
               </UiEntity>
             )}
             <UiEntity

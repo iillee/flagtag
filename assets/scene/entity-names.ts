@@ -52,8 +52,6 @@ export enum EntityNames {
   Doubloon_10 = "Doubloon_10",
   Doubloon_13 = "Doubloon_13",
   Doubloon_14 = "Doubloon_14",
-  Doubloon_15 = "Doubloon_15",
-  Doubloon_16 = "Doubloon_16",
   Doubloon_17 = "Doubloon_17",
   Doubloon_18 = "Doubloon_18",
   Doubloon_19 = "Doubloon_19",
