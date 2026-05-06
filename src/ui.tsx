@@ -1867,11 +1867,50 @@ function DesktopLayout() {
             })()}
 
             {/* Status tab content */}
-            {folderTab === 'status' && (
-              <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: { bottom: S(60) } }}>
-                <Label value="Coming soon..." fontSize={S(28)} color={MUTED} font="sans-serif" />
-              </UiEntity>
-            )}
+            {folderTab === 'status' && (() => {
+              const localPlayer = getPlayer()
+              const localName = localPlayer?.name ?? 'Unknown'
+              const localId = localPlayer?.userId?.toLowerCase() ?? ''
+              const coins = getCoinBalance()
+              const liveWinsStatus = getLeaderboardEntries().find(e => e.userId.toLowerCase() === localId)?.roundsWon ?? 0
+              const myFlags = winsFrozen ? (displayedWins ?? liveWinsStatus) : liveWinsStatus
+              const boomerang = getBoomerangColor()
+              const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
+
+              const STAT_ROW = 34
+              const STAT_ICON = 24
+              const STAT_FONT = 16
+              const SECTION_FONT = 16
+
+              const sectionHeader = (title: string, first: boolean = false) => (
+                <UiEntity uiTransform={{ width: '100%', height: S(first ? 28 : 36), flexDirection: 'row', alignItems: 'flex-end', padding: { left: S(10) } }}>
+                  <Label value={title} fontSize={S(SECTION_FONT)} color={GOLD} font="sans-serif" />
+                </UiEntity>
+              )
+              const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White()) => (
+                <UiEntity uiTransform={{ width: '100%', height: S(STAT_ROW), flexDirection: 'row', alignItems: 'center', padding: { left: S(10), right: S(10) } }}>
+                  <Label value={label} fontSize={S(STAT_FONT)} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(STAT_ROW) }} textAlign="middle-left" />
+                  <Label value={value} fontSize={S(STAT_FONT)} color={valueColor} font="sans-serif" uiTransform={{ height: S(STAT_ROW), margin: { right: S(6) } }} textAlign="middle-right" />
+                  <UiEntity uiTransform={{ width: S(STAT_ICON), height: S(STAT_ICON) }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
+                </UiEntity>
+              )
+
+              return (
+                <UiEntity uiTransform={{ width: '100%', flexGrow: 1, flexDirection: 'column', padding: { top: S(6), bottom: S(6) } }}>
+                  <UiEntity uiTransform={{ width: '100%', padding: { left: S(10), right: S(10), top: S(4), bottom: S(2) } }}>
+                    <Label value={localName} fontSize={S(20)} color={WHITE} font="sans-serif" />
+                  </UiEntity>
+
+                  {sectionHeader('INVENTORY', true)}
+                  {iconRow('Coins', `${coins}`, 'assets/images/coin.png', GOLD, GOLD)}
+                  {iconRow('Flags', `${myFlags}`, 'assets/images/flag-icon-white.png', GOLD, GOLD)}
+
+                  {sectionHeader('EQUIPMENT')}
+                  {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
+                  {iconRow('Trap', 'Banana', 'assets/images/banana-color.png')}
+                </UiEntity>
+              )
+            })()}
 
             {/* Leaderboard tab content (daily + alltime) */}
             {leaderboardTab !== 'metrics' && folderTab !== 'status' && (

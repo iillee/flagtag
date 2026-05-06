@@ -255,6 +255,10 @@ export function setupCoinMessages(): void {
     console.log('[CoinPickup] Wallet balance loaded:', walletBalance)
   })
 
+  // Request balance immediately on connect (don't wait for coin setup)
+  room.send('requestWalletBalance', { t: 0 })
+  balanceRequested = true
+
   // Round-end coin earnings breakdown (personalized)
   room.onMessage('roundCoinsEarned', (data) => {
     const player = getPlayer()
@@ -284,11 +288,7 @@ export function coinPickupSystem(dt: number): void {
     setupCoins()
   }
 
-  // Request wallet balance once
-  if (!balanceRequested) {
-    balanceRequested = true
-    room.send('requestWalletBalance', { t: 0 })
-  }
+
 
   if (trackedCoins.length === 0) return
 
