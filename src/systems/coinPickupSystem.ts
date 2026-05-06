@@ -256,6 +256,10 @@ export function setupCoinMessages(): void {
 
   // Wallet balance response (on join)
   room.onMessage('walletBalance', (data) => {
+    // Only accept balance updates meant for us
+    const player = getPlayer()
+    if (!player) return
+    if (data.playerId && data.playerId !== player.userId.toLowerCase()) return
     walletBalance = data.coins
     balanceReceived = true
     console.log('[CoinPickup] Wallet balance loaded:', walletBalance)

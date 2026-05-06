@@ -1291,7 +1291,7 @@ async function awardRoundCoins(players: { userId: string; seconds: number }[]): 
     if (coins > 0) {
       const newBalance = await addPlayerCoins(p.userId, coins)
       // Send balance update to the specific player
-      room.send('walletBalance', { coins: newBalance })
+      room.send('walletBalance', { playerId: p.userId, coins: newBalance })
       // Send detailed breakdown so client can show "You Earned" UI
       const holdTimeCoins = Math.floor(p.seconds * COINS_PER_HOLD_SECOND)
       const placementBonus = (i < ROUND_PLACEMENT_BONUS.length && p.seconds > 0) ? ROUND_PLACEMENT_BONUS[i] : 0
@@ -1585,7 +1585,7 @@ function registerHandlers(): void {
     const from = context.from.toLowerCase()
     const balance = await loadPlayerCoinBalance(from)
     getOrCreateWalletEntity(from)  // ensure wallet entity exists and is synced
-    room.send('walletBalance', { coins: balance })
+    room.send('walletBalance', { playerId: from, coins: balance })
     console.log('[Coins] Sent wallet balance to', from.slice(0, 8), ':', balance)
   })
 
