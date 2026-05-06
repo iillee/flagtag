@@ -14,7 +14,7 @@ import { AUTH_SERVER_PEER_ID } from '@dcl/sdk/network/message-bus-sync'
 // ── Constants ──
 
 /** Seconds between each random coin respawn (one empty spot refills per tick) */
-export const COIN_RESPAWN_INTERVAL_SEC = 15
+export const COIN_RESPAWN_INTERVAL_SEC = 30
 
 /** Radius in meters for coin pickup detection (server-side) */
 export const COIN_PICKUP_RADIUS = 2.5

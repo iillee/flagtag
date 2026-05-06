@@ -7,7 +7,7 @@ import {
   getKnownPlayerName
 } from './gameState/flagHoldTime'
 import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from './systems/trapSystem'
-import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, getChargeFraction, getIsCharging } from './systems/projectileSystem'
+import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, getChargeFraction, getIsCharging, getBurnoutFlash } from './systems/projectileSystem'
 import { clearMushroomShield } from './systems/mushroomSystem'
 import { isCinematicActive } from './cinematicState'
 import { room } from './shared/messages'
@@ -195,6 +195,9 @@ const EARNED_COIN_DELAY = 1.2   // seconds after text before coins start flying
 const EARNED_FLY_DURATION = 1.0 // seconds for coin fly animation
 let earnedCoinsFlyProgress = 0  // 0 to 1
 let earnedSoundPlayed = false
+let earnedCoinSoundsPlayed = 0   // how many coin sounds have played so far
+let earnedCoinSoundTimer = 0     // timer for spacing coin sounds
+const COIN_SOUND_INTERVAL = 0.18 // seconds between each coin sound
 
 
 let pendingEarningsLocal: RoundEarnings | null = null
@@ -238,24 +241,34 @@ engine.addSystem((dt: number) => {
   if (earnedUiPhase === 'text' && earnedUiTimer >= EARNED_TEXT_DELAY + EARNED_COIN_DELAY) {
     earnedUiPhase = 'coins'
     earnedUiTimer = 0
-    // Play coin sound and apply deferred balance
+    earnedCoinSoundsPlayed = 0
+    earnedCoinSoundTimer = 0
+    // Apply deferred balance
     if (!earnedSoundPlayed) {
       earnedSoundPlayed = true
       applyDeferredBalance(activeRoundEarnings.newBalance)
       winsFrozen = false  // unfreeze wins display
       displayedWins = null  // reset so it reads live value
+    }
+  } else if (earnedUiPhase === 'coins') {
+    const totalCoins = activeRoundEarnings.total
+    const totalSoundDuration = Math.max(EARNED_FLY_DURATION, totalCoins * COIN_SOUND_INTERVAL)
+    // Play coin sounds one at a time
+    earnedCoinSoundTimer += dt
+    if (earnedCoinSoundsPlayed < totalCoins && earnedCoinSoundTimer >= COIN_SOUND_INTERVAL) {
+      earnedCoinSoundTimer -= COIN_SOUND_INTERVAL
+      earnedCoinSoundsPlayed++
       const snd = engine.addEntity()
       Transform.create(snd, { position: Vector3.Zero() })
       AudioSource.create(snd, {
         audioClipUrl: 'assets/sounds/coin.mp3',
         playing: true,
-        volume: 0.9,
+        volume: 0.7,
         loop: false,
         global: true,
       })
     }
-  } else if (earnedUiPhase === 'coins') {
-    earnedCoinsFlyProgress = Math.min(1, earnedUiTimer / EARNED_FLY_DURATION)
+    earnedCoinsFlyProgress = Math.min(1, earnedUiTimer / totalSoundDuration)
     if (earnedCoinsFlyProgress >= 1) {
       earnedUiPhase = 'fly'
       earnedUiTimer = 0
@@ -719,7 +732,7 @@ function PlayerListUi() {
                     <Label value={`${activeRoundEarnings.rank === 1 ? '1st' : activeRoundEarnings.rank === 2 ? '2nd' : '3rd'} Place Bonus: +${activeRoundEarnings.placement}`} fontSize={mobile ? 34 : S(21)} color={activeRoundEarnings.rank === 1 ? GOLD : activeRoundEarnings.rank === 2 ? SILVER : BRONZE} font="sans-serif" />
                   )}
                   {activeRoundEarnings.rank === 1 && (
-                    <Label value={`🏁 Winning: +1 Flag`} fontSize={mobile ? 34 : S(21)} color={GOLD} font="sans-serif" />
+                    <Label value={`Winning: +1 Flag`} fontSize={mobile ? 34 : S(21)} color={GOLD} font="sans-serif" />
                   )}
                 </UiEntity>
 
@@ -756,7 +769,7 @@ function PlayerListUi() {
               )}
 
               {/* Credits — lower area, title fixed */}
-              <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '50%' }, flexDirection: 'column', alignItems: 'center' }}>
+              <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '62%' }, flexDirection: 'column', alignItems: 'center' }}>
                 <Label value="Special Thanks to:" fontSize={mobile ? 52 : S(34)} color={GOLD} font="sans-serif" />
                 <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
                 {creditLines.slice(0, creditLineIndex + 1).map((line, i) => (
@@ -2229,7 +2242,7 @@ function DesktopLayout() {
             uiTransform={{
               width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE),
               flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              borderRadius: S(4),
+              borderRadius: S(_BORDER_RADIUS),
               margin: { right: S(8) },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}
@@ -2238,10 +2251,13 @@ function DesktopLayout() {
               uiTransform={{ positionType: 'absolute', position: { top: S(-2), left: S(5) } }}
             />
             {/* Charge fill — behind icon, in front of background */}
-            {getIsCharging() && (() => {
-              const cf = getChargeFraction()
+            {(getIsCharging() || getBurnoutFlash()) && (() => {
+              const burnout = getBurnoutFlash()
+              const cf = burnout ? 1 : getChargeFraction()
               const fillPct = Math.round(cf * 100)
-              const fillColor = cf >= 1.25 / 1.5
+              const fillColor = burnout
+                ? Color4.create(1, 0.15, 0.1, 0.9)
+                : cf >= 1.25 / 1.5
                 ? Color4.create(1, 0.84, 0, 0.85)
                 : Color4.create(1, 1, 1, 0.5)
               const inset = S(6)
@@ -2251,6 +2267,7 @@ function DesktopLayout() {
                   position: { bottom: inset, left: inset, right: inset },
                   height: `${fillPct}%`,
                   maxHeight: S(_ABILITY_BTN_SIZE) - inset * 2,
+                  borderRadius: S(_BORDER_RADIUS),
                 }}
                 uiBackground={{ color: fillColor }}
                 />
@@ -2278,7 +2295,7 @@ function DesktopLayout() {
             uiTransform={{
               width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE),
               flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              borderRadius: S(4),
+              borderRadius: S(_BORDER_RADIUS),
               margin: { left: S(8) },
             }}
             uiBackground={{ color: PANEL_BG_SEMI }}

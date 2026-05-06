@@ -52,6 +52,11 @@ export function getChargeFraction(): number {
 /** Returns true if the player is currently charging a throw */
 export function getIsCharging(): boolean { return isCharging }
 
+// ── Burnout flash state ──
+let burnoutFlashUntil: number = 0
+const BURNOUT_FLASH_MS = 400
+export function getBurnoutFlash(): boolean { return Date.now() < burnoutFlashUntil }
+
 /** Returns charge phase: 'charging' | 'none' */
 export function getChargePhase(): 'charging' | 'none' {
   if (!isCharging || chargeStartMs === 0) return 'none'
@@ -1384,6 +1389,7 @@ export function projectileClientSystem(dt: number): void {
     stopChargeSound()
     removeChargeSlow()
     room.send('chargeStop', { t: now })
+    burnoutFlashUntil = Date.now() + BURNOUT_FLASH_MS
     console.log('[Projectile] 💥 BURNOUT — held too long, self-stun!')
     // Force flag drop if carrying
     if (isServerConnected()) {

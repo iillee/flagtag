@@ -3660,48 +3660,6 @@
             "parent": 0
           }
         },
-        "695": {
-          "json": {
-            "position": {
-              "x": 237.25,
-              "y": 14,
-              "z": 241.5
-            },
-            "rotation": {
-              "x": 0.7071067690849304,
-              "y": 0,
-              "z": 0,
-              "w": 0.7071067690849304
-            },
-            "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
-            },
-            "parent": 0
-          }
-        },
-        "696": {
-          "json": {
-            "position": {
-              "x": 233.25,
-              "y": 14,
-              "z": 237.5
-            },
-            "rotation": {
-              "x": 0.7071067690849304,
-              "y": 0,
-              "z": 0,
-              "w": 0.7071067690849304
-            },
-            "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
-            },
-            "parent": 0
-          }
-        },
         "697": {
           "json": {
             "position": {
@@ -5031,20 +4989,6 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "695": {
-          "json": {
-            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "696": {
-          "json": {
-            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "697": {
           "json": {
             "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
@@ -5966,16 +5910,6 @@
         "694": {
           "json": {
             "value": "Doubloon_14"
-          }
-        },
-        "695": {
-          "json": {
-            "value": "Doubloon_15"
-          }
-        },
-        "696": {
-          "json": {
-            "value": "Doubloon_16"
           }
         },
         "697": {
@@ -7087,7 +7021,7 @@
         "serializationType": "map"
       },
       "data": {
-        "707": {
+        "660": {
           "json": {
             "gizmo": 1
           }
@@ -7250,8 +7184,6 @@
                   700,
                   689,
                   697,
-                  695,
-                  696,
                   686,
                   682,
                   687
@@ -8045,14 +7977,6 @@
                 "children": []
               },
               {
-                "entity": 695,
-                "children": []
-              },
-              {
-                "entity": 696,
-                "children": []
-              },
-              {
                 "entity": 697,
                 "children": []
               },
@@ -8432,12 +8356,6 @@
           "json": {}
         },
         "694": {
-          "json": {}
-        },
-        "695": {
-          "json": {}
-        },
-        "696": {
           "json": {}
         },
         "697": {
