@@ -302,6 +302,7 @@ export function isAnyOverlayOpen(): boolean {
     || mobileScoreboardOverlayVisible
     || mailboxPopupVisible
     || chestPopupVisible
+    || gravestonePopupVisible
 }
 
 // ── Chest popup state ──
@@ -334,6 +335,21 @@ export function hideMailboxPopup() {
 
 export function isMailboxPopupVisible() {
   return mailboxPopupVisible
+}
+
+let gravestonePopupVisible = false
+
+export function showGravestonePopup() {
+  gravestonePopupVisible = true
+}
+
+export function hideGravestonePopup() {
+  gravestonePopupVisible = false
+  notifyOverlayClosed()
+}
+
+export function isGravestonePopupVisible() {
+  return gravestonePopupVisible
 }
 
 // ── UI click sound (preloaded) ──
@@ -892,6 +908,53 @@ function PlayerListUi() {
           </UiEntity>
         </UiEntity>
       )}
+      {/* Gravestone popup */}
+      {gravestonePopupVisible && (() => {
+        let closeGravestoneHovered = false
+        return (
+        <UiEntity uiTransform={{
+          positionType: 'absolute',
+          position: { top: S(0), left: S(0) },
+          width: '100%',
+          height: '100%',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+        onMouseDown={() => {}}
+        >
+          <UiEntity uiTransform={{
+            width: mobile ? 340 : S(340),
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: mobile
+              ? { top: 28, bottom: 28, left: 20, right: 20 }
+              : { top: S(24), bottom: S(24), left: S(24), right: S(24) },
+            borderRadius: mobile ? 20 : S(20),
+          }}
+          uiBackground={{ color: PANEL_BG }}
+          >
+            <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: mobile ? 4 : S(4), right: mobile ? 4 : S(4) },
+                width: mobile ? 80 : S(80),
+                height: mobile ? 80 : S(80),
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onMouseEnter={() => { closeGravestoneHovered = true }}
+              onMouseLeave={() => { closeGravestoneHovered = false }}
+              onMouseDown={() => { playClickSound(); hideGravestonePopup(); closeGravestoneHovered = false; notifyOverlayClosed() }}
+            >
+              <Label value="×" fontSize={mobile ? 52 : S(44)} color={closeGravestoneHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+            </UiEntity>
+            <Label value="Here lies" fontSize={mobile ? 28 : S(24)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 8 : S(8) } }} />
+            <Label value="_________" fontSize={mobile ? 32 : S(28)} color={WHITE} font="sans-serif" uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 8 : S(8) } }} />
+          </UiEntity>
+        </UiEntity>
+        )
+      })()}
       {/* Chest popup */}
       {chestPopupVisible && (
         <UiEntity uiTransform={{
@@ -2287,7 +2350,7 @@ function DesktopLayout() {
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
             <Label value="E" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: S(-2), left: S(5) } }}
+              uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) } }}
             />
             {/* Charge fill — behind icon, in front of background */}
             {(getIsCharging() || getBurnoutFlash()) && (() => {
@@ -2340,7 +2403,7 @@ function DesktopLayout() {
             uiBackground={{ color: PANEL_BG_SEMI }}
           >
             <Label value="F" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif"
-              uiTransform={{ positionType: 'absolute', position: { top: S(-2), left: S(5) } }}
+              uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) } }}
             />
             <UiEntity
               uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3, height: S(_ABILITY_ICON_SIZE) * 1.3, margin: { top: S(2) } }}

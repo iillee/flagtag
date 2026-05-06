@@ -152,6 +152,11 @@ let waitTimer = 0
 let localPickupCooldowns = new Set<string>() // prevent spamming requests
 let walletBalance = 0
 let balanceRequested = false
+let balanceReceived = false
+let balanceRetryTimer = 0
+const BALANCE_RETRY_INTERVAL = 2 // seconds
+const BALANCE_MAX_RETRIES = 5
+let balanceRetryCount = 0
 
 /** Get the current coin balance for UI display */
 export function getCoinBalance(): number {
@@ -252,6 +257,7 @@ export function setupCoinMessages(): void {
   // Wallet balance response (on join)
   room.onMessage('walletBalance', (data) => {
     walletBalance = data.coins
+    balanceReceived = true
     console.log('[CoinPickup] Wallet balance loaded:', walletBalance)
   })
 
@@ -281,6 +287,17 @@ export function setupCoinMessages(): void {
 
 export function coinPickupSystem(dt: number): void {
   // Wait for composites + bobSpinSystem to set up (needs to run after bobSpinSystem's 3s wait)
+  // Retry wallet balance request if we haven't received it yet
+  if (balanceRequested && !balanceReceived && balanceRetryCount < BALANCE_MAX_RETRIES) {
+    balanceRetryTimer += dt
+    if (balanceRetryTimer >= BALANCE_RETRY_INTERVAL) {
+      balanceRetryTimer = 0
+      balanceRetryCount++
+      room.send('requestWalletBalance', { t: balanceRetryCount })
+      console.log('[CoinPickup] Retrying wallet balance request, attempt', balanceRetryCount)
+    }
+  }
+
   if (!setupDone) {
     waitTimer += dt
     if (waitTimer < 4) return // 4s: after bobSpinSystem's 3s setup
