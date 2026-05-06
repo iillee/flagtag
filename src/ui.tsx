@@ -690,6 +690,10 @@ function PlayerListUi() {
               {/* "You Earned" coin breakdown — upper area */}
               {activeRoundEarnings && (
                 <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '15%' }, flexDirection: 'column', alignItems: 'center' }}>
+                <UiEntity
+                  uiTransform={{ width: mobile ? 420 : S(320), padding: { top: mobile ? 28 : S(22), bottom: mobile ? 36 : S(28), left: mobile ? 24 : S(18), right: mobile ? 24 : S(18) }, flexDirection: 'column', alignItems: 'center' }}
+                  uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
+                >
                   <Label value="You Earned" fontSize={mobile ? 72 : S(46)} color={GOLD} font="sans-serif" />
                   <UiEntity uiTransform={{ height: mobile ? 24 : S(18) }} />
                   <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -707,6 +711,7 @@ function PlayerListUi() {
                   {activeRoundEarnings.placement > 0 && (
                     <Label value={`${activeRoundEarnings.rank === 1 ? '1st' : activeRoundEarnings.rank === 2 ? '2nd' : '3rd'} Place Bonus: +${activeRoundEarnings.placement}`} fontSize={mobile ? 34 : S(21)} color={activeRoundEarnings.rank === 1 ? GOLD : activeRoundEarnings.rank === 2 ? SILVER : BRONZE} font="sans-serif" />
                   )}
+                </UiEntity>
 
                   {/* Flying coins animation */}
                   {(earnedUiPhase === 'coins' || earnedUiPhase === 'fly') && (() => {
@@ -2347,6 +2352,42 @@ function DesktopLayout() {
             </UiEntity>
           </UiEntity>
         </UiEntity>
+        {/* ── Stats square — coin + flag win counters ── */}
+        {(() => {
+          const sqSize = S(2 * _ROW_HEIGHT + 2 * _PADDING)
+          const localId = getPlayer()?.userId?.toLowerCase() ?? ''
+          const myWins = getLeaderboardEntries().find(e => e.userId.toLowerCase() === localId)?.roundsWon ?? 0
+          return (
+            <UiEntity
+              uiTransform={{
+                width: sqSize, height: sqSize,
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: { right: S(4) },
+                borderRadius: S(_BORDER_RADIUS),
+              }}
+              uiBackground={{ color: PANEL_BG }}
+            >
+              {/* Coin counter */}
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(2) } }}>
+                <UiEntity
+                  uiTransform={{ width: S(20), height: S(20), margin: { right: S(6) } }}
+                  uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
+                />
+                <Label value={`${getCoinBalance()}`} fontSize={S(18)} color={GOLD} font="sans-serif" />
+              </UiEntity>
+              {/* Flag wins counter */}
+              <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { top: S(2) } }}>
+                <UiEntity
+                  uiTransform={{ width: S(18), height: S(18), margin: { right: S(6) } }}
+                  uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }}
+                />
+                <Label value={`${myWins}`} fontSize={S(18)} color={WHITE} font="sans-serif" />
+              </UiEntity>
+            </UiEntity>
+          )
+        })()}
         {/* Scoreboard panel */}
         <UiEntity
           uiTransform={{
@@ -2577,36 +2618,7 @@ function MobileLayout() {
         )
       })()}
 
-      {/* ── Coin Wallet — below top bar, centered ── */}
-      {!isCinematicActive() && cinematicFadeOpacity === 0 && (
-        <UiEntity
-          uiTransform={{
-            positionType: 'absolute',
-            position: { top: 106 },
-            width: '100%',
-            flexDirection: 'row',
-            justifyContent: 'center',
-          }}
-        >
-          <UiEntity
-            uiTransform={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: 44,
-              padding: { left: 14, right: 18 },
-              borderRadius: 22,
-            }}
-            uiBackground={{ color: Color4.create(0.1, 0.08, 0.05, 0.75) }}
-          >
-            <UiEntity
-              uiTransform={{ width: 28, height: 28, margin: { right: 8 } }}
-              uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
-            />
-            <Label value={`${getCoinBalance()}`} fontSize={24} color={GOLD} font="sans-serif" />
-          </UiEntity>
-        </UiEntity>
-      )}
+      {/* Coin wallet removed — moved into stats square next to ability bar */}
 
       {/* ── Mobile Ability Bar — bottom center, clickable, 2x size ── */}
       {!isSpectatorMode() && (() => {
