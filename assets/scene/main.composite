@@ -3495,9 +3495,9 @@
         "685": {
           "json": {
             "position": {
-              "x": 250.5,
+              "x": 252.25,
               "y": 4,
-              "z": 179.5
+              "z": 178
             },
             "rotation": {
               "x": 0.7071067690849304,
@@ -3558,7 +3558,7 @@
         "688": {
           "json": {
             "position": {
-              "x": 226.5,
+              "x": 228.5,
               "y": 40.792510986328125,
               "z": 287
             },
@@ -3603,6 +3603,279 @@
               "x": 255.5,
               "y": 24.309125900268555,
               "z": 335.2004089355469
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "693": {
+          "json": {
+            "position": {
+              "x": 210.5,
+              "y": 41.292510986328125,
+              "z": 280.75
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "694": {
+          "json": {
+            "position": {
+              "x": 248.25,
+              "y": 40.792510986328125,
+              "z": 286.75
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "695": {
+          "json": {
+            "position": {
+              "x": 237.25,
+              "y": 14,
+              "z": 241.5
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "696": {
+          "json": {
+            "position": {
+              "x": 233.25,
+              "y": 14,
+              "z": 237.5
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "697": {
+          "json": {
+            "position": {
+              "x": 235.75,
+              "y": 2.75,
+              "z": 270.75
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "698": {
+          "json": {
+            "position": {
+              "x": 244.25,
+              "y": 21,
+              "z": 180.75
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "699": {
+          "json": {
+            "position": {
+              "x": 240.5,
+              "y": 21,
+              "z": 166.58729553222656
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "700": {
+          "json": {
+            "position": {
+              "x": 217.5,
+              "y": 35.10185623168945,
+              "z": 148.44139099121094
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "701": {
+          "json": {
+            "position": {
+              "x": 216,
+              "y": 19.559125900268555,
+              "z": 325.7004089355469
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "702": {
+          "json": {
+            "position": {
+              "x": 266.25,
+              "y": 18.559125900268555,
+              "z": 351.4504089355469
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "704": {
+          "json": {
+            "position": {
+              "x": 279,
+              "y": 18.559125900268555,
+              "z": 336.9504089355469
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "706": {
+          "json": {
+            "position": {
+              "x": 288.25,
+              "y": 18.559125900268555,
+              "z": 318.9504089355469
+            },
+            "rotation": {
+              "x": 0.7071067690849304,
+              "y": 0,
+              "z": 0,
+              "w": 0.7071067690849304
+            },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
+            "parent": 0
+          }
+        },
+        "707": {
+          "json": {
+            "position": {
+              "x": 232.75,
+              "y": 24.5,
+              "z": 286
             },
             "rotation": {
               "x": 0.7071067690849304,
@@ -4743,6 +5016,97 @@
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
+        },
+        "693": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "694": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "695": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "696": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "697": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "698": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "699": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "700": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "701": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "702": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "704": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "706": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "707": {
+          "json": {
+            "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
         }
       }
     },
@@ -5592,6 +5956,71 @@
         "690": {
           "json": {
             "value": "Doubloon_10"
+          }
+        },
+        "693": {
+          "json": {
+            "value": "Doubloon_13"
+          }
+        },
+        "694": {
+          "json": {
+            "value": "Doubloon_14"
+          }
+        },
+        "695": {
+          "json": {
+            "value": "Doubloon_15"
+          }
+        },
+        "696": {
+          "json": {
+            "value": "Doubloon_16"
+          }
+        },
+        "697": {
+          "json": {
+            "value": "Doubloon_17"
+          }
+        },
+        "698": {
+          "json": {
+            "value": "Doubloon_18"
+          }
+        },
+        "699": {
+          "json": {
+            "value": "Doubloon_19"
+          }
+        },
+        "700": {
+          "json": {
+            "value": "Doubloon_20"
+          }
+        },
+        "701": {
+          "json": {
+            "value": "Doubloon_21"
+          }
+        },
+        "702": {
+          "json": {
+            "value": "Doubloon_22"
+          }
+        },
+        "704": {
+          "json": {
+            "value": "Doubloon_24"
+          }
+        },
+        "706": {
+          "json": {
+            "value": "Doubloon_26"
+          }
+        },
+        "707": {
+          "json": {
+            "value": "Doubloon_27"
           }
         }
       }
@@ -6658,7 +7087,7 @@
         "serializationType": "map"
       },
       "data": {
-        "690": {
+        "707": {
           "json": {
             "gizmo": 1
           }
@@ -6805,11 +7234,24 @@
                   680,
                   681,
                   683,
+                  707,
                   690,
+                  701,
+                  702,
+                  704,
+                  706,
                   688,
+                  694,
+                  693,
                   684,
                   685,
+                  698,
+                  699,
+                  700,
                   689,
+                  697,
+                  695,
+                  696,
                   686,
                   682,
                   687
@@ -7593,6 +8035,58 @@
               {
                 "entity": 690,
                 "children": []
+              },
+              {
+                "entity": 693,
+                "children": []
+              },
+              {
+                "entity": 694,
+                "children": []
+              },
+              {
+                "entity": 695,
+                "children": []
+              },
+              {
+                "entity": 696,
+                "children": []
+              },
+              {
+                "entity": 697,
+                "children": []
+              },
+              {
+                "entity": 698,
+                "children": []
+              },
+              {
+                "entity": 699,
+                "children": []
+              },
+              {
+                "entity": 700,
+                "children": []
+              },
+              {
+                "entity": 701,
+                "children": []
+              },
+              {
+                "entity": 702,
+                "children": []
+              },
+              {
+                "entity": 704,
+                "children": []
+              },
+              {
+                "entity": 706,
+                "children": []
+              },
+              {
+                "entity": 707,
+                "children": []
               }
             ]
           }
@@ -7932,6 +8426,45 @@
           "json": {}
         },
         "690": {
+          "json": {}
+        },
+        "693": {
+          "json": {}
+        },
+        "694": {
+          "json": {}
+        },
+        "695": {
+          "json": {}
+        },
+        "696": {
+          "json": {}
+        },
+        "697": {
+          "json": {}
+        },
+        "698": {
+          "json": {}
+        },
+        "699": {
+          "json": {}
+        },
+        "700": {
+          "json": {}
+        },
+        "701": {
+          "json": {}
+        },
+        "702": {
+          "json": {}
+        },
+        "704": {
+          "json": {}
+        },
+        "706": {
+          "json": {}
+        },
+        "707": {
           "json": {}
         }
       }

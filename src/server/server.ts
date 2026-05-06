@@ -13,7 +13,7 @@ import {
 import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
 import {
-  CoinState, PlayerWallet, COIN_STATE_SYNC_ID, COIN_RESPAWN_SEC, COIN_PICKUP_RADIUS,
+  CoinState, PlayerWallet, COIN_STATE_SYNC_ID, COIN_RESPAWN_INTERVAL_SEC, COIN_PICKUP_RADIUS,
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
   getWalletSyncId
 } from '../shared/coins'
@@ -50,8 +50,10 @@ let mushroomIdCounter = 0
 
 // ── Coin state ──
 let coinStateEntity: Entity
-/** Map of coinId → respawn timestamp (ms). Coins in this map are hidden. */
-const coinCooldowns = new Map<string, number>()
+/** Set of coinIds currently picked up (empty spots waiting for random respawn) */
+const coinCooldowns = new Set<string>()
+/** Timer tracking seconds until next random coin respawn */
+let coinRespawnTimer = 0
 /** Map of wallet address → coin balance (in-memory cache, persisted to Storage) */
 const playerCoinBalances = new Map<string, number>()
 /** Map of wallet address → wallet entity */
@@ -1242,31 +1244,29 @@ function getOrCreateWalletEntity(walletAddress: string): Entity {
 
 function updateCoinStateCRDT(): void {
   const obj: Record<string, number> = {}
-  for (const [coinId, respawnAt] of coinCooldowns) {
-    obj[coinId] = respawnAt
+  for (const coinId of coinCooldowns) {
+    obj[coinId] = 1 // value doesn't matter, just presence
   }
   CoinState.getMutable(coinStateEntity).cooldownJson = JSON.stringify(obj)
 }
 
-/** Server system: respawn coins whose cooldown has expired */
-function coinServerSystem(_dt: number): void {
+/** Server system: periodically respawn one random coin from the empty pool */
+function coinServerSystem(dt: number): void {
   if (coinCooldowns.size === 0) return
   
-  const now = Date.now()
-  let changed = false
+  coinRespawnTimer += dt
+  if (coinRespawnTimer < COIN_RESPAWN_INTERVAL_SEC) return
+  coinRespawnTimer = 0
   
-  for (const [coinId, respawnAt] of coinCooldowns) {
-    if (now >= respawnAt) {
-      coinCooldowns.delete(coinId)
-      room.send('coinRespawned', { coinId })
-      changed = true
-      console.log('[Coins] Coin respawned:', coinId)
-    }
-  }
+  // Pick a random coin from the cooldown set to respawn
+  const cooldownArray = Array.from(coinCooldowns)
+  const idx = Math.floor(Math.random() * cooldownArray.length)
+  const coinId = cooldownArray[idx]
   
-  if (changed) {
-    updateCoinStateCRDT()
-  }
+  coinCooldowns.delete(coinId)
+  room.send('coinRespawned', { coinId })
+  updateCoinStateCRDT()
+  console.log('[Coins] Coin respawned (random):', coinId, '| remaining empty:', coinCooldowns.size)
 }
 
 /** Award coins to players at end of round based on hold time and placement */
@@ -1563,15 +1563,14 @@ function registerHandlers(): void {
     const from = context.from.toLowerCase()
     const coinId = data.coinId
     
-    // Check if coin is already on cooldown
+    // Check if coin is already picked up
     if (coinCooldowns.has(coinId)) {
-      console.log('[Coins] Pickup rejected — coin on cooldown:', coinId)
+      console.log('[Coins] Pickup rejected — coin already picked up:', coinId)
       return
     }
     
-    // Put coin on cooldown
-    const respawnAt = Date.now() + COIN_RESPAWN_SEC * 1000
-    coinCooldowns.set(coinId, respawnAt)
+    // Add to empty pool (will respawn randomly later)
+    coinCooldowns.add(coinId)
     updateCoinStateCRDT()
     
     // Award coin to player
