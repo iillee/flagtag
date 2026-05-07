@@ -15,6 +15,7 @@ import { setupSpectator } from './systems/spectatorSystem'
 import { waterSystem } from './systems/waterSystem'
 import { mailboxSystem } from './systems/mailboxSystem'
 import { gravestoneSystem } from './systems/gravestoneSystem'
+import { terminalSystem } from './systems/terminalSystem'
 import { chestSystem } from './systems/chestSystem'
 
 import { updateWorldTime } from './shared/dayNight'
@@ -362,6 +363,7 @@ export async function main() {
   engine.addSystem(mailboxSystem)
   engine.addSystem(chestSystem)
   engine.addSystem(gravestoneSystem)
+  engine.addSystem(terminalSystem)
 
 
 

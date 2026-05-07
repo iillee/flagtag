@@ -306,6 +306,35 @@ export function isAnyOverlayOpen(): boolean {
     || gravestonePopupVisible
 }
 
+// ── Terminal metrics panel ──
+let metricsOpenedFromTerminal = false
+
+export function openMetricsPanel() {
+  playClickSound()
+  metricsOpenedFromTerminal = true
+  setLeaderboardOverlayVisible(true)
+  folderTab = 'metrics'
+  leaderboardTab = 'metrics'
+  metricsTab = 'daily'
+  leaderboardScrollOffset = 0
+  visitorScrollOffset = 0
+}
+
+export function closeMetricsPanel() {
+  if (metricsOpenedFromTerminal) {
+    playClickSound()
+    metricsOpenedFromTerminal = false
+    setLeaderboardOverlayVisible(false)
+    folderTab = 'leaderboards'
+    leaderboardTab = 'daily'
+    notifyOverlayClosed()
+  }
+}
+
+export function isMetricsPanelOpen(): boolean {
+  return metricsOpenedFromTerminal && getLeaderboardOverlayVisible()
+}
+
 // ── Chest popup state ──
 let chestPopupVisible = false
 
@@ -590,7 +619,7 @@ engine.addSystem(() => {
   if (inputSystem.isTriggered(InputAction.IA_ACTION_6, PointerEventType.PET_DOWN)) {
     let closed = false
     if (getWinConditionOverlayVisible()) { setWinConditionOverlayVisible(false); closed = true }
-    if (getLeaderboardOverlayVisible()) { setLeaderboardOverlayVisible(false); closed = true }
+    if (getLeaderboardOverlayVisible()) { setLeaderboardOverlayVisible(false); metricsOpenedFromTerminal = false; folderTab = 'leaderboards'; leaderboardTab = 'daily'; closed = true }
     if (getAnalyticsOverlayVisible()) { setAnalyticsOverlayVisible(false); closed = true }
     if (closed) { playClickSound(); notifyOverlayClosed() }
   }
@@ -1548,28 +1577,26 @@ function DesktopLayout() {
             }}
           >
             {/* Filler patches — cover rounded corner dips where active tab meets body */}
-            {/* Left bottom corner of active tab */}
-            <UiEntity
+            {!metricsOpenedFromTerminal && <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(_FOLDER_TAB_HEIGHT - 2), left: S(folderTab === 'status' ? 0 : folderTab === 'leaderboards' ? (_FOLDER_TAB_WIDTH + _FOLDER_GAP) : (_FOLDER_TAB_WIDTH + _FOLDER_GAP) * 2) },
+                position: { top: S(_FOLDER_TAB_HEIGHT - 2), left: S(folderTab === 'status' ? 0 : (_FOLDER_TAB_WIDTH + _FOLDER_GAP)) },
                 width: S(_FOLDER_RADIUS + 2),
                 height: S(_FOLDER_RADIUS + 4),
               }}
               uiBackground={{ color: FOLDER_ACTIVE }}
-            />
-            {/* Right bottom corner of active tab */}
-            <UiEntity
+            />}
+            {!metricsOpenedFromTerminal && <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(_FOLDER_TAB_HEIGHT), left: S((folderTab === 'status' ? 0 : folderTab === 'leaderboards' ? (_FOLDER_TAB_WIDTH + _FOLDER_GAP) : (_FOLDER_TAB_WIDTH + _FOLDER_GAP) * 2) + _FOLDER_TAB_WIDTH - _FOLDER_RADIUS) },
+                position: { top: S(_FOLDER_TAB_HEIGHT), left: S((folderTab === 'status' ? 0 : (_FOLDER_TAB_WIDTH + _FOLDER_GAP)) + _FOLDER_TAB_WIDTH - _FOLDER_RADIUS) },
                 width: S(_FOLDER_RADIUS),
                 height: S(_FOLDER_RADIUS),
               }}
               uiBackground={{ color: FOLDER_ACTIVE }}
-            />
+            />}
             {/* Folder tab 1 — Status */}
-            <UiEntity
+            {!metricsOpenedFromTerminal && <UiEntity
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: S(0), left: S(0) },
@@ -1585,9 +1612,9 @@ function DesktopLayout() {
               onMouseDown={() => { playClickSound(); folderTab = 'status' }}
             >
               <Label value="Status" fontSize={S(28)} color={folderTab === 'status' ? GOLD : MUTED} font="sans-serif" />
-            </UiEntity>
+            </UiEntity>}
             {/* Folder tab 2 — Leaderboards */}
-            <UiEntity
+            {!metricsOpenedFromTerminal && <UiEntity
               uiTransform={{
                 positionType: 'absolute',
                 position: { top: S(0), left: S(_FOLDER_TAB_WIDTH + _FOLDER_GAP) },
@@ -1603,12 +1630,13 @@ function DesktopLayout() {
               onMouseDown={() => { playClickSound(); folderTab = 'leaderboards'; leaderboardTab = 'daily'; leaderboardScrollOffset = 0 }}
             >
               <Label value="Leaderboards" fontSize={S(28)} color={folderTab === 'leaderboards' ? GOLD : MUTED} font="sans-serif" />
-            </UiEntity>
-            {/* Folder tab 3 — Metrics */}
-            <UiEntity
+            </UiEntity>}
+            {/* Metrics tab removed from tabs — now accessed via Terminal in-world */}
+            {/* "Scene Metrics" tab — shown only when opened from terminal */}
+            {metricsOpenedFromTerminal && <UiEntity
               uiTransform={{
                 positionType: 'absolute',
-                position: { top: S(0), left: S((_FOLDER_TAB_WIDTH + _FOLDER_GAP) * 2) },
+                position: { top: S(0), left: S(0) },
                 width: S(_FOLDER_TAB_WIDTH),
                 height: S(_FOLDER_TAB_HEIGHT + _FOLDER_RADIUS),
                 borderRadius: S(_FOLDER_RADIUS),
@@ -1617,11 +1645,29 @@ function DesktopLayout() {
                 justifyContent: 'center',
                 padding: { bottom: S(_FOLDER_RADIUS) },
               }}
-              uiBackground={{ color: folderTab === 'metrics' ? FOLDER_ACTIVE : FOLDER_INACTIVE }}
-              onMouseDown={() => { playClickSound(); folderTab = 'metrics'; leaderboardTab = 'metrics'; metricsTab = 'daily'; leaderboardScrollOffset = 0; visitorScrollOffset = 0 }}
+              uiBackground={{ color: FOLDER_ACTIVE }}
             >
-              <Label value="Metrics" fontSize={S(28)} color={folderTab === 'metrics' ? GOLD : MUTED} font="sans-serif" />
-            </UiEntity>
+              <Label value="Scene Metrics" fontSize={S(28)} color={GOLD} font="sans-serif" />
+            </UiEntity>}
+            {/* Filler patch for terminal metrics tab */}
+            {metricsOpenedFromTerminal && <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: S(_FOLDER_TAB_HEIGHT - 2), left: S(0) },
+                width: S(_FOLDER_RADIUS + 2),
+                height: S(_FOLDER_RADIUS + 4),
+              }}
+              uiBackground={{ color: FOLDER_ACTIVE }}
+            />}
+            {metricsOpenedFromTerminal && <UiEntity
+              uiTransform={{
+                positionType: 'absolute',
+                position: { top: S(_FOLDER_TAB_HEIGHT), left: S(_FOLDER_TAB_WIDTH - _FOLDER_RADIUS) },
+                width: S(_FOLDER_RADIUS),
+                height: S(_FOLDER_RADIUS),
+              }}
+              uiBackground={{ color: FOLDER_ACTIVE }}
+            />}
             {/* Folder body — main panel area */}
             <UiEntity
               uiTransform={{
@@ -1702,7 +1748,7 @@ function DesktopLayout() {
                 }}
                 onMouseEnter={() => { closeLeaderboardHovered = true }}
                 onMouseLeave={() => { closeLeaderboardHovered = false }}
-                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); closeLeaderboardHovered = false; notifyOverlayClosed() }}
+                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); closeLeaderboardHovered = false; metricsOpenedFromTerminal = false; folderTab = 'leaderboards'; leaderboardTab = 'daily'; notifyOverlayClosed() }}
               >
                 <Label value="×" fontSize={S(38)} color={closeLeaderboardHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
               </UiEntity>
@@ -2450,7 +2496,7 @@ function DesktopLayout() {
                 uiBackground={{ color: PANEL_BG }}
                 onMouseEnter={() => { squareIconHovered = true }}
                 onMouseLeave={() => { squareIconHovered = false }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; metricsOpenedFromTerminal = false; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="Menus" fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(94), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
               </UiEntity>
@@ -2460,7 +2506,7 @@ function DesktopLayout() {
               uiBackground={{ color: PANEL_BG }}
               onMouseEnter={() => { squareIconHovered = true; playHoverSound() }}
               onMouseLeave={() => { squareIconHovered = false }}
-              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; metricsOpenedFromTerminal = false; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
             >
               <UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
             </UiEntity>
@@ -2737,7 +2783,7 @@ function MobileLayout() {
                   margin: { left: 6 },
                 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileScoreboardOverlayVisible = false; leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; metricsOpenedFromTerminal = false; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible ? GOLD : WHITE }} />
               </UiEntity>
@@ -3160,11 +3206,11 @@ function MobileLayout() {
                 width: 88, height: 88,
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               }}
-              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
+              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); metricsOpenedFromTerminal = false; folderTab = 'leaderboards'; leaderboardTab = 'daily'; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            {(() => { folderTab = 'leaderboards'; leaderboardTab = leaderboardTab === 'metrics' ? 'daily' : leaderboardTab; return null })()}
+            {(() => { if (!metricsOpenedFromTerminal) { folderTab = 'leaderboards'; leaderboardTab = leaderboardTab === 'metrics' ? 'daily' : leaderboardTab; } return null })()}
             {(
             <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 40 }}>
               <UiEntity
