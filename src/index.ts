@@ -17,6 +17,7 @@ import { mailboxSystem } from './systems/mailboxSystem'
 import { gravestoneSystem } from './systems/gravestoneSystem'
 import { terminalSystem } from './systems/terminalSystem'
 import { chestSystem } from './systems/chestSystem'
+import { upgradeStateSystem, initUpgradeListeners } from './gameState/playerUpgradeState'
 
 import { updateWorldTime } from './shared/dayNight'
 import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
@@ -351,6 +352,7 @@ export async function main() {
   engine.addSystem(waterBobSystem)
   engine.addSystem(coinBobSpinSystem)
   setupCoinMessages()
+  initUpgradeListeners()
   engine.addSystem(coinPickupSystem)
   engine.addSystem(waterSplashSystem)
 
@@ -362,6 +364,7 @@ export async function main() {
   // Mailbox — click to leave feedback
   engine.addSystem(mailboxSystem)
   engine.addSystem(chestSystem)
+  engine.addSystem(upgradeStateSystem)
   engine.addSystem(gravestoneSystem)
   engine.addSystem(terminalSystem)
 

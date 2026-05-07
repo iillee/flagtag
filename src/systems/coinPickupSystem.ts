@@ -265,8 +265,9 @@ export function setupCoinMessages(): void {
     console.log('[CoinPickup] Wallet balance loaded:', walletBalance)
   })
 
-  // Request balance immediately on connect (don't wait for coin setup)
+  // Request balance + upgrades immediately on connect (don't wait for coin setup)
   room.send('requestWalletBalance', { t: 0 })
+  room.send('requestUpgrades', { t: 0 })
   balanceRequested = true
 
   // Round-end coin earnings breakdown (personalized)

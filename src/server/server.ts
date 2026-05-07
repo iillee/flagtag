@@ -18,6 +18,13 @@ import {
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
   getWalletSyncId
 } from '../shared/coins'
+import {
+  PlayerUpgrades, PlayerLifetimeWins,
+  getUpgradesSyncId, getLifetimeWinsSyncId,
+  parseUpgrades, serializeUpgrades, BOOMERANG_STORE,
+  type UpgradeData
+} from '../shared/upgrades'
+import type { BoomerangColor } from '../gameState/boomerangColor'
 
 // ── Constants ──
 const PICKUP_RADIUS = 3
@@ -59,6 +66,16 @@ let coinRespawnTimer = 0
 const playerCoinBalances = new Map<string, number>()
 /** Map of wallet address → wallet entity */
 const walletEntities = new Map<string, Entity>()
+
+// ── Upgrade / progression state ──
+/** Map of wallet address → upgrade data (in-memory cache, persisted to Storage) */
+const playerUpgradeData = new Map<string, UpgradeData>()
+/** Map of wallet address → upgrade entity */
+const upgradeEntities = new Map<string, Entity>()
+/** Map of wallet address → lifetime wins (in-memory cache, persisted to Storage) */
+const playerLifetimeWinsCache = new Map<string, number>()
+/** Map of wallet address → lifetime wins entity */
+const lifetimeWinsEntities = new Map<string, Entity>()
 
 // ── Server state ──
 let flagEntity: Entity
@@ -1257,6 +1274,160 @@ function getOrCreateWalletEntity(walletAddress: string): Entity {
   return entity
 }
 
+// ── Upgrade / progression helpers ──
+
+async function loadPlayerUpgrades(walletAddress: string): Promise<UpgradeData> {
+  const key = walletAddress.toLowerCase()
+  const cached = playerUpgradeData.get(key)
+  if (cached) return cached
+
+  try {
+    const saved = await Storage.get<string>(`upgrades:${key}`)
+    const data = saved ? parseUpgrades(saved) : { boomerangs: ['r'] as BoomerangColor[], equipped: 'r' as BoomerangColor }
+    playerUpgradeData.set(key, data)
+    return data
+  } catch (err) {
+    console.error('[Upgrades] Failed to load for', key.slice(0, 8), err)
+    return { boomerangs: ['r'], equipped: 'r' }
+  }
+}
+
+async function savePlayerUpgrades(walletAddress: string, data: UpgradeData): Promise<void> {
+  const key = walletAddress.toLowerCase()
+  playerUpgradeData.set(key, data)
+
+  // Update synced entity
+  const entity = getOrCreateUpgradeEntity(key)
+  PlayerUpgrades.getMutable(entity).upgradesJson = serializeUpgrades(data)
+
+  try {
+    await Storage.set(`upgrades:${key}`, serializeUpgrades(data))
+  } catch (err) {
+    console.error('[Upgrades] Failed to persist for', key.slice(0, 8), err)
+  }
+}
+
+function getOrCreateUpgradeEntity(walletAddress: string): Entity {
+  const key = walletAddress.toLowerCase()
+  let entity = upgradeEntities.get(key)
+  if (entity) return entity
+
+  entity = engine.addEntity()
+  const data = playerUpgradeData.get(key) ?? { boomerangs: ['r'], equipped: 'r' }
+  PlayerUpgrades.create(entity, { playerId: key, upgradesJson: serializeUpgrades(data) })
+  syncEntity(entity, [PlayerUpgrades.componentId], getUpgradesSyncId(key))
+  upgradeEntities.set(key, entity)
+  console.log('[Upgrades] Created entity for', key.slice(0, 8))
+  return entity
+}
+
+async function loadPlayerLifetimeWins(walletAddress: string): Promise<number> {
+  const key = walletAddress.toLowerCase()
+  const cached = playerLifetimeWinsCache.get(key)
+  if (cached !== undefined) return cached
+
+  try {
+    const saved = await Storage.get<string>(`lifetimeWins:${key}`)
+    const wins = saved ? parseInt(saved, 10) : 0
+    playerLifetimeWinsCache.set(key, wins)
+    return wins
+  } catch (err) {
+    console.error('[LifetimeWins] Failed to load for', key.slice(0, 8), err)
+    return 0
+  }
+}
+
+async function addPlayerLifetimeWin(walletAddress: string): Promise<number> {
+  const key = walletAddress.toLowerCase()
+  const current = await loadPlayerLifetimeWins(key)
+  const newWins = current + 1
+  playerLifetimeWinsCache.set(key, newWins)
+
+  // Update synced entity
+  const entity = getOrCreateLifetimeWinsEntity(key)
+  PlayerLifetimeWins.getMutable(entity).wins = newWins
+
+  try {
+    await Storage.set(`lifetimeWins:${key}`, String(newWins))
+  } catch (err) {
+    console.error('[LifetimeWins] Failed to persist for', key.slice(0, 8), err)
+  }
+
+  return newWins
+}
+
+function getOrCreateLifetimeWinsEntity(walletAddress: string): Entity {
+  const key = walletAddress.toLowerCase()
+  let entity = lifetimeWinsEntities.get(key)
+  if (entity) return entity
+
+  entity = engine.addEntity()
+  const wins = playerLifetimeWinsCache.get(key) ?? 0
+  PlayerLifetimeWins.create(entity, { playerId: key, wins })
+  syncEntity(entity, [PlayerLifetimeWins.componentId], getLifetimeWinsSyncId(key))
+  lifetimeWinsEntities.set(key, entity)
+  console.log('[LifetimeWins] Created entity for', key.slice(0, 8), 'wins:', wins)
+  return entity
+}
+
+async function handleBuyBoomerang(playerId: string, color: string): Promise<void> {
+  const key = playerId.toLowerCase()
+  const boomerangColor = color as BoomerangColor
+  
+  // Find the store item
+  const item = BOOMERANG_STORE.find(i => i.id === boomerangColor)
+  if (!item) {
+    room.send('buyResult', { success: false, color, reason: 'Invalid item', newBalance: 0, upgradesJson: '' })
+    return
+  }
+
+  // Already owned?
+  const upgrades = await loadPlayerUpgrades(key)
+  if (upgrades.boomerangs.includes(boomerangColor)) {
+    room.send('buyResult', { success: false, color, reason: 'Already owned', newBalance: 0, upgradesJson: '' })
+    return
+  }
+
+  // Check flag requirement
+  const wins = await loadPlayerLifetimeWins(key)
+  if (wins < item.flagsRequired) {
+    room.send('buyResult', { success: false, color, reason: `Need ${item.flagsRequired} flags (you have ${wins})`, newBalance: 0, upgradesJson: '' })
+    return
+  }
+
+  // Check coin balance
+  const balance = await loadPlayerCoinBalance(key)
+  if (balance < item.coinCost) {
+    room.send('buyResult', { success: false, color, reason: `Need ${item.coinCost} coins (you have ${balance})`, newBalance: 0, upgradesJson: '' })
+    return
+  }
+
+  // Deduct coins
+  const newBalance = balance - item.coinCost
+  await setPlayerCoinBalance(key, newBalance)
+
+  // Add boomerang to owned list + auto-equip
+  upgrades.boomerangs.push(boomerangColor)
+  upgrades.equipped = boomerangColor
+  await savePlayerUpgrades(key, upgrades)
+
+  // Update the player's boomerang color on server side
+  playerBoomerangColors.set(key, boomerangColor)
+
+  console.log('[Store] Player', key.slice(0, 8), 'bought', item.label, 'for', item.coinCost, 'coins. New balance:', newBalance)
+
+  room.send('buyResult', {
+    success: true,
+    color,
+    reason: '',
+    newBalance,
+    upgradesJson: serializeUpgrades(upgrades)
+  })
+
+  // Broadcast color change to all players
+  room.send('playerColorChanged', { playerId: key, color: boomerangColor })
+}
+
 function updateCoinStateCRDT(): void {
   const obj: Record<string, number> = {}
   for (const coinId of coinCooldowns) {
@@ -1531,13 +1702,21 @@ function registerHandlers(): void {
   })
 
   // ── Boomerang color change ──
-  room.onMessage('colorChanged', (data, context) => {
+  room.onMessage('colorChanged', async (data, context) => {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      const color = data.color || 'r'
+      const color = (data.color || 'r') as BoomerangColor
+      // Validate ownership — only allow equipped boomerangs the player owns
+      const upgrades = await loadPlayerUpgrades(from)
+      if (!upgrades.boomerangs.includes(color)) {
+        console.log(`[Server] colorChanged rejected — ${from.slice(0, 8)} doesn't own ${color}`)
+        // Send back their actual equipped color
+        room.send('playerColorChanged', { playerId: from, color: upgrades.equipped })
+        return
+      }
       playerBoomerangColors.set(from, color)
-      console.log(`[Server] Player ${from} changed boomerang color to ${color}`)
+      console.log(`[Server] Player ${from.slice(0, 8)} changed boomerang color to ${color}`)
       // Broadcast to ALL clients (including sender, so they can confirm)
       room.send('playerColorChanged', { playerId: from, color })
     } catch (err) { console.error('[Server] ❌ colorChanged handler error:', err) }
@@ -1617,6 +1796,53 @@ function registerHandlers(): void {
     }).catch(err => {
       console.error('[Server] ❌ Manual Discord report failed:', err)
     })
+  })
+
+  // ── Store / upgrade handlers ──
+
+  room.onMessage('requestUpgrades', async (_data, context) => {
+    if (!context) return
+    const from = context.from.toLowerCase()
+    // Load and sync upgrades + lifetime wins
+    const upgrades = await loadPlayerUpgrades(from)
+    getOrCreateUpgradeEntity(from)
+    const wins = await loadPlayerLifetimeWins(from)
+    getOrCreateLifetimeWinsEntity(from)
+    console.log('[Store] Sent upgrades to', from.slice(0, 8), '- owned:', upgrades.boomerangs.join(','), 'wins:', wins)
+
+    // Auto-equip their saved boomerang color
+    if (upgrades.equipped && upgrades.equipped !== 'r') {
+      playerBoomerangColors.set(from, upgrades.equipped)
+      room.send('playerColorChanged', { playerId: from, color: upgrades.equipped })
+    }
+  })
+
+  room.onMessage('buyBoomerang', async (data, context) => {
+    if (!context || !data.color) return
+    const from = context.from.toLowerCase()
+    try {
+      await handleBuyBoomerang(from, data.color)
+    } catch (err) {
+      console.error('[Store] buyBoomerang error:', err)
+    }
+  })
+
+  room.onMessage('equipBoomerang', async (data, context) => {
+    if (!context || !data.color) return
+    const from = context.from.toLowerCase()
+    const color = data.color as BoomerangColor
+    
+    const upgrades = await loadPlayerUpgrades(from)
+    if (!upgrades.boomerangs.includes(color)) {
+      console.log('[Store] equipBoomerang rejected — not owned:', color, 'by', from.slice(0, 8))
+      return
+    }
+    
+    upgrades.equipped = color
+    await savePlayerUpgrades(from, upgrades)
+    playerBoomerangColors.set(from, color)
+    room.send('playerColorChanged', { playerId: from, color })
+    console.log('[Store] Player', from.slice(0, 8), 'equipped', color)
   })
 }
 
@@ -2931,6 +3157,15 @@ async function handleRoundEnd(): Promise<void> {
     mlMutable.month = currentMonth
     await persistMonthlyLeaderboard(mlJson)
     await Storage.set('monthlyLeaderboardMonth', currentMonth)
+  }
+
+  // ── 7b. Award lifetime wins (flags) to winners ──
+  if (maxSeconds > 0) {
+    const winners = players.filter(p => p.seconds >= maxSeconds)
+    for (const w of winners) {
+      const newWins = await addPlayerLifetimeWin(w.userId)
+      console.log('[LifetimeWins] Player', w.userId.slice(0, 8), 'now has', newWins, 'lifetime wins')
+    }
   }
 
   // ── 8. Persist flag state ──

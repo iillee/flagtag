@@ -25,8 +25,8 @@ export const ROUND_PARTICIPATION_COINS = 1
 /** Bonus coins for top 3 placements at round end */
 export const ROUND_PLACEMENT_BONUS = [5, 3, 1] as const  // 1st, 2nd, 3rd
 
-/** Maximum coins a player can hold (upgradeable in future) */
-export const MAX_COINS = 1000
+/** Maximum coins a player can hold */
+export const MAX_COINS = 10000
 
 /** Coins per second of flag hold time (fractional, floored at round end) */
 export const COINS_PER_HOLD_SECOND = 0.1

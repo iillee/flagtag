@@ -79,6 +79,12 @@ export const Messages = {
   walletBalance: Schemas.Map({ playerId: Schemas.String, coins: Schemas.Int }),  // Server → Client: your current balance
   roundCoinsEarned: Schemas.Map({ playerId: Schemas.String, total: Schemas.Int, participation: Schemas.Int, holdTime: Schemas.Int, placement: Schemas.Int, rank: Schemas.Int, newBalance: Schemas.Int }), // Server → Client: round-end earnings breakdown
 
+  // Store / upgrade messages
+  requestUpgrades: Schemas.Map({ t: Schemas.Int }),                    // Client → Server: request my upgrades + lifetime wins on join
+  buyBoomerang: Schemas.Map({ color: Schemas.String }),                // Client → Server: purchase a boomerang
+  buyResult: Schemas.Map({ success: Schemas.Boolean, color: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),  // Server → Client
+  equipBoomerang: Schemas.Map({ color: Schemas.String }),              // Client → Server: equip an owned boomerang
+
   // Zombie messages
   zombieHit: Schemas.Map({ zombieId: Schemas.Float }),          // Client → Server: boomerang hit a zombie
   zombieKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: zombie died (VFX)
