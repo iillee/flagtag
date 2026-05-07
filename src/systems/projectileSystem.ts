@@ -112,6 +112,8 @@ const EMOTE_MOVE_THRESHOLD = 0.1 // player must move this far to cancel emote hi
 // Track when the local player has an active throw (hide hand boomerang)
 let localThrowActive = false
 let localThrowSawVisual = false // set true once msgProjectileVisuals was non-empty after throw
+let localThrowStartMs = 0 // independent timestamp — never overwritten by cooldown logic
+const LOCAL_THROW_SAFETY_MS = 4000 // force-clear localThrowActive after 4s with no visual
 
 export function setHandBoomerangEntity(e: Entity) {
   handBoomerangEntity = e
@@ -327,6 +329,7 @@ function stopOrbitVisual(): void {
   }
   localThrowActive = false
   localThrowSawVisual = false
+  localThrowStartMs = 0
   // Start cooldown NOW (after orbit ends), not when it was thrown
   lastLocalProjectileFireTime = Date.now()
   lastThrowExtraCooldown = 3 // 1s base + 3s extra = 4s total post-catch cooldown
@@ -1093,7 +1096,7 @@ export function triggerProjectileFromUI(): void {
     const uiOrbitAngle = Math.atan2(oaDirX, oaDirZ) * (180 / Math.PI)
     const serverUp = isServerConnected()
     if (serverUp) {
-      localThrowActive = true; localThrowSawVisual = false
+      localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
       updateHandBoomerangVisibility()
       room.send('requestOrbit', { t: now, startAngle: uiOrbitAngle })
     } else {
@@ -1109,7 +1112,7 @@ export function triggerProjectileFromUI(): void {
 
   if (serverUp) {
     console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
-    localThrowActive = true; localThrowSawVisual = false
+    localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
     updateHandBoomerangVisibility()
     const uiRange = uiColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
     const uiSpeed = CHARGE_MIN_SPEED
@@ -1121,7 +1124,7 @@ export function triggerProjectileFromUI(): void {
     }
   } else {
     console.log('[Projectile] 🎯 UI tap — firing projectile locally (no server)')
-    localThrowActive = true; localThrowSawVisual = false
+    localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
     updateHandBoomerangVisibility()
     fireProjectileLocally()
   }
@@ -1176,11 +1179,14 @@ export function projectileClientSystem(dt: number): void {
         // Visual existed and is now gone — boomerang returned
         localThrowActive = false
         localThrowSawVisual = false
+        localThrowStartMs = 0
         lastLocalProjectileFireTime = now // start post-catch cooldown
-      } else if (now - lastLocalProjectileFireTime > PROJECTILE_LIFETIME_SEC * 1000) {
-        // Safety: message never arrived
+      } else if (localThrowStartMs > 0 && now - localThrowStartMs > LOCAL_THROW_SAFETY_MS) {
+        // Safety: no visual appeared within 4s — message was lost or race condition
+        console.log('[Projectile] ⚠️ localThrowActive stuck for', ((now - localThrowStartMs) / 1000).toFixed(1), 's with no visual — force-clearing')
         localThrowActive = false
         localThrowSawVisual = false
+        localThrowStartMs = 0
         lastLocalProjectileFireTime = now // start post-catch cooldown
       }
     }
@@ -1243,7 +1249,7 @@ export function projectileClientSystem(dt: number): void {
       const eOrbitAngle = Math.atan2(eaDirX, eaDirZ) * (180 / Math.PI)
       const serverUp = isServerConnected()
       if (serverUp) {
-        localThrowActive = true; localThrowSawVisual = false
+        localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
         updateHandBoomerangVisibility()
         room.send('requestOrbit', { t: now, startAngle: eOrbitAngle })
       } else {
@@ -1263,7 +1269,7 @@ export function projectileClientSystem(dt: number): void {
       const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
       const speed = CHARGE_MIN_SPEED
       if (serverUp) {
-        localThrowActive = true; localThrowSawVisual = false
+        localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
         updateHandBoomerangVisibility()
         room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: speed, chargeRange: range, chargeScale: 1 })
 
@@ -1273,7 +1279,7 @@ export function projectileClientSystem(dt: number): void {
           fireWallRaycast(spawnPos, dirX, dirZ)
         }
       } else {
-        localThrowActive = true; localThrowSawVisual = false
+        localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
         updateHandBoomerangVisibility()
         fireProjectileLocally(speed, range)
       }
@@ -1369,7 +1375,7 @@ export function projectileClientSystem(dt: number): void {
     const { dirX, dirZ } = getPlayerForward()
 
     if (serverUp) {
-      localThrowActive = true; localThrowSawVisual = false
+      localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
       updateHandBoomerangVisibility()
       room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed, chargeRange, chargeScale })
 
@@ -1379,7 +1385,7 @@ export function projectileClientSystem(dt: number): void {
         fireWallRaycast(spawnPos, dirX, dirZ)
       }
     } else {
-      localThrowActive = true; localThrowSawVisual = false
+      localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
       updateHandBoomerangVisibility()
       fireProjectileLocally(chargeSpeed, chargeRange)
     }
