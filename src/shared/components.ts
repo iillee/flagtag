@@ -195,15 +195,24 @@ export const TRAP_MAX_ACTIVE = 3
 export const TRAP_TRIGGER_RADIUS = 2.0
 
 /**
- * Sync ID range for traps — monotonically increasing, never recycled.
- * Each new trap gets a unique sync ID for the lifetime of the server process.
- * The entityEnumId space is a 32-bit integer, so we have billions of IDs available.
- * Base starts at 1000000 to avoid collisions with hold-time entities (10000–109999).
+ * Sync ID pool for traps — fixed pool of reusable IDs.
+ * Instead of monotonically increasing (which leaves CRDT tombstones that accumulate
+ * and eventually saturate the buffer), we reuse a fixed set of slots.
+ * Max concurrent traps: 10 players × 3 each = 30. Pool of 40 gives headroom.
  */
 const TRAP_SYNC_ID_BASE = 1000000
-let trapIdCounter = 0
+const TRAP_POOL_SIZE = 40
+const trapIdPool: number[] = []
+for (let i = 0; i < TRAP_POOL_SIZE; i++) trapIdPool.push(TRAP_SYNC_ID_BASE + i)
 export function getNextTrapSyncId(): number {
-  return TRAP_SYNC_ID_BASE + (trapIdCounter++)
+  // Recycle from pool; if exhausted, wrap around (oldest trap will be overwritten)
+  if (trapIdPool.length > 0) return trapIdPool.shift()!
+  return TRAP_SYNC_ID_BASE + (Math.floor(Math.random() * TRAP_POOL_SIZE))
+}
+export function recycleTrapSyncId(id: number): void {
+  if (id >= TRAP_SYNC_ID_BASE && id < TRAP_SYNC_ID_BASE + TRAP_POOL_SIZE) {
+    if (!trapIdPool.includes(id)) trapIdPool.push(id)
+  }
 }
 
 // ── Projectile (powerup) ──
@@ -248,15 +257,21 @@ export const PROJECTILE_HIT_RADIUS = 2.0
 export const PROJECTILE_LIFETIME_SEC = 8
 
 /**
- * Sync ID range for projectiles — monotonically increasing, never recycled.
- * Each new projectile gets a unique sync ID for the lifetime of the server process.
- * The entityEnumId space is a 32-bit integer, so we have billions of IDs available.
- * Base starts at 2000000 to guarantee no overlap with traps or hold-time entities.
+ * Sync ID pool for projectiles — fixed pool of reusable IDs.
+ * Max concurrent projectiles: 10 players × 2 (yellow) = 20. Pool of 30 gives headroom.
  */
 const PROJECTILE_SYNC_ID_BASE = 2000000
-let projectileIdCounter = 0
+const PROJECTILE_POOL_SIZE = 30
+const projectileIdPool: number[] = []
+for (let i = 0; i < PROJECTILE_POOL_SIZE; i++) projectileIdPool.push(PROJECTILE_SYNC_ID_BASE + i)
 export function getNextProjectileSyncId(): number {
-  return PROJECTILE_SYNC_ID_BASE + (projectileIdCounter++)
+  if (projectileIdPool.length > 0) return projectileIdPool.shift()!
+  return PROJECTILE_SYNC_ID_BASE + (Math.floor(Math.random() * PROJECTILE_POOL_SIZE))
+}
+export function recycleProjectileSyncId(id: number): void {
+  if (id >= PROJECTILE_SYNC_ID_BASE && id < PROJECTILE_SYNC_ID_BASE + PROJECTILE_POOL_SIZE) {
+    if (!projectileIdPool.includes(id)) projectileIdPool.push(id)
+  }
 }
 
 // ── Zombie ──
@@ -295,9 +310,17 @@ export const ZOMBIE_SPAWN_INTERVAL = 20
 export const ZOMBIE_MAX_ACTIVE = 5
 
 const ZOMBIE_SYNC_ID_BASE = 3000000
-let zombieIdCounter = 0
+const ZOMBIE_POOL_SIZE = 5
+const zombieIdPool: number[] = []
+for (let i = 0; i < ZOMBIE_POOL_SIZE; i++) zombieIdPool.push(ZOMBIE_SYNC_ID_BASE + i)
 export function getNextZombieSyncId(): number {
-  return ZOMBIE_SYNC_ID_BASE + (zombieIdCounter++)
+  if (zombieIdPool.length > 0) return zombieIdPool.shift()!
+  return ZOMBIE_SYNC_ID_BASE + (Math.floor(Math.random() * ZOMBIE_POOL_SIZE))
+}
+export function recycleZombieSyncId(id: number): void {
+  if (id >= ZOMBIE_SYNC_ID_BASE && id < ZOMBIE_SYNC_ID_BASE + ZOMBIE_POOL_SIZE) {
+    if (!zombieIdPool.includes(id)) zombieIdPool.push(id)
+  }
 }
 
 export enum SyncIds {

@@ -6,8 +6,9 @@ import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState, VisitorAnalytics, MonthlyVisitorAnalytics,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
-  Zombie, ZOMBIE_DETECT_RADIUS, ZOMBIE_SPEED, ZOMBIE_FAST_SPEED, ZOMBIE_FAST_DIST, ZOMBIE_HIT_RADIUS, ZOMBIE_SPAWN_INTERVAL, ZOMBIE_MAX_ACTIVE, getNextZombieSyncId,
-  getHoldTimeEntityEnumId, getNextTrapSyncId, getNextProjectileSyncId,
+  Zombie, ZOMBIE_DETECT_RADIUS, ZOMBIE_SPEED, ZOMBIE_FAST_SPEED, ZOMBIE_FAST_DIST, ZOMBIE_HIT_RADIUS, ZOMBIE_SPAWN_INTERVAL, ZOMBIE_MAX_ACTIVE,
+  getNextZombieSyncId, recycleZombieSyncId,
+  getHoldTimeEntityEnumId, getNextTrapSyncId, recycleTrapSyncId, getNextProjectileSyncId, recycleProjectileSyncId,
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString
 } from '../shared/components'
 import { room } from '../shared/messages'
@@ -155,6 +156,7 @@ const lastTrapDropTime = new Map<string, number>()
 /** Track active trap entities for cleanup, with per-trap gravity state. */
 interface ActiveTrap {
   entity: Entity
+  syncId: number
   droppedBy: string
   droppedAtMs: number
   falling: boolean
@@ -163,6 +165,18 @@ interface ActiveTrap {
   groundResolved: boolean  // true once client raycast has reported ground
 }
 const activeTraps: ActiveTrap[] = []
+
+/** Remove a trap entity and recycle its sync ID back to the pool. */
+function removeTrap(trap: ActiveTrap): void {
+  removeTrap(trap)
+  recycleTrapSyncId(trap.syncId)
+}
+
+/** Remove a projectile entity and recycle its sync ID back to the pool. */
+function removeProjectile(projectile: ActiveProjectile): void {
+  removeProjectile(projectile)
+  recycleProjectileSyncId(projectile.syncId)
+}
 
 // ── Green orbit state ──
 const ORBIT_DURATION_MS = 3500       // 3.5 seconds of spinning
@@ -183,6 +197,7 @@ const lastOrbitTime = new Map<string, number>()
 const lastProjectileFireTime = new Map<string, number>()
 interface ActiveProjectile {
   entity: Entity
+  syncId: number
   firedBy: string
   firedAtMs: number
   startX: number
@@ -200,7 +215,7 @@ interface ActiveProjectile {
   groundY: number        // latest ground height reported by client
   onGround: boolean      // true once projectile has landed on a surface
   // CRDT write throttle — sync distanceTraveled at 10Hz instead of 60fps
-  lastSyncedDist: number
+
   // Boomerang return
   returning: boolean
   returnX: number  // current position during return
@@ -212,7 +227,7 @@ interface ActiveProjectile {
   chargeScale: number
 }
 const activeProjectiles: ActiveProjectile[] = []
-const PROJECTILE_SYNC_INTERVAL = 0.1 // seconds between Projectile component CRDT writes
+
 
 // Gravity state for dropped flag
 let flagFalling = false
@@ -1856,10 +1871,12 @@ function handleTrapDrop(playerId: string): void {
     droppedByPlayerId: playerId,
     droppedAtMs: now,
   })
-  syncEntity(trapEntity, [Transform.componentId, Trap.componentId], getNextTrapSyncId())
+  const trapSyncId = getNextTrapSyncId()
+  syncEntity(trapEntity, [Transform.componentId, Trap.componentId], trapSyncId)
 
   activeTraps.push({
     entity: trapEntity,
+    syncId: trapSyncId,
     droppedBy: playerId,
     droppedAtMs: now,
     falling: true,
@@ -1901,7 +1918,7 @@ function bananaServerSystem(dt: number): void {
     const ageMs = now - trap.droppedAtMs
     if (ageMs > TRAP_LIFETIME_SEC * 1000) {
       console.log('[Server] 🪤 Trap expired, removing')
-      engine.removeEntity(trap.entity)
+      removeTrap(trap)
       activeTraps.splice(i, 1)
       continue
     }
@@ -1921,10 +1938,10 @@ function bananaServerSystem(dt: number): void {
         console.log('[Server] 🪤👻 Trap hit ghost! Killing ghost.')
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
         room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
-        engine.removeEntity(z.entity)
+        engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
         activeZombies.splice(gi, 1)
         zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
-        engine.removeEntity(trap.entity)
+        removeTrap(trap)
         activeTraps.splice(i, 1)
         trapConsumed = true
         break
@@ -1954,7 +1971,7 @@ function bananaServerSystem(dt: number): void {
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
 
         // Remove the trap
-        engine.removeEntity(trap.entity)
+        removeTrap(trap)
         activeTraps.splice(i, 1)
         break // This trap is consumed
       }
@@ -2120,10 +2137,12 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   // Syncing Transform at 60fps per projectile saturates the CRDT buffer and freezes
   // ALL synced components (including the scoreboard). Clients use local visual
   // entities positioned via Projectile component data (startX/Y/Z + direction + distanceTraveled).
-  syncEntity(projectileEntity, [Projectile.componentId], getNextProjectileSyncId())
+  const projectileSyncId = getNextProjectileSyncId()
+  syncEntity(projectileEntity, [Projectile.componentId], projectileSyncId)
 
   activeProjectiles.push({
     entity: projectileEntity,
+    syncId: projectileSyncId,
     firedBy: playerId,
     firedAtMs: now,
     startX: spawnPos.x,
@@ -2139,7 +2158,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     fallVelocity: 0,
     groundY: Math.max(0, playerPos.y - 0.88),  // Approximate ground level from player height (~0.88m avatar offset)
     onGround: false,
-    lastSyncedDist: 0,
+
     returning: false,
     returnX: spawnPos.x,
     returnY: spawnPos.y,
@@ -2166,7 +2185,7 @@ function shellServerSystem(dt: number): void {
     if (now - projectile.firedAtMs > PROJECTILE_LIFETIME_SEC * 1000) {
       console.log('[Server] 🎯 Projectile expired (timeout)')
       room.send('shellReturned', { firedBy: projectile.firedBy })
-      engine.removeEntity(projectile.entity)
+      removeProjectile(projectile)
       activeProjectiles.splice(i, 1)
       continue
     }
@@ -2214,7 +2233,7 @@ function shellServerSystem(dt: number): void {
         // Returned to shooter — remove and notify clients
         console.log('[Server] 🎯 Projectile returned to shooter')
         room.send('shellReturned', { firedBy: projectile.firedBy })
-        engine.removeEntity(projectile.entity)
+        removeProjectile(projectile)
         activeProjectiles.splice(i, 1)
         continue
       }
@@ -2230,13 +2249,9 @@ function shellServerSystem(dt: number): void {
       // Return target resolved client-side via CRDT player transforms
     }
 
-    // Update synced component — throttled to avoid CRDT saturation.
-    const distDelta = projectile.distanceTraveled - projectile.lastSyncedDist
-    if (distDelta >= PROJECTILE_SPEED * PROJECTILE_SYNC_INTERVAL) {
-      const shellComp = Projectile.getMutable(projectile.entity)
-      shellComp.distanceTraveled = projectile.distanceTraveled
-      projectile.lastSyncedDist = projectile.distanceTraveled
-    }
+      // NOTE: Projectile CRDT writes removed — clients use message-based visuals
+    // (shellDropped/shellTriggered/shellReturned) which are instant WebSocket delivery.
+    // Syncing distanceTraveled at 10Hz was contributing to CRDT buffer saturation.
 
     // Check player hits — any player (except the shooter on outbound, ALL players on return)
     const projectilePos = Transform.get(projectile.entity).position
@@ -2266,7 +2281,7 @@ function shellServerSystem(dt: number): void {
         if (projectile.returning) {
           // On return: consumed on hit
           room.send('shellReturned', { firedBy: projectile.firedBy })
-          engine.removeEntity(projectile.entity)
+          removeProjectile(projectile)
           activeProjectiles.splice(i, 1)
           shellConsumed = true
         } else {
@@ -2291,13 +2306,13 @@ function shellServerSystem(dt: number): void {
         console.log('[Server] 🎯🪤 Projectile hit trap!', projectile.returning ? 'Both destroyed.' : 'Trap destroyed, projectile returning.')
         room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '' })
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
-        engine.removeEntity(trap.entity)
+        removeTrap(trap)
         activeTraps.splice(j, 1)
 
         if (projectile.returning) {
           // On return: consumed
           room.send('shellReturned', { firedBy: projectile.firedBy })
-          engine.removeEntity(projectile.entity)
+          removeProjectile(projectile)
           activeProjectiles.splice(i, 1)
           shellConsumed = true
         } else {
@@ -2811,7 +2826,7 @@ async function handleRoundEnd(): Promise<void> {
 
   // ── 3. Remove all active traps ──
   for (const trap of activeTraps) {
-    engine.removeEntity(trap.entity)
+    removeTrap(trap)
   }
   activeTraps.length = 0
   lastTrapDropTime.clear()
@@ -2819,7 +2834,7 @@ async function handleRoundEnd(): Promise<void> {
 
   // ── 3b. Remove all active projectiles + orbits ──
   for (const projectile of activeProjectiles) {
-    engine.removeEntity(projectile.entity)
+    removeProjectile(projectile)
   }
   activeProjectiles.length = 0
   lastProjectileFireTime.clear()
@@ -3032,6 +3047,7 @@ const ZOMBIE_SPAWN_POS = Vector3.create(225, 1.25, 287) // Black cube location
 
 interface ActiveZombie {
   entity: Entity
+  syncId: number
   hp: number
   posX: number
   posY: number
@@ -3039,6 +3055,7 @@ interface ActiveZombie {
   spawnedAtMs: number
   lastStaggerTime: Map<string, number> // prevent rapid re-stagger per player
   lastHitMs: number // prevent multiple hits from same projectile pass
+  lastCrdtSyncTime: number // throttle Zombie component CRDT writes to ~5Hz
 }
 
 const activeZombies: ActiveZombie[] = []
@@ -3061,7 +3078,7 @@ room.onMessage('zombieHit', (data, sender) => {
         // Kill zombie
         console.log('[Server] 🧟 Zombie killed!')
         room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
-        engine.removeEntity(z.entity)
+        engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
         activeZombies.splice(i, 1)
         zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
       }
@@ -3073,7 +3090,7 @@ room.onMessage('zombieHit', (data, sender) => {
 function despawnAllZombies(): void {
   for (const z of activeZombies) {
     Zombie.deleteFrom(z.entity)
-    engine.removeEntity(z.entity)
+    engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
   }
   activeZombies.length = 0
 }
@@ -3159,9 +3176,19 @@ function zombieServerSystem(dt: number): void {
       z.posY += (ZOMBIE_SPAWN_POS.y - z.posY) * 2.0 * clampedDt
     }
 
-    // Update transform (synced to clients via CRDT)
+    // Update local Transform (used for server-side collision checks only — NOT synced)
     const t = Transform.getMutable(z.entity)
     t.position = Vector3.create(z.posX, z.posY, z.posZ)
+
+    // Throttled CRDT write (~5Hz) — update Zombie.targetX/Y/Z for client interpolation
+    const ZOMBIE_CRDT_INTERVAL_MS = 200
+    if (now - z.lastCrdtSyncTime >= ZOMBIE_CRDT_INTERVAL_MS) {
+      z.lastCrdtSyncTime = now
+      const zm = Zombie.getMutable(z.entity)
+      zm.targetX = z.posX
+      zm.targetY = z.posY
+      zm.targetZ = z.posZ
+    }
   }
 
   // ── Check projectile-zombie collisions ──
@@ -3183,7 +3210,7 @@ function zombieServerSystem(dt: number): void {
         if (z.hp <= 0) {
           console.log('[Server] 🧟 Zombie killed by projectile!')
           room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
-          engine.removeEntity(z.entity)
+          engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
           activeZombies.splice(i, 1)
           zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
         }
@@ -3215,17 +3242,24 @@ function spawnZombie(): void {
     active: true,
     targetX: pos.x, targetY: pos.y, targetZ: pos.z,
   })
-  syncEntity(entity, [Transform.componentId, Zombie.componentId], getNextZombieSyncId())
+  // NOTE: Only sync Zombie component — NOT Transform.
+  // Writing Transform every frame (~30 CRDT writes/s) saturates the CRDT buffer
+  // and freezes all other synced components (scoreboard, flag state, hold time).
+  // Clients interpolate toward Zombie.targetX/Y/Z which is updated at 5Hz.
+  const zombieSyncId = getNextZombieSyncId()
+  syncEntity(entity, [Zombie.componentId], zombieSyncId)
 
   activeZombies.push({
     entity,
-    hp: 1,
+    syncId: zombieSyncId,
+    hp: 2,
     posX: pos.x,
     posY: pos.y,
     posZ: pos.z,
     spawnedAtMs: Date.now(),
     lastStaggerTime: new Map(),
     lastHitMs: 0,
+    lastCrdtSyncTime: 0,
   })
   console.log('[Server] 🧟 Zombie spawned at', pos.x, pos.y, pos.z)
 }

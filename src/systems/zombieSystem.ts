@@ -220,10 +220,9 @@ export function zombieClientSystem(dt: number): void {
   // Track which zombie entities currently exist (server-synced via CRDT)
   const activeZombieEntities = new Set<Entity>()
 
-  for (const [entity] of engine.getEntitiesWith(Zombie, Transform)) {
+  for (const [entity] of engine.getEntitiesWith(Zombie)) {
     activeZombieEntities.add(entity)
     const zombie = Zombie.get(entity)
-    const serverTransform = Transform.get(entity)
 
     if (!zombie.active) {
       // Zombie deactivated — remove visual if exists
@@ -231,16 +230,20 @@ export function zombieClientSystem(dt: number): void {
       continue
     }
 
+    // Read position from Zombie component fields (throttled at 5Hz by server)
+    // instead of Transform (which is no longer synced to avoid CRDT saturation)
+    const serverPos = Vector3.create(zombie.targetX, zombie.targetY, zombie.targetZ)
+
     let cz = clientZombies.get(entity)
     if (!cz) {
       // Create visual for new zombie
-      cz = createZombieVisual(entity, serverTransform.position)
+      cz = createZombieVisual(entity, serverPos)
       clientZombies.set(entity, cz)
     }
 
     // Update time for animations
     cz.time += dt
-    cz.lastServerPos = Vector3.create(serverTransform.position.x, serverTransform.position.y, serverTransform.position.z)
+    cz.lastServerPos = serverPos
 
     // Spawn rise animation
     if (cz.spawnTimer < SPAWN_RISE_DURATION) {

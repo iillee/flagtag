@@ -386,7 +386,7 @@ const PROJECTILE_SCALE = Vector3.create(2.5, 4.5, 2.5)
 const PROJECTILE_STAGGER_MS = 800
 const PROJECTILE_SPIN_SPEED = 720 // degrees per second
 const PROJECTILE_CHEST_OFFSET = 0.8 // Y offset from player position to chest height
-const GROUND_RAY_INTERVAL = 0.05 // seconds between ground raycasts for moving projectiles
+
 
 // Stagger state for projectile hits
 let projectileStaggerUntil = 0
@@ -555,73 +555,10 @@ function processWallRaycasts(): void {
   }
 }
 
-// ── Continuous ground raycasts for server-mode projectiles ──
-// We track synced Projectile entities and periodically fire downward raycasts
-// from their current position to report ground height to the server.
-interface TrackedServerProjectile {
-  rayEntity: Entity | null
-  lastRayTime: number
-}
-const trackedServerProjectiles = new Map<number, TrackedServerProjectile>() // entity id -> tracking state
-
-function updateServerProjectileGroundRaycasts(dt: number): void {
-  const now = Date.now()
-
-  for (const [entity, projectile] of engine.getEntitiesWith(Projectile, Transform)) {
-    if (!projectile.active) continue
-
-    const entityId = entity as number
-    let tracked = trackedServerProjectiles.get(entityId)
-    if (!tracked) {
-      tracked = { rayEntity: null, lastRayTime: 0 }
-      trackedServerProjectiles.set(entityId, tracked)
-    }
-
-    // Check pending raycast result
-    if (tracked.rayEntity !== null) {
-      const result = RaycastResult.getOrNull(tracked.rayEntity)
-      if (result) {
-        if (result.hits.length > 0) {
-          const pos = Transform.get(entity).position
-          room.send('reportShellGroundY', {
-            shellX: pos.x,
-            shellZ: pos.z,
-            groundY: result.hits[0].position!.y
-          })
-        }
-        engine.removeEntity(tracked.rayEntity)
-        tracked.rayEntity = null
-      }
-    }
-
-    // Fire new ground raycast periodically
-    if (tracked.rayEntity === null && now - tracked.lastRayTime > GROUND_RAY_INTERVAL * 1000) {
-      tracked.lastRayTime = now
-      const pos = Transform.get(entity).position
-      const rayEntity = engine.addEntity()
-      Transform.create(rayEntity, {
-        position: Vector3.create(pos.x, pos.y + 2, pos.z) // start above projectile
-      })
-      Raycast.create(rayEntity, {
-        direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
-        maxDistance: 200,
-        queryType: RaycastQueryType.RQT_HIT_FIRST,
-        continuous: false
-      })
-      tracked.rayEntity = rayEntity
-    }
-  }
-
-  // Clean up tracking for projectiles that no longer exist
-  for (const [entityId, tracked] of trackedServerProjectiles) {
-    if (!Projectile.has(entityId as Entity)) {
-      if (tracked.rayEntity !== null) {
-        engine.removeEntity(tracked.rayEntity)
-      }
-      trackedServerProjectiles.delete(entityId)
-    }
-  }
-}
+// ── Ground raycasts for server-mode projectiles REMOVED ──
+// Projectile visuals are entirely message-driven (shellDropped/shellTriggered/shellReturned).
+// The CRDT-synced Projectile component is no longer used for client rendering.
+// Ground raycasts were a vestige of the old shell-with-gravity mechanic.
 
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('shellDropped', (data) => {
@@ -1224,8 +1161,6 @@ export function projectileClientSystem(dt: number): void {
   if (serverUp) {
     // Process wall raycasts
     processWallRaycasts()
-    // Continuously report ground Y for moving projectiles
-    updateServerProjectileGroundRaycasts(dt)
 
     // Animate message-driven projectile visuals (movement, expiry)
     updateMsgProjectileVisuals(dt)
