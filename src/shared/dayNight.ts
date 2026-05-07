@@ -9,6 +9,7 @@
  */
 
 import { getWorldTime } from '~system/Runtime'
+import { engine, SkyboxTime } from '@dcl/sdk/ecs'
 
 const SUNSET_TIME = 64800   // 6 PM
 const SUNRISE_TIME = 7200   // 6 AM
@@ -24,6 +25,9 @@ export function updateWorldTime(): void {
   lastFetchTime = now
   getWorldTime({}).then((result) => {
     cachedWorldSeconds = result.seconds % 86400
+    // Force skybox to match world time — prevents players from manually overriding
+    const skyTime = (cachedWorldSeconds / 86400) * 72000
+    SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: skyTime })
   }).catch(() => {})
 }
 

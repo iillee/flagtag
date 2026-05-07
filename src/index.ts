@@ -386,8 +386,8 @@ export async function main() {
   engine.addSystem(updateHoldTimeInterpolation)
 
   // ── Day/Night Cycle ──
-  // No SkyboxTime override — uses Decentraland's default skybox.
-  // We poll getWorldTime() to keep ghost/night logic in sync with the lights.
+  // Polls getWorldTime() and forces SkyboxTime to match, preventing players
+  // from manually overriding the skybox. All players see the same sky.
   engine.addSystem(function dayNightPollSystem(_dt: number) {
     updateWorldTime()
   })

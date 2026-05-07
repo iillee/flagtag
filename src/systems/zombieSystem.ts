@@ -136,18 +136,12 @@ export function zombieClientSystem(dt: number): void {
   initCombatPools()
   ensureGhostDeathSound()
 
-  // Keep world time cache fresh
+  // Keep world time cache fresh (used by other systems, not for ghost gating)
   updateWorldTime()
 
-  // Ghost only appears at night — hide all visuals during daytime
-  if (!isNightTime()) {
-    for (const [entity, cz] of clientZombies) {
-      destroyZombieVisual(cz)
-      clientZombies.delete(entity)
-    }
-    ghostTouchingThisFrame = false
-    return
-  }
+  // Ghost visibility is determined by the server — if the server sends active
+  // Zombie entities via CRDT, we render them. No client-side night check needed.
+  // This prevents desync where some players see ghosts and others don't.
 
   // ── Scare meter: drain while ghost is touching, recharge when safe ──
   if (ghostDeathRespawnDelay <= 0) {
