@@ -168,13 +168,13 @@ const activeTraps: ActiveTrap[] = []
 
 /** Remove a trap entity and recycle its sync ID back to the pool. */
 function removeTrap(trap: ActiveTrap): void {
-  removeTrap(trap)
+  engine.removeEntity(trap.entity)
   recycleTrapSyncId(trap.syncId)
 }
 
 /** Remove a projectile entity and recycle its sync ID back to the pool. */
 function removeProjectile(projectile: ActiveProjectile): void {
-  removeProjectile(projectile)
+  engine.removeEntity(projectile.entity)
   recycleProjectileSyncId(projectile.syncId)
 }
 
