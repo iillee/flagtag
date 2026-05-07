@@ -386,8 +386,9 @@ export async function main() {
   engine.addSystem(updateHoldTimeInterpolation)
 
   // ── Day/Night Cycle ──
-  // Polls getWorldTime() and forces SkyboxTime to match, preventing players
-  // from manually overriding the skybox. All players see the same sky.
+  // Polls getWorldTime() to keep server-side ghost spawn logic in sync.
+  // Skybox is NOT overridden — players can use auto or manual settings.
+  // Ghost appears regardless of local skybox (server-authoritative).
   engine.addSystem(function dayNightPollSystem(_dt: number) {
     updateWorldTime()
   })
