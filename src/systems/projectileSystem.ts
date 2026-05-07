@@ -617,6 +617,29 @@ room.onMessage('shellTriggered', (data) => {
 })
 
 // ── Orbit message listeners ──
+room.onMessage('shellReturned', (data) => {
+  const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+  const playerId = (data.firedBy || '').toLowerCase()
+  if (!playerId || playerId !== localUserId) return
+  // Direct cleanup: server confirmed our boomerang returned/expired
+  // Remove any lingering visual for this player
+  for (let i = msgProjectileVisuals.length - 1; i >= 0; i--) {
+    if (msgProjectileVisuals[i].firedBy === localUserId) {
+      if (msgProjectileVisuals[i].groundRayEntity !== null) engine.removeEntity(msgProjectileVisuals[i].groundRayEntity!)
+      releaseProjectileToPool(msgProjectileVisuals[i].entity)
+      msgProjectileVisuals.splice(i, 1)
+    }
+  }
+  if (localThrowActive && !orbitActive) {
+    console.log('[Projectile] ✅ shellReturned for local player — clearing localThrowActive')
+    localThrowActive = false
+    localThrowSawVisual = false
+    localThrowStartMs = 0
+    lastLocalProjectileFireTime = Date.now()
+    updateHandBoomerangVisibility()
+  }
+})
+
 room.onMessage('orbitStarted', (data) => {
   const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
   const playerId = data.playerId?.toLowerCase() || ''
@@ -1172,7 +1195,7 @@ export function projectileClientSystem(dt: number): void {
     // Skip during green orbit — orbit manages localThrowActive itself via stopOrbitVisual()
     if (localThrowActive && !orbitActive) {
       const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
-      const hasLocalVisual = msgProjectileVisuals.some(v => v.firedBy === localUserId || v.firedBy === '')
+      const hasLocalVisual = msgProjectileVisuals.some(v => v.firedBy === localUserId)
       if (hasLocalVisual) {
         localThrowSawVisual = true
       } else if (localThrowSawVisual) {
@@ -1181,6 +1204,13 @@ export function projectileClientSystem(dt: number): void {
         localThrowSawVisual = false
         localThrowStartMs = 0
         lastLocalProjectileFireTime = now // start post-catch cooldown
+      } else if (localThrowStartMs > 0 && now - localThrowStartMs > PROJECTILE_LIFETIME_SEC * 1000) {
+        // Ultimate safety: no matter what, clear after projectile lifetime (8s)
+        console.log('[Projectile] ⚠️ localThrowActive stuck for', ((now - localThrowStartMs) / 1000).toFixed(1), 's (lifetime exceeded) — force-clearing')
+        localThrowActive = false
+        localThrowSawVisual = false
+        localThrowStartMs = 0
+        lastLocalProjectileFireTime = now
       } else if (localThrowStartMs > 0 && now - localThrowStartMs > LOCAL_THROW_SAFETY_MS) {
         // Safety: no visual appeared within 4s — message was lost or race condition
         console.log('[Projectile] ⚠️ localThrowActive stuck for', ((now - localThrowStartMs) / 1000).toFixed(1), 's with no visual — force-clearing')
