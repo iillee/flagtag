@@ -406,10 +406,14 @@ export function flagClientSystem(dt: number): void {
         if (flag.state === FlagState.Carried) continue
         const dist = Vector3.distance(myPos, Transform.get(flagEnt).position)
         if (dist <= AUTO_PICKUP_RADIUS) {
-          // Send pickup request — visual+sound deferred until server confirms (pickupConfirmed)
-          // to prevent repeated sounds when server rejects due to missing position data
+          // Optimistic Phase 1: show clone + sound + shield immediately (no server round-trip lag)
+          // If server rejects, the pending-pickup timeout will roll everything back.
           if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
           showClone(userId)
+          playPickupSound()
+          skipNextPickupSound = true  // suppress duplicate when pickupConfirmed arrives
+          showShieldForPlayer(userId)
+          setShieldAlpha(userId, 1.0)
           pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
           
           room.send('requestPickup', { t: 0 })
@@ -468,6 +472,7 @@ export function flagClientSystem(dt: number): void {
     console.log('[Flag] ⏪ Pickup not confirmed — rolling back')
     pendingPickupUntil = 0
     hideClone()
+    if (userId) hideShieldForPlayer(userId)
     if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
     // Apply a longer cooldown to prevent rapid re-pickup attempts when server keeps rejecting
     lastAutoPickupRequestMs = Date.now() + 2000  // won't retry for 2.5s (cooldown is 500ms, so 2000 + 500)
