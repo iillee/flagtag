@@ -1,3 +1,4 @@
+import { GAME_VERSION } from './version'
 import { Color4, Vector3 } from '@dcl/sdk/math'
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
@@ -1424,6 +1425,7 @@ function DesktopLayout() {
                 uiTransform={{ width: S(120), height: S(120) }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
               />
+              <Label value={GAME_VERSION} fontSize={S(10)} color={Color4.create(1, 1, 1, 0.35)} font="sans-serif" uiTransform={{ margin: { top: S(8) } }} />
             </UiEntity>
 
             {/* ── Win + Controls Card ── */}
@@ -3046,6 +3048,7 @@ function MobileLayout() {
                 uiTransform={{ width: 120, height: 120 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
               />
+              <Label value={GAME_VERSION} fontSize={10} color={Color4.create(1, 1, 1, 0.35)} font="sans-serif" uiTransform={{ margin: { top: 8 } }} />
             </UiEntity>
 
             {/* ── Win + Controls Card ── */}
