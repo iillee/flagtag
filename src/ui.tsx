@@ -1471,23 +1471,6 @@ function DesktopLayout() {
               uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}
               onMouseDown={() => {}}
             >
-              {/* Close X button */}
-              <UiEntity
-                uiTransform={{
-                  positionType: 'absolute',
-                  position: { top: S(4), right: S(4) },
-                  width: S(44),
-                  height: S(44),
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                onMouseEnter={() => { closeWinConditionHovered = true }}
-                onMouseLeave={() => { closeWinConditionHovered = false }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false; notifyOverlayClosed() }}
-              >
-                <Label value="×" fontSize={S(44)} color={closeWinConditionHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
-              </UiEntity>
               <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
                 <Label value="Win" fontSize={S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(12) } }} />
                 <Label value={"Score 1 point for every\nsecond you hold the Flag"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ margin: { bottom: S(6) } }} />
@@ -1530,6 +1513,23 @@ function DesktopLayout() {
                 </UiEntity>
                 <Label value="Toggle UI Size" fontSize={S(13)} color={MUTED} font="sans-serif" />
               </UiEntity>
+              </UiEntity>
+              {/* Close X button — rendered last so it's on top */}
+              <UiEntity
+                uiTransform={{
+                  positionType: 'absolute',
+                  position: { top: S(0), right: S(0) },
+                  width: S(80),
+                  height: S(80),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onMouseEnter={() => { closeWinConditionHovered = true }}
+                onMouseLeave={() => { closeWinConditionHovered = false }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); closeWinConditionHovered = false; notifyOverlayClosed() }}
+              >
+                <Label value="×" fontSize={S(44)} color={closeWinConditionHovered ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
               </UiEntity>
             </UiEntity>
           </UiEntity>
@@ -1738,8 +1738,8 @@ function DesktopLayout() {
               <UiEntity uiTransform={{ width: S(12) }} />
               <UiEntity
                 uiTransform={{
-                  width: S(44),
-                  height: S(44),
+                  width: S(80),
+                  height: S(80),
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -2496,17 +2496,16 @@ function DesktopLayout() {
                 uiBackground={{ color: PANEL_BG }}
                 onMouseEnter={() => { squareIconHovered = true }}
                 onMouseLeave={() => { squareIconHovered = false }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; metricsOpenedFromTerminal = false; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="Menus" fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(94), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
               </UiEntity>
             )}
             <UiEntity
-              uiTransform={{ positionType: 'absolute', position: { top: 0, right: 0 }, width: S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS) }}
-              uiBackground={{ color: PANEL_BG }}
+              uiTransform={{ positionType: 'absolute', position: { top: 0, right: 0 }, width: squareIconHovered ? S(140) : S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', padding: { right: S(14) }, borderRadius: S(_BORDER_RADIUS) }}
+              uiBackground={{ color: squareIconHovered ? Color4.create(0, 0, 0, 0) : PANEL_BG }}
               onMouseEnter={() => { squareIconHovered = true; playHoverSound() }}
               onMouseLeave={() => { squareIconHovered = false }}
-              onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; metricsOpenedFromTerminal = false; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+              onMouseDown={() => { playClickSound(); const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); leaderboardScrollOffset = 0; leaderboardTab = 'daily'; folderTab = 'leaderboards'; metricsOpenedFromTerminal = false; setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
             >
               <UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardOverlayVisible || squareIconHovered ? GOLD : WHITE }} />
             </UiEntity>
@@ -2519,17 +2518,16 @@ function DesktopLayout() {
                 uiBackground={{ color: PANEL_BG }}
                 onMouseEnter={() => { questionIconHovered = true }}
                 onMouseLeave={() => { questionIconHovered = false }}
-                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="Help" fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(94), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
               </UiEntity>
             )}
             <UiEntity
-              uiTransform={{ positionType: 'absolute', position: { top: 0, right: 0 }, width: S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS) }}
-              uiBackground={{ color: PANEL_BG }}
+              uiTransform={{ positionType: 'absolute', position: { top: 0, right: 0 }, width: questionIconHovered ? S(140) : S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', padding: { right: S(11) }, borderRadius: S(_BORDER_RADIUS) }}
+              uiBackground={{ color: questionIconHovered ? Color4.create(0, 0, 0, 0) : PANEL_BG }}
               onMouseEnter={() => { questionIconHovered = true; playHoverSound() }}
               onMouseLeave={() => { questionIconHovered = false }}
-              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
+              onMouseDown={() => { playClickSound(); const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsOpenedFromTerminal = false; setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
             >
               <Label value="?" fontSize={S(24)} color={winConditionOverlayVisible || questionIconHovered ? GOLD : WHITE} font="sans-serif" />
             </UiEntity>
@@ -3111,21 +3109,6 @@ function MobileLayout() {
               uiBackground={{ color: Color4.create(0.15, 0.12, 0.12, 0.92) }}
               onMouseDown={() => {}}
             >
-              {/* Close X button */}
-              <UiEntity
-                uiTransform={{
-                  positionType: 'absolute',
-                  position: { top: 4, right: 4 },
-                  width: 44,
-                  height: 44,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
-              >
-                <Label value="×" fontSize={44} color={CLOSE_GREY} font="sans-serif" />
-              </UiEntity>
               <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
                 <Label value="Win" fontSize={28} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: 12 } }} />
                 <Label value={"Score 1 point for every\nsecond you hold the Flag"} fontSize={13} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ margin: { bottom: 6 } }} />
@@ -3161,6 +3144,21 @@ function MobileLayout() {
                 </UiEntity>
                 <Label value={musicMuted ? "Unmute Music" : "Mute Music"} fontSize={13} color={MUTED} font="sans-serif" />
               </UiEntity>
+              </UiEntity>
+              {/* Close X button — rendered last so it's on top */}
+              <UiEntity
+                uiTransform={{
+                  positionType: 'absolute',
+                  position: { top: 0, right: 0 },
+                  width: 88,
+                  height: 88,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
+              >
+                <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
               </UiEntity>
             </UiEntity>
           </UiEntity>
