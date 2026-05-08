@@ -50,6 +50,23 @@ function playCoinSound(): void {
   })
 }
 
+// ── Spatial coin sound (for other players) ──
+
+const spatialCoinSounds: { entity: Entity; timer: number }[] = []
+
+function playCoinSoundAt(pos: { x: number; y: number; z: number }): void {
+  const e = engine.addEntity()
+  Transform.create(e, { position: Vector3.create(pos.x, pos.y, pos.z) })
+  AudioSource.create(e, {
+    audioClipUrl: 'assets/sounds/coin.mp3',
+    playing: true,
+    loop: false,
+    volume: 0.5,
+    global: false, // spatial sound
+  })
+  spatialCoinSounds.push({ entity: e, timer: 2 })
+}
+
 // ── Head bounce state ──
 interface HeadBounce {
   entity: Entity
@@ -236,12 +253,16 @@ export function setupCoinMessages(): void {
     // Head bounce on the picker's avatar
     spawnHeadBounceCoin(data.playerId)
 
-    // Check if this pickup was by us
+    // Play coin sound for everyone (spatial for others, global for picker)
     const player = getPlayer()
-    if (player && data.playerId === player.userId.toLowerCase()) {
+    const isMe = player && data.playerId === player.userId.toLowerCase()
+    if (isMe) {
       walletBalance = data.newBalance
-      playCoinSound()
+      playCoinSound() // global sound for the picker
       console.log('[CoinPickup] You picked up a coin! Balance:', walletBalance)
+    } else if (coin) {
+      // Spatial sound at the coin's position for other players
+      playCoinSoundAt(coin.position)
     }
   })
 
@@ -314,6 +335,15 @@ export function coinPickupSystem(dt: number): void {
 
 
   if (trackedCoins.length === 0) return
+
+  // Tick spatial coin sounds — clean up expired
+  for (let i = spatialCoinSounds.length - 1; i >= 0; i--) {
+    spatialCoinSounds[i].timer -= dt
+    if (spatialCoinSounds[i].timer <= 0) {
+      engine.removeEntity(spatialCoinSounds[i].entity)
+      spatialCoinSounds.splice(i, 1)
+    }
+  }
 
   // Tick head bounces — clean up expired
   for (let i = activeHeadBounces.length - 1; i >= 0; i--) {

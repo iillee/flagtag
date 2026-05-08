@@ -1391,28 +1391,28 @@ async function handleBuyBoomerang(playerId: string, color: string): Promise<void
   // Find the store item
   const item = BOOMERANG_STORE.find(i => i.id === boomerangColor)
   if (!item) {
-    room.send('buyResult', { success: false, color, reason: 'Invalid item', newBalance: 0, upgradesJson: '' })
+    room.send('buyResult', { success: false, color, reason: 'Invalid item', newBalance: 0, upgradesJson: '' }, { to: [key] })
     return
   }
 
   // Already owned?
   const upgrades = await loadPlayerUpgrades(key)
   if (upgrades.boomerangs.includes(boomerangColor)) {
-    room.send('buyResult', { success: false, color, reason: 'Already owned', newBalance: 0, upgradesJson: '' })
+    room.send('buyResult', { success: false, color, reason: 'Already owned', newBalance: 0, upgradesJson: '' }, { to: [key] })
     return
   }
 
   // Check flag requirement
   const wins = await loadPlayerLifetimeWins(key)
   if (wins < item.flagsRequired) {
-    room.send('buyResult', { success: false, color, reason: `Need ${item.flagsRequired} flags (you have ${wins})`, newBalance: 0, upgradesJson: '' })
+    room.send('buyResult', { success: false, color, reason: `Need ${item.flagsRequired} flags (you have ${wins})`, newBalance: 0, upgradesJson: '' }, { to: [key] })
     return
   }
 
   // Check coin balance
   const balance = await loadPlayerCoinBalance(key)
   if (balance < item.coinCost) {
-    room.send('buyResult', { success: false, color, reason: `Need ${item.coinCost} coins (you have ${balance})`, newBalance: 0, upgradesJson: '' })
+    room.send('buyResult', { success: false, color, reason: `Need ${item.coinCost} coins (you have ${balance})`, newBalance: 0, upgradesJson: '' }, { to: [key] })
     return
   }
 
@@ -1436,7 +1436,7 @@ async function handleBuyBoomerang(playerId: string, color: string): Promise<void
     reason: '',
     newBalance,
     upgradesJson: serializeUpgrades(upgrades)
-  })
+  }, { to: [key] })
 
   // Broadcast color change to all players
   room.send('playerColorChanged', { playerId: key, color: boomerangColor })
@@ -1491,7 +1491,7 @@ async function awardRoundCoins(players: { userId: string; seconds: number }[]): 
     if (coins > 0) {
       const newBalance = await addPlayerCoins(p.userId, coins)
       // Send balance update to the specific player
-      room.send('walletBalance', { playerId: p.userId, coins: newBalance })
+      room.send('walletBalance', { playerId: p.userId, coins: newBalance }, { to: [p.userId] })
       // Send detailed breakdown so client can show "You Earned" UI
       const holdTimeCoins = Math.floor(p.seconds * COINS_PER_HOLD_SECOND)
       const placementBonus = (i < ROUND_PLACEMENT_BONUS.length && p.seconds > 0) ? ROUND_PLACEMENT_BONUS[i] : 0
@@ -1503,7 +1503,7 @@ async function awardRoundCoins(players: { userId: string; seconds: number }[]): 
         placement: placementBonus,
         rank: i + 1,
         newBalance
-      })
+      }, { to: [p.userId] })
       console.log('[Coins] Awarded', coins, 'coins to', p.userId.slice(0, 8), '(new balance:', newBalance, ')')
     }
   }
@@ -1800,7 +1800,7 @@ function registerHandlers(): void {
     const from = context.from.toLowerCase()
     const balance = await loadPlayerCoinBalance(from)
     getOrCreateWalletEntity(from)  // ensure wallet entity exists and is synced
-    room.send('walletBalance', { playerId: from, coins: balance })
+    room.send('walletBalance', { playerId: from, coins: balance }, { to: [from] })
     console.log('[Coins] Sent wallet balance to', from.slice(0, 8), ':', balance)
   })
 
@@ -1830,7 +1830,7 @@ function registerHandlers(): void {
     const wins = await loadPlayerLifetimeWins(from)
     getOrCreateLifetimeWinsEntity(from)
     // Send direct message so client gets data immediately (CRDT sync can be slow)
-    room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins })
+    room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins }, { to: [from] })
     console.log('[Store] Sent upgrades to', from.slice(0, 8), '- owned:', upgrades.boomerangs.join(','), 'wins:', wins)
 
     // Auto-equip their saved boomerang color
