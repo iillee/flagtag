@@ -50,6 +50,11 @@ export function getLastBuyError(): string {
   return lastBuyError
 }
 
+/** Re-request upgrade data from server (call when opening store) */
+export function refreshUpgradesFromServer(): void {
+  room.send('requestUpgrades', { t: 0 })
+}
+
 /** Request purchase of a boomerang */
 export function requestBuyBoomerang(color: BoomerangColor): void {
   if (buyPending) return

@@ -37,7 +37,7 @@ import {
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 import { musicEntity } from './index'
 import { getCoinBalance, applyDeferredBalance } from './systems/coinPickupSystem'
-import { getLocalUpgrades, getLocalLifetimeWins, requestBuyBoomerang, requestEquipBoomerang, isBuyPending, getLastBuyError } from './gameState/playerUpgradeState'
+import { getLocalUpgrades, getLocalLifetimeWins, requestBuyBoomerang, requestEquipBoomerang, isBuyPending, getLastBuyError, refreshUpgradesFromServer } from './gameState/playerUpgradeState'
 import { BOOMERANG_STORE } from './shared/upgrades'
 import { isMobile } from '@dcl/sdk/platform'
 
@@ -343,6 +343,8 @@ let chestPopupVisible = false
 
 export function showChestPopup() {
   chestPopupVisible = true
+  // Request fresh upgrade/wallet data from server so the store is always current
+  refreshUpgradesFromServer()
 }
 
 export function hideChestPopup() {
