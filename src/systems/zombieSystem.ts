@@ -28,6 +28,8 @@ interface ClientZombie {
   modelEntity: Entity    // GLB model
   time: number           // accumulated time for bob/drift
   lastServerPos: Vector3 // last known server position
+  prevServerPos: Vector3 // previous server position (for velocity estimation)
+  velocity: Vector3      // estimated velocity for dead reckoning
   renderPos: Vector3     // interpolated render position
   dead: boolean
   spawnTimer: number     // counts up from 0 to SPAWN_RISE_DURATION
@@ -243,7 +245,19 @@ export function zombieClientSystem(dt: number): void {
 
     // Update time for animations
     cz.time += dt
-    cz.lastServerPos = serverPos
+
+    // Detect new server position and estimate velocity
+    const dx2 = serverPos.x - cz.lastServerPos.x
+    const dy2 = serverPos.y - cz.lastServerPos.y
+    const dz2 = serverPos.z - cz.lastServerPos.z
+    if (dx2 * dx2 + dy2 * dy2 + dz2 * dz2 > 0.0001) {
+      // Server sent a new position — estimate velocity from delta
+      // CRDT updates arrive ~5Hz (200ms), so divide by estimated interval
+      const interval = 0.2
+      cz.velocity = Vector3.create(dx2 / interval, dy2 / interval, dz2 / interval)
+      cz.prevServerPos = Vector3.clone(cz.lastServerPos)
+      cz.lastServerPos = serverPos
+    }
 
     // Spawn rise animation
     if (cz.spawnTimer < SPAWN_RISE_DURATION) {
@@ -264,9 +278,15 @@ export function zombieClientSystem(dt: number): void {
       audio.playing = true
     }
 
-    // Smooth interpolation toward server position
-    const lerpSpeed = 5.0
-    cz.renderPos = Vector3.lerp(cz.renderPos, cz.lastServerPos, Math.min(1, lerpSpeed * dt))
+    // Dead reckoning: predict where the ghost should be, then lerp toward it
+    // This smooths out the 5Hz server updates into fluid motion
+    const predictedPos = Vector3.create(
+      cz.lastServerPos.x + cz.velocity.x * 0.1,
+      cz.lastServerPos.y + cz.velocity.y * 0.1,
+      cz.lastServerPos.z + cz.velocity.z * 0.1
+    )
+    const lerpSpeed = 4.0
+    cz.renderPos = Vector3.lerp(cz.renderPos, predictedPos, Math.min(1, lerpSpeed * dt))
 
     // Add floaty bob and lateral drift (only after spawn completes)
     const animBlend = spawnEase // 0 during rise, 1 when fully spawned
@@ -346,6 +366,8 @@ function createZombieVisual(serverEntity: Entity, pos: Vector3): ClientZombie {
     modelEntity,
     time: Math.random() * 10,
     lastServerPos: Vector3.create(pos.x, pos.y, pos.z),
+    prevServerPos: Vector3.create(pos.x, pos.y, pos.z),
+    velocity: Vector3.Zero(),
     renderPos: Vector3.create(pos.x, pos.y, pos.z),
     dead: false,
     spawnTimer: 0,

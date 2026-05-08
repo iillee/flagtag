@@ -1082,6 +1082,8 @@ function PlayerListUi() {
                       margin: { left: mobile ? 6 : S(6), right: mobile ? 6 : S(6) },
                       padding: mobile ? 8 : S(8),
                       borderRadius: mobile ? 14 : S(14),
+                      borderWidth: canBuy ? (mobile ? 2 : S(2)) : 0,
+                      borderColor: canBuy ? BRIGHT_WHITE : Color4.Clear(),
                       justifyContent: 'flex-start',
                       alignItems: 'center',
                       flexDirection: 'column',

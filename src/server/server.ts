@@ -1808,6 +1808,8 @@ function registerHandlers(): void {
     getOrCreateUpgradeEntity(from)
     const wins = await loadPlayerLifetimeWins(from)
     getOrCreateLifetimeWinsEntity(from)
+    // Send direct message so client gets data immediately (CRDT sync can be slow)
+    room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins })
     console.log('[Store] Sent upgrades to', from.slice(0, 8), '- owned:', upgrades.boomerangs.join(','), 'wins:', wins)
 
     // Auto-equip their saved boomerang color

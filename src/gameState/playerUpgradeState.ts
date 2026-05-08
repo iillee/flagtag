@@ -67,8 +67,23 @@ export function requestEquipBoomerang(color: BoomerangColor): void {
   room.send('equipBoomerang', { color })
 }
 
-/** Initialize: listen for buy results */
+/** Initialize: listen for buy results and request upgrade data from server */
 export function initUpgradeListeners(): void {
+  // Request our upgrades + lifetime wins from the server on join
+  room.send('requestUpgrades', { t: 0 })
+
+  // Direct response with upgrade data (faster than CRDT sync)
+  room.onMessage('upgradesResponse', (data) => {
+    const parsed = parseUpgrades(data.upgradesJson)
+    localUpgrades = parsed
+    localLifetimeWins = data.wins ?? 0
+    if (!initialEquipApplied && parsed.equipped) {
+      initialEquipApplied = true
+      setBoomerangColor(parsed.equipped)
+    }
+    console.log('[Store] Got direct upgrade data - owned:', parsed.boomerangs.join(','), 'wins:', localLifetimeWins)
+  })
+
   room.onMessage('buyResult', (data) => {
     buyPending = false
     if (data.success) {
