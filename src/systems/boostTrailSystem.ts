@@ -2,7 +2,7 @@
  * Boost Trail System
  * 
  * Spawns colored orb trails at players' feet during speed boosts.
- * Gold orbs for coin boost, red orbs for mushroom boost.
+ * Gold orbs for coin boost, gold orbs for mushroom boost.
  * Local player trail driven by speedBoostSystem state.
  * Remote player trails driven by 'boostStarted' messages (within 32m).
  */
@@ -26,8 +26,8 @@ const REMOTE_PROXIMITY = 32 // meters — only show trails for players within th
 
 // ── Materials ──
 const MUSHROOM_MATERIAL = {
-  albedoColor: Color4.create(1.0, 0.2, 0.15, 0.55),
-  emissiveColor: Color4.create(1.0, 0.1, 0.05, 1),
+  albedoColor: Color4.create(1.0, 0.85, 0.1, 0.55),
+  emissiveColor: Color4.create(1.0, 0.75, 0.0, 1),
   emissiveIntensity: 2.5,
   roughness: 1.0,
   metallic: 0.0,

@@ -1536,6 +1536,28 @@ function registerHandlers(): void {
       handleDrop(context.from.toLowerCase())
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
+
+  // Death penalty — deduct coins on death (drowning, lightning, ghost)
+  const DEATH_PENALTY_COINS = 10
+  const deathPenaltyCooldowns = new Map<string, number>() // prevent spam
+  room.onMessage('deathPenalty', async (data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      const now = Date.now()
+      const lastDeath = deathPenaltyCooldowns.get(from) ?? 0
+      if (now - lastDeath < 3000) return // 3s cooldown to prevent duplicate messages
+      deathPenaltyCooldowns.set(from, now)
+
+      const current = await loadPlayerCoinBalance(from)
+      const penalty = Math.min(DEATH_PENALTY_COINS, current) // don't go negative
+      const newBalance = current - penalty
+      await setPlayerCoinBalance(from, newBalance)
+      room.send('walletBalance', { playerId: from, coins: newBalance }, { to: [from] })
+      room.send('deathPenaltyApplied', { playerId: from, penalty, newBalance }, { to: [from] })
+      console.log(`[Server] 💀 Death penalty: ${from.slice(0, 8)} lost ${penalty} coins (${current} → ${newBalance})`)
+    } catch (err) { console.error('[Server] ❌ deathPenalty handler error:', err) }
+  })
   // Reload-respawn: player reloaded scene while carrying flag → respawn at random point
   room.onMessage('requestReloadRespawn', (_data, context) => {
     try {

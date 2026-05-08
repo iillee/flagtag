@@ -2,6 +2,7 @@ import { engine, Transform, InputModifier, AudioSource } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
+import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../cinematicState'
 
@@ -158,6 +159,7 @@ export function waterSystem(dt: number) {
           mode: InputModifier.Mode.Standard({ disableAll: false })
         })
       }
+      clearDeathPenalty()
       drownCooldown = 2.0
       airRemaining = DROWN_TIME
       setBarVisible(false)
@@ -222,6 +224,7 @@ export function waterSystem(dt: number) {
       }
 
       room.send('requestDrop', { t: 0 })
+      sendDeathPenalty('drown')
 
       if (waterSoundEntity) {
         AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })

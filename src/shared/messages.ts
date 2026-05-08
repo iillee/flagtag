@@ -97,6 +97,9 @@ export const Messages = {
   // zombieStagger and ghostDeath removed — replaced by ghostTouching + scare meter
   ghostTouching: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: ghost is touching a player this frame
 
+  // Death penalty
+  deathPenalty: Schemas.Map({ cause: Schemas.String }),           // Client → Server: player died, deduct coins
+  deathPenaltyApplied: Schemas.Map({ playerId: Schemas.String, penalty: Schemas.Int, newBalance: Schemas.Int }),  // Server → Client
 
 }
 

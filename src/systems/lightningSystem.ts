@@ -5,6 +5,7 @@ import { Flag, FlagState } from '../shared/components'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { triggerEmote, movePlayerTo } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
+import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { setLightningRespawning } from '../gameState/lightningState'
 import { isCinematicActive } from '../cinematicState'
 
@@ -411,6 +412,7 @@ function executeStrike(pos: { x: number; y: number; z: number }) {
 /** Called by carrier's client to handle death */
 function handleLocalDeath() {
   room.send('requestDrop', { t: 0 })
+  sendDeathPenalty('lightning')
 
   void triggerEmote({ predefinedEmote: 'urn:decentraland:matic:collections-v2:0x7bdc37ff3e8dca2d69f01a3dc34f3ad82e2e1870:0' })
   InputModifier.createOrReplace(engine.PlayerEntity, {
@@ -478,6 +480,7 @@ export function lightningSystem(dt: number) {
     if (lightningRespawnDelay <= 0) {
       lightningRespawnDelay = 0
       setLightningRespawning(false)
+      clearDeathPenalty()
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: false })
       })

@@ -178,6 +178,11 @@ export function getCoinBalance(): number {
   return walletBalance
 }
 
+/** Whether coin balance has been loaded from server */
+export function isCoinBalanceLoaded(): boolean {
+  return balanceReceived
+}
+
 /** Apply deferred round-end balance (called when coin animation triggers) */
 export function applyDeferredBalance(newBalance: number): void {
   walletBalance = newBalance

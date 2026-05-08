@@ -36,8 +36,8 @@ import {
 } from './ui/uiConstants'
 import { getAnalyticsOverlayVisible, toggleAnalyticsOverlay, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
 import { musicEntity } from './index'
-import { getCoinBalance, applyDeferredBalance } from './systems/coinPickupSystem'
-import { getLocalUpgrades, getLocalLifetimeWins, requestBuyBoomerang, requestEquipBoomerang, isBuyPending, getLastBuyError, refreshUpgradesFromServer } from './gameState/playerUpgradeState'
+import { getCoinBalance, applyDeferredBalance, isCoinBalanceLoaded } from './systems/coinPickupSystem'
+import { getLocalUpgrades, getLocalLifetimeWins, isWinsLoaded, requestBuyBoomerang, requestEquipBoomerang, isBuyPending, getLastBuyError, refreshUpgradesFromServer } from './gameState/playerUpgradeState'
 import { BOOMERANG_STORE } from './shared/upgrades'
 import { isMobile } from '@dcl/sdk/platform'
 
@@ -60,6 +60,7 @@ import { isSpectatorMode, isSpectatorTransitioning, exitSpectatorMode } from './
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
 import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/zombieSystem'
+import { isDeathPenaltyVisible, getLastDeathPenalty } from './systems/deathPenaltySystem'
 import { signedFetch } from '~system/SignedFetch'
 
 const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
@@ -1055,11 +1056,11 @@ function PlayerListUi() {
             }}>
               <UiEntity uiTransform={{ width: mobile ? 20 : S(18), height: mobile ? 20 : S(18), margin: { right: mobile ? 5 : S(5) } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }} />
-              <Label value={`${coins}`} fontSize={mobile ? 22 : S(18)} color={GOLD} font="sans-serif"
+              <Label value={isCoinBalanceLoaded() ? `${coins}` : '--'} fontSize={mobile ? 22 : S(18)} color={GOLD} font="sans-serif"
                 uiTransform={{ margin: { right: mobile ? 20 : S(20) } }} />
               <UiEntity uiTransform={{ width: mobile ? 20 : S(18), height: mobile ? 20 : S(18), margin: { right: mobile ? 5 : S(5) } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
-              <Label value={`${lifetimeWins}`} fontSize={mobile ? 22 : S(18)} color={GOLD} font="sans-serif" />
+              <Label value={isWinsLoaded() ? `${lifetimeWins}` : '--'} fontSize={mobile ? 22 : S(18)} color={GOLD} font="sans-serif" />
             </UiEntity>
 
             {/* Boomerang grid — order: r, y, g, b */}
@@ -1206,6 +1207,15 @@ function PlayerListUi() {
           {isDrownTextVisible() && (
             <Label value="You Drowned!" fontSize={mobile ? 72 : S(42)} color={CORAL_RED} font="sans-serif" />
           )}
+          {isDrownTextVisible() && isDeathPenaltyVisible() && (
+            <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { top: S(8) } }}>
+              <UiEntity
+                uiTransform={{ width: mobile ? 24 : S(20), height: mobile ? 24 : S(20), margin: { right: mobile ? 6 : S(6) } }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
+              />
+              <Label value={`-${getLastDeathPenalty()}`} fontSize={mobile ? 48 : S(28)} color={CORAL_RED} font="sans-serif" />
+            </UiEntity>
+          )}
           {isDrownTextVisible() && (
             <UiEntity uiTransform={{ height: S(12) }} />
           )}
@@ -1232,6 +1242,15 @@ function PlayerListUi() {
           {isLightningTextVisible() && (
             <Label value="You were struck by lightning!" fontSize={mobile ? 72 : S(42)} color={CORAL_RED} font="sans-serif" />
           )}
+          {isLightningTextVisible() && isDeathPenaltyVisible() && (
+            <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { top: S(8) } }}>
+              <UiEntity
+                uiTransform={{ width: mobile ? 24 : S(20), height: mobile ? 24 : S(20), margin: { right: mobile ? 6 : S(6) } }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
+              />
+              <Label value={`-${getLastDeathPenalty()}`} fontSize={mobile ? 48 : S(28)} color={CORAL_RED} font="sans-serif" />
+            </UiEntity>
+          )}
           {isLightningTextVisible() && (
             <UiEntity uiTransform={{ height: S(12) }} />
           )}
@@ -1257,6 +1276,15 @@ function PlayerListUi() {
         >
           {isGhostDeathTextVisible() && (
             <Label value="You were scared to death!" fontSize={mobile ? 72 : S(42)} color={CORAL_RED} font="sans-serif" />
+          )}
+          {isGhostDeathTextVisible() && isDeathPenaltyVisible() && (
+            <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { top: S(8) } }}>
+              <UiEntity
+                uiTransform={{ width: mobile ? 24 : S(20), height: mobile ? 24 : S(20), margin: { right: mobile ? 6 : S(6) } }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
+              />
+              <Label value={`-${getLastDeathPenalty()}`} fontSize={mobile ? 48 : S(28)} color={CORAL_RED} font="sans-serif" />
+            </UiEntity>
           )}
           {isGhostDeathTextVisible() && (
             <UiEntity uiTransform={{ height: S(12) }} />
@@ -2120,8 +2148,8 @@ function DesktopLayout() {
                   </UiEntity>
 
                   {sectionHeader('INVENTORY', true)}
-                  {iconRow('Coins', `${coins}`, 'assets/images/coin.png', GOLD, GOLD)}
-                  {iconRow('Flags', `${myFlags}`, 'assets/images/flag-icon-white.png', GOLD, GOLD)}
+                  {iconRow('Coins', isCoinBalanceLoaded() ? `${coins}` : '--', 'assets/images/coin.png', GOLD, GOLD)}
+                  {iconRow('Flags', isWinsLoaded() ? `${myFlags}` : '--', 'assets/images/flag-icon-white.png', GOLD, GOLD)}
 
                   {sectionHeader('EQUIPMENT')}
                   {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
@@ -2666,7 +2694,7 @@ function DesktopLayout() {
                   uiTransform={{ width: S(20), height: S(20), margin: { right: S(6) } }}
                   uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }}
                 />
-                <Label value={`${getCoinBalance()}`} fontSize={S(18)} color={WHITE} font="sans-serif" />
+                <Label value={isCoinBalanceLoaded() ? `${getCoinBalance()}` : '--'} fontSize={S(18)} color={WHITE} font="sans-serif" />
               </UiEntity>
               {/* Flag wins counter */}
               <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { top: S(0) } }}>
@@ -2674,7 +2702,7 @@ function DesktopLayout() {
                   uiTransform={{ width: S(18), height: S(18), margin: { right: S(6) } }}
                   uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }}
                 />
-                <Label value={`${myWins}`} fontSize={S(18)} color={WHITE} font="sans-serif" />
+                <Label value={isWinsLoaded() ? `${myWins}` : '--'} fontSize={S(18)} color={WHITE} font="sans-serif" />
               </UiEntity>
             </UiEntity>
           )

@@ -44,6 +44,7 @@ import { createLeaderboardOverlayEntity } from './components/leaderboardOverlayS
 import { createAnalyticsOverlayEntity } from './components/analyticsOverlayState'
 import './shared/components'
 import { room } from './shared/messages'
+import { setupDeathPenaltyMessages } from './systems/deathPenaltySystem'
 
 export let musicEntity: ReturnType<typeof engine.addEntity>
 
@@ -356,6 +357,7 @@ export async function main() {
   setupCoinMessages()
   setupBoostTrailMessages()
   initUpgradeListeners()
+  setupDeathPenaltyMessages()
   engine.addSystem(coinPickupSystem)
   engine.addSystem(waterSplashSystem)
 

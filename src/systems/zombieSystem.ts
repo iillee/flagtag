@@ -11,6 +11,7 @@ import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Zombie } from '../shared/components'
 import { room } from '../shared/messages'
+import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { showHitEffect, initPools as initCombatPools } from './combatSystem'
 import { isCinematicActive } from '../cinematicState'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
@@ -167,6 +168,7 @@ export function zombieClientSystem(dt: number): void {
         scareRemaining = 0
         scareBarVisible = false
         lastTouchedTimer = SCARE_RECHARGE_DELAY + 1
+        sendDeathPenalty('ghost')
         console.log('[Ghost] 👻 You were scared to death!')
       }
     } else {
@@ -205,6 +207,7 @@ export function zombieClientSystem(dt: number): void {
     }
     if (ghostDeathRespawnDelay <= 0) {
       ghostDeathRespawnDelay = 0
+      clearDeathPenalty()
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: false })
       })

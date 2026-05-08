@@ -14,6 +14,11 @@ import { setBoomerangColor, type BoomerangColor } from './boomerangColor'
 // ── Local cache ──
 let localUpgrades: UpgradeData = { boomerangs: ['r'], equipped: 'r' }
 let localLifetimeWins = 0
+let winsReceived = false
+let winsRetryTimer = 0
+let winsRetryCount = 0
+const WINS_RETRY_INTERVAL = 2
+const WINS_MAX_RETRIES = 5
 let buyPending = false
 let lastBuyError = ''
 let lastBuyErrorTimer = 0
@@ -38,6 +43,11 @@ export function getLocalUpgrades(): UpgradeData {
 /** Get the local player's lifetime wins (flags) */
 export function getLocalLifetimeWins(): number {
   return localLifetimeWins
+}
+
+/** Whether lifetime wins have been loaded from server */
+export function isWinsLoaded(): boolean {
+  return winsReceived
 }
 
 /** Whether a purchase is in progress */
@@ -74,14 +84,12 @@ export function requestEquipBoomerang(color: BoomerangColor): void {
 
 /** Initialize: listen for buy results and request upgrade data from server */
 export function initUpgradeListeners(): void {
-  // Request our upgrades + lifetime wins from the server on join
-  room.send('requestUpgrades', { t: 0 })
-
-  // Direct response with upgrade data (faster than CRDT sync)
+  // Register listener BEFORE sending request to avoid race condition
   room.onMessage('upgradesResponse', (data) => {
     const parsed = parseUpgrades(data.upgradesJson)
     localUpgrades = parsed
     localLifetimeWins = data.wins ?? 0
+    winsReceived = true
     if (!initialEquipApplied && parsed.equipped) {
       initialEquipApplied = true
       setBoomerangColor(parsed.equipped)
@@ -106,10 +114,24 @@ export function initUpgradeListeners(): void {
       console.log('[Store] Purchase failed:', data.reason)
     }
   })
+
+  // Now send the request (after listeners are registered)
+  room.send('requestUpgrades', { t: 0 })
 }
 
 /** System: read synced upgrade data each frame */
 export function upgradeStateSystem(dt: number): void {
+  // Retry wins/upgrades request if not received yet
+  if (!winsReceived && winsRetryCount < WINS_MAX_RETRIES) {
+    winsRetryTimer += dt
+    if (winsRetryTimer >= WINS_RETRY_INTERVAL) {
+      winsRetryTimer = 0
+      winsRetryCount++
+      room.send('requestUpgrades', { t: winsRetryCount })
+      console.log(`[Store] Retrying requestUpgrades (attempt ${winsRetryCount})`)
+    }
+  }
+
   // Clear buy error after timeout
   if (lastBuyError && lastBuyErrorTimer > 0) {
     lastBuyErrorTimer -= dt
@@ -140,6 +162,7 @@ export function upgradeStateSystem(dt: number): void {
   for (const [, data] of engine.getEntitiesWith(PlayerLifetimeWins)) {
     if (data.playerId === localId) {
       localLifetimeWins = data.wins
+      winsReceived = true
       break
     }
   }
