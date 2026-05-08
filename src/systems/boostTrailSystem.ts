@@ -1,24 +1,28 @@
 /**
  * Boost Trail System
  * 
- * Spawns colored orb trails at the player's feet during speed boosts.
- * Gold orbs for mushroom boost, light blue/white orbs for coin boost.
- * Driven by the speedBoostSystem's active state.
+ * Spawns colored orb trails at players' feet during speed boosts.
+ * Gold orbs for coin boost, red orbs for mushroom boost.
+ * Local player trail driven by speedBoostSystem state.
+ * Remote player trails driven by 'boostStarted' messages (within 32m).
  */
 import {
   engine, Transform, Entity, MeshRenderer, Material, MaterialTransparencyMode,
-  Tween, EasingFunction
+  Tween, EasingFunction, PlayerIdentityData
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
+import { getPlayer } from '@dcl/sdk/players'
 import { isSpeedBoosted, getBoostTier } from './speedBoostSystem'
+import { room } from '../shared/messages'
 
 // ── Config ──
 const TRAIL_SPAWN_INTERVAL = 0.08
 const TRAIL_LIFETIME_MS = 600
 const TRAIL_START_SCALE = 0.18
-const TRAIL_POOL_SIZE = 20
+const TRAIL_POOL_SIZE = 40 // increased for remote players
 const TRAIL_MIN_MOVE_DIST = 0.05
 const TRAIL_HIDDEN_POS = Vector3.create(0, -100, 0)
+const REMOTE_PROXIMITY = 32 // meters — only show trails for players within this range
 
 // ── Materials ──
 const MUSHROOM_MATERIAL = {
@@ -41,13 +45,10 @@ const COIN_MATERIAL = {
   transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
 }
 
-// ── State ──
+// ── Pool ──
 const trailPool: Entity[] = []
 let trailPoolIdx = 0
 let trailPoolReady = false
-let trailSpawnAccum = 0
-let lastPlayerPos: Vector3 | null = null
-let lastTier: string = 'none'
 const activePuffs: { entity: Entity; expiresAt: number }[] = []
 
 function initTrailPool(): void {
@@ -57,7 +58,7 @@ function initTrailPool(): void {
     const e = engine.addEntity()
     Transform.create(e, { position: TRAIL_HIDDEN_POS, scale: Vector3.Zero() })
     MeshRenderer.setSphere(e)
-    Material.setPbrMaterial(e, COIN_MATERIAL) // default, will be overridden per-spawn
+    Material.setPbrMaterial(e, COIN_MATERIAL)
     trailPool.push(e)
   }
 }
@@ -78,7 +79,6 @@ function spawnPuff(position: Vector3, tier: string): void {
   t.position = jittered
   t.scale = Vector3.create(s, s, s)
 
-  // Set color based on tier
   Material.setPbrMaterial(puff, tier === 'mushroom' ? MUSHROOM_MATERIAL : COIN_MATERIAL)
 
   Tween.createOrReplace(puff, {
@@ -107,45 +107,122 @@ function cleanupExpired(): void {
   }
 }
 
-function hideAll(): void {
-  for (const p of activePuffs) hidePuff(p.entity)
-  activePuffs.length = 0
-  trailSpawnAccum = 0
-  lastPlayerPos = null
+// ── Local player state ──
+let localSpawnAccum = 0
+let localLastPos: Vector3 | null = null
+let localLastTier: string = 'none'
+
+// ── Remote player boost tracking ──
+interface RemoteBoost {
+  tier: string
+  timer: number
+  lastPos: Vector3 | null
+  spawnAccum: number
+}
+const remoteBoosts: Map<string, RemoteBoost> = new Map()
+
+/** Set up message listener for remote boost broadcasts */
+export function setupBoostTrailMessages(): void {
+  room.onMessage('playerBoosted', (data) => {
+    const playerId = data.playerId
+    if (!playerId) return
+    // Skip our own messages
+    const local = getPlayer()
+    if (local && playerId === local.userId.toLowerCase()) return
+
+    const existing = remoteBoosts.get(playerId)
+    if (existing) {
+      existing.tier = data.tier
+      existing.timer = data.duration
+    } else {
+      remoteBoosts.set(playerId, {
+        tier: data.tier,
+        timer: data.duration,
+        lastPos: null,
+        spawnAccum: 0,
+      })
+    }
+  })
+}
+
+/** Find a remote player's world position via PlayerIdentityData */
+function getRemotePlayerPos(playerId: string): Vector3 | null {
+  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+    if (identity.address.toLowerCase() === playerId) {
+      return Transform.get(entity).position
+    }
+  }
+  return null
 }
 
 /** Per-frame system */
 export function boostTrailSystem(dt: number): void {
   cleanupExpired()
 
+  const localPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : null
+
+  // ── Local player trail ──
   const boosted = isSpeedBoosted()
   const tier = getBoostTier()
 
   if (!boosted) {
-    if (lastTier !== 'none') {
-      hideAll()
-      lastTier = 'none'
+    if (localLastTier !== 'none') {
+      localSpawnAccum = 0
+      localLastPos = null
+      localLastTier = 'none'
     }
-    return
+  } else {
+    localLastTier = tier
+    if (localPos) {
+      if (localLastPos === null) {
+        localLastPos = Vector3.create(localPos.x, localPos.y, localPos.z)
+      }
+      const dx = localPos.x - localLastPos.x
+      const dz = localPos.z - localLastPos.z
+      const moved = Math.sqrt(dx * dx + dz * dz)
+
+      localSpawnAccum += dt
+      if (localSpawnAccum >= TRAIL_SPAWN_INTERVAL && moved >= TRAIL_MIN_MOVE_DIST) {
+        spawnPuff(Vector3.create(localPos.x, localPos.y + 0.15, localPos.z), tier)
+        localSpawnAccum = 0
+        localLastPos = Vector3.create(localPos.x, localPos.y, localPos.z)
+      }
+    }
   }
 
-  lastTier = tier
+  // ── Remote player trails ──
+  for (const [playerId, boost] of remoteBoosts) {
+    boost.timer -= dt
+    if (boost.timer <= 0) {
+      remoteBoosts.delete(playerId)
+      continue
+    }
 
-  if (!Transform.has(engine.PlayerEntity)) return
-  const pos = Transform.get(engine.PlayerEntity).position
+    // Find remote player position
+    const remotePos = getRemotePlayerPos(playerId)
+    if (!remotePos) continue
 
-  if (lastPlayerPos === null) {
-    lastPlayerPos = Vector3.create(pos.x, pos.y, pos.z)
-  }
+    // Proximity check — only spawn if within range
+    if (localPos) {
+      const dx = localPos.x - remotePos.x
+      const dy = localPos.y - remotePos.y
+      const dz = localPos.z - remotePos.z
+      if (dx * dx + dy * dy + dz * dz > REMOTE_PROXIMITY * REMOTE_PROXIMITY) continue
+    }
 
-  const dx = pos.x - lastPlayerPos.x
-  const dz = pos.z - lastPlayerPos.z
-  const moved = Math.sqrt(dx * dx + dz * dz)
+    if (boost.lastPos === null) {
+      boost.lastPos = Vector3.create(remotePos.x, remotePos.y, remotePos.z)
+    }
 
-  trailSpawnAccum += dt
-  if (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL && moved >= TRAIL_MIN_MOVE_DIST) {
-    spawnPuff(Vector3.create(pos.x, pos.y + 0.15, pos.z), tier)
-    trailSpawnAccum = 0
-    lastPlayerPos = Vector3.create(pos.x, pos.y, pos.z)
+    const dx = remotePos.x - boost.lastPos.x
+    const dz = remotePos.z - boost.lastPos.z
+    const moved = Math.sqrt(dx * dx + dz * dz)
+
+    boost.spawnAccum += dt
+    if (boost.spawnAccum >= TRAIL_SPAWN_INTERVAL && moved >= TRAIL_MIN_MOVE_DIST) {
+      spawnPuff(Vector3.create(remotePos.x, remotePos.y + 0.15, remotePos.z), boost.tier)
+      boost.spawnAccum = 0
+      boost.lastPos = Vector3.create(remotePos.x, remotePos.y, remotePos.z)
+    }
   }
 }

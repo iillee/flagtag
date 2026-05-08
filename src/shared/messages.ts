@@ -53,6 +53,11 @@ export const Messages = {
   orbitHit: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String, attackerId: Schemas.String }),
   orbitEnded: Schemas.Map({ playerId: Schemas.String }),
 
+  // Speed boost trail sync (client → server)
+  reportBoost: Schemas.Map({ tier: Schemas.String, duration: Schemas.Float }),
+  // Speed boost trail sync (server → all clients)
+  playerBoosted: Schemas.Map({ playerId: Schemas.String, tier: Schemas.String, duration: Schemas.Float }),
+
   // Boomerang charge sync
   chargeStart: Schemas.Map({ t: Schemas.Int }),
   chargeStop: Schemas.Map({ t: Schemas.Int }),

@@ -7,6 +7,7 @@
  * Mushroom overrides coin boost (higher tier).
  */
 import { engine, AvatarLocomotionSettings } from '@dcl/sdk/ecs'
+import { room } from '../shared/messages'
 
 // ── Config ──
 const COIN_BOOST_DURATION = 3.0       // seconds
@@ -55,6 +56,7 @@ export function addCoinSpeedBoost(): void {
     currentTier = 'coin'
     applyBoost(COIN_LOCOMOTION)
   }
+  room.send('reportBoost', { tier: 'coin', duration: COIN_BOOST_DURATION })
   console.log(`[SpeedBoost] ⚡ Coin boost! Timer: ${boostTimer.toFixed(1)}s`)
 }
 
@@ -65,6 +67,7 @@ export function addMushroomSpeedBoost(): void {
     currentTier = 'mushroom'
     applyBoost(MUSHROOM_LOCOMOTION)
   }
+  room.send('reportBoost', { tier: 'mushroom', duration: MUSHROOM_BOOST_DURATION })
   console.log(`[SpeedBoost] 🍄 Mushroom boost! Timer: ${boostTimer.toFixed(1)}s`)
 }
 

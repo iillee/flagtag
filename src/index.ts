@@ -25,7 +25,7 @@ import { waterBobSystem } from './systems/waterBobSystem'
 import { coinBobSpinSystem } from './systems/coinBobSpinSystem'
 import { coinPickupSystem, setupCoinMessages } from './systems/coinPickupSystem'
 import { speedBoostSystem } from './systems/speedBoostSystem'
-import { boostTrailSystem } from './systems/boostTrailSystem'
+import { boostTrailSystem, setupBoostTrailMessages } from './systems/boostTrailSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
 import { setupLightning, lightningSystem, setupLightningMessages } from './systems/lightningSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
@@ -354,6 +354,7 @@ export async function main() {
   engine.addSystem(waterBobSystem)
   engine.addSystem(coinBobSpinSystem)
   setupCoinMessages()
+  setupBoostTrailMessages()
   initUpgradeListeners()
   engine.addSystem(coinPickupSystem)
   engine.addSystem(waterSplashSystem)

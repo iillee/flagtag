@@ -1743,6 +1743,13 @@ function registerHandlers(): void {
     room.send('hitVfx', { x: data.x || 0, y: data.y || 0, z: data.z || 0 })
   })
 
+  // ── Speed boost trail sync ──
+  room.onMessage('reportBoost', (data, context) => {
+    if (!context) return
+    const from = context.from.toLowerCase()
+    room.send('playerBoosted', { playerId: from, tier: data.tier || 'coin', duration: data.duration || 3 })
+  })
+
   room.onMessage('chargeStart', (data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
