@@ -1,7 +1,8 @@
 import {
   engine, Transform, GltfContainer, Entity, AudioSource,
   Raycast, RaycastResult, RaycastQueryType,
-  Tween, EasingFunction
+  Tween, TweenSequence, TweenLoop, EasingFunction,
+  AvatarAttach, AvatarAnchorPointType
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
@@ -63,6 +64,92 @@ function playBoostSound(): void {
 
 // ── Shield break sound ──
 // playShieldBreakSound + shieldBreakSoundEntity removed — unused
+
+// ── Head bounce state ──
+interface HeadBounce {
+  entity: Entity
+  timer: number
+}
+const activeMushroomBounces: HeadBounce[] = []
+
+function spawnHeadBounceMushroom(playerId: string): void {
+  const headAnchor = engine.addEntity()
+  AvatarAttach.create(headAnchor, {
+    avatarId: playerId,
+    anchorPointId: AvatarAnchorPointType.AAPT_HEAD,
+  })
+
+  const mushroomClone = engine.addEntity()
+  Transform.create(mushroomClone, {
+    parent: headAnchor,
+    position: Vector3.create(0, 0.5, 0),
+    scale: Vector3.create(0.5, 0.5, 0.5),
+  })
+  GltfContainer.create(mushroomClone, {
+    src: MUSHROOM_MODEL,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0,
+  })
+
+  // Pop up fast then fall + shrink away
+  Tween.create(mushroomClone, {
+    mode: Tween.Mode.Move({
+      start: Vector3.create(0, 0.5, 0),
+      end: Vector3.create(0, 2.0, 0),
+    }),
+    duration: 200,
+    easingFunction: EasingFunction.EF_EASEOUTQUAD,
+  })
+  TweenSequence.create(mushroomClone, {
+    sequence: [
+      {
+        mode: Tween.Mode.Move({
+          start: Vector3.create(0, 2.0, 0),
+          end: Vector3.create(0, 0.8, 0),
+        }),
+        duration: 350,
+        easingFunction: EasingFunction.EF_EASEINQUAD,
+      },
+    ],
+    loop: TweenLoop.TL_YOYO,
+  })
+
+  // Shrink parent for simultaneous scale animation
+  const shrinkParent = engine.addEntity()
+  Transform.create(shrinkParent, {
+    parent: headAnchor,
+    position: Vector3.Zero(),
+    scale: Vector3.One(),
+  })
+  Transform.getMutable(mushroomClone).parent = shrinkParent
+
+  Tween.create(shrinkParent, {
+    mode: Tween.Mode.Scale({
+      start: Vector3.One(),
+      end: Vector3.One(),
+    }),
+    duration: 200,
+    easingFunction: EasingFunction.EF_LINEAR,
+  })
+  TweenSequence.create(shrinkParent, {
+    sequence: [
+      {
+        mode: Tween.Mode.Scale({
+          start: Vector3.One(),
+          end: Vector3.create(0, 0, 0),
+        }),
+        duration: 350,
+        easingFunction: EasingFunction.EF_EASEINQUAD,
+      },
+    ],
+    loop: TweenLoop.TL_YOYO,
+  })
+
+  const totalDuration = 0.6
+  activeMushroomBounces.push({ entity: mushroomClone, timer: totalDuration })
+  activeMushroomBounces.push({ entity: shrinkParent, timer: totalDuration + 0.05 })
+  activeMushroomBounces.push({ entity: headAnchor, timer: 0.75 })
+}
 
 const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
@@ -150,6 +237,7 @@ room.onMessage('mushroomPositions', (data) => {
     const pid = (data as any).playerId as string
     console.log('[Mushroom] Mushroom', mid, 'picked up by', pid)
     playBoostSound()
+    spawnHeadBounceMushroom(pid)
     // Speed boost for the local player who picked up the mushroom
     const lp = getPlayer()
     if (lp && pid.toLowerCase() === lp.userId?.toLowerCase()) {
@@ -229,11 +317,10 @@ function processMushroomRaycasts(): void {
 
         m.candidateIndex++
         if (m.candidateIndex >= m.candidates.length) {
-          // All candidates exhausted — place at water level as fallback
-          console.log('[Mushroom] Mushroom', m.id, 'all', m.candidates.length, 'candidates on water, placing at water level')
-          const t = Transform.getMutable(m.entity)
-          t.position = Vector3.create(currentCandidate.x, WATER_Y + 0.2, currentCandidate.z)
-          m.placed = true
+          // All candidates exhausted — remove the mushroom entirely
+          console.log('[Mushroom] Mushroom', m.id, 'all', m.candidates.length, 'candidates on water, skipping')
+          engine.removeEntity(m.entity)
+          mushrooms.splice(i, 1)
           continue
         }
 
@@ -277,6 +364,15 @@ export function mushroomClientSystem(dt: number): void {
   if (!positionsRequested && isServerConnected()) {
     positionsRequested = true
     room.send('requestMushroomPositions', { t: 0 })
+  }
+
+  // Tick head bounces — clean up expired
+  for (let i = activeMushroomBounces.length - 1; i >= 0; i--) {
+    activeMushroomBounces[i].timer -= dt
+    if (activeMushroomBounces[i].timer <= 0) {
+      engine.removeEntity(activeMushroomBounces[i].entity)
+      activeMushroomBounces.splice(i, 1)
+    }
   }
 
   processMushroomRaycasts()
