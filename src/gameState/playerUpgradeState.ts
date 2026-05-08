@@ -93,9 +93,7 @@ export function initUpgradeListeners(): void {
       setBoomerangColor(updated.equipped)
       lastBuyError = ''
       // Play purchase sound
-      const a = AudioSource.getMutable(purchaseSoundEntity)
-      a.currentTime = 0
-      a.playing = true
+      AudioSource.createOrReplace(purchaseSoundEntity, { audioClipUrl: 'assets/sounds/purchase.mp3', playing: true, loop: false, volume: 1, global: true })
       console.log('[Store] Purchase successful:', data.color)
     } else {
       lastBuyError = data.reason

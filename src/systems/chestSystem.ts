@@ -45,9 +45,7 @@ export function chestSystem() {
       pointerEventsSystem.onPointerDown(
         { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Open Chest', maxDistance: 8 } },
         () => {
-          const a = AudioSource.getMutable(chestSoundEntity)
-          a.currentTime = 0
-          a.playing = true
+          AudioSource.createOrReplace(chestSoundEntity, { audioClipUrl: 'assets/sounds/chest.mp3', playing: true, loop: false, volume: 1, global: true })
           lastOpenedChestEntity = entity
           showChestPopup()
         }

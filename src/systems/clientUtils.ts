@@ -21,9 +21,7 @@ export function playErrorSound(): void {
       global: true
     })
   }
-  const a = AudioSource.getMutable(errorSoundEntity)
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(errorSoundEntity, { audioClipUrl: 'assets/sounds/error.mp3', playing: true, loop: false, volume: 0.6, global: true })
 }
 
 // ── Server connection check ──

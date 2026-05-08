@@ -57,9 +57,7 @@ function playTrapDropSound(position: Vector3): void {
   }
   const t = Transform.getMutable(trapDropSoundEntity)
   t.position = position
-  const a = AudioSource.getMutable(trapDropSoundEntity)
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(trapDropSoundEntity, { audioClipUrl: 'assets/sounds/trap2.mp3', playing: true, loop: false, volume: 1, global: false })
 }
 
 function playTrapSplatSound(position: Vector3): void {
@@ -76,9 +74,7 @@ function playTrapSplatSound(position: Vector3): void {
   }
   const t = Transform.getMutable(trapSplatSoundEntity)
   t.position = position
-  const a = AudioSource.getMutable(trapSplatSoundEntity)
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(trapSplatSoundEntity, { audioClipUrl: 'assets/sounds/hit.mp3', playing: true, loop: false, volume: 1, global: false })
 }
 
 // ── Splat VFX pool ──

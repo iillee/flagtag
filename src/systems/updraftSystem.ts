@@ -277,10 +277,7 @@ function playSwooshSound(): void {
       global: true
     })
   }
-  const a = AudioSource.getMutable(swooshSoundEntity)
-  a.playing = false
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(swooshSoundEntity, { audioClipUrl: 'assets/sounds/swoosh.mp3', playing: true, loop: false, volume: 1, global: true })
 }
 
 // ── Physics lift ────────────────────────────────────────────

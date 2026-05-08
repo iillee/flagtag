@@ -404,8 +404,7 @@ function executeStrike(pos: { x: number; y: number; z: number }) {
 
   // Thunder sound
   if (thunderEntity) {
-    AudioSource.getMutable(thunderEntity).playing = false
-    AudioSource.getMutable(thunderEntity).playing = true
+    AudioSource.createOrReplace(thunderEntity, { audioClipUrl: 'assets/sounds/lighting.mp3', playing: true, loop: false, volume: 1.0, global: true })
   }
 }
 
@@ -419,9 +418,7 @@ function handleLocalDeath() {
   })
 
   if (deathSoundEntity) {
-    const a = AudioSource.getMutable(deathSoundEntity)
-    a.currentTime = 0
-    a.playing = true
+    AudioSource.createOrReplace(deathSoundEntity, { audioClipUrl: 'assets/sounds/death.mp3', playing: true, loop: false, volume: 1, global: true })
   }
 
   lightningRespawnDelay = LIGHTNING_RESPAWN_DURATION
@@ -517,9 +514,7 @@ export function lightningSystem(dt: number) {
         VisibilityComponent.getMutable(s).visible = true
       }
       if (buzzEntity) {
-        const buzz = AudioSource.getMutable(buzzEntity)
-        buzz.playing = false
-        buzz.playing = true
+        AudioSource.createOrReplace(buzzEntity, { audioClipUrl: 'assets/sounds/buzz.mp3', playing: true, loop: false, volume: 0.4, global: true })
       }
     }
 
@@ -565,8 +560,7 @@ export function lightningSystem(dt: number) {
     if (!soundPlayed && warningTimer >= WARNING_LEAD - THUNDER_LEAD) {
       soundPlayed = true
       if (thunderEntity) {
-        AudioSource.getMutable(thunderEntity).playing = false
-        AudioSource.getMutable(thunderEntity).playing = true
+        AudioSource.createOrReplace(thunderEntity, { audioClipUrl: 'assets/sounds/lighting.mp3', playing: true, loop: false, volume: 1.0, global: true })
       }
     }
 
@@ -577,7 +571,7 @@ export function lightningSystem(dt: number) {
       for (const s of sparkEntities) {
         VisibilityComponent.getMutable(s).visible = false
       }
-      if (buzzEntity) AudioSource.getMutable(buzzEntity).playing = false
+      if (buzzEntity) AudioSource.createOrReplace(buzzEntity, { audioClipUrl: 'assets/sounds/buzz.mp3', playing: false, loop: false, volume: 0.4, global: true })
 
       // Strike is now handled server-side — just clean up warning visuals
       strikeScheduled = false
@@ -595,7 +589,7 @@ export function lightningSystem(dt: number) {
       for (const s of sparkEntities) {
         VisibilityComponent.getMutable(s).visible = false
       }
-      if (buzzEntity) AudioSource.getMutable(buzzEntity).playing = false
+      if (buzzEntity) AudioSource.createOrReplace(buzzEntity, { audioClipUrl: 'assets/sounds/buzz.mp3', playing: false, loop: false, volume: 0.4, global: true })
     }
   }
 }

@@ -15,7 +15,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { CoinState, COIN_PICKUP_RADIUS } from '../shared/coins'
 import { room } from '../shared/messages'
 import { setPendingRoundEarnings } from '../gameState/roundEarnings'
-import { addCoinSpeedBoost } from './speedBoostSystem'
+
 
 // ── Types ──
 
@@ -241,7 +241,6 @@ export function setupCoinMessages(): void {
     if (player && data.playerId === player.userId.toLowerCase()) {
       walletBalance = data.newBalance
       playCoinSound()
-      addCoinSpeedBoost()
       console.log('[CoinPickup] You picked up a coin! Balance:', walletBalance)
     }
   })

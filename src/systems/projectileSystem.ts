@@ -415,9 +415,7 @@ function playChargeSound(): void {
 
 function stopChargeSound(): void {
   if (chargeSoundEntity && AudioSource.has(chargeSoundEntity)) {
-    const a = AudioSource.getMutable(chargeSoundEntity)
-    a.playing = false
-    a.volume = 0
+    AudioSource.createOrReplace(chargeSoundEntity, { audioClipUrl: CHARGE_SOUND_SRC, playing: false, loop: false, volume: 0, global: true, pitch: 0.6 })
   }
 }
 

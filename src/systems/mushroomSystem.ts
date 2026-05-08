@@ -58,9 +58,7 @@ function playBoostSound(): void {
       global: true
     })
   }
-  const a = AudioSource.getMutable(boostSoundEntity)
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(boostSoundEntity, { audioClipUrl: 'assets/sounds/powerup.mp3', playing: true, loop: false, volume: 0.0625, global: true })
 }
 
 // ── Shield break sound ──

@@ -161,9 +161,7 @@ export function zombieClientSystem(dt: number): void {
           mode: InputModifier.Mode.Standard({ disableAll: true })
         })
         if (ghostDeathSoundEntity) {
-          const a = AudioSource.getMutable(ghostDeathSoundEntity)
-          a.currentTime = 0
-          a.playing = true
+          AudioSource.createOrReplace(ghostDeathSoundEntity, { audioClipUrl: 'assets/sounds/death.mp3', playing: true, loop: false, volume: 1, global: true })
         }
         ghostDeathRespawnDelay = GHOST_RESPAWN_DURATION
         scareRemaining = 0
@@ -273,9 +271,7 @@ export function zombieClientSystem(dt: number): void {
     ghostSoundTimer += dt
     if (ghostSoundTimer >= GHOST_SOUND_INTERVAL) {
       ghostSoundTimer = 0
-      const audio = AudioSource.getMutable(cz.modelEntity)
-      audio.playing = false
-      audio.playing = true
+      AudioSource.createOrReplace(cz.modelEntity, { audioClipUrl: 'assets/sounds/ghost.mp3', playing: true, loop: false, volume: 0.5, global: false })
     }
 
     // Dead reckoning: predict where the ghost should be, then lerp toward it

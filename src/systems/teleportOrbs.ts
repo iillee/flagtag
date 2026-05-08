@@ -62,8 +62,8 @@ export function setupTeleportOrbs(): void {
   const orbPairs: OrbPair[] = [
     createOrbPair(
       [{ x: 290.5, y: 2.6, z: 254.7 }, { x: 276.56, y: 52.25, z: 301.5 }],
-      Color3.create(1.0, 0.45, 0.05),   // Orange
-      Color4.create(1.0, 0.4, 0.0, 0.85)
+      Color3.create(1.0, 0.84, 0.0),    // Gold
+      Color4.create(1.0, 0.84, 0.0, 0.85)
     ),
     createOrbPair(
       [{ x: 224, y: 2.0, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
@@ -89,9 +89,7 @@ export function setupTeleportOrbs(): void {
           const destIndex = i === 0 ? 1 : 0
           const dest = pair.positions[destIndex]
           for (const snd of pair.soundEntities) {
-            const a = AudioSource.getMutable(snd)
-            a.currentTime = 0
-            a.playing = true
+            AudioSource.createOrReplace(snd, { audioClipUrl: 'assets/sounds/teleport.mp3', playing: true, loop: false, volume: 1, global: false })
           }
           pair.cooldown = TELEPORT_COOLDOWN
           void movePlayerTo({ newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z) })

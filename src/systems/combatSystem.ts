@@ -198,9 +198,7 @@ export function playHitSound(position: Vector3): void {
   // Position the sound at the hit location
   const t = Transform.getMutable(e)
   t.position = position
-  const a = AudioSource.getMutable(e)
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(e, { audioClipUrl: HIT_SOUND_PATH, playing: true, loop: false, volume: 1, global: false })
 }
 
 export function playMissSound(position: Vector3): void {
@@ -212,9 +210,7 @@ export function playMissSound(position: Vector3): void {
   // Position the sound at the miss location
   const t = Transform.getMutable(missSoundEntity)
   t.position = position
-  const a = AudioSource.getMutable(missSoundEntity)
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: true, loop: false, volume: 2.5, global: false })
 }
 
 // ── Stagger & message handling ──
@@ -255,20 +251,28 @@ function playRemoteChargeSound(playerId: string): void {
     })
     remoteChargeSounds.set(playerId, e)
   } else {
-    const a = AudioSource.getMutable(e)
-    if (!a.playing) {
-      a.playing = true
-      a.volume = 0.4
-    }
+    AudioSource.createOrReplace(e, {
+      audioClipUrl: CHARGE_SOUND_SRC,
+      playing: true,
+      loop: false,
+      volume: 0.4,
+      global: false,
+      pitch: 0.6
+    })
   }
 }
 
 function stopRemoteChargeSound(playerId: string): void {
   const e = remoteChargeSounds.get(playerId)
   if (e && AudioSource.has(e)) {
-    const a = AudioSource.getMutable(e)
-    a.playing = false
-    a.volume = 0
+    AudioSource.createOrReplace(e, {
+      audioClipUrl: CHARGE_SOUND_SRC,
+      playing: false,
+      loop: false,
+      volume: 0,
+      global: false,
+      pitch: 0.6
+    })
   }
 }
 

@@ -485,7 +485,7 @@ export class Portal {
   private setPortalState(state: PortalState, angle: number, playOpen: boolean, playClose: boolean, playAmb: boolean): void {
     this.fireDoorTween(angle)
     // doorOpen / doorClose sounds removed along with doors
-    AudioSource.getMutable(this.audioAmb).playing = playAmb
+    AudioSource.createOrReplace(this.audioAmb, { audioClipUrl: 'assets/sounds/portals/doorAmb.mp3', playing: playAmb, loop: true, volume: 1 })
     PortalData.getMutable(this.root).state = state
     if (state !== PortalState.CLOSED) activateParallax()
   }

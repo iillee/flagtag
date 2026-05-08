@@ -283,9 +283,7 @@ function playPickupSound(): void {
     Transform.create(pickupSoundEntity, { position: Vector3.Zero() })
     AudioSource.create(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: false, loop: false, volume: 2, global: true })
   }
-  const a = AudioSource.getMutable(pickupSoundEntity)
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: true, loop: false, volume: 2, global: true })
 }
 
 function playDropSound(): void {
@@ -294,9 +292,7 @@ function playDropSound(): void {
     Transform.create(dropSoundEntity, { position: Vector3.Zero() })
     AudioSource.create(dropSoundEntity, { audioClipUrl: 'assets/sounds/drop.mp3', playing: false, loop: false, volume: 0.25, global: true })
   }
-  const a = AudioSource.getMutable(dropSoundEntity)
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(dropSoundEntity, { audioClipUrl: 'assets/sounds/drop.mp3', playing: true, loop: false, volume: 0.25, global: true })
 }
 
 // Ground raycast for server

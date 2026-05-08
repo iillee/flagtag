@@ -128,9 +128,8 @@ export function waterSystem(dt: number) {
     drownCooldown = 0
     outOfWaterTimer = 3.0
     wasInWater = false
-    if (waterSoundEntity) {
-      const a = AudioSource.getMutable(waterSoundEntity)
-      if (a.playing) a.playing = false
+    if (waterSoundEntity && AudioSource.has(waterSoundEntity)) {
+      AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
     }
     return
   }
@@ -219,16 +218,13 @@ export function waterSystem(dt: number) {
       setBarVisible(false)
 
       if (drownSoundEntity) {
-        const a = AudioSource.getMutable(drownSoundEntity)
-        a.currentTime = 0
-        a.playing = true
+        AudioSource.createOrReplace(drownSoundEntity, { audioClipUrl: 'assets/sounds/death.mp3', playing: true, loop: false, volume: 1.0, global: true })
       }
 
       room.send('requestDrop', { t: 0 })
 
       if (waterSoundEntity) {
-        const a = AudioSource.getMutable(waterSoundEntity)
-        a.playing = false
+        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
       }
 
       void triggerEmote({ predefinedEmote: 'urn:decentraland:matic:collections-v2:0x7bdc37ff3e8dca2d69f01a3dc34f3ad82e2e1870:0' })
@@ -264,16 +260,18 @@ export function waterSystem(dt: number) {
     const dz = playerPos.z - lastPlayerPos.z
     const isMoving = (dx * dx + dz * dz) > 0.0001
 
-    const audio = AudioSource.getMutable(waterSoundEntity)
-    if (isMoving && !audio.playing) {
-      audio.playing = true
-    } else if (!isMoving && audio.playing) {
-      audio.playing = false
+    const audio = AudioSource.getMutableOrNull(waterSoundEntity)
+    if (audio) {
+      if (isMoving && !audio.playing) {
+        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: true, loop: true, volume: 0.5, global: true })
+      } else if (!isMoving && audio.playing) {
+        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
+      }
     }
   } else if (!inWater && waterSoundEntity) {
-    const audio = AudioSource.getMutable(waterSoundEntity)
-    if (audio.playing) {
-      audio.playing = false
+    const audio = AudioSource.getMutableOrNull(waterSoundEntity)
+    if (audio && audio.playing) {
+      AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
     }
   }
 

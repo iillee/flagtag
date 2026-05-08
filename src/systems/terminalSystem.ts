@@ -50,9 +50,7 @@ export function terminalSystem() {
     pointerEventsSystem.onPointerDown(
       { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Boot Up Computer', maxDistance: 5 } },
       () => {
-        const a = AudioSource.getMutable(sound)
-        a.currentTime = 0
-        a.playing = true
+        AudioSource.createOrReplace(sound, { audioClipUrl: 'assets/sounds/terminal.mp3', playing: true, loop: false, volume: 1, global: false })
         openMetricsPanel()
       }
     )

@@ -38,10 +38,7 @@ function playBinocularsSound() {
       global: true
     })
   }
-  const a = AudioSource.getMutable(binocularsSoundEntity)
-  a.playing = false
-  a.currentTime = 0
-  a.playing = true
+  AudioSource.createOrReplace(binocularsSoundEntity, { audioClipUrl: 'assets/sounds/binoculars.mp3', playing: true, loop: false, volume: 1, global: true })
 }
 
 let exitGracePeriod = 0

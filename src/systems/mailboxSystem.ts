@@ -42,9 +42,7 @@ export function mailboxSystem() {
       pointerEventsSystem.onPointerDown(
         { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Leave a Message', maxDistance: 5 } },
         () => {
-          const a = AudioSource.getMutable(mailboxSound)
-          a.currentTime = 0
-          a.playing = true
+          AudioSource.createOrReplace(mailboxSound, { audioClipUrl: 'assets/sounds/mailbox.mp3', playing: true, loop: false, volume: 1, global: false })
           showMailboxPopup()
         }
       )
