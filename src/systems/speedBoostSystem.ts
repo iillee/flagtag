@@ -20,11 +20,11 @@ const BASE_RUN = 10.0
 const BASE_JUMP = 1.0
 const BASE_RUN_JUMP = 1.5
 
-// Coin: +10% speed, no jump increase
+// Coin: +20% speed, no jump increase
 const COIN_LOCOMOTION = {
-  walkSpeed: BASE_WALK * 1.1,
-  jogSpeed: BASE_JOG * 1.1,
-  runSpeed: BASE_RUN * 1.1,
+  walkSpeed: BASE_WALK * 1.2,
+  jogSpeed: BASE_JOG * 1.2,
+  runSpeed: BASE_RUN * 1.2,
 }
 
 // Mushroom: +50% speed, jump, and glide

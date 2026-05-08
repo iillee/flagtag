@@ -305,8 +305,11 @@ export function coinPickupSystem(dt: number): void {
   if (!setupDone) {
     waitTimer += dt
     if (waitTimer < 4) return // 4s: after bobSpinSystem's 3s setup
+    if (trackedCoins.length === 0) {
+      setupCoins()
+      if (trackedCoins.length === 0 && waitTimer < 10) return // retry until 10s
+    }
     setupDone = true
-    setupCoins()
   }
 
 
