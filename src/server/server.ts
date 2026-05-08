@@ -1328,7 +1328,21 @@ async function loadPlayerLifetimeWins(walletAddress: string): Promise<number> {
 
   try {
     const saved = await Storage.get<string>(`lifetimeWins:${key}`)
-    const wins = saved ? parseInt(saved, 10) : 0
+    let wins = saved ? parseInt(saved, 10) : 0
+
+    // If no stored lifetime wins, seed from all-time leaderboard (historical data
+    // recorded before the lifetime wins counter was added)
+    if (wins === 0 && !saved) {
+      const atEntries = parseLeaderboardJson(AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)?.json)
+      const entry = atEntries.find(e => e.userId.toLowerCase() === key)
+      if (entry && entry.roundsWon > 0) {
+        wins = entry.roundsWon
+        console.log('[LifetimeWins] Seeded', key.slice(0, 8), 'with', wins, 'wins from all-time leaderboard')
+        // Persist so we only seed once
+        await Storage.set(`lifetimeWins:${key}`, String(wins))
+      }
+    }
+
     playerLifetimeWinsCache.set(key, wins)
     return wins
   } catch (err) {

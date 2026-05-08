@@ -2087,7 +2087,7 @@ function DesktopLayout() {
               const localName = localPlayer?.name ?? 'Unknown'
               const localId = localPlayer?.userId?.toLowerCase() ?? ''
               const coins = getCoinBalance()
-              const liveWinsStatus = getLeaderboardEntries().find(e => e.userId.toLowerCase() === localId)?.roundsWon ?? 0
+              const liveWinsStatus = getLocalLifetimeWins()
               const myFlags = winsFrozen ? (displayedWins ?? liveWinsStatus) : liveWinsStatus
               const boomerang = getBoomerangColor()
               const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
@@ -2641,8 +2641,7 @@ function DesktopLayout() {
         {(() => {
           const panelH = S(2 * _ROW_HEIGHT + 2 * _PADDING)
           const panelW = S(3 * _ROW_HEIGHT + 2 * _PADDING)
-          const localId = getPlayer()?.userId?.toLowerCase() ?? ''
-          const liveWins = getLeaderboardEntries().find(e => e.userId.toLowerCase() === localId)?.roundsWon ?? 0
+          const liveWins = getLocalLifetimeWins()
           if (!winsFrozen) displayedWins = liveWins
           const myWins = displayedWins ?? liveWins
           return (
