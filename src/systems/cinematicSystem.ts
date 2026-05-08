@@ -11,6 +11,7 @@ import { cancelDrownRespawn } from './waterSystem'
 import { cancelLightningRespawn } from './lightningSystem'
 import { exitSpectatorMode } from './spectatorSystem'
 import { room } from '../shared/messages'
+import { clearSpeedBoost } from './speedBoostSystem'
 
 // ── Camera entities ──
 const GREEN_CUBE_POS = Vector3.create(258.78, 19.25, 227.81)
@@ -185,6 +186,7 @@ export function setupCinematicSystem(): void {
 
     cancelDrownRespawn()
     cancelLightningRespawn()
+    clearSpeedBoost()
 
     fadePhase = 1
     fadeTimer = FADE_IN_DUR

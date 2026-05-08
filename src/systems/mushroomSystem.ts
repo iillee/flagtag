@@ -1,14 +1,15 @@
 import {
   engine, Transform, GltfContainer, Entity, AudioSource,
   Raycast, RaycastResult, RaycastQueryType,
-  MeshRenderer, Material, MaterialTransparencyMode,
   Tween, EasingFunction
 } from '@dcl/sdk/ecs'
-import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
+import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
 import { Flag } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
 import { showShieldForPlayer, hideShieldForPlayer, hideAllShields, setShieldAlpha } from './shieldSystem'
+import { addMushroomSpeedBoost } from './speedBoostSystem'
+
 
 // ── Constants ──
 const MUSHROOM_MODEL = 'assets/models/mushroom_03.glb'
@@ -58,7 +59,6 @@ function playBoostSound(): void {
     })
   }
   const a = AudioSource.getMutable(boostSoundEntity)
-  a.playing = false
   a.currentTime = 0
   a.playing = true
 }
@@ -71,89 +71,7 @@ const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup reque
 let positionsRequested = false
 // shieldActive removed — mushrooms no longer block hits
 
-// ── Mushroom trail timer (gold orbs at feet after mushroom pickup) ──
-const MUSHROOM_TRAIL_DURATION = 5.0 // seconds of gold trail after picking up a mushroom
-let mushroomTrailTimer = 0
 
-// ── Trail pool (gold orbs at feet when shield active) ──
-const TRAIL_SPAWN_INTERVAL = 0.08
-const TRAIL_LIFETIME_MS = 600
-const TRAIL_START_SCALE = 0.18
-const TRAIL_POOL_SIZE = 15
-const TRAIL_MIN_MOVE_DIST = 0.05
-const TRAIL_MATERIAL = {
-  albedoColor: Color4.create(1.0, 0.82, 0.2, 0.55),
-  emissiveColor: Color4.create(1.0, 0.75, 0.1, 1),
-  emissiveIntensity: 2.5,
-  roughness: 1.0,
-  metallic: 0.0,
-  specularIntensity: 0.0,
-  transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-}
-const trailPool: Entity[] = []
-let trailPoolIdx = 0
-let trailPoolReady = false
-let trailSpawnAccum = 0
-let lastShieldPlayerPos: Vector3 | null = null
-const activeTrailPuffs: { entity: Entity; expiresAt: number }[] = []
-const TRAIL_HIDDEN_POS = Vector3.create(0, -100, 0)
-
-function initTrailPool(): void {
-  if (trailPoolReady) return
-  trailPoolReady = true
-  for (let i = 0; i < TRAIL_POOL_SIZE; i++) {
-    const e = engine.addEntity()
-    Transform.create(e, { position: TRAIL_HIDDEN_POS, scale: Vector3.Zero() })
-    MeshRenderer.setSphere(e)
-    Material.setPbrMaterial(e, TRAIL_MATERIAL)
-    trailPool.push(e)
-  }
-}
-
-function spawnTrailPuff(position: Vector3): void {
-  initTrailPool()
-  const puff = trailPool[trailPoolIdx % TRAIL_POOL_SIZE]
-  trailPoolIdx++
-  const jitteredPos = Vector3.create(
-    position.x + (Math.random() - 0.5) * 0.25,
-    position.y + (Math.random() - 0.5) * 0.15,
-    position.z + (Math.random() - 0.5) * 0.25,
-  )
-  const s = TRAIL_START_SCALE * (0.8 + Math.random() * 0.4)
-  const t = Transform.getMutable(puff)
-  t.position = jitteredPos
-  t.scale = Vector3.create(s, s, s)
-  Tween.createOrReplace(puff, {
-    mode: Tween.Mode.Scale({ start: Vector3.create(s, s, s), end: Vector3.Zero() }),
-    duration: TRAIL_LIFETIME_MS,
-    easingFunction: EasingFunction.EF_EASEINQUAD,
-  })
-  activeTrailPuffs.push({ entity: puff, expiresAt: Date.now() + TRAIL_LIFETIME_MS + 50 })
-}
-
-function hideTrailPuff(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = TRAIL_HIDDEN_POS
-  t.scale = Vector3.Zero()
-  if (Tween.has(entity)) Tween.deleteFrom(entity)
-}
-
-function cleanupExpiredTrailPuffs(): void {
-  const now = Date.now()
-  for (let i = activeTrailPuffs.length - 1; i >= 0; i--) {
-    if (now >= activeTrailPuffs[i].expiresAt) {
-      hideTrailPuff(activeTrailPuffs[i].entity)
-      activeTrailPuffs.splice(i, 1)
-    }
-  }
-}
-
-function hideAllTrailPuffs(): void {
-  for (const p of activeTrailPuffs) hideTrailPuff(p.entity)
-  activeTrailPuffs.length = 0
-  trailSpawnAccum = 0
-  lastShieldPlayerPos = null
-}
 
 // ── Beacon state ──
 // setupMushroomBeacon removed — was never called
@@ -234,10 +152,10 @@ room.onMessage('mushroomPositions', (data) => {
     const pid = (data as any).playerId as string
     console.log('[Mushroom] Mushroom', mid, 'picked up by', pid)
     playBoostSound()
-    // Activate gold trail for the local player who picked up the mushroom
+    // Speed boost for the local player who picked up the mushroom
     const lp = getPlayer()
     if (lp && pid.toLowerCase() === lp.userId?.toLowerCase()) {
-      mushroomTrailTimer = MUSHROOM_TRAIL_DURATION
+      addMushroomSpeedBoost()
     }
     // Remove the mushroom visual
     for (let i = mushrooms.length - 1; i >= 0; i--) {
@@ -365,32 +283,6 @@ export function mushroomClientSystem(dt: number): void {
 
   processMushroomRaycasts()
 
-  // ── Orb trail after mushroom pickup ──
-  cleanupExpiredTrailPuffs()
-  if (mushroomTrailTimer > 0) mushroomTrailTimer -= dt
-  const hasMushroomTrail = mushroomTrailTimer > 0
-
-  if (hasMushroomTrail && Transform.has(engine.PlayerEntity)) {
-    const pos = Transform.get(engine.PlayerEntity).position
-    if (lastShieldPlayerPos === null) {
-      lastShieldPlayerPos = Vector3.create(pos.x, pos.y, pos.z)
-    }
-    const dx2 = pos.x - lastShieldPlayerPos.x
-    const dz2 = pos.z - lastShieldPlayerPos.z
-    const moved = Math.sqrt(dx2 * dx2 + dz2 * dz2)
-    trailSpawnAccum += dt
-    if (trailSpawnAccum >= TRAIL_SPAWN_INTERVAL && moved >= TRAIL_MIN_MOVE_DIST) {
-      spawnTrailPuff(Vector3.create(pos.x, pos.y + 0.15, pos.z))
-      trailSpawnAccum = 0
-      lastShieldPlayerPos = Vector3.create(pos.x, pos.y, pos.z)
-    }
-  } else {
-    if (lastShieldPlayerPos !== null) {
-      // Trail just ended — clean up any remaining puffs
-      hideAllTrailPuffs()
-    }
-  }
-
   // Check proximity for pickup (send to server)
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
@@ -417,7 +309,5 @@ export function hasMushroomShield(): boolean {
 /** Clear effects on round end */
 export function clearMushroomShield(): void {
   hideAllShields()
-  hideAllTrailPuffs()
-  mushroomTrailTimer = 0
   console.log('[Mushroom] Effects cleared (round end)')
 }

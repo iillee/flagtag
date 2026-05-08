@@ -271,6 +271,8 @@ room.onMessage('pickupConfirmed', (data) => {
   // Play pickup sound now that server confirmed (prevents repeated sounds on rejected pickups)
   playPickupSound()
   skipNextPickupSound = true  // skip the CRDT-triggered sound since we already played it
+
+
 })
 
 

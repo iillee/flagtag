@@ -5,6 +5,7 @@ import { room } from '../shared/messages'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../cinematicState'
 
+
 // Water surface Y level
 const WATER_SURFACE_Y = 1.58
 

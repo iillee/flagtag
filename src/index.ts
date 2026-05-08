@@ -24,6 +24,8 @@ import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
 import { waterBobSystem } from './systems/waterBobSystem'
 import { coinBobSpinSystem } from './systems/coinBobSpinSystem'
 import { coinPickupSystem, setupCoinMessages } from './systems/coinPickupSystem'
+import { speedBoostSystem } from './systems/speedBoostSystem'
+import { boostTrailSystem } from './systems/boostTrailSystem'
 import { waterSplashSystem } from './systems/waterSplashSystem'
 import { setupLightning, lightningSystem, setupLightningMessages } from './systems/lightningSystem'
 import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
@@ -386,6 +388,8 @@ export async function main() {
   engine.addSystem(trapClientSystem)
   engine.addSystem(projectileClientSystem)
   engine.addSystem(mushroomClientSystem)
+  engine.addSystem(speedBoostSystem)
+  engine.addSystem(boostTrailSystem)
   engine.addSystem(shieldSystem)
   engine.addSystem(zombieClientSystem) // Ghost system enabled
   engine.addSystem(updateHoldTimeInterpolation)

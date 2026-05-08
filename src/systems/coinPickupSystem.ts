@@ -15,6 +15,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { CoinState, COIN_PICKUP_RADIUS } from '../shared/coins'
 import { room } from '../shared/messages'
 import { setPendingRoundEarnings } from '../gameState/roundEarnings'
+import { addCoinSpeedBoost } from './speedBoostSystem'
 
 // ── Types ──
 
@@ -39,17 +40,14 @@ function playCoinSound(): void {
   if (!coinSoundEntity) {
     coinSoundEntity = engine.addEntity()
     Transform.create(coinSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(coinSoundEntity, {
-      audioClipUrl: 'assets/sounds/coin.mp3',
-      playing: false,
-      loop: false,
-      volume: 0.7,
-      global: true,
-    })
   }
-  const audio = AudioSource.getMutable(coinSoundEntity)
-  audio.currentTime = 0
-  audio.playing = true
+  AudioSource.createOrReplace(coinSoundEntity, {
+    audioClipUrl: 'assets/sounds/coin.mp3',
+    playing: true,
+    loop: false,
+    volume: 0.7,
+    global: true,
+  })
 }
 
 // ── Head bounce state ──
@@ -243,6 +241,7 @@ export function setupCoinMessages(): void {
     if (player && data.playerId === player.userId.toLowerCase()) {
       walletBalance = data.newBalance
       playCoinSound()
+      addCoinSpeedBoost()
       console.log('[CoinPickup] You picked up a coin! Balance:', walletBalance)
     }
   })
