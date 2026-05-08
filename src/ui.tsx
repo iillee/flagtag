@@ -1044,7 +1044,7 @@ function PlayerListUi() {
             </UiEntity>
 
             {/* Title */}
-            <Label value="Store" fontSize={mobile ? 38 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 4 : S(4) } }} />
+            <Label value="Chest" fontSize={mobile ? 38 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 4 : S(4) } }} />
 
             {/* Wallet row: coins + flags */}
             <UiEntity uiTransform={{
