@@ -588,8 +588,8 @@ function getRemotePlayerPosition(userId: string): Vector3 | null {
 
 room.onMessage('shellTriggered', (data) => {
   const pos = Vector3.create(data.x, data.y, data.z)
-  // Remove the message-driven projectile visual closest to the hit position
-  removeMsgProjectileVisualNear(data.x, data.y, data.z, !!data.peak)
+  // Remove the projectile visual matching the thrower
+  removeMsgProjectileVisualByThrower(data.firedBy || '', data.x, data.y, data.z, !!data.peak)
 
   // Hit a player: particles + hit sound + stagger. Hit a wall: miss sound.
   if (data.victimId && data.victimId !== '') {
@@ -618,17 +618,17 @@ room.onMessage('shellTriggered', (data) => {
 room.onMessage('shellReturned', (data) => {
   const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
   const playerId = (data.firedBy || '').toLowerCase()
-  if (!playerId || playerId !== localUserId) return
-  // Direct cleanup: server confirmed our boomerang returned/expired
-  // Remove any lingering visual for this player
+  if (!playerId) return
+  // Clean up ALL visuals for this thrower (local or remote) — prevents pool leaks
   for (let i = msgProjectileVisuals.length - 1; i >= 0; i--) {
-    if (msgProjectileVisuals[i].firedBy === localUserId) {
+    if (msgProjectileVisuals[i].firedBy === playerId) {
       if (msgProjectileVisuals[i].groundRayEntity !== null) engine.removeEntity(msgProjectileVisuals[i].groundRayEntity!)
       releaseProjectileToPool(msgProjectileVisuals[i].entity)
       msgProjectileVisuals.splice(i, 1)
     }
   }
-  if (localThrowActive && !orbitActive) {
+  // Clear local throw state if this was our boomerang
+  if (playerId === localUserId && localThrowActive && !orbitActive) {
     console.log('[Projectile] ✅ shellReturned for local player — clearing localThrowActive')
     localThrowActive = false
     localThrowSawVisual = false
@@ -855,57 +855,60 @@ function updateLocalProjectiles(dt: number): void {
   }
 }
 
-// ── Projectile visual entity pool ──
-// Pre-create a fixed pool of entities with GltfContainer already loaded.
-// Show/hide by moving position + scale instead of create/destroy to avoid
-// the Decentraland engine bug where rapid GltfContainer create/destroy
-// causes models to stop rendering.
-const PROJECTILE_POOL_SIZE = 10
-const projectilePool: Entity[] = []
+// ── Projectile visual entity pool (per-color) ──
+// Pre-create a fixed pool of entities per boomerang color, each with its own
+// GltfContainer already loaded. This avoids swapping .glb src on reuse, which
+// triggers a Decentraland engine bug where rapid GltfContainer model swaps
+// cause models to stop rendering after repeated use.
+const POOL_SIZE_PER_COLOR = 6
+const BOOMERANG_COLORS = ['r', 'y', 'b', 'g'] as const
+const projectilePoolByColor: Map<string, Entity[]> = new Map()
 let projectilePoolReady = false
 const PROJECTILE_HIDDEN_POS = Vector3.create(0, -200, 0)
 
 export function initProjectilePool(): void {
   if (projectilePoolReady) return
   projectilePoolReady = true
-  for (let i = 0; i < PROJECTILE_POOL_SIZE; i++) {
-    const e = engine.addEntity()
-    Transform.create(e, { position: PROJECTILE_HIDDEN_POS, scale: Vector3.Zero() })
-    GltfContainer.create(e, {
-      src: getProjectileModelSrc(),
-      visibleMeshesCollisionMask: 0,
-      invisibleMeshesCollisionMask: 0
-    })
-    projectilePool.push(e)
+  let totalCreated = 0
+  for (const color of BOOMERANG_COLORS) {
+    const pool: Entity[] = []
+    for (let i = 0; i < POOL_SIZE_PER_COLOR; i++) {
+      const e = engine.addEntity()
+      Transform.create(e, { position: PROJECTILE_HIDDEN_POS, scale: Vector3.Zero() })
+      GltfContainer.create(e, {
+        src: `assets/models/boomerang.${color}.glb`,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
+      pool.push(e)
+      totalCreated++
+    }
+    projectilePoolByColor.set(color, pool)
   }
-  console.log('[Projectile] 🎯 Pre-created projectile visual pool of', PROJECTILE_POOL_SIZE)
+  console.log('[Projectile] 🎯 Pre-created', totalCreated, 'projectile visuals (', POOL_SIZE_PER_COLOR, 'per color)')
 }
 
-// Update pool + hand boomerang when color changes
+// Update hand boomerang when color changes (pool no longer needs updating)
 onBoomerangColorChange((color) => {
   const newSrc = getProjectileModelSrc()
-  // Update all pooled entities
-  for (const e of projectilePool) {
-    if (GltfContainer.has(e)) {
-      const gltf = GltfContainer.getMutable(e)
-      gltf.src = newSrc
-    }
-  }
   // Update hand boomerang
   if (handBoomerangEntity !== null && GltfContainer.has(handBoomerangEntity)) {
     const gltf = GltfContainer.getMutable(handBoomerangEntity)
     gltf.src = newSrc
   }
-  console.log('[Projectile] Updated pool + hand model to', newSrc)
+  console.log('[Projectile] Updated hand model to', newSrc)
 })
 
-function acquireProjectileFromPool(): Entity | null {
+function acquireProjectileFromPool(color: string): Entity | null {
   initProjectilePool()
-  for (const e of projectilePool) {
+  const validColor = BOOMERANG_COLORS.includes(color as any) ? color : 'r'
+  const pool = projectilePoolByColor.get(validColor)
+  if (!pool) return null
+  for (const e of pool) {
     const t = Transform.get(e)
     if (t.position.y < -100) return e
   }
-  console.error('[Projectile] 🎯 Pool exhausted! All', PROJECTILE_POOL_SIZE, 'projectile visuals in use.')
+  console.error('[Projectile] 🎯 Pool exhausted for color', validColor, '! All', POOL_SIZE_PER_COLOR, 'in use.')
   return null
 }
 
@@ -946,7 +949,9 @@ interface MsgProjectileVisual {
 const msgProjectileVisuals: MsgProjectileVisual[] = []
 
 function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeSpeed?: number, chargeRange?: number, chargeScale?: number): void {
-  const localEntity = acquireProjectileFromPool()
+  const validColors = ['r', 'y', 'b', 'g']
+  const c = (color && validColors.includes(color)) ? color : 'r'
+  const localEntity = acquireProjectileFromPool(c)
   if (!localEntity) return
 
   const scaleMult = (chargeScale && chargeScale > 0) ? chargeScale : 1
@@ -955,12 +960,7 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
   t.scale = Vector3.create(PROJECTILE_SCALE.x * scaleMult, PROJECTILE_SCALE.y * scaleMult, PROJECTILE_SCALE.z * scaleMult)
   t.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(dirX, dirZ) * (180 / Math.PI), 0)
 
-  // Set the correct color model for this projectile
-  if (color && GltfContainer.has(localEntity)) {
-    const validColors = ['r', 'y', 'b', 'g']
-    const c = validColors.includes(color) ? color : 'r'
-    GltfContainer.getMutable(localEntity).src = `assets/models/boomerang.${c}.glb`
-  }
+  // No GltfContainer swap needed — pool entity already has the correct color model
 
   attachProjectileSound(localEntity)
 
@@ -986,16 +986,30 @@ function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number
   console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1), 'speed:', ((chargeSpeed && chargeSpeed > 0) ? chargeSpeed : PROJECTILE_SPEED))
 }
 
-function removeMsgProjectileVisualNear(x: number, y: number, z: number, isPeak: boolean = false): void {
-  // Find the closest projectile visual
+function removeMsgProjectileVisualByThrower(firedBy: string, x: number, y: number, z: number, isPeak: boolean = false): void {
+  // Match by thrower ID to avoid cross-player mismatches.
+  // If multiple visuals exist for the same thrower (e.g. yellow double-throw),
+  // pick the closest one among that thrower's visuals.
+  const throwerId = (firedBy || '').toLowerCase()
   let closestIdx = -1
   let closestDist = Infinity
   for (let i = 0; i < msgProjectileVisuals.length; i++) {
     const vis = msgProjectileVisuals[i]
+    if (throwerId && vis.firedBy !== throwerId) continue
     const pos = Transform.get(vis.entity).position
     const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
     if (dist < closestDist) { closestDist = dist; closestIdx = i }
+  }
+  // Fallback: if no match by thrower (shouldn't happen), try any visual
+  if (closestIdx === -1 && throwerId) {
+    for (let i = 0; i < msgProjectileVisuals.length; i++) {
+      const vis = msgProjectileVisuals[i]
+      const pos = Transform.get(vis.entity).position
+      const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (dist < closestDist) { closestDist = dist; closestIdx = i }
+    }
   }
   if (closestIdx === -1) return
 

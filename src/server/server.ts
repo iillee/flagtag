@@ -2474,7 +2474,7 @@ function shellServerSystem(dt: number): void {
         projectile.returnZ = projectile.startZ + projectile.dirZ * projectile.distanceTraveled
         // Send triggered with no victim so client starts return visual
         const projectilePos = Transform.get(projectile.entity).position
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', peak: !projectile.hitWall })
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', peak: !projectile.hitWall, firedBy: projectile.firedBy })
       } else {
         // Straight line forward
         const newX = projectile.startX + projectile.dirX * projectile.distanceTraveled
@@ -2544,7 +2544,7 @@ function shellServerSystem(dt: number): void {
           handleDrop(addr)
         }
 
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr })
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr, firedBy: projectile.firedBy })
 
         if (projectile.returning) {
           // On return: consumed on hit
@@ -2572,7 +2572,7 @@ function shellServerSystem(dt: number): void {
       const dist = Vector3.distance(projectilePos, trapPos)
       if (dist < PROJECTILE_HIT_RADIUS * projectile.chargeScale) {
         console.log('[Server] 🎯🪤 Projectile hit trap!', projectile.returning ? 'Both destroyed.' : 'Trap destroyed, projectile returning.')
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '' })
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', firedBy: projectile.firedBy })
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
         removeTrap(trap)
         activeTraps.splice(j, 1)
@@ -3497,7 +3497,7 @@ function zombieServerSystem(dt: number): void {
           proj.returnX = projPos.x
           proj.returnY = projPos.y
           proj.returnZ = projPos.z
-          room.send('shellTriggered', { x: projPos.x, y: projPos.y, z: projPos.z, victimId: '', peak: true })
+          room.send('shellTriggered', { x: projPos.x, y: projPos.y, z: projPos.z, victimId: '', peak: true, firedBy: proj.firedBy })
           console.log('[Server] 🧟 Projectile rebounding off zombie')
         }
         break
