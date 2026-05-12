@@ -1,6 +1,6 @@
 import { Color4 } from '@dcl/sdk/math'
 import { engine, UiCanvasInformation } from '@dcl/sdk/ecs'
-import { Flag } from '../shared/components'
+import { Sword as Flag } from '../shared/components'
 
 // ═══════════════════════════════════════════════════════════
 // COLOR PALETTE

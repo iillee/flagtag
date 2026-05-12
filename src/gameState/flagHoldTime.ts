@@ -1,6 +1,11 @@
 import { engine, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
-import { PlayerFlagHoldTime, Flag, FlagState } from '../shared/components'
+import { PlayerSurvivalTime, Sword, SwordState } from '../shared/components'
+
+// Backwards-compatible aliases
+const PlayerFlagHoldTime = PlayerSurvivalTime
+const Flag = Sword
+const FlagState = SwordState
 import { room } from '../shared/messages'
 
 /** Players in the scene (userId -> display name). Updated via onEnterScene / onLeaveScene. */

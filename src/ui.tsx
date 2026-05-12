@@ -12,10 +12,11 @@ import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjecti
 import { clearMushroomShield } from './systems/mushroomSystem'
 
 import { isCinematicActive } from './cinematicState'
+import { getLocalIsInfected, getHumansRemaining, isInfectionRoundActive, getStatusFlashText } from './systems/infectionSystem'
 import { room } from './shared/messages'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount, getMonthlyVisitors, getMonthlyVisitorCount, getMonthlyOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries, getAllTimeLeaderboardEntries, getMonthlyLeaderboardEntries } from './gameState/roundsWon'
-import { getCountdownSeconds, CountdownTimer, Flag } from './shared/components'
+import { getCountdownSeconds, CountdownTimer, Sword as Flag } from './shared/components'
 import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType, PointerEvents, executeTask, type Entity } from '@dcl/sdk/ecs'
 import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
 import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
@@ -1441,6 +1442,27 @@ function DesktopLayout() {
           <Label value={formatCountdown(countdownSeconds)} fontSize={S(40)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: S(-6) } }} />
         </UiEntity>
       </UiEntity>}
+
+      {/* ── Infection Status HUD ── */}
+      {!isCinematicActive() && !splashVisible && isInfectionRoundActive() && (
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: S(80), left: S(0) }, width: '100%', flexDirection: 'column', alignItems: 'center' }}>
+          <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', padding: { left: S(16), right: S(16), top: S(8), bottom: S(8) }, borderRadius: S(_BORDER_RADIUS) }}
+            uiBackground={{ color: getLocalIsInfected() ? Color4.create(0.15, 0.4, 0.1, 0.85) : Color4.create(0.1, 0.15, 0.4, 0.85) }}>
+            <Label value={getLocalIsInfected() ? '☠️ INFECTED' : '🧑 HUMAN'} fontSize={S(22)} color={getLocalIsInfected() ? Color4.create(0.4, 1, 0.2, 1) : Color4.create(0.4, 0.7, 1, 1)} font="sans-serif" />
+            <Label value={`Humans remaining: ${getHumansRemaining()}`} fontSize={S(14)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: S(-4) } }} />
+          </UiEntity>
+        </UiEntity>
+      )}
+
+      {/* ── Status Flash ── */}
+      {getStatusFlashText() !== '' && (
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: S(140), left: S(0) }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+          <UiEntity uiTransform={{ padding: { left: S(20), right: S(20), top: S(10), bottom: S(10) }, borderRadius: S(8) }}
+            uiBackground={{ color: Color4.create(0, 0, 0, 0.8) }}>
+            <Label value={getStatusFlashText()} fontSize={S(20)} color={GOLD} font="sans-serif" />
+          </UiEntity>
+        </UiEntity>
+      )}
 
       {/* Round-end splash — bottom of screen over cinematic camera (only when there are scorers) */}
       {splashVisible && cinematicShowing && splashPlayers.length > 0 && (

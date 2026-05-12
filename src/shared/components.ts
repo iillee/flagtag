@@ -1,17 +1,16 @@
 import { engine, Schemas } from '@dcl/sdk/ecs'
 import { AUTH_SERVER_PEER_ID } from '@dcl/sdk/network/message-bus-sync'
 
-// ── Flag ──
+// ── Sword ──
 
-export enum FlagState {
+export enum SwordState {
   AtBase = 'atBase',
   Carried = 'carried',
   Dropped = 'dropped'
 }
 
-export const Flag = engine.defineComponent('ctf-flag', {
-  teamId: Schemas.Int,
-  state: Schemas.EnumString<FlagState>(FlagState, FlagState.AtBase),
+export const Sword = engine.defineComponent('cg-sword', {
+  state: Schemas.EnumString<SwordState>(SwordState, SwordState.AtBase),
   carrierPlayerId: Schemas.String,
   baseX: Schemas.Float,
   baseY: Schemas.Float,
@@ -20,26 +19,57 @@ export const Flag = engine.defineComponent('ctf-flag', {
   dropAnchorY: Schemas.Float,
   dropAnchorZ: Schemas.Float
 }, {
-  teamId: 0,
-  state: FlagState.AtBase,
+  state: SwordState.AtBase,
   carrierPlayerId: '',
   baseX: 0, baseY: 0, baseZ: 0,
   dropAnchorX: 0, dropAnchorY: 0, dropAnchorZ: 0
 })
 
-Flag.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+Sword.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-// ── Player hold time ──
+// ── Infection State (global round state, server-synced) ──
 
-export const PlayerFlagHoldTime = engine.defineComponent('ctf-player-flag-hold-time', {
+export const InfectionState = engine.defineComponent('cg-infection-state', {
+  patientZeroId: Schemas.String,          // userId of the first infected player
+  infectedPlayersJson: Schemas.String,    // JSON array of infected player userIds
+  humansRemaining: Schemas.Int,           // count of non-infected players
+  roundActive: Schemas.Boolean,           // true once Patient Zero is chosen
+}, {
+  patientZeroId: '',
+  infectedPlayersJson: '[]',
+  humansRemaining: 0,
+  roundActive: false,
+})
+
+InfectionState.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
+// ── Player Infection (per-player, server-synced) ──
+
+export const PlayerInfected = engine.defineComponent('cg-player-infected', {
   playerId: Schemas.String,
-  seconds: Schemas.Float
+  isInfected: Schemas.Boolean,
+  infectedAtMs: Schemas.Number,           // Date.now() when infected (0 if human)
+  respawnCooldownUntilMs: Schemas.Number, // 0 if alive, timestamp if killed by sword and waiting to respawn
+}, {
+  playerId: '',
+  isInfected: false,
+  infectedAtMs: 0,
+  respawnCooldownUntilMs: 0,
+})
+
+PlayerInfected.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
+// ── Player Survival Time (replaces PlayerFlagHoldTime) ──
+
+export const PlayerSurvivalTime = engine.defineComponent('cg-player-survival-time', {
+  playerId: Schemas.String,
+  seconds: Schemas.Float           // how long this player survived as human this round
 }, { playerId: '', seconds: 0 })
 
-PlayerFlagHoldTime.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+PlayerSurvivalTime.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
 /** Deterministic numeric id for sync entity (same userId => same id on all clients). */
-const HOLD_TIME_ENTITY_BASE = 10000
+const SURVIVAL_TIME_ENTITY_BASE = 10000
 
 function hashString(s: string): number {
   let h = 0
@@ -49,9 +79,27 @@ function hashString(s: string): number {
   return h >>> 0
 }
 
-export function getHoldTimeEntityEnumId(userId: string): number {
-  return HOLD_TIME_ENTITY_BASE + (hashString(userId.toLowerCase()) % 100000)
+export function getSurvivalTimeEntityEnumId(userId: string): number {
+  return SURVIVAL_TIME_ENTITY_BASE + (hashString(userId.toLowerCase()) % 100000)
 }
+
+/** Deterministic sync ID for PlayerInfected entities. */
+const INFECTED_ENTITY_BASE = 200000
+
+export function getInfectedEntityEnumId(userId: string): number {
+  return INFECTED_ENTITY_BASE + (hashString(userId.toLowerCase()) % 100000)
+}
+
+// ── Infection Constants ──
+
+/** Distance at which a slime infects a human (meters). */
+export const INFECTION_RADIUS = 2.0
+/** Sword melee attack range (meters). */
+export const SWORD_ATTACK_RADIUS = 3.0
+/** Seconds a slime is dead after being killed by the sword. */
+export const SLIME_RESPAWN_COOLDOWN_SEC = 8
+/** Brief immunity after being infected — prevents chain-tag in crowds (ms). */
+export const INFECTION_IMMUNITY_MS = 2000
 
 // ── Countdown timer ──
 
@@ -116,28 +164,23 @@ MonthlyLeaderboardState.validateBeforeChange((value) => value.senderAddress === 
 
 // ── Shared constants ──
 
-export const FLAG_BASE_POSITION = { x: 230, y: 13, z: 258 }
+export const SWORD_BASE_POSITION = { x: 230, y: 13, z: 258 }
 
-// ── Red Flag Spawn Points ──
-export const FLAG_SPAWN_POINTS = [
+// ── Sword Spawn Points ──
+export const SWORD_SPAWN_POINTS = [
   { x: 228.4, y: 2.6, z: 192.5 },      // Spawn Point 1
-  { x: 217, y: 8.25, z: 258 },   // Spawn Point 2
-  { x: 211.2, y: 13, z: 305.4 } // Spawn Point 3
+  { x: 217, y: 8.25, z: 258 },          // Spawn Point 2
+  { x: 211.2, y: 13, z: 305.4 }         // Spawn Point 3
 ] as const
 
 /**
- * Three spawn locations for the red flag.
- * Flag will randomly spawn at one of these three locations when a round ends.
- */
-
-/**
- * Get a random spawn point for flag respawn.
- * Used at round end to prevent spawn camping.
+ * Get a random spawn point for sword respawn.
+ * Used at round start / after sword is dropped.
  */
 export function getRandomSpawnPoint(): { x: number; y: number; z: number } {
-  const index = Math.floor(Math.random() * FLAG_SPAWN_POINTS.length)
-  const spawnPoint = { ...FLAG_SPAWN_POINTS[index] }
-  console.log(`[SpawnSystem] Flag spawning at point ${index + 1}/3: (${spawnPoint.x}, ${spawnPoint.y}, ${spawnPoint.z})`)
+  const index = Math.floor(Math.random() * SWORD_SPAWN_POINTS.length)
+  const spawnPoint = { ...SWORD_SPAWN_POINTS[index] }
+  console.log(`[SpawnSystem] Sword spawning at point ${index + 1}/3: (${spawnPoint.x}, ${spawnPoint.y}, ${spawnPoint.z})`)
   return spawnPoint
 }
 
@@ -215,116 +258,9 @@ export function recycleTrapSyncId(id: number): void {
   }
 }
 
-// ── Projectile (powerup) ──
-
-export const Projectile = engine.defineComponent('ctf-shell', {
-  firedByPlayerId: Schemas.String,
-  firedAtMs: Schemas.Number,
-  startX: Schemas.Float,          // spawn position — client uses these for local movement prediction
-  startY: Schemas.Float,
-  startZ: Schemas.Float,
-  dirX: Schemas.Float,           // normalized forward direction (XZ plane)
-  dirZ: Schemas.Float,
-  distanceTraveled: Schemas.Float,
-  maxDistance: Schemas.Float,     // wall distance reported by client, or default cap
-  active: Schemas.Boolean,       // false once it hits something or expires
-}, {
-  firedByPlayerId: '',
-  firedAtMs: 0,
-  startX: 0,
-  startY: 0,
-  startZ: 0,
-  dirX: 0,
-  dirZ: 0,
-  distanceTraveled: 0,
-  maxDistance: 50,
-  active: true,
-})
-
-Projectile.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
-
-/** Cooldown between projectile fires (seconds). */
-export const PROJECTILE_COOLDOWN_SEC = 1.0
-/** Max projectiles one player can have in flight at once. */
-export const PROJECTILE_MAX_ACTIVE = 1
-/** Speed of projectile (meters per second). */
-export const PROJECTILE_SPEED = 30
-/** Max range if no wall is detected (meters). */
-export const PROJECTILE_MAX_RANGE = 50
-/** Radius for projectile hitting a player (meters). */
-export const PROJECTILE_HIT_RADIUS = 2.0
-/** Max time a projectile can exist (seconds) — safety net. */
-export const PROJECTILE_LIFETIME_SEC = 8
-
-/**
- * Sync ID pool for projectiles — fixed pool of reusable IDs.
- * Max concurrent projectiles: 10 players × 2 (yellow) = 20. Pool of 30 gives headroom.
- */
-const PROJECTILE_SYNC_ID_BASE = 2000000
-const PROJECTILE_POOL_SIZE = 30
-const projectileIdPool: number[] = []
-for (let i = 0; i < PROJECTILE_POOL_SIZE; i++) projectileIdPool.push(PROJECTILE_SYNC_ID_BASE + i)
-export function getNextProjectileSyncId(): number {
-  if (projectileIdPool.length > 0) return projectileIdPool.shift()!
-  return PROJECTILE_SYNC_ID_BASE + (Math.floor(Math.random() * PROJECTILE_POOL_SIZE))
-}
-export function recycleProjectileSyncId(id: number): void {
-  if (id >= PROJECTILE_SYNC_ID_BASE && id < PROJECTILE_SYNC_ID_BASE + PROJECTILE_POOL_SIZE) {
-    if (!projectileIdPool.includes(id)) projectileIdPool.push(id)
-  }
-}
-
-// ── Zombie ──
-
-export const Zombie = engine.defineComponent('ctf-zombie', {
-  hp: Schemas.Int,
-  spawnX: Schemas.Float,
-  spawnY: Schemas.Float,
-  spawnZ: Schemas.Float,
-  active: Schemas.Boolean,
-  targetX: Schemas.Float,
-  targetY: Schemas.Float,
-  targetZ: Schemas.Float,
-}, {
-  hp: 1,
-  spawnX: 0, spawnY: 0, spawnZ: 0,
-  active: true,
-  targetX: 0, targetY: 0, targetZ: 0,
-})
-
-Zombie.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
-
-/** Zombie detection radius (meters) — starts homing when player is within this. */
-export const ZOMBIE_DETECT_RADIUS = 20
-/** Zombie base speed (m/s). */
-export const ZOMBIE_SPEED = 3
-/** Zombie fast speed when close (m/s). */
-export const ZOMBIE_FAST_SPEED = 5
-/** Distance at which zombie speeds up (meters). */
-export const ZOMBIE_FAST_DIST = 8
-/** Zombie hit radius — staggers player on contact (meters). */
-export const ZOMBIE_HIT_RADIUS = 1.5
-/** Zombie spawn interval (seconds). */
-export const ZOMBIE_SPAWN_INTERVAL = 20
-/** Max active zombies. */
-export const ZOMBIE_MAX_ACTIVE = 5
-
-const ZOMBIE_SYNC_ID_BASE = 3000000
-const ZOMBIE_POOL_SIZE = 5
-const zombieIdPool: number[] = []
-for (let i = 0; i < ZOMBIE_POOL_SIZE; i++) zombieIdPool.push(ZOMBIE_SYNC_ID_BASE + i)
-export function getNextZombieSyncId(): number {
-  if (zombieIdPool.length > 0) return zombieIdPool.shift()!
-  return ZOMBIE_SYNC_ID_BASE + (Math.floor(Math.random() * ZOMBIE_POOL_SIZE))
-}
-export function recycleZombieSyncId(id: number): void {
-  if (id >= ZOMBIE_SYNC_ID_BASE && id < ZOMBIE_SYNC_ID_BASE + ZOMBIE_POOL_SIZE) {
-    if (!zombieIdPool.includes(id)) zombieIdPool.push(id)
-  }
-}
-
 export enum SyncIds {
-  FLAG = 1,
+  SWORD = 1,
+  INFECTION_STATE = 2,
   COUNTDOWN = 200,
   LEADERBOARD = 201,
   VISITOR_ANALYTICS = 202,

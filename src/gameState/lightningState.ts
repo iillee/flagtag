@@ -1,10 +1,3 @@
-// Shared lightning respawn state — avoids circular imports between flagSystem and lightningSystem
-let _lightningRespawning = false
-
-export function setLightningRespawning(value: boolean) {
-  _lightningRespawning = value
-}
-
-export function isLightningRespawning(): boolean {
-  return _lightningRespawning
-}
+// STUB — lightning state removed for Contagion mode
+export function setLightningRespawning(_value: boolean): void {}
+export function isLightningRespawning(): boolean { return false }

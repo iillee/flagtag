@@ -3,13 +3,12 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
-  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState, VisitorAnalytics, MonthlyVisitorAnalytics,
+  Sword, SwordState, PlayerSurvivalTime, InfectionState, PlayerInfected,
+  CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState, VisitorAnalytics, MonthlyVisitorAnalytics,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
-  Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
-  Zombie, ZOMBIE_DETECT_RADIUS, ZOMBIE_SPEED, ZOMBIE_FAST_SPEED, ZOMBIE_FAST_DIST, ZOMBIE_HIT_RADIUS, ZOMBIE_SPAWN_INTERVAL, ZOMBIE_MAX_ACTIVE,
-  getNextZombieSyncId, recycleZombieSyncId,
-  getHoldTimeEntityEnumId, getNextTrapSyncId, recycleTrapSyncId, getNextProjectileSyncId, recycleProjectileSyncId,
-  FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString
+  getSurvivalTimeEntityEnumId, getInfectedEntityEnumId, getNextTrapSyncId, recycleTrapSyncId,
+  SWORD_BASE_POSITION, SWORD_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString,
+  INFECTION_RADIUS, SWORD_ATTACK_RADIUS, SLIME_RESPAWN_COOLDOWN_SEC, INFECTION_IMMUNITY_MS
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
@@ -26,35 +25,28 @@ import {
 } from '../shared/upgrades'
 import type { BoomerangColor } from '../gameState/boomerangColor'
 
+// ── Infection state ──
+let infectionStateEntity: Entity
+/** Map of player userId → PlayerInfected entity */
+const infectedEntities = new Map<string, Entity>()
+/** Set of currently infected player userIds */
+const infectedPlayers = new Set<string>()
+/** Map of recently infected players → timestamp (for brief immunity) */
+const infectionImmunityUntil = new Map<string, number>()
+/** Whether infection round is active (Patient Zero has been chosen) */
+let infectionRoundActive = false
+/** Patient Zero userId for current round */
+let patientZeroId = ''
+/** Timestamp when survival time tracking started for this round */
+let survivalTimeStartMs = 0
+
 // ── Constants ──
-const PICKUP_RADIUS = 3
-const PROXIMITY_STEAL_RADIUS = 2.0  // Auto-steal flag when within this distance of carrier
-const STEAL_IMMUNITY_MS = 3000    // Immunity for the player who STEALS the flag (time to escape the crowd)
-const HOLD_TIME_SYNC_INTERVAL = 0.5  // Sync hold time every 0.5s (was 0.2s) — reduces CRDT pressure; client interpolates between updates
-// Bob/spin constants removed — animation is now client-side only
+const SWORD_PICKUP_RADIUS = 3
+const SURVIVAL_TIME_SYNC_INTERVAL = 0.5  // Sync survival time every 0.5s — reduces CRDT pressure
 const SPLASH_DURATION_MS = 3000
-const FLAG_GRAVITY = 15          // m/s² (slightly faster than real gravity for snappy game feel)
-const FLAG_MIN_Y = 1.5           // absolute minimum Y (ground plane)
+const SWORD_GRAVITY = 15          // m/s² (slightly faster than real gravity for snappy game feel)
+const SWORD_MIN_Y = 1.5           // absolute minimum Y (ground plane)
 const CARRIER_Y_WINDOW_SEC = 2.0 // seconds of carrier Y history to estimate ground level
-
-// ── Mushroom constants ──
-const MUSHROOM_COUNT = 1
-// Shield lasts until hit or round end
-// Mushroom spawn constrained to boundary cylinder
-const MUSHROOM_CX = 250.75
-const MUSHROOM_CZ = 255.5
-const MUSHROOM_RADIUS = 128
-
-const MUSHROOM_CANDIDATES = 10  // Number of candidate positions per mushroom
-
-interface ServerMushroom {
-  id: number
-  candidates: { x: number; z: number }[]
-  pickedUp: boolean
-}
-const activeMushrooms: ServerMushroom[] = []
-let mushroomIdCounter = 0
-// mushroomShieldActive removed — mushrooms no longer block hits
 
 // ── Coin state ──
 let coinStateEntity: Entity
@@ -78,7 +70,7 @@ const playerLifetimeWinsCache = new Map<string, number>()
 const lifetimeWinsEntities = new Map<string, Entity>()
 
 // ── Server state ──
-let flagEntity: Entity
+let swordEntity: Entity
 let countdownEntity: Entity
 let leaderboardEntity: Entity
 let allTimeLeaderboardEntity: Entity
@@ -86,57 +78,44 @@ let monthlyLeaderboardEntity: Entity
 let visitorAnalyticsEntity: Entity
 let monthlyVisitorAnalyticsEntity: Entity
 
-let holdTimeAccum = 0
-let holdTimeCarrierKey = '' // Track WHO we're accumulating for
+// Survival time accumulator (for all humans — accumulated per-tick, flushed periodically)
+let survivalTimeAccumTimer = 0
 
-// ── Lightning state ──
-const LIGHTNING_ROLL_INTERVAL = 5 // seconds between probability rolls
-const LIGHTNING_WARNING_DURATION = 3 // seconds warning before strike
-let lightningRollTimer = 0
-let lightningStrikeScheduled = false
-let lightningWarningTimer = 0
-let _lightningOriginalCarrierId = '' // carrier when warning started — reserved for future use
-
-function getLightningStrikeChance(points: number): number {
-  if (points < 100) return 0.0
-  if (points < 200) return 0.05 + (points - 100) / 100 * 0.05  // 5–10%
-  if (points < 250) return 0.10 + (points - 200) / 50 * 0.30   // 10–40%
-  if (points < 280) return 0.40 + (points - 250) / 30 * 0.30   // 40–70%
-  return 0.70 + (points - 280) / 20 * 0.25                     // 70–95%
-}
-
-function getCarrierHoldSeconds(): number {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) return 0
-  const key = flag.carrierPlayerId.toLowerCase()
-  const entity = holdTimeEntities.get(key)
-  if (!entity) return 0
-  return (PlayerFlagHoldTime.getOrNull(entity)?.seconds ?? 0) + (holdTimeCarrierKey === key ? holdTimeAccum : 0)
-}
-
-// lastAttackTime removed — melee attack replaced by proximity steal
-const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
-const holdTimeEntities = new Map<string, Entity>()
+const survivalTimeEntities = new Map<string, Entity>()
 const knownPlayers = new Set<string>()
 const playerNames = new Map<string, string>()
 let lastLeaderboardResetDay = ''
 
 /**
- * Single entry point for creating/retrieving a PlayerFlagHoldTime entity.
- * Prevents the race condition where both playerTrackingSystem and
- * holdTimeServerSystem create duplicate entities for the same player.
+ * Single entry point for creating/retrieving a PlayerSurvivalTime entity.
  */
-function getOrCreateHoldTimeEntity(userKey: string): Entity {
+function getOrCreateSurvivalTimeEntity(userKey: string): Entity {
   const key = userKey.toLowerCase()
-  let entity = holdTimeEntities.get(key)
+  let entity = survivalTimeEntities.get(key)
   if (entity) return entity
 
   entity = engine.addEntity()
-  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: 0 })
-  syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(key))
-  holdTimeEntities.set(key, entity)
+  PlayerSurvivalTime.create(entity, { playerId: key, seconds: 0 })
+  syncEntity(entity, [PlayerSurvivalTime.componentId], getSurvivalTimeEntityEnumId(key))
+  survivalTimeEntities.set(key, entity)
   knownPlayers.add(key)
-  console.log('[Server] Created hold-time entity for', key.slice(0, 8))
+  console.log('[Server] Created survival-time entity for', key.slice(0, 8))
+  return entity
+}
+
+/**
+ * Single entry point for creating/retrieving a PlayerInfected entity.
+ */
+function getOrCreateInfectedEntity(userKey: string): Entity {
+  const key = userKey.toLowerCase()
+  let entity = infectedEntities.get(key)
+  if (entity) return entity
+
+  entity = engine.addEntity()
+  PlayerInfected.create(entity, { playerId: key, isInfected: false, infectedAtMs: 0, respawnCooldownUntilMs: 0 })
+  syncEntity(entity, [PlayerInfected.componentId], getInfectedEntityEnumId(key))
+  infectedEntities.set(key, entity)
+  console.log('[Server] Created infected entity for', key.slice(0, 8))
   return entity
 }
 
@@ -189,69 +168,14 @@ function removeTrap(trap: ActiveTrap): void {
   recycleTrapSyncId(trap.syncId)
 }
 
-/** Remove a projectile entity and recycle its sync ID back to the pool. */
-function removeProjectile(projectile: ActiveProjectile): void {
-  engine.removeEntity(projectile.entity)
-  recycleProjectileSyncId(projectile.syncId)
-}
-
-// ── Green orbit state ──
-const ORBIT_DURATION_MS = 3500       // 3.5 seconds of spinning
-const ORBIT_RADIUS = 4.0            // meters from player center
-const ORBIT_HIT_RADIUS = 2.0        // how close a victim must be to the orbit ring
-const ORBIT_COOLDOWN_SEC = 7        // total cooldown after orbit ends
-interface ActiveOrbit {
-  playerId: string
-  startedAtMs: number
-  hitPlayers: Set<string>  // each player can only be hit once per orbit
-}
-const activeOrbits: ActiveOrbit[] = []
-const lastOrbitTime = new Map<string, number>()
-
-// ── Projectile state ──
-// PROJECTILE_MODEL_SRC removed — server doesn't create visuals
-// PROJECTILE_GROUND_OFFSET removed — unused on server
-const lastProjectileFireTime = new Map<string, number>()
-interface ActiveProjectile {
-  entity: Entity
-  syncId: number
-  firedBy: string
-  firedAtMs: number
-  startX: number
-  startY: number
-  startZ: number
-  dirX: number
-  dirZ: number
-  distanceTraveled: number
-  maxDistance: number
-  wallDistReported: boolean
-  hitWall: boolean        // true if maxDistance was shortened by a wall
-  // Gravity
-  currentY: number
-  fallVelocity: number
-  groundY: number        // latest ground height reported by client
-  onGround: boolean      // true once projectile has landed on a surface
-  // CRDT write throttle — sync distanceTraveled at 10Hz instead of 60fps
-
-  // Boomerang return
-  returning: boolean
-  returnX: number  // current position during return
-  returnY: number
-  returnZ: number
-  // Charge speed (30 = tap, 60 = full charge)
-  chargeSpeed: number
-  // Charge scale (1 = normal, up to 3 for green boomerang)
-  chargeScale: number
-}
-const activeProjectiles: ActiveProjectile[] = []
 
 
-// Gravity state for dropped flag
-let flagFalling = false
-let flagFallVelocity = 0
-let flagGravityTargetY = FLAG_MIN_Y
+// Gravity state for dropped sword
+let swordFalling = false
+let swordFallVelocity = 0
+let swordGravityTargetY = SWORD_MIN_Y
 const carrierYSamples: { y: number; time: number }[] = []
-let lastDropperId = ''  // Who dropped the flag — only accept reportGroundY from them
+let lastDropperId = ''  // Who dropped the sword — only accept reportGroundY from them
 
 // Carrier staleness detection — force-drop if carrier position is unavailable
 const CARRIER_NO_POSITION_TIMEOUT_MS = 5000   // No position data → likely disconnected
@@ -270,17 +194,17 @@ function isRealName(name: string): boolean {
 }
 
 // ── Persistence helpers ──
-async function persistFlagState(): Promise<void> {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  const pos = Transform.get(flagEntity).position
-  await Storage.set('flagState', JSON.stringify({
-    state: flag.state,
+async function persistSwordState(): Promise<void> {
+  const sword = Sword.getOrNull(swordEntity)
+  if (!sword) return
+  const pos = Transform.get(swordEntity).position
+  await Storage.set('swordState', JSON.stringify({
+    state: sword.state,
     x: pos.x, y: pos.y, z: pos.z,
-    carrierPlayerId: flag.carrierPlayerId,
-    dropAnchorX: flag.dropAnchorX,
-    dropAnchorY: flag.dropAnchorY,
-    dropAnchorZ: flag.dropAnchorZ
+    carrierPlayerId: sword.carrierPlayerId,
+    dropAnchorX: sword.dropAnchorX,
+    dropAnchorY: sword.dropAnchorY,
+    dropAnchorZ: sword.dropAnchorZ
   }))
 }
 
@@ -879,63 +803,67 @@ async function checkMonthlyVisitorReset(): Promise<void> {
 // ── Setup ──
 
 export async function setupServer(): Promise<void> {
-  console.log('[Server] Starting Flag Tag server...')
+  console.log('[Server] Starting Contagion server...')
 
-  // Load persisted flag state (with error handling)
-  let savedFlag: string | null = null
+  // Load persisted sword state (with error handling)
+  let savedSword: string | null = null
   try {
-    savedFlag = await Storage.get<string>('flagState')
+    savedSword = await Storage.get<string>('swordState')
   } catch (err) {
-    console.error('[Server] Failed to load flag state from storage:', err)
+    console.error('[Server] Failed to load sword state from storage:', err)
   }
   
-  let flagStartState = FlagState.AtBase
-  let flagStartPos = Vector3.create(FLAG_BASE_POSITION.x, FLAG_BASE_POSITION.y, FLAG_BASE_POSITION.z)
+  let swordStartState = SwordState.AtBase
+  let swordStartPos = Vector3.create(SWORD_BASE_POSITION.x, SWORD_BASE_POSITION.y, SWORD_BASE_POSITION.z)
   let dropAnchor = { x: 0, y: 0, z: 0 }
 
-  if (savedFlag) {
+  if (savedSword) {
     try {
-      const data = JSON.parse(savedFlag)
-      if (data.state === FlagState.Dropped) {
-        flagStartState = FlagState.Dropped
-        flagStartPos = Vector3.create(data.x, data.y, data.z)
+      const data = JSON.parse(savedSword)
+      if (data.state === SwordState.Dropped) {
+        swordStartState = SwordState.Dropped
+        swordStartPos = Vector3.create(data.x, data.y, data.z)
         dropAnchor = { x: data.dropAnchorX || data.x, y: data.dropAnchorY || data.y, z: data.dropAnchorZ || data.z }
       }
-      // If carried when server stopped, reset to dropped at last position
-      if (data.state === FlagState.Carried) {
-        flagStartState = FlagState.Dropped
-        flagStartPos = Vector3.create(data.x, data.y, data.z)
+      if (data.state === SwordState.Carried) {
+        swordStartState = SwordState.Dropped
+        swordStartPos = Vector3.create(data.x, data.y, data.z)
         dropAnchor = { x: data.x, y: data.y, z: data.z }
       }
     } catch { /* invalid data, use defaults */ }
   }
 
-  // Create flag entity
-  flagEntity = engine.addEntity()
-  Transform.create(flagEntity, {
-    position: flagStartPos,
+  // Create sword entity
+  swordEntity = engine.addEntity()
+  Transform.create(swordEntity, {
+    position: swordStartPos,
     rotation: Quaternion.fromEulerDegrees(0, 0, 0),
     scale: Vector3.create(1, 1, 1)
   })
-  // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
-  // This avoids a Bevy renderer issue where server-synced GltfContainer sometimes fails to trigger GLB loading.
   
-  // Use the first spawn point as the default base (or restored position if available)
-  const initialBase = flagStartState === FlagState.AtBase ? FLAG_SPAWN_POINTS[0] : { x: flagStartPos.x, y: flagStartPos.y, z: flagStartPos.z }
+  const initialBase = swordStartState === SwordState.AtBase ? SWORD_SPAWN_POINTS[0] : { x: swordStartPos.x, y: swordStartPos.y, z: swordStartPos.z }
   
-  // If starting at base, initialize drop anchor to match base coordinates (prevents 0,0,0 issue)
-  if (flagStartState === FlagState.AtBase) {
+  if (swordStartState === SwordState.AtBase) {
     dropAnchor = { x: initialBase.x, y: initialBase.y, z: initialBase.z }
   }
   
-  Flag.create(flagEntity, {
-    teamId: 0,
-    state: flagStartState,
+  Sword.create(swordEntity, {
+    state: swordStartState,
     carrierPlayerId: '',
     baseX: initialBase.x, baseY: initialBase.y, baseZ: initialBase.z,
     dropAnchorX: dropAnchor.x, dropAnchorY: dropAnchor.y, dropAnchorZ: dropAnchor.z
   })
-  syncEntity(flagEntity, [Transform.componentId, Flag.componentId], SyncIds.FLAG)
+  syncEntity(swordEntity, [Transform.componentId, Sword.componentId], SyncIds.SWORD)
+
+  // Create infection state entity
+  infectionStateEntity = engine.addEntity()
+  InfectionState.create(infectionStateEntity, {
+    patientZeroId: '',
+    infectedPlayersJson: '[]',
+    humansRemaining: 0,
+    roundActive: false,
+  })
+  syncEntity(infectionStateEntity, [InfectionState.componentId], SyncIds.INFECTION_STATE)
 
   // Create countdown timer - use next UTC boundary for proper initialization
   const now = Date.now()
@@ -1072,26 +1000,35 @@ export async function setupServer(): Promise<void> {
   await syncMonthlyVisitorAnalytics()
 
   // ── Reconcile stale CRDT entities from previous server lifetime ──
-  // After a server restart, in-memory Maps are empty but old synced
-  // PlayerFlagHoldTime entities persist in CRDT state. Reclaim them
-  // to prevent duplicates. Reset scores to 0 since round state is lost.
   let reconciledCount = 0
-  for (const [entity, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+  for (const [entity, data] of engine.getEntitiesWith(PlayerSurvivalTime)) {
     const key = data.playerId.toLowerCase()
-    if (!holdTimeEntities.has(key)) {
-      holdTimeEntities.set(key, entity)
+    if (!survivalTimeEntities.has(key)) {
+      survivalTimeEntities.set(key, entity)
       knownPlayers.add(key)
-      // Reset score — we can't trust stale mid-round values after restart
-      PlayerFlagHoldTime.getMutable(entity).seconds = 0
+      PlayerSurvivalTime.getMutable(entity).seconds = 0
       reconciledCount++
     } else {
-      // Duplicate entity for same player — remove it
       engine.removeEntity(entity)
-      console.log('[Server] Removed duplicate hold-time entity for', key.slice(0, 8))
+      console.log('[Server] Removed duplicate survival-time entity for', key.slice(0, 8))
     }
   }
   if (reconciledCount > 0) {
-    console.log('[Server] Reconciled', reconciledCount, 'stale hold-time entities from previous server lifetime')
+    console.log('[Server] Reconciled', reconciledCount, 'stale survival-time entities from previous server lifetime')
+  }
+  // Reconcile stale PlayerInfected entities
+  for (const [entity, data] of engine.getEntitiesWith(PlayerInfected)) {
+    const key = data.playerId.toLowerCase()
+    if (!infectedEntities.has(key)) {
+      infectedEntities.set(key, entity)
+      // Reset infection state on server restart
+      const m = PlayerInfected.getMutable(entity)
+      m.isInfected = false
+      m.infectedAtMs = 0
+      m.respawnCooldownUntilMs = 0
+    } else {
+      engine.removeEntity(entity)
+    }
   }
 
   // ── Initialize coin state entity ──
@@ -1108,25 +1045,18 @@ export async function setupServer(): Promise<void> {
   const safeSystem = (name: string, fn: (dt: number) => void) => (dt: number) => {
     try { fn(dt) } catch (err) { console.error(`[Server] ❌ ${name} error:`, err) }
   }
-  engine.addSystem(safeSystem('flagServerSystem', flagServerSystem))
-  engine.addSystem(safeSystem('holdTimeServerSystem', holdTimeServerSystem))
-  engine.addSystem(safeSystem('lightningServerSystem', lightningServerSystem))
+  engine.addSystem(safeSystem('swordServerSystem', swordServerSystem))
+  engine.addSystem(safeSystem('survivalTimeServerSystem', survivalTimeServerSystem))
+  engine.addSystem(safeSystem('infectionServerSystem', infectionServerSystem))
   engine.addSystem(safeSystem('playerTrackingSystem', playerTrackingSystem))
   engine.addSystem(safeSystem('countdownServerSystem', countdownServerSystem))
   engine.addSystem(safeSystem('visitorTrackingServerSystem', visitorTrackingServerSystem))
   engine.addSystem(safeSystem('nameResolverServerSystem', nameResolverServerSystem))
-  engine.addSystem(safeSystem('proximityStealSystem', checkProximitySteal))
   engine.addSystem(safeSystem('bananaServerSystem', bananaServerSystem))
-  engine.addSystem(safeSystem('shellServerSystem', shellServerSystem))
-  engine.addSystem(safeSystem('orbitServerSystem', orbitServerSystem))
   engine.addSystem(safeSystem('updraftServerSystem', updraftServerSystem))
-  engine.addSystem(safeSystem('zombieServerSystem', zombieServerSystem)) // Ghost system enabled
   engine.addSystem(safeSystem('coinServerSystem', coinServerSystem))
 
-  // ── Spawn mushrooms ──
-  spawnMushrooms()
-
-  console.log('[Server] Flag Tag server ready')
+  console.log('[Server] Contagion server ready')
 }
 
 // ── Helper: find player position by wallet address (case-insensitive) ──
@@ -1141,10 +1071,7 @@ function getPlayerPosition(address: string): Vector3 | null {
 // ── Gravity helpers ──
 
 /**
- * Compute where the flag should land based on the carrier's recent ground-level Y.
- * We track the carrier's Y over the last ~2 seconds. The minimum Y in that window
- * is our best estimate of the terrain they were walking on. If the flag is dropped
- * above that level (e.g. mid-jump), gravity pulls it down to the estimated ground.
+ * Compute where the sword should land based on the carrier's recent ground-level Y.
  */
 function computeGravityTarget(dropY: number): void {
   let minY = Infinity
@@ -1153,20 +1080,20 @@ function computeGravityTarget(dropY: number): void {
   }
   // If we have history, use the lowest recent Y + small offset; otherwise assume near drop point
   const groundEstimate = minY === Infinity ? dropY - 0.5 : minY
-  flagGravityTargetY = Math.max(FLAG_MIN_Y, groundEstimate + 0.5)
+  swordGravityTargetY = Math.max(SWORD_MIN_Y, groundEstimate + 0.5)
   carrierYSamples.length = 0
 
-  if (dropY > flagGravityTargetY + 0.1) {
-    flagFalling = true
-    flagFallVelocity = 0
+  if (dropY > swordGravityTargetY + 0.1) {
+    swordFalling = true
+    swordFallVelocity = 0
   } else {
-    flagFalling = false
+    swordFalling = false
   }
 }
 
 function resetGravityState(): void {
-  flagFalling = false
-  flagFallVelocity = 0
+  swordFalling = false
+  swordFallVelocity = 0
   carrierYSamples.length = 0
   resetCarrierTracking()
 }
@@ -1439,7 +1366,7 @@ async function handleBuyBoomerang(playerId: string, color: string): Promise<void
   }, { to: [key] })
 
   // Broadcast color change to all players
-  room.send('playerColorChanged', { playerId: key, color: boomerangColor })
+  // room.send('playerColorChanged', { playerId: key, color: boomerangColor })
 }
 
 function updateCoinStateCRDT(): void {
@@ -1522,22 +1449,28 @@ function registerHandlers(): void {
       // Send all existing player boomerang colors to the new joiner
       for (const [playerId, color] of playerBoomerangColors) {
         if (playerId !== from) {
-          room.send('playerColorChanged', { playerId, color })
+          // room.send('playerColorChanged', { playerId, color })
         }
       }
     } catch (err) { console.error('[Server] ❌ registerName handler error:', err) }
   })
-  room.onMessage('requestPickup', (_data, context) => {
+  room.onMessage('requestSwordPickup', (_data, context) => {
     try {
       if (!context) return
-      handlePickup(context.from.toLowerCase())
-    } catch (err) { console.error('[Server] ❌ requestPickup handler error:', err) }
+      handleSwordPickup(context.from.toLowerCase())
+    } catch (err) { console.error('[Server] ❌ requestSwordPickup handler error:', err) }
   })
-  room.onMessage('requestDrop', (_data, context) => {
+  room.onMessage('requestSwordDrop', (_data, context) => {
     try {
       if (!context) return
-      handleDrop(context.from.toLowerCase())
-    } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
+      handleSwordDrop(context.from.toLowerCase())
+    } catch (err) { console.error('[Server] ❌ requestSwordDrop handler error:', err) }
+  })
+  room.onMessage('requestSwordAttack', (_data, context) => {
+    try {
+      if (!context) return
+      handleSwordAttack(context.from.toLowerCase())
+    } catch (err) { console.error('[Server] ❌ requestSwordAttack handler error:', err) }
   })
 
   // Death penalty — deduct coins on death (drowning, lightning, ghost)
@@ -1561,23 +1494,23 @@ function registerHandlers(): void {
       console.log(`[Server] 💀 Death penalty: ${from.slice(0, 8)} lost ${penalty} coins (${current} → ${newBalance})`)
     } catch (err) { console.error('[Server] ❌ deathPenalty handler error:', err) }
   })
-  // Reload-respawn: player reloaded scene while carrying flag → respawn at random point
+  // Reload-respawn: player reloaded scene while carrying sword → respawn at random point
   room.onMessage('requestReloadRespawn', (_data, context) => {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      const flag = Flag.getOrNull(flagEntity)
-      if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== from) return
+      const sword = Sword.getOrNull(swordEntity)
+      if (!sword || sword.state !== SwordState.Carried || sword.carrierPlayerId !== from) return
       const spawn = getRandomSpawnPoint()
-      const mutable = Flag.getMutable(flagEntity)
-      mutable.state = FlagState.AtBase
+      const mutable = Sword.getMutable(swordEntity)
+      mutable.state = SwordState.AtBase
       mutable.carrierPlayerId = ''
       mutable.baseX = spawn.x
       mutable.baseY = spawn.y
       mutable.baseZ = spawn.z
-      const t = Transform.getMutable(flagEntity)
+      const t = Transform.getMutable(swordEntity)
       t.position = Vector3.create(spawn.x, spawn.y, spawn.z)
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+      persistSwordState().catch(e => console.error('[Server] persistSwordState error:', e))
     } catch (err) { console.error('[Server] ❌ requestReloadRespawn handler error:', err) }
   })
   room.onMessage('requestBanana', (_data, context) => {
@@ -1587,53 +1520,7 @@ function registerHandlers(): void {
       handleTrapDrop(from)
     } catch (err) { console.error('[Server] ❌ requestBanana handler error:', err) }
   })
-  room.onMessage('requestShell', (data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      // Accept optional chargeSpeed/chargeRange from charge mechanic, clamped to valid ranges
-      const chargeSpeed = typeof data.chargeSpeed === 'number' ? Math.max(PROJECTILE_SPEED, Math.min(60, data.chargeSpeed)) : PROJECTILE_SPEED
-      const chargeRange = typeof data.chargeRange === 'number' ? Math.max(20, Math.min(PROJECTILE_MAX_RANGE, data.chargeRange)) : 20
-      const chargeScale = typeof data.chargeScale === 'number' ? Math.max(1, Math.min(3, data.chargeScale)) : 1
-      handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r', chargeSpeed, chargeRange, chargeScale)
-    } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
-  })
-  room.onMessage('reportShellWallDist', (data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      for (const projectile of activeProjectiles) {
-        if (projectile.firedBy === from && !projectile.wallDistReported) {
-          const oldMax = projectile.maxDistance
-          projectile.maxDistance = Math.min(projectile.maxDistance, data.maxDist)
-          if (projectile.maxDistance < oldMax) projectile.hitWall = true
-          projectile.wallDistReported = true
-          console.log('[Server] 🎯 Projectile wall distance updated:', data.maxDist.toFixed(1), 'm')
-          break
-        }
-      }
-    } catch (err) { console.error('[Server] ❌ reportShellWallDist handler error:', err) }
-  })
-  room.onMessage('reportShellGroundY', (data, context) => {
-    try {
-      if (!context) return
-      let closest: ActiveProjectile | null = null
-      let closestDist = 5
-      for (const projectile of activeProjectiles) {
-        const pos = Transform.get(projectile.entity).position
-        const dx = pos.x - data.shellX
-        const dz = pos.z - data.shellZ
-        const dist = Math.sqrt(dx * dx + dz * dz)
-        if (dist < closestDist) {
-          closestDist = dist
-          closest = projectile
-        }
-      }
-      if (closest) {
-        closest.groundY = Math.max(0, data.groundY)
-      }
-    } catch (err) { console.error('[Server] ❌ reportShellGroundY handler error:', err) }
-  })
+
   room.onMessage('reportBananaGroundY', (data, context) => {
     try {
       if (!context) return
@@ -1666,103 +1553,25 @@ function registerHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      // Only accept ground report from the player who dropped the flag
       if (lastDropperId && from !== lastDropperId) return
-      const flag = Flag.getOrNull(flagEntity)
-      if (!flag || flag.state !== FlagState.Dropped) return
+      const sword = Sword.getOrNull(swordEntity)
+      if (!sword || sword.state !== SwordState.Dropped) return
 
-      const newTarget = Math.max(FLAG_MIN_Y, data.y + 0.5)
-      flagGravityTargetY = newTarget
+      const newTarget = Math.max(SWORD_MIN_Y, data.y + 0.5)
+      swordGravityTargetY = newTarget
 
-      const currentAnchorY = flag.dropAnchorY
+      const currentAnchorY = sword.dropAnchorY
       if (currentAnchorY <= newTarget) {
-        const flagMutable = Flag.getMutable(flagEntity)
-        flagMutable.dropAnchorY = newTarget
-        flagFalling = false
-        flagFallVelocity = 0
-        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-      } else if (!flagFalling) {
-        flagFalling = true
-        flagFallVelocity = 0
+        const swordMutable = Sword.getMutable(swordEntity)
+        swordMutable.dropAnchorY = newTarget
+        swordFalling = false
+        swordFallVelocity = 0
+        persistSwordState().catch(e => console.error('[Server] persistSwordState error:', e))
+      } else if (!swordFalling) {
+        swordFalling = true
+        swordFallVelocity = 0
       }
     } catch (err) { console.error('[Server] ❌ reportGroundY handler error:', err) }
-  })
-
-  // ── Mushroom position request (client asks on connect) ──
-  room.onMessage('requestMushroomPositions', (_data, _context) => {
-    try {
-      const remaining = activeMushrooms.filter(m => !m.pickedUp).map(mushroomToPayload)
-      room.send('mushroomPositions', { mushroomsJson: JSON.stringify(remaining) })
-    } catch (err) { console.error('[Server] ❌ requestMushroomPositions handler error:', err) }
-  })
-
-  // ── Mushroom pickup ──
-  room.onMessage('pickupMushroom', (data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const mid = (data as any).id as number
-      const mushroom = activeMushrooms.find(m => m.id === mid)
-      if (!mushroom || mushroom.pickedUp) return
-      mushroom.pickedUp = true
-      console.log('[Server] 🍄 Mushroom', mid, 'picked up by', from.slice(0, 8))
-      room.send('mushroomPickedUp', { id: mid, playerId: from })
-      // Spawn a replacement mushroom
-      spawnOneMushroom()
-    } catch (err) { console.error('[Server] ❌ pickupMushroom handler error:', err) }
-  })
-
-  // Mushroom reroll removed — candidates are now sent upfront
-
-  // ── Green orbit ──
-  room.onMessage('requestOrbit', (_data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const startAngle = typeof _data.startAngle === 'number' ? _data.startAngle : 0
-      handleOrbitRequest(from, startAngle)
-    } catch (err) { console.error('[Server] ❌ requestOrbit handler error:', err) }
-  })
-
-  // ── Green orbit wall hit ──
-  room.onMessage('orbitHitWall', (_data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const idx = activeOrbits.findIndex(o => o.playerId === from)
-      if (idx === -1) return
-      console.log('[Server] 🌀 Orbit hit wall for', from.slice(0, 8), '— ending orbit')
-      room.send('orbitEnded', { playerId: from })
-      activeOrbits.splice(idx, 1)
-    } catch (err) { console.error('[Server] ❌ orbitHitWall handler error:', err) }
-  })
-
-  // ── Boomerang color change ──
-  room.onMessage('colorChanged', async (data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const color = (data.color || 'r') as BoomerangColor
-      // Validate ownership — only allow equipped boomerangs the player owns
-      const upgrades = await loadPlayerUpgrades(from)
-      if (!upgrades.boomerangs.includes(color)) {
-        console.log(`[Server] colorChanged rejected — ${from.slice(0, 8)} doesn't own ${color}`)
-        // Send back their actual equipped color
-        room.send('playerColorChanged', { playerId: from, color: upgrades.equipped })
-        return
-      }
-      playerBoomerangColors.set(from, color)
-      console.log(`[Server] Player ${from.slice(0, 8)} changed boomerang color to ${color}`)
-      // Broadcast to ALL clients (including sender, so they can confirm)
-      room.send('playerColorChanged', { playerId: from, color })
-    } catch (err) { console.error('[Server] ❌ colorChanged handler error:', err) }
-  })
-
-  // ── Boomerang charge sync ──
-  // ── Burnout self-stun — rebroadcast hit VFX to all clients ──
-  room.onMessage('chargeBurnout', (data, context) => {
-    if (!context) return
-    room.send('hitVfx', { x: data.x || 0, y: data.y || 0, z: data.z || 0 })
   })
 
   // ── Speed boost trail sync ──
@@ -1770,17 +1579,6 @@ function registerHandlers(): void {
     if (!context) return
     const from = context.from.toLowerCase()
     room.send('playerBoosted', { playerId: from, tier: data.tier || 'coin', duration: data.duration || 3 })
-  })
-
-  room.onMessage('chargeStart', (data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    room.send('playerChargeStart', { playerId: from, t: data.t || 0 })
-  })
-  room.onMessage('chargeStop', (data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    room.send('playerChargeStop', { playerId: from, t: data.t || 0 })
   })
 
 
@@ -1858,7 +1656,7 @@ function registerHandlers(): void {
     // Auto-equip their saved boomerang color
     if (upgrades.equipped && upgrades.equipped !== 'r') {
       playerBoomerangColors.set(from, upgrades.equipped)
-      room.send('playerColorChanged', { playerId: from, color: upgrades.equipped })
+      // room.send('playerColorChanged', { playerId: from, color: upgrades.equipped })
     }
   })
 
@@ -1886,7 +1684,7 @@ function registerHandlers(): void {
     upgrades.equipped = color
     await savePlayerUpgrades(from, upgrades)
     playerBoomerangColors.set(from, color)
-    room.send('playerColorChanged', { playerId: from, color })
+    // room.send('playerColorChanged', { playerId: from, color })
     console.log('[Store] Player', from.slice(0, 8), 'equipped', color)
   })
 }
@@ -1980,133 +1778,232 @@ function patchAllLeaderboardNames(json: string, label: string): string {
   return json
 }
 
-function handlePickup(playerId: string): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  if (flag.state !== FlagState.AtBase && flag.state !== FlagState.Dropped) return
+// ── Sword handlers ──
+
+function handleSwordPickup(playerId: string): void {
+  const sword = Sword.getOrNull(swordEntity)
+  if (!sword) return
+  if (sword.state !== SwordState.AtBase && sword.state !== SwordState.Dropped) return
+
+  // Only humans can pick up the sword
+  if (infectedPlayers.has(playerId)) {
+    console.log('[Server] ⚔️ Sword pickup denied — player is infected:', playerId.slice(0, 8))
+    return
+  }
 
   const playerPos = getPlayerPosition(playerId)
   if (playerPos) {
-    const flagPos = Transform.get(flagEntity).position
-    const dist = Vector3.distance(playerPos, flagPos)
-    if (dist > PICKUP_RADIUS) return
+    const swordPos = Transform.get(swordEntity).position
+    const dist = Vector3.distance(playerPos, swordPos)
+    if (dist > SWORD_PICKUP_RADIUS) return
   } else {
-    // Player position not yet synced — trust client-side proximity check
-    console.log('[Server] ⚠️ handlePickup: no position for', playerId.slice(0, 8), '— trusting client proximity')
+    console.log('[Server] ⚠️ handleSwordPickup: no position for', playerId.slice(0, 8), '— trusting client proximity')
   }
 
-  // Flush any leftover hold time from a previous carrier (safety)
-  flushHoldTimeAccum()
-
-  const mutable = Flag.getMutable(flagEntity)
-  mutable.state = FlagState.Carried
+  const mutable = Sword.getMutable(swordEntity)
+  mutable.state = SwordState.Carried
   mutable.carrierPlayerId = playerId
 
   resetGravityState()
-  lastCarrierPositionMs = Date.now() // Start staleness timer so force-drop works even if position never syncs
-  lastStealTime.set(playerId, Date.now()) // Grant immunity on pickup too
-  room.send('pickupConfirmed', { playerId })
-  room.send('flagImmunity', { playerId, durationMs: STEAL_IMMUNITY_MS })
-  room.send('pickupSound', { t: 0 })
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+  lastCarrierPositionMs = Date.now()
+  room.send('swordPickupConfirmed', { playerId })
+  room.send('swordPickupSound', { t: 0 })
+  persistSwordState().catch(e => console.error('[Server] persistSwordState error:', e))
+  console.log('[Server] ⚔️ Sword picked up by', playerId.slice(0, 8))
 }
 
-function handleDrop(playerId: string): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return
-
-  // Flush accumulated hold time to the carrier BEFORE dropping
-  flushHoldTimeAccum()
+function handleSwordDrop(playerId: string): void {
+  const sword = Sword.getOrNull(swordEntity)
+  if (!sword) return
+  if (sword.state !== SwordState.Carried || sword.carrierPlayerId !== playerId) return
 
   const playerPos = getPlayerPosition(playerId)
   let dropPos: Vector3
   if (playerPos) {
-    // Drop at player's feet (not behind them) to prevent wall clipping
     dropPos = Vector3.add(playerPos, Vector3.create(0, 0.5, 0))
   } else if (lastKnownCarrierPos) {
-    // Use last tracked position instead of stale flagEntity Transform
     dropPos = Vector3.add(lastKnownCarrierPos, Vector3.create(0, 0.5, 0))
-    console.log('[Server] ⚠️ handleDrop: no live position for', playerId.slice(0, 8), '— using last known carrier pos')
   } else {
-    dropPos = Transform.get(flagEntity).position
+    dropPos = Transform.get(swordEntity).position
   }
 
-  const mutable = Flag.getMutable(flagEntity)
-  mutable.state = FlagState.Dropped
+  const mutable = Sword.getMutable(swordEntity)
+  mutable.state = SwordState.Dropped
   mutable.carrierPlayerId = ''
   mutable.dropAnchorX = dropPos.x
   mutable.dropAnchorY = dropPos.y
   mutable.dropAnchorZ = dropPos.z
 
-  const t = Transform.getMutable(flagEntity)
+  const t = Transform.getMutable(swordEntity)
   t.position = dropPos
 
-  // Track who dropped — only accept reportGroundY from this player
   lastDropperId = playerId
-
-  // Start gravity — estimate ground from carrier's recent Y history
   computeGravityTarget(dropPos.y)
 
-  room.send('dropSound', { t: 0 })
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+  room.send('swordDropSound', { t: 0 })
+  persistSwordState().catch(e => console.error('[Server] persistSwordState error:', e))
+  console.log('[Server] ⚔️ Sword dropped by', playerId.slice(0, 8))
 }
 
-function handleFlagSteal(victimId: string, attackerId: string): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) return
-
-  // Flush accumulated hold time to the VICTIM before transferring flag
-  flushHoldTimeAccum()
-
-  const mutable = Flag.getMutable(flagEntity)
-  mutable.state = FlagState.Carried
-  mutable.carrierPlayerId = attackerId
-
-  lastStealTime.set(attackerId, Date.now())
-  resetGravityState()
-  lastCarrierPositionMs = Date.now() // Start staleness timer for new carrier
-  room.send('pickupConfirmed', { playerId: attackerId })
-  room.send('flagImmunity', { playerId: attackerId, durationMs: STEAL_IMMUNITY_MS })
-  room.send('pickupSound', { t: 0 })
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+/** Force-drop the sword (e.g. when carrier gets infected) */
+function forceSwordDrop(playerId: string): void {
+  const sword = Sword.getOrNull(swordEntity)
+  if (!sword || sword.state !== SwordState.Carried || sword.carrierPlayerId !== playerId) return
+  handleSwordDrop(playerId)
 }
 
-/** Proximity steal — called every server tick to check if any player is close enough to steal the flag. */
-function checkProximitySteal(): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) return
+/** Sword attack — sword carrier swings at nearby slimes */
+const SWORD_ATTACK_COOLDOWN_MS = 1000
+let lastSwordAttackMs = 0
 
-  const carrierId = flag.carrierPlayerId
-  const carrierPos = getPlayerPosition(carrierId)
-  if (!carrierPos) return
+function handleSwordAttack(playerId: string): void {
+  const sword = Sword.getOrNull(swordEntity)
+  if (!sword || sword.state !== SwordState.Carried || sword.carrierPlayerId !== playerId) return
 
   const now = Date.now()
-  // Carrier has steal immunity — nobody can take it from them yet
-  const carrierStealTime = lastStealTime.get(carrierId) ?? 0
-  if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
+  if (now - lastSwordAttackMs < SWORD_ATTACK_COOLDOWN_MS) return
+  lastSwordAttackMs = now
 
-  let closestId: string | null = null
-  let closestDist = PROXIMITY_STEAL_RADIUS
+  const attackerPos = getPlayerPosition(playerId)
+  if (!attackerPos) return
 
-  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    const addr = identity.address.toLowerCase()
-    if (addr === carrierId) continue
+  // Send attack VFX to all clients
+  room.send('swordAttackVfx', { x: attackerPos.x, y: attackerPos.y, z: attackerPos.z, attackerId: playerId })
 
-    const pos = getPlayerPosition(addr)
-    if (!pos) continue
-    const dist = Vector3.distance(carrierPos, pos)
-    if (dist < closestDist) {
-      closestDist = dist
-      closestId = addr
+  // Check all infected players within sword range
+  for (const slimeId of infectedPlayers) {
+    // Skip slimes that are already in respawn cooldown
+    const infectedEntity = infectedEntities.get(slimeId)
+    if (infectedEntity) {
+      const inf = PlayerInfected.getOrNull(infectedEntity)
+      if (inf && inf.respawnCooldownUntilMs > now) continue
+    }
+
+    const slimePos = getPlayerPosition(slimeId)
+    if (!slimePos) continue
+
+    const dist = Vector3.distance(attackerPos, slimePos)
+    if (dist < SWORD_ATTACK_RADIUS) {
+      // Kill the slime!
+      console.log('[Server] ⚔️ Sword killed slime:', slimeId.slice(0, 8))
+      const cooldownUntil = now + SLIME_RESPAWN_COOLDOWN_SEC * 1000
+
+      if (infectedEntity) {
+        const m = PlayerInfected.getMutable(infectedEntity)
+        m.respawnCooldownUntilMs = cooldownUntil
+      }
+
+      room.send('slimeKilled', { slimeId, killedBy: playerId, x: slimePos.x, y: slimePos.y, z: slimePos.z })
+      room.send('stagger', { victimId: slimeId })
+      break // One kill per swing
     }
   }
+}
 
-  if (closestId) {
-    console.log('[Server] 🚩 Proximity steal:', closestId.slice(0, 8), '<-', carrierId.slice(0, 8))
-    handleFlagSteal(carrierId, closestId)
+// ── Infection logic ──
+
+/** Infect a human player. Called by infectionServerSystem on proximity. */
+function infectPlayer(victimId: string, attackerId: string): void {
+  if (infectedPlayers.has(victimId)) return // already infected
+
+  const now = Date.now()
+  infectedPlayers.add(victimId)
+  infectionImmunityUntil.set(victimId, now + INFECTION_IMMUNITY_MS)
+
+  // Update the player's infection entity
+  const entity = getOrCreateInfectedEntity(victimId)
+  const m = PlayerInfected.getMutable(entity)
+  m.isInfected = true
+  m.infectedAtMs = now
+  m.respawnCooldownUntilMs = 0
+
+  // If the victim was carrying the sword, force-drop it
+  forceSwordDrop(victimId)
+
+  // Update global infection state
+  syncInfectionState()
+
+  room.send('playerInfected', { victimId, attackerId })
+  room.send('stagger', { victimId })
+  console.log('[Server] 🧟 Player infected:', victimId.slice(0, 8), 'by', attackerId.slice(0, 8), '| humans remaining:', getHumansRemaining())
+
+  // Check for early round end
+  const remaining = getHumansRemaining()
+  if (remaining <= 1 && infectionRoundActive) {
+    console.log('[Server] 🏆 All humans infected (or 1 left) — triggering early round end')
+    // The countdownServerSystem will detect this via earlyRoundEndRequested
+    earlyRoundEndRequested = true
   }
+}
+
+/** Flag for early round end when all humans are infected */
+let earlyRoundEndRequested = false
+
+/** Count humans remaining (connected, not infected) */
+function getHumansRemaining(): number {
+  let count = 0
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    const addr = identity.address.toLowerCase()
+    if (!infectedPlayers.has(addr)) count++
+  }
+  return count
+}
+
+/** Sync the global InfectionState component to all clients */
+function syncInfectionState(): void {
+  const m = InfectionState.getMutable(infectionStateEntity)
+  m.patientZeroId = patientZeroId
+  m.infectedPlayersJson = JSON.stringify(Array.from(infectedPlayers))
+  m.humansRemaining = getHumansRemaining()
+  m.roundActive = infectionRoundActive
+}
+
+/** Pick a random connected player as Patient Zero */
+function startInfectionRound(): void {
+  const connected: string[] = []
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    connected.push(identity.address.toLowerCase())
+  }
+
+  if (connected.length < 2) {
+    console.log('[Server] 🧟 Not enough players for infection round (', connected.length, ')')
+    infectionRoundActive = false
+    syncInfectionState()
+    return
+  }
+
+  // Pick random Patient Zero
+  const idx = Math.floor(Math.random() * connected.length)
+  patientZeroId = connected[idx]
+  infectionRoundActive = true
+  survivalTimeStartMs = Date.now()
+  earlyRoundEndRequested = false
+
+  // Clear previous infection state
+  infectedPlayers.clear()
+  infectionImmunityUntil.clear()
+
+  // Infect Patient Zero
+  infectedPlayers.add(patientZeroId)
+  const entity = getOrCreateInfectedEntity(patientZeroId)
+  const m = PlayerInfected.getMutable(entity)
+  m.isInfected = true
+  m.infectedAtMs = Date.now()
+  m.respawnCooldownUntilMs = 0
+
+  // Reset all other players to human
+  for (const addr of connected) {
+    if (addr === patientZeroId) continue
+    const e = getOrCreateInfectedEntity(addr)
+    const inf = PlayerInfected.getMutable(e)
+    inf.isInfected = false
+    inf.infectedAtMs = 0
+    inf.respawnCooldownUntilMs = 0
+  }
+
+  syncInfectionState()
+  room.send('roundStartInfection', { patientZeroId })
+  console.log('[Server] 🧟 Infection round started! Patient Zero:', patientZeroId.slice(0, 8), '| Humans:', connected.length - 1)
 }
 
 function handleTrapDrop(playerId: string): void {
@@ -2179,7 +2076,7 @@ function bananaServerSystem(dt: number): void {
 
     // Gravity — pull trap down to ground
     if (trap.falling) {
-      trap.fallVelocity += FLAG_GRAVITY * clampedDt
+      trap.fallVelocity += SWORD_GRAVITY * clampedDt
       const pos = Transform.get(trap.entity).position
       let newY = pos.y - trap.fallVelocity * clampedDt
       if (newY <= trap.targetY) {
@@ -2204,28 +2101,6 @@ function bananaServerSystem(dt: number): void {
     const trapPos = Transform.get(trap.entity).position
     let trapConsumed = false
 
-    // Check ghost-trap collision
-    for (let gi = activeZombies.length - 1; gi >= 0; gi--) {
-      const z = activeZombies[gi]
-      const dx = z.posX - trapPos.x
-      const dy = z.posY - trapPos.y
-      const dz = z.posZ - trapPos.z
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-      if (dist < TRAP_TRIGGER_RADIUS) {
-        console.log('[Server] 🪤👻 Trap hit ghost! Killing ghost.')
-        room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
-        room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
-        engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
-        activeZombies.splice(gi, 1)
-        zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
-        removeTrap(trap)
-        activeTraps.splice(i, 1)
-        trapConsumed = true
-        break
-      }
-    }
-    if (trapConsumed) continue
-
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       const addr = identity.address.toLowerCase()
       // Self-hit: immune for 2 seconds after dropping, then fair game
@@ -2238,12 +2113,8 @@ function bananaServerSystem(dt: number): void {
       if (dist < TRAP_TRIGGER_RADIUS) {
         console.log('[Server] 🪤 Trap triggered by', addr.slice(0, 8), '! Staggering...')
 
-        // Drop the flag if the victim is carrying it
-        const flag = Flag.getOrNull(flagEntity)
-        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-          console.log('[Server] 🪤 Victim was carrying flag — forcing drop!')
-          handleDrop(addr)
-        }
+        // Drop the sword if the victim is carrying it
+        forceSwordDrop(addr)
 
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
 
@@ -2256,372 +2127,24 @@ function bananaServerSystem(dt: number): void {
   }
 }
 
-function handleOrbitRequest(playerId: string, startAngle: number = 0): void {
-  const now = Date.now()
-
-  // Cooldown check
-  const lastOrb = lastOrbitTime.get(playerId) ?? 0
-  if (now - lastOrb < ORBIT_COOLDOWN_SEC * 1000) {
-    console.log('[Server] Orbit denied: cooldown active')
-    return
-  }
-
-  // Can't orbit while already orbiting
-  if (activeOrbits.some(o => o.playerId === playerId)) {
-    console.log('[Server] Orbit denied: already orbiting')
-    return
-  }
-
-  // Can't orbit while a projectile is in flight
-  if (activeProjectiles.some(p => p.firedBy === playerId)) {
-    console.log('[Server] Orbit denied: projectile in flight')
-    return
-  }
-
-  const playerPos = getPlayerPosition(playerId)
-  if (!playerPos) {
-    console.log('[Server] Orbit denied: player position not found')
-    return
-  }
-
-  activeOrbits.push({
-    playerId,
-    startedAtMs: now,
-    hitPlayers: new Set()
-  })
-  lastOrbitTime.set(playerId, now)
-
-  room.send('orbitStarted', { playerId, durationMs: ORBIT_DURATION_MS, startAngle })
-  console.log('[Server] 🌀 Orbit started by', playerId.slice(0, 8))
-}
-
-/** Server system: check orbit hits and expiry. */
-function orbitServerSystem(_dt: number): void {
-  const now = Date.now()
-
-  for (let i = activeOrbits.length - 1; i >= 0; i--) {
-    const orbit = activeOrbits[i]
-
-    // Expiry
-    if (now - orbit.startedAtMs > ORBIT_DURATION_MS) {
-      console.log('[Server] 🌀 Orbit ended for', orbit.playerId.slice(0, 8))
-      room.send('orbitEnded', { playerId: orbit.playerId })
-      activeOrbits.splice(i, 1)
-      continue
-    }
-
-    // Get orbiter position
-    const orbiterPos = getPlayerPosition(orbit.playerId)
-    if (!orbiterPos) continue
-
-    // Check all players for hits
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const addr = identity.address.toLowerCase()
-      if (addr === orbit.playerId) continue
-      if (orbit.hitPlayers.has(addr)) continue  // already hit this orbit
-
-      const victimPos = getPlayerPosition(addr)
-      if (!victimPos) continue
-
-      const dist = Vector3.distance(orbiterPos, victimPos)
-      // Hit if within orbit radius + hit radius (the boomerang sweeps through)
-      if (dist < ORBIT_RADIUS + ORBIT_HIT_RADIUS && dist > 0.5) {
-        orbit.hitPlayers.add(addr)
-        console.log('[Server] 🌀 Orbit hit player', addr.slice(0, 8), '— ending orbit')
-
-        // Drop flag if victim is carrying
-        const flag = Flag.getOrNull(flagEntity)
-        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-          console.log('[Server] 🌀 Orbit victim was carrying flag — forcing drop!')
-          handleDrop(addr)
-        }
-
-        room.send('orbitHit', { x: victimPos.x, y: victimPos.y, z: victimPos.z, victimId: addr, attackerId: orbit.playerId })
-        // End orbit on hit — boomerang returns to player
-        room.send('orbitEnded', { playerId: orbit.playerId })
-        activeOrbits.splice(i, 1)
-        break
-      }
-    }
-  }
-}
-
-function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r', chargeSpeed: number = PROJECTILE_SPEED, chargeRange: number = 20, chargeScale: number = 1): void {
-  const now = Date.now()
-
-  // Cooldown check
-  const lastFire = lastProjectileFireTime.get(playerId) ?? 0
-  const shellCd = PROJECTILE_COOLDOWN_SEC
-  // Yellow gets a shorter cooldown window to allow the rapid 2nd throw
-  const effectiveCd = color === 'y' ? 0.2 : shellCd
-  if (now - lastFire < effectiveCd * 1000) {
-    console.log('[Server] Projectile denied: cooldown active')
-    return
-  }
-
-  // Max active check (yellow allows 2)
-  const playerProjectiles = activeProjectiles.filter(s => s.firedBy === playerId)
-  const maxActive = color === 'y' ? 2 : PROJECTILE_MAX_ACTIVE
-  if (playerProjectiles.length >= maxActive) {
-    console.log('[Server] Projectile denied: max active projectiles reached')
-    return
-  }
-
-  // Get player position
-  const playerPos = getPlayerPosition(playerId)
-  if (!playerPos) {
-    console.log('[Server] Projectile denied: player position not found')
-    return
-  }
-
-  // Normalize direction on XZ plane
-  const len = Math.sqrt(dirX * dirX + dirZ * dirZ)
-  if (len < 0.01) {
-    console.log('[Server] Projectile denied: invalid direction')
-    return
-  }
-  const nDirX = dirX / len
-  const nDirZ = dirZ / len
-
-  // Spawn slightly in front of the player near ground level
-  const spawnPos = Vector3.create(
-    playerPos.x + nDirX * 1.0,
-    playerPos.y + 0.8,
-    playerPos.z + nDirZ * 1.0
-  )
-
-  // Create synced projectile entity
-  const projectileEntity = engine.addEntity()
-  Transform.create(projectileEntity, {
-    position: spawnPos,
-    scale: Vector3.create(1, 1, 1),
-    rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
-  })
-  // NOTE: GltfContainer is NOT created on the server — clients attach the visual mesh locally.
-  Projectile.create(projectileEntity, {
-    firedByPlayerId: playerId,
-    firedAtMs: now,
-    startX: spawnPos.x,
-    startY: spawnPos.y,
-    startZ: spawnPos.z,
-    dirX: nDirX,
-    dirZ: nDirZ,
-    distanceTraveled: 0,
-    maxDistance: chargeRange,
-    active: true,
-  })
-  // NOTE: Transform is intentionally NOT synced for projectiles.
-  // Syncing Transform at 60fps per projectile saturates the CRDT buffer and freezes
-  // ALL synced components (including the scoreboard). Clients use local visual
-  // entities positioned via Projectile component data (startX/Y/Z + direction + distanceTraveled).
-  const projectileSyncId = getNextProjectileSyncId()
-  syncEntity(projectileEntity, [Projectile.componentId], projectileSyncId)
-
-  activeProjectiles.push({
-    entity: projectileEntity,
-    syncId: projectileSyncId,
-    firedBy: playerId,
-    firedAtMs: now,
-    startX: spawnPos.x,
-    startY: spawnPos.y,
-    startZ: spawnPos.z,
-    dirX: nDirX,
-    dirZ: nDirZ,
-    distanceTraveled: 0,
-    maxDistance: chargeRange,
-    wallDistReported: false,
-    hitWall: false,
-    currentY: spawnPos.y,
-    fallVelocity: 0,
-    groundY: Math.max(0, playerPos.y - 0.88),  // Approximate ground level from player height (~0.88m avatar offset)
-    onGround: false,
-
-    returning: false,
-    returnX: spawnPos.x,
-    returnY: spawnPos.y,
-    returnZ: spawnPos.z,
-    chargeSpeed,
-    chargeScale,
-
-  })
-  lastProjectileFireTime.set(playerId, now)
-
-  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ, color, firedBy: playerId, chargeSpeed, chargeRange, chargeScale })
-  console.log('[Server] 🎯 Projectile fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
-}
-
-/** Server system: move projectiles forward (and return), check player hits, and handle expiry. */
-function shellServerSystem(dt: number): void {
-  const now = Date.now()
-  const clampedDt = Math.min(dt, 0.1)
-
-  for (let i = activeProjectiles.length - 1; i >= 0; i--) {
-    const projectile = activeProjectiles[i]
-
-    // Safety expiry (time-based)
-    if (now - projectile.firedAtMs > PROJECTILE_LIFETIME_SEC * 1000) {
-      console.log('[Server] 🎯 Projectile expired (timeout)')
-      room.send('shellReturned', { firedBy: projectile.firedBy })
-      removeProjectile(projectile)
-      activeProjectiles.splice(i, 1)
-      continue
-    }
-
-    const moveDistance = (projectile.chargeSpeed || PROJECTILE_SPEED) * clampedDt
-
-    if (!projectile.returning) {
-      // ── Outbound flight ──
-      projectile.distanceTraveled += moveDistance
-
-      // Check if projectile exceeded max range → start returning
-      if (projectile.distanceTraveled >= projectile.maxDistance) {
-        console.log('[Server] 🎯 Projectile reached max range at', projectile.distanceTraveled.toFixed(1), 'm — returning')
-        projectile.returning = true
-        // Snap position to max range point
-        projectile.returnX = projectile.startX + projectile.dirX * projectile.distanceTraveled
-        projectile.returnY = projectile.startY
-        projectile.returnZ = projectile.startZ + projectile.dirZ * projectile.distanceTraveled
-        // Send triggered with no victim so client starts return visual
-        const projectilePos = Transform.get(projectile.entity).position
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', peak: !projectile.hitWall, firedBy: projectile.firedBy })
-      } else {
-        // Straight line forward
-        const newX = projectile.startX + projectile.dirX * projectile.distanceTraveled
-        const newZ = projectile.startZ + projectile.dirZ * projectile.distanceTraveled
-        const t = Transform.getMutable(projectile.entity)
-        t.position = Vector3.create(newX, projectile.startY, newZ)
-        projectile.returnX = newX
-        projectile.returnY = projectile.startY
-        projectile.returnZ = newZ
-      }
-    } else {
-      // ── Return flight — home in on shooter's chest height ──
-      const CHEST_OFFSET = 0.8
-      const shooterPos = getPlayerPosition(projectile.firedBy)
-      const rawTarget = shooterPos || Vector3.create(projectile.startX, projectile.startY, projectile.startZ)
-      const targetPos = Vector3.create(rawTarget.x, rawTarget.y + CHEST_OFFSET, rawTarget.z)
-
-      const dx = targetPos.x - projectile.returnX
-      const dy = targetPos.y - projectile.returnY
-      const dz = targetPos.z - projectile.returnZ
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-
-      if (dist < PROJECTILE_HIT_RADIUS) {
-        // Returned to shooter — remove and notify clients
-        console.log('[Server] 🎯 Projectile returned to shooter')
-        room.send('shellReturned', { firedBy: projectile.firedBy })
-        removeProjectile(projectile)
-        activeProjectiles.splice(i, 1)
-        continue
-      }
-
-      // Move toward shooter
-      const nx = dx / dist, ny = dy / dist, nz = dz / dist
-      projectile.returnX += nx * moveDistance
-      projectile.returnY += ny * moveDistance
-      projectile.returnZ += nz * moveDistance
-      const t = Transform.getMutable(projectile.entity)
-      t.position = Vector3.create(projectile.returnX, projectile.returnY, projectile.returnZ)
-
-      // Return target resolved client-side via CRDT player transforms
-    }
-
-      // NOTE: Projectile CRDT writes removed — clients use message-based visuals
-    // (shellDropped/shellTriggered/shellReturned) which are instant WebSocket delivery.
-    // Syncing distanceTraveled at 10Hz was contributing to CRDT buffer saturation.
-
-    // Check player hits — any player (except the shooter on outbound, ALL players on return)
-    const projectilePos = Transform.get(projectile.entity).position
-    let shellConsumed = false
-
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const addr = identity.address.toLowerCase()
-      // Skip the shooter — can't hit yourself with your own boomerang
-      if (addr === projectile.firedBy) continue
-
-      const playerPos = getPlayerPosition(addr)
-      if (!playerPos) continue
-
-      const dist = Vector3.distance(playerPos, projectilePos)
-      if (dist < PROJECTILE_HIT_RADIUS * projectile.chargeScale) {
-        console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)')
-
-        // Drop the flag if the victim is carrying it
-        const flag = Flag.getOrNull(flagEntity)
-        if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
-          console.log('[Server] 🎯 Victim was carrying flag — forcing drop!')
-          handleDrop(addr)
-        }
-
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr, firedBy: projectile.firedBy })
-
-        if (projectile.returning) {
-          // On return: consumed on hit
-          room.send('shellReturned', { firedBy: projectile.firedBy })
-          removeProjectile(projectile)
-          activeProjectiles.splice(i, 1)
-          shellConsumed = true
-        } else {
-          // On outbound: hit triggers return, keep flying back
-          projectile.returning = true
-          projectile.returnX = projectilePos.x
-          projectile.returnY = projectilePos.y
-          projectile.returnZ = projectilePos.z
-          console.log('[Server] 🎯 Projectile hit on outbound — returning to shooter')
-        }
-        break
-      }
-    }
-    if (shellConsumed) continue
-
-    // Check trap collision — projectile destroys the trap, then returns
-    for (let j = activeTraps.length - 1; j >= 0; j--) {
-      const trap = activeTraps[j]
-      const trapPos = Transform.get(trap.entity).position
-      const dist = Vector3.distance(projectilePos, trapPos)
-      if (dist < PROJECTILE_HIT_RADIUS * projectile.chargeScale) {
-        console.log('[Server] 🎯🪤 Projectile hit trap!', projectile.returning ? 'Both destroyed.' : 'Trap destroyed, projectile returning.')
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', firedBy: projectile.firedBy })
-        room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
-        removeTrap(trap)
-        activeTraps.splice(j, 1)
-
-        if (projectile.returning) {
-          // On return: consumed
-          room.send('shellReturned', { firedBy: projectile.firedBy })
-          removeProjectile(projectile)
-          activeProjectiles.splice(i, 1)
-          shellConsumed = true
-        } else {
-          // On outbound: trap destroyed, projectile returns
-          projectile.returning = true
-          projectile.returnX = projectilePos.x
-          projectile.returnY = projectilePos.y
-          projectile.returnZ = projectilePos.z
-        }
-        break
-      }
-    }
-  }
-}
+// ── Removed: orbit system, projectile system (not needed for Contagion) ──
 
 // ── Server Systems ──
 
-function flagServerSystem(dt: number): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
+function swordServerSystem(dt: number): void {
+  const sword = Sword.getOrNull(swordEntity)
+  if (!sword) return
 
   const clampedDt = Math.min(dt, 0.1)
 
   // Track carrier Y for gravity target estimation + staleness detection
-  if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+  if (sword.state === SwordState.Carried && sword.carrierPlayerId) {
     const nowMs = Date.now()
-    const carrierPos = getPlayerPosition(flag.carrierPlayerId)
+    const carrierPos = getPlayerPosition(sword.carrierPlayerId)
     if (carrierPos) {
       lastCarrierPositionMs = nowMs
       lastKnownCarrierPos = Vector3.create(carrierPos.x, carrierPos.y, carrierPos.z)
 
-      // Y samples for gravity estimation
       const nowSec = nowMs / 1000
       carrierYSamples.push({ y: carrierPos.y, time: nowSec })
       while (carrierYSamples.length > 0 && nowSec - carrierYSamples[0].time > CARRIER_Y_WINDOW_SEC) {
@@ -2631,81 +2154,76 @@ function flagServerSystem(dt: number): void {
 
     // Staleness check: force-drop if carrier position is unavailable for 5s
     if (lastCarrierPositionMs > 0 && (nowMs - lastCarrierPositionMs) > CARRIER_NO_POSITION_TIMEOUT_MS) {
-      console.log('[Server] ⚠️ STALE CARRIER DETECTED:', flag.carrierPlayerId.slice(0, 8), '- no position data for', Math.round((nowMs - lastCarrierPositionMs) / 1000) + 's — force-dropping flag')
-      flushHoldTimeAccum()
-      // Use last known carrier position if available, otherwise fall back to stale flagEntity Transform
+      console.log('[Server] ⚠️ STALE SWORD CARRIER:', sword.carrierPlayerId.slice(0, 8), '— force-dropping sword')
       const dropPos = lastKnownCarrierPos
         ? Vector3.create(lastKnownCarrierPos.x, lastKnownCarrierPos.y + 0.5, lastKnownCarrierPos.z)
-        : Transform.get(flagEntity).position
-      const mutable = Flag.getMutable(flagEntity)
-      mutable.state = FlagState.Dropped
+        : Transform.get(swordEntity).position
+      const mutable = Sword.getMutable(swordEntity)
+      mutable.state = SwordState.Dropped
       mutable.carrierPlayerId = ''
       mutable.dropAnchorX = dropPos.x
       mutable.dropAnchorY = dropPos.y
       mutable.dropAnchorZ = dropPos.z
-      lastDropperId = ''  // No specific dropper — accept first non-quarantined report
+      lastDropperId = ''
       resetCarrierTracking()
       computeGravityTarget(dropPos.y)
-      room.send('dropSound', { t: 0 })
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+      room.send('swordDropSound', { t: 0 })
+      persistSwordState().catch(e => console.error('[Server] persistSwordState error:', e))
     }
   } else {
-    // Not carried — reset tracking so next pickup starts fresh
     resetCarrierTracking()
   }
 
-  // Gravity for dropped flag — accelerate downward until reaching ground estimate
-  let currentAnchorY = flag.dropAnchorY
-  if (flag.state === FlagState.Dropped && flagFalling) {
-    flagFallVelocity += FLAG_GRAVITY * clampedDt
-    let newY = currentAnchorY - flagFallVelocity * clampedDt
-    if (newY <= flagGravityTargetY) {
-      newY = flagGravityTargetY
-      flagFalling = false
-      flagFallVelocity = 0
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+  // Gravity for dropped sword
+  let currentAnchorY = sword.dropAnchorY
+  if (sword.state === SwordState.Dropped && swordFalling) {
+    swordFallVelocity += SWORD_GRAVITY * clampedDt
+    let newY = currentAnchorY - swordFallVelocity * clampedDt
+    if (newY <= swordGravityTargetY) {
+      newY = swordGravityTargetY
+      swordFalling = false
+      swordFallVelocity = 0
+      persistSwordState().catch(e => console.error('[Server] persistSwordState error:', e))
     }
     currentAnchorY = newY
-    const flagMutable = Flag.getMutable(flagEntity)
-    flagMutable.dropAnchorY = newY
+    const swordMutable = Sword.getMutable(swordEntity)
+    swordMutable.dropAnchorY = newY
   }
 
-  // Water respawn: if flag drops below water level, respawn at a random spawn point
+  // Water respawn
   const WATER_RESPAWN_Y = 1.58
-  if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y) {
+  if (sword.state === SwordState.Dropped && currentAnchorY <= WATER_RESPAWN_Y) {
     const spawn = getRandomSpawnPoint()
-    console.log('[Server] 🌊 Flag fell in water (Y=' + currentAnchorY.toFixed(2) + ') — respawning at', spawn.x, spawn.y, spawn.z)
-    const flagMutable2 = Flag.getMutable(flagEntity)
-    flagMutable2.state = FlagState.AtBase
-    flagMutable2.carrierPlayerId = ''
-    flagMutable2.baseX = spawn.x
-    flagMutable2.baseY = spawn.y
-    flagMutable2.baseZ = spawn.z
-    flagMutable2.dropAnchorX = spawn.x
-    flagMutable2.dropAnchorY = spawn.y
-    flagMutable2.dropAnchorZ = spawn.z
-    const t2 = Transform.getMutable(flagEntity)
+    console.log('[Server] 🌊 Sword fell in water — respawning at', spawn.x, spawn.y, spawn.z)
+    const swordMutable2 = Sword.getMutable(swordEntity)
+    swordMutable2.state = SwordState.AtBase
+    swordMutable2.carrierPlayerId = ''
+    swordMutable2.baseX = spawn.x
+    swordMutable2.baseY = spawn.y
+    swordMutable2.baseZ = spawn.z
+    swordMutable2.dropAnchorX = spawn.x
+    swordMutable2.dropAnchorY = spawn.y
+    swordMutable2.dropAnchorZ = spawn.z
+    const t2 = Transform.getMutable(swordEntity)
     t2.position = Vector3.create(spawn.x, spawn.y, spawn.z)
-    flagFalling = false
-    flagFallVelocity = 0
-    persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+    swordFalling = false
+    swordFallVelocity = 0
+    persistSwordState().catch(e => console.error('[Server] persistSwordState error:', e))
   }
 
-  // Server only writes the raw rest position — no bob/spin animation.
-  // Bob and spin are handled client-side to eliminate ~10Hz CRDT writes.
-  // Only write Transform when the flag is falling (gravity updates).
-  if (flag.state !== FlagState.Carried && flagFalling) {
-    const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
-    const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
-    const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
-    const t = Transform.getMutable(flagEntity)
+  // Only write Transform when falling (gravity updates)
+  if (sword.state !== SwordState.Carried && swordFalling) {
+    const restX = sword.state === SwordState.AtBase ? sword.baseX : sword.dropAnchorX
+    const restY = sword.state === SwordState.AtBase ? sword.baseY : currentAnchorY
+    const restZ = sword.state === SwordState.AtBase ? sword.baseZ : sword.dropAnchorZ
+    const t = Transform.getMutable(swordEntity)
     t.position = Vector3.create(restX, restY, restZ)
   }
 
-  // Detect carrier disconnect (case-insensitive address comparison)
-  if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+  // Detect carrier disconnect
+  if (sword.state === SwordState.Carried && sword.carrierPlayerId) {
     let carrierConnected = false
-    const carrierLower = flag.carrierPlayerId.toLowerCase()
+    const carrierLower = sword.carrierPlayerId.toLowerCase()
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
       if (identity.address.toLowerCase() === carrierLower) {
         carrierConnected = true
@@ -2713,142 +2231,114 @@ function flagServerSystem(dt: number): void {
       }
     }
     if (!carrierConnected) {
-      console.log('[Server] ⚠️ Carrier', carrierLower.slice(0, 8), 'disconnected (PlayerIdentityData gone) — dropping flag')
-      flushHoldTimeAccum()
+      console.log('[Server] ⚠️ Sword carrier', carrierLower.slice(0, 8), 'disconnected — dropping sword')
       const dropPos = lastKnownCarrierPos
         ? Vector3.create(lastKnownCarrierPos.x, lastKnownCarrierPos.y + 0.5, lastKnownCarrierPos.z)
-        : Transform.get(flagEntity).position
-      const mutable = Flag.getMutable(flagEntity)
-      mutable.state = FlagState.Dropped
+        : Transform.get(swordEntity).position
+      const mutable = Sword.getMutable(swordEntity)
+      mutable.state = SwordState.Dropped
       mutable.carrierPlayerId = ''
       mutable.dropAnchorX = dropPos.x
       mutable.dropAnchorY = dropPos.y
       mutable.dropAnchorZ = dropPos.z
-      lastDropperId = ''  // No specific dropper — accept first non-quarantined report
-
+      lastDropperId = ''
       resetCarrierTracking()
       computeGravityTarget(dropPos.y)
-
-      room.send('dropSound', { t: 0 })
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+      room.send('swordDropSound', { t: 0 })
+      persistSwordState().catch(e => console.error('[Server] persistSwordState error:', e))
     }
   }
 }
 
-/**
- * Flush any accumulated hold time to the specified player.
- * Called when the carrier changes or the flag is dropped so that
- * no accumulated time is lost or credited to the wrong player.
- */
-function flushHoldTimeAccum(): void {
-  if (holdTimeAccum > 0 && holdTimeCarrierKey) {
-    const entity = getOrCreateHoldTimeEntity(holdTimeCarrierKey)
-    const mutable = PlayerFlagHoldTime.getMutable(entity)
-    mutable.seconds += holdTimeAccum
-    console.log('[Server] Flushed', holdTimeAccum.toFixed(2), 's hold time to', holdTimeCarrierKey.slice(0, 8), '(total:', mutable.seconds.toFixed(1), 's)')
+/** Survival time system — all living humans accumulate survival time each tick */
+function survivalTimeServerSystem(dt: number): void {
+  if (!infectionRoundActive) return
+
+  const clampedDt = Math.min(dt, 0.1)
+  survivalTimeAccumTimer += clampedDt
+
+  if (survivalTimeAccumTimer < SURVIVAL_TIME_SYNC_INTERVAL) return
+  const elapsed = survivalTimeAccumTimer
+  survivalTimeAccumTimer = 0
+
+  // Award survival time to all connected humans (not infected)
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    const addr = identity.address.toLowerCase()
+    if (infectedPlayers.has(addr)) continue // slimes don't get survival time
+
+    const entity = getOrCreateSurvivalTimeEntity(addr)
+    const mutable = PlayerSurvivalTime.getMutable(entity)
+    mutable.seconds += elapsed
   }
-  holdTimeAccum = 0
-  holdTimeCarrierKey = ''
 }
 
-function holdTimeServerSystem(dt: number): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) {
-    // Flag not carried — flush any remaining time to the previous carrier
-    flushHoldTimeAccum()
-    return
+/** Infection system — check slime-human proximity every tick */
+function infectionServerSystem(_dt: number): void {
+  if (!infectionRoundActive) return
+
+  const now = Date.now()
+
+  // Check slime respawn cooldowns
+  for (const slimeId of infectedPlayers) {
+    const entity = infectedEntities.get(slimeId)
+    if (!entity) continue
+    const inf = PlayerInfected.getOrNull(entity)
+    if (inf && inf.respawnCooldownUntilMs > 0 && now >= inf.respawnCooldownUntilMs) {
+      // Slime respawn!
+      const m = PlayerInfected.getMutable(entity)
+      m.respawnCooldownUntilMs = 0
+      room.send('slimeRespawned', { slimeId })
+      console.log('[Server] 🧟 Slime respawned:', slimeId.slice(0, 8))
+    }
   }
 
-  const carrierKey = flag.carrierPlayerId.toLowerCase()
+  // Check proximity between active slimes and humans
+  for (const slimeId of infectedPlayers) {
+    // Skip slimes in respawn cooldown
+    const slimeInfEntity = infectedEntities.get(slimeId)
+    if (slimeInfEntity) {
+      const inf = PlayerInfected.getOrNull(slimeInfEntity)
+      if (inf && inf.respawnCooldownUntilMs > 0 && now < inf.respawnCooldownUntilMs) continue
+    }
 
-  // Carrier changed — flush accumulated time to the PREVIOUS carrier first
-  if (carrierKey !== holdTimeCarrierKey) {
-    flushHoldTimeAccum()
-    holdTimeCarrierKey = carrierKey
-  }
+    const slimePos = getPlayerPosition(slimeId)
+    if (!slimePos) continue
 
-  holdTimeAccum += Math.min(dt, 0.1)
-  if (holdTimeAccum < HOLD_TIME_SYNC_INTERVAL) return
+    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      const humanId = identity.address.toLowerCase()
+      if (infectedPlayers.has(humanId)) continue // skip other slimes
 
-  // Use centralized helper — safe to call even if entity already exists
-  const entity = getOrCreateHoldTimeEntity(carrierKey)
+      // Check immunity
+      const immuneUntil = infectionImmunityUntil.get(humanId) ?? 0
+      if (now < immuneUntil) continue
 
-  const mutable = PlayerFlagHoldTime.getMutable(entity)
-  mutable.seconds += holdTimeAccum
-  holdTimeAccum = 0
-}
+      const humanPos = getPlayerPosition(humanId)
+      if (!humanPos) continue
 
-function lightningServerSystem(dt: number): void {
-  const flag = Flag.getOrNull(flagEntity)
-  const carried = flag && flag.state === FlagState.Carried && !!flag.carrierPlayerId
-
-  // Handle active warning countdown
-  if (lightningStrikeScheduled) {
-    lightningWarningTimer += dt
-    if (lightningWarningTimer >= LIGHTNING_WARNING_DURATION) {
-      lightningStrikeScheduled = false
-      lightningWarningTimer = 0
-
-      // If someone is carrying the flag, they get zapped.
-      // If the flag was dropped, strike the flag's position with no victim.
-      const victimId = carried ? flag!.carrierPlayerId! : ''
-
-      // Determine strike position: carrier's position if carried, flag position if dropped
-      let strikePos = { x: 256, y: 5, z: 256 } // fallback center
-      if (carried && victimId) {
-        for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
-          const identity = PlayerIdentityData.get(entity)
-          if (identity.address.toLowerCase() === victimId.toLowerCase()) {
-            const t = Transform.getOrNull(entity)
-            if (t) strikePos = { x: t.position.x, y: t.position.y, z: t.position.z }
-            break
-          }
-        }
-      } else {
-        // Flag is on the ground — strike the flag's position
-        const flagT = Transform.getOrNull(flagEntity)
-        if (flagT) strikePos = { x: flagT.position.x, y: flagT.position.y, z: flagT.position.z }
+      const dist = Vector3.distance(slimePos, humanPos)
+      if (dist < INFECTION_RADIUS) {
+        infectPlayer(humanId, slimeId)
+        break // One infection per slime per tick
       }
-
-      console.log('[Server] ⚡ Lightning strike at', strikePos.x.toFixed(1), strikePos.y.toFixed(1), strikePos.z.toFixed(1), 'victim:', victimId || '(none - flag only)')
-      room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId })
-
-      // Drop the flag if it's still being carried
-      if (carried) {
-        const mutable = Flag.getMutable(flagEntity)
-        mutable.state = FlagState.Dropped
-        mutable.carrierPlayerId = ''
-        flushHoldTimeAccum()
-        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-      }
-
-      _lightningOriginalCarrierId = ''
     }
-    return // Don't roll while a strike is pending
   }
 
-  // No rolling if flag isn't carried
-  if (!carried) {
-    lightningRollTimer = 0
-    return
+  // Handle disconnected players — remove from infected set
+  const connectedNow = new Set<string>()
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    connectedNow.add(identity.address.toLowerCase())
   }
-
-  lightningRollTimer += dt
-  if (lightningRollTimer >= LIGHTNING_ROLL_INTERVAL) {
-    lightningRollTimer = 0
-    const score = getCarrierHoldSeconds()
-    const chance = getLightningStrikeChance(score)
-    if (chance > 0 && Math.random() < chance) {
-      console.log(`[Server] ⚡ Lightning roll succeeded! Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
-      lightningStrikeScheduled = true
-      lightningWarningTimer = 0
-      _lightningOriginalCarrierId = flag!.carrierPlayerId!
-      room.send('lightningWarning', { t: 0 })
-    } else if (chance > 0) {
-      console.log(`[Server] ⚡ Lightning roll failed. Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
+  for (const slimeId of Array.from(infectedPlayers)) {
+    if (!connectedNow.has(slimeId)) {
+      infectedPlayers.delete(slimeId)
+      syncInfectionState()
     }
   }
 }
+
+// ── Removed: flagServerSystem, holdTimeServerSystem, lightningServerSystem, checkProximitySteal ──
+// ── Removed: orbitServerSystem, shellServerSystem, handleProjectileFire ──
+// These are all replaced by swordServerSystem, survivalTimeServerSystem, infectionServerSystem
 
 // Track which players are currently connected (detected this frame)
 const currentlyConnected = new Set<string>()
@@ -2868,8 +2358,9 @@ function playerTrackingSystem(): void {
       // Player just connected (or reconnected)
       currentlyConnected.add(userKey)
 
-      // Create synced hold time entity if this is a new player
-      getOrCreateHoldTimeEntity(userKey)
+      // Create synced survival time + infection entities
+      getOrCreateSurvivalTimeEntity(userKey)
+      getOrCreateInfectedEntity(userKey)
       
       // Load coin balance and create wallet entity
       loadPlayerCoinBalance(userKey).then(() => {
@@ -2967,54 +2458,52 @@ function countdownServerSystem(): void {
     return
   }
   
-  const intervalMs = 5 * 60 * 1000 // 5 minutes in milliseconds
-  
+  const intervalMs = 5 * 60 * 1000
+
   // Debug: Log timer state every 30 seconds
   if (now - lastTimerDebugLog > 30000) {
     lastTimerDebugLog = now
     const secondsUntilEnd = Math.floor((timer.roundEndTimeMs - now) / 1000)
-    console.log('[Server.Timer] secondsUntilEnd:', secondsUntilEnd, 'roundEndTimeMs:', new Date(timer.roundEndTimeMs).toISOString(), 'triggered:', timer.roundEndTriggered)
+    console.log('[Server.Timer] secondsUntilEnd:', secondsUntilEnd, 'triggered:', timer.roundEndTriggered, 'infected:', infectedPlayers.size, 'humans:', getHumansRemaining())
+  }
+
+  // Early round end — all humans infected
+  if (earlyRoundEndRequested && !timer.roundEndTriggered) {
+    earlyRoundEndRequested = false
+    console.log('[Server] ⏰ Early round end — all humans infected!')
+    handleRoundEnd().catch((err) => {
+      console.error('[Server.ERROR] handleRoundEnd (early) failed:', err)
+      room.send('respawnPlayers', { t: 0, winnersJson: '[]' })
+    })
+    // Don't update roundEndTimeMs — the next UTC boundary is still the next round's end
+    return
   }
   
-  // Round end: trigger exactly when we reach roundEndTimeMs (the UTC boundary)
-  // The splash will show the winner from the previous round and display during the first 3 seconds of the new round
+  // Normal round end at UTC boundary
   if (!timer.roundEndTriggered && now >= timer.roundEndTimeMs) {
-    // Prevent duplicate triggers - only process each roundEndTimeMs once
-    if (timer.roundEndTimeMs === lastProcessedRoundEndTime) {
-      return
-    }
+    if (timer.roundEndTimeMs === lastProcessedRoundEndTime) return
     lastProcessedRoundEndTime = timer.roundEndTimeMs
     
-    const currentBoundary = Math.floor(now / intervalMs) * intervalMs
     const msAfter = now - timer.roundEndTimeMs
-    
     console.log('[Server] ⏰ Round end! Triggered at roundEndTimeMs:', new Date(timer.roundEndTimeMs).toISOString(), `(${msAfter}ms after)`)
-    console.log('[Server] Current boundary:', new Date(currentBoundary).toISOString())
     
-    // Calculate next boundary
     const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
-    
-    // Update the timer's roundEndTimeMs to the next boundary for the next round
     const mutable = CountdownTimer.getMutable(countdownEntity)
     mutable.roundEndTimeMs = nextBoundary
-    
     console.log('[Server] Next round will end at:', new Date(nextBoundary).toISOString())
     
     handleRoundEnd().catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
-      // Emergency recovery: ensure flag is reset and players are respawned
-      // even if something in the handler crashed
       try {
-        const flag = Flag.getOrNull(flagEntity)
-        if (flag && flag.state === FlagState.Carried) {
-          const mutable = Flag.getMutable(flagEntity)
-          mutable.state = FlagState.AtBase
-          mutable.carrierPlayerId = ''
+        const sword = Sword.getOrNull(swordEntity)
+        if (sword && sword.state === SwordState.Carried) {
+          const m = Sword.getMutable(swordEntity)
+          m.state = SwordState.AtBase
+          m.carrierPlayerId = ''
         }
-        lightningRollTimer = 0
-        lightningStrikeScheduled = false
-        lightningWarningTimer = 0
-        _lightningOriginalCarrierId = ''
+        infectedPlayers.clear()
+        infectionRoundActive = false
+        syncInfectionState()
         room.send('respawnPlayers', { t: 0, winnersJson: '[]' })
         console.log('[Server] ⚠️ Emergency round-end recovery executed')
       } catch (recoveryErr) {
@@ -3023,11 +2512,12 @@ function countdownServerSystem(): void {
     })
   }
   
-  // Splash finished — clear the splash and officially start new round
+  // Splash finished — start new infection round
   if (timer.roundEndTriggered && now >= timer.roundEndDisplayUntilMs) {
     const mutable = CountdownTimer.getMutable(countdownEntity)
     mutable.roundEndTriggered = false
-    console.log('[Server] Round splash finished, new round active')
+    console.log('[Server] Round splash finished — starting new infection round')
+    startInfectionRound()
   }
 }
 
@@ -3035,79 +2525,83 @@ async function handleRoundEnd(): Promise<void> {
   const now = Date.now()
 
   // ══════════════════════════════════════════════════════════════════════
-  // CRITICAL: All state mutations that affect holdTimeServerSystem MUST
-  // happen synchronously BEFORE any `await`. During `await` gaps, the
-  // engine runs systems — if the flag is still Carried, holdTimeServerSystem
-  // keeps accumulating time and can write it back AFTER we reset scores.
+  // CRITICAL: All state mutations MUST happen synchronously BEFORE any `await`.
   // ══════════════════════════════════════════════════════════════════════
 
-  // ── 0a. Flush any in-progress hold time so final scores are accurate ──
-  flushHoldTimeAccum()
+  // ── 0. Stop infection round ──
+  infectionRoundActive = false
+  earlyRoundEndRequested = false
 
-  // ── 0b. Reset flag to random spawn point IMMEDIATELY (before any await) ──
-  // This ensures holdTimeServerSystem sees AtBase on the very next frame
-  // and stops accumulating time.
+  // ── 0b. Reset sword to random spawn point IMMEDIATELY ──
   resetGravityState()
   const spawnPoint = getRandomSpawnPoint()
-  console.log('[Server] Round ended, flag respawning at random location to prevent spawn camping')
+  console.log('[Server] Round ended, sword respawning at random location')
   
-  const flagMutable = Flag.getMutable(flagEntity)
-  flagMutable.state = FlagState.AtBase
-  flagMutable.carrierPlayerId = ''
-  flagMutable.baseX = spawnPoint.x
-  flagMutable.baseY = spawnPoint.y
-  flagMutable.baseZ = spawnPoint.z
+  const swordMutable = Sword.getMutable(swordEntity)
+  swordMutable.state = SwordState.AtBase
+  swordMutable.carrierPlayerId = ''
+  swordMutable.baseX = spawnPoint.x
+  swordMutable.baseY = spawnPoint.y
+  swordMutable.baseZ = spawnPoint.z
   
-  const flagT = Transform.getMutable(flagEntity)
-  flagT.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
+  const swordT = Transform.getMutable(swordEntity)
+  swordT.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
 
-  // ── 1. Determine winner(s) — read scores BEFORE resetting them ──
+  // ── 1. Determine winner(s) — longest survival time wins ──
   let maxSeconds = 0
   const players: { userId: string; seconds: number }[] = []
 
-  for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+  for (const [, data] of engine.getEntitiesWith(PlayerSurvivalTime)) {
     if (data.seconds > 0) {
       players.push({ userId: data.playerId, seconds: data.seconds })
       if (data.seconds > maxSeconds) maxSeconds = data.seconds
     }
   }
 
-  // ── 2. Reset ALL hold times to 0 synchronously ──
-  // Iterate the ENTIRE ECS (not just holdTimeEntities map) to catch any
-  // stale/orphaned entities that might show old scores on clients.
+  // ── 2. Reset ALL survival times to 0 synchronously ──
   const connectedNow = new Set<string>()
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
     connectedNow.add(identity.address.toLowerCase())
   }
 
   const entitiesToRemove: string[] = []
-  for (const [entity, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+  for (const [entity, data] of engine.getEntitiesWith(PlayerSurvivalTime)) {
     const key = data.playerId.toLowerCase()
     if (connectedNow.has(key)) {
-      PlayerFlagHoldTime.getMutable(entity).seconds = 0
+      PlayerSurvivalTime.getMutable(entity).seconds = 0
     } else {
-      // Disconnected — mark for removal
       entitiesToRemove.push(key)
     }
   }
   for (const userKey of entitiesToRemove) {
-    const entity = holdTimeEntities.get(userKey)
+    const entity = survivalTimeEntities.get(userKey)
     if (entity) {
       engine.removeEntity(entity)
-      holdTimeEntities.delete(userKey)
+      survivalTimeEntities.delete(userKey)
       knownPlayers.delete(userKey)
     }
   }
   if (entitiesToRemove.length > 0) {
-    console.log('[Server] Cleaned up', entitiesToRemove.length, 'hold-time entities for disconnected players')
+    console.log('[Server] Cleaned up', entitiesToRemove.length, 'survival-time entities for disconnected players')
   }
 
-  // Force-clear accumulator again (holdTimeServerSystem cannot have run since
-  // step 0a because we haven't hit any await yet, but be defensive)
-  holdTimeAccum = 0
-  holdTimeCarrierKey = ''
+  // Reset survival time accumulator
+  survivalTimeAccumTimer = 0
 
-  // ── 3. Remove all active traps ──
+  // ── 3. Reset infection state ──
+  infectedPlayers.clear()
+  infectionImmunityUntil.clear()
+  patientZeroId = ''
+  // Reset all PlayerInfected components
+  for (const [entity] of engine.getEntitiesWith(PlayerInfected)) {
+    const m = PlayerInfected.getMutable(entity)
+    m.isInfected = false
+    m.infectedAtMs = 0
+    m.respawnCooldownUntilMs = 0
+  }
+  syncInfectionState()
+
+  // ── 3a. Remove all active traps ──
   for (const trap of activeTraps) {
     removeTrap(trap)
   }
@@ -3115,34 +2609,7 @@ async function handleRoundEnd(): Promise<void> {
   lastTrapDropTime.clear()
   console.log('[Server] 🪤 All traps cleared for new round')
 
-  // ── 3b. Remove all active projectiles + orbits ──
-  for (const projectile of activeProjectiles) {
-    removeProjectile(projectile)
-  }
-  activeProjectiles.length = 0
-  lastProjectileFireTime.clear()
-  // Clear active orbits
-  for (const orbit of activeOrbits) {
-    room.send('orbitEnded', { playerId: orbit.playerId })
-  }
-  activeOrbits.length = 0
-  lastOrbitTime.clear()
-  console.log('[Server] 🎯 All projectiles + orbits cleared for new round')
-
-  // ── 3c. Clear combat cooldown maps to prevent memory growth ──
-  lastStealTime.clear()
-
-  // ── 3d. Reset lightning state ──
-  lightningRollTimer = 0
-  lightningStrikeScheduled = false
-  lightningWarningTimer = 0
-  _lightningOriginalCarrierId = ''
-
-  // ── 3e. Respawn mushrooms ──
-  spawnMushrooms()
-  console.log('[Server] 🍄 Mushrooms respawned for new round')
-
-  // ── 3f. Compute top 3 BEFORE sending respawnPlayers (avoids CRDT race) ──
+  // ── 4. Compute top 3 BEFORE sending respawnPlayers ──
   const topPlayers = [...players]
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 3)
@@ -3158,36 +2625,32 @@ async function handleRoundEnd(): Promise<void> {
     })
   
   for (const p of topPlayers) {
-    console.log('[Server] Top player:', p.name, '-', p.seconds, 'seconds')
+    console.log('[Server] Top survivor:', p.name, '-', p.seconds, 'seconds')
   }
 
   const winnersJson = JSON.stringify(topPlayers)
 
-  // ── 3g. Respawn all players at spawn point immediately ──
+  // ── 5. Respawn all players ──
   room.send('respawnPlayers', { t: 0, winnersJson })
-  console.log('[Server] 📍 Respawning all players at spawn point')
+  console.log('[Server] 📍 Respawning all players')
 
   // ══════════════════════════════════════════════════════════════════════
   // All synchronous state mutations done. Safe to await now.
-  // holdTimeServerSystem will see AtBase and not accumulate.
   // ══════════════════════════════════════════════════════════════════════
 
-  // ── 4. Set timer: splash + winner data (CRDT backup — clients use message data) ──
+  // ── 6. Set timer splash ──
   const timerMutable = CountdownTimer.getMutable(countdownEntity)
   timerMutable.roundEndTriggered = true
   timerMutable.roundEndDisplayUntilMs = now + SPLASH_DURATION_MS
   timerMutable.roundWinnerJson = winnersJson
-  
-  console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
 
-  // ── 5b. Award coins for round participation & placement ──
+  // ── 7. Award coins ──
   await awardRoundCoins(players)
 
-  // ── 6. Check for daily/monthly leaderboard reset ──
+  // ── 8. Leaderboard updates ──
   await checkLeaderboardDailyReset()
   await checkMonthlyLeaderboardReset()
 
-  // ── 7. Update all three leaderboards (async persistence is safe now) ──
   if (maxSeconds > 0) {
     // Daily
     const dailyEntries = parseLeaderboardJson(LeaderboardState.getOrNull(leaderboardEntity)?.json)
@@ -3216,7 +2679,7 @@ async function handleRoundEnd(): Promise<void> {
     await Storage.set('monthlyLeaderboardMonth', currentMonth)
   }
 
-  // ── 7b. Award lifetime wins (flags) to winners ──
+  // ── 9. Award lifetime wins to survivors with max time ──
   if (maxSeconds > 0) {
     const winners = players.filter(p => p.seconds >= maxSeconds)
     for (const w of winners) {
@@ -3225,8 +2688,8 @@ async function handleRoundEnd(): Promise<void> {
     }
   }
 
-  // ── 8. Persist flag state ──
-  await persistFlagState()
+  // ── 10. Persist sword state ──
+  await persistSwordState()
 }
 
 let visitorSyncTimer = 0
@@ -3293,265 +2756,3 @@ function nameResolverServerSystem(dt: number): void {
   }
 }
 
-// ── Mushroom spawning ──
-function randomMushroomCandidates(): { x: number; z: number }[] {
-  const candidates: { x: number; z: number }[] = []
-  for (let i = 0; i < MUSHROOM_CANDIDATES; i++) {
-    const angle = Math.random() * Math.PI * 2
-    const r = MUSHROOM_RADIUS * Math.sqrt(Math.random())
-    candidates.push({ x: MUSHROOM_CX + Math.cos(angle) * r, z: MUSHROOM_CZ + Math.sin(angle) * r })
-  }
-  return candidates
-}
-
-function mushroomToPayload(m: ServerMushroom): any {
-  return { id: m.id, candidates: m.candidates }
-}
-
-function spawnOneMushroom(): void {
-  const candidates = randomMushroomCandidates()
-  const m: ServerMushroom = { id: mushroomIdCounter++, candidates, pickedUp: false }
-  activeMushrooms.push(m)
-  console.log('[Server] 🍄 Spawned replacement mushroom', m.id, 'with', candidates.length, 'candidates')
-  room.send('mushroomPositions', { mushroomsJson: JSON.stringify([mushroomToPayload(m)]) })
-}
-
-function spawnMushrooms(): void {
-  activeMushrooms.length = 0
-  for (let i = 0; i < MUSHROOM_COUNT; i++) {
-    const candidates = randomMushroomCandidates()
-    activeMushrooms.push({
-      id: mushroomIdCounter++,
-      candidates,
-      pickedUp: false
-    })
-  }
-  console.log('[Server] 🍄 Spawned', MUSHROOM_COUNT, 'mushrooms')
-  const positions = activeMushrooms.map(mushroomToPayload)
-  room.send('mushroomPositions', { mushroomsJson: JSON.stringify(positions), fullReset: true })
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// ── Zombie Server System ──
-// ══════════════════════════════════════════════════════════════════════════════
-
-const ZOMBIE_SPAWN_POS = Vector3.create(225, 1.25, 287) // Black cube location
-
-interface ActiveZombie {
-  entity: Entity
-  syncId: number
-  hp: number
-  posX: number
-  posY: number
-  posZ: number
-  spawnedAtMs: number
-  lastStaggerTime: Map<string, number> // prevent rapid re-stagger per player
-  lastHitMs: number // prevent multiple hits from same projectile pass
-  lastCrdtSyncTime: number // throttle Zombie component CRDT writes to ~5Hz
-}
-
-const activeZombies: ActiveZombie[] = []
-let zombieSpawnTimer = 10 // first spawn after 10s
-let zombieRespawnCooldown = 0 // cooldown after ghost is killed
-const ZOMBIE_RESPAWN_COOLDOWN = 30 // seconds before respawn after death
-const ZOMBIE_STAGGER_COOLDOWN_MS = 3000 // can only stagger same player every 3s
-const ZOMBIE_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
-
-// Listen for zombie hit reports from clients
-room.onMessage('zombieHit', (data, sender) => {
-  // Validate: find the zombie entity, reduce HP
-  for (let i = activeZombies.length - 1; i >= 0; i--) {
-    const z = activeZombies[i]
-    // Match by entity ID sent as zombieId (we use entity number)
-    if ((z.entity as number) === data.zombieId) {
-      z.hp--
-      console.log('[Server] 🧟 Zombie hit! HP:', z.hp)
-      if (z.hp <= 0) {
-        // Kill zombie
-        console.log('[Server] 🧟 Zombie killed!')
-        room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
-        engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
-        activeZombies.splice(i, 1)
-        zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
-      }
-      break
-    }
-  }
-})
-
-function despawnAllZombies(): void {
-  for (const z of activeZombies) {
-    Zombie.deleteFrom(z.entity)
-    engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
-  }
-  activeZombies.length = 0
-}
-
-function zombieServerSystem(dt: number): void {
-  const clampedDt = Math.min(dt, 0.1)
-  const now = Date.now()
-
-  // Keep world time cache fresh for night detection
-  updateWorldTime()
-
-  // ── Ghost only spawns at night ──
-  if (!isNightTime()) {
-    if (activeZombies.length > 0) {
-      despawnAllZombies()
-      console.log('[Server] ☀️ Dawn — despawning ghost')
-    }
-    zombieSpawnTimer = 5 // ready to spawn quickly when night falls
-    return
-  }
-
-  // ── Spawn timer (single ghost, 30s respawn cooldown after death) ──
-  if (zombieRespawnCooldown > 0) {
-    zombieRespawnCooldown -= clampedDt
-  }
-  if (activeZombies.length === 0 && zombieRespawnCooldown <= 0) {
-    zombieSpawnTimer -= clampedDt
-    if (zombieSpawnTimer <= 0) {
-      spawnZombie()
-      zombieSpawnTimer = 0
-    }
-  }
-
-  // ── Update each zombie ──
-  for (let i = activeZombies.length - 1; i >= 0; i--) {
-    const z = activeZombies[i]
-
-    // Find nearest player
-    let nearestDist = Infinity
-    let nearestPos: Vector3 | null = null
-    let nearestId = ''
-
-    for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const pPos = transform.position
-      const dx = pPos.x - z.posX
-      const dy = Math.abs(pPos.y - z.posY)
-      const dz = pPos.z - z.posZ
-      const dist = Math.sqrt(dx * dx + dz * dz)
-      if (dy > 20) continue // ignore players too far above/below
-      if (dist < nearestDist) {
-        nearestDist = dist
-        nearestPos = pPos
-        nearestId = identity.address.toLowerCase()
-      }
-    }
-
-    if (nearestPos && nearestDist < ZOMBIE_DETECT_RADIUS) {
-      // Move toward player
-      const speed = nearestDist < ZOMBIE_FAST_DIST ? ZOMBIE_FAST_SPEED : ZOMBIE_SPEED
-      const dx = nearestPos.x - z.posX
-      const dz = nearestPos.z - z.posZ
-      const dist2d = Math.sqrt(dx * dx + dz * dz)
-      if (dist2d > 0.1) {
-        z.posX += (dx / dist2d) * speed * clampedDt
-        z.posZ += (dz / dist2d) * speed * clampedDt
-      }
-      // Match target Y (float above ground at player level)
-      z.posY += (nearestPos.y - z.posY) * 2.0 * clampedDt
-
-      // Check contact → send ghostTouching (scare meter fills on client)
-      if (nearestDist < ZOMBIE_HIT_RADIUS) {
-        room.send('ghostTouching', { victimId: nearestId })
-      }
-    } else {
-      // Idle: slow orbit around spawn point
-      const elapsed = (now - z.spawnedAtMs) / 1000
-      const angle = elapsed * ZOMBIE_IDLE_ORBIT_SPEED
-      const orbitRadius = 3
-      const targetX = ZOMBIE_SPAWN_POS.x + Math.cos(angle) * orbitRadius
-      const targetZ = ZOMBIE_SPAWN_POS.z + Math.sin(angle) * orbitRadius
-      z.posX += (targetX - z.posX) * 2.0 * clampedDt
-      z.posZ += (targetZ - z.posZ) * 2.0 * clampedDt
-      z.posY += (ZOMBIE_SPAWN_POS.y - z.posY) * 2.0 * clampedDt
-    }
-
-    // Update local Transform (used for server-side collision checks only — NOT synced)
-    const t = Transform.getMutable(z.entity)
-    t.position = Vector3.create(z.posX, z.posY, z.posZ)
-
-    // Throttled CRDT write (~5Hz) — update Zombie.targetX/Y/Z for client interpolation
-    const ZOMBIE_CRDT_INTERVAL_MS = 200
-    if (now - z.lastCrdtSyncTime >= ZOMBIE_CRDT_INTERVAL_MS) {
-      z.lastCrdtSyncTime = now
-      const zm = Zombie.getMutable(z.entity)
-      zm.targetX = z.posX
-      zm.targetY = z.posY
-      zm.targetZ = z.posZ
-    }
-  }
-
-  // ── Check projectile-zombie collisions ──
-  const HIT_COOLDOWN_MS = 500 // prevent same projectile hitting multiple times per pass
-  for (const proj of activeProjectiles) {
-    const projPos = Transform.get(proj.entity).position
-    for (let i = activeZombies.length - 1; i >= 0; i--) {
-      const z = activeZombies[i]
-      if (now - z.lastHitMs < HIT_COOLDOWN_MS) continue
-      const dx = projPos.x - z.posX
-      const dy = projPos.y - z.posY
-      const dz = projPos.z - z.posZ
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-      if (dist < PROJECTILE_HIT_RADIUS * (proj.chargeScale || 1)) {
-        z.hp--
-        z.lastHitMs = now
-        console.log('[Server] 🧟 Projectile hit zombie! HP:', z.hp)
-        room.send('hitVfx', { x: z.posX, y: z.posY + 1, z: z.posZ })
-        if (z.hp <= 0) {
-          console.log('[Server] 🧟 Zombie killed by projectile!')
-          room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
-          engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
-          activeZombies.splice(i, 1)
-          zombieRespawnCooldown = ZOMBIE_RESPAWN_COOLDOWN
-        }
-        // Trigger boomerang return (same as hitting a player)
-        if (!proj.returning) {
-          proj.returning = true
-          proj.returnX = projPos.x
-          proj.returnY = projPos.y
-          proj.returnZ = projPos.z
-          room.send('shellTriggered', { x: projPos.x, y: projPos.y, z: projPos.z, victimId: '', peak: true, firedBy: proj.firedBy })
-          console.log('[Server] 🧟 Projectile rebounding off zombie')
-        }
-        break
-      }
-    }
-  }
-}
-
-function spawnZombie(): void {
-  const entity = engine.addEntity()
-  const pos = ZOMBIE_SPAWN_POS
-  Transform.create(entity, {
-    position: Vector3.create(pos.x, pos.y, pos.z),
-    scale: Vector3.create(1, 1, 1)
-  })
-  Zombie.create(entity, {
-    hp: 2,
-    spawnX: pos.x, spawnY: pos.y, spawnZ: pos.z,
-    active: true,
-    targetX: pos.x, targetY: pos.y, targetZ: pos.z,
-  })
-  // NOTE: Only sync Zombie component — NOT Transform.
-  // Writing Transform every frame (~30 CRDT writes/s) saturates the CRDT buffer
-  // and freezes all other synced components (scoreboard, flag state, hold time).
-  // Clients interpolate toward Zombie.targetX/Y/Z which is updated at 5Hz.
-  const zombieSyncId = getNextZombieSyncId()
-  syncEntity(entity, [Zombie.componentId], zombieSyncId)
-
-  activeZombies.push({
-    entity,
-    syncId: zombieSyncId,
-    hp: 2,
-    posX: pos.x,
-    posY: pos.y,
-    posZ: pos.z,
-    spawnedAtMs: Date.now(),
-    lastStaggerTime: new Map(),
-    lastHitMs: 0,
-    lastCrdtSyncTime: 0,
-  })
-  console.log('[Server] 🧟 Zombie spawned at', pos.x, pos.y, pos.z)
-}

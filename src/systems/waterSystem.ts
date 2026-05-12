@@ -223,7 +223,7 @@ export function waterSystem(dt: number) {
         AudioSource.createOrReplace(drownSoundEntity, { audioClipUrl: 'assets/sounds/death.mp3', playing: true, loop: false, volume: 1.0, global: true })
       }
 
-      room.send('requestDrop', { t: 0 })
+      room.send('requestSwordDrop', { t: 0 })
       sendDeathPenalty('drown')
 
       if (waterSoundEntity) {

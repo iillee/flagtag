@@ -4,7 +4,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
-import { Flag, FlagState } from '../shared/components'
+import { Sword as Flag, SwordState as FlagState } from '../shared/components'
 
 // ── Configuration ──
 const BEACON_HEIGHT = 110

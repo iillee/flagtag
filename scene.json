@@ -2,7 +2,7 @@
   "ecs7": true,
   "runtimeVersion": "7",
   "display": {
-    "title": "Flag Tag",
+    "title": "Infection",
     "description": "Multiplayer keep away game with a flag!\n\nFive minute rounds running 24/7",
     "favicon": "",
     "navmapThumbnail": "assets/images/flagtag_splash.png"

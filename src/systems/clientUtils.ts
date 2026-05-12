@@ -4,7 +4,7 @@
  */
 import { engine, Transform, AudioSource, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { Flag } from '../shared/components'
+import { Sword as Flag } from '../shared/components'
 
 // ── Error sound (cooldown denial) ──
 let errorSoundEntity: Entity | null = null

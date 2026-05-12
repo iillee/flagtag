@@ -3667,16 +3667,16 @@
               "y": 41.292510986328125,
               "z": 280.8976135253906
             },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
             "rotation": {
               "x": 0.7071067690849304,
               "y": 0,
               "z": 0,
               "w": 0.7071067690849304
-            },
-            "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
             },
             "parent": 0
           }
@@ -7087,9 +7087,9 @@
         "serializationType": "map"
       },
       "data": {
-        "693": {
+        "514": {
           "json": {
-            "gizmo": 1
+            "gizmo": 0
           }
         }
       }
@@ -11137,7 +11137,7 @@
       "data": {
         "0": {
           "json": {
-            "name": "Flag Tag",
+            "name": "Infection",
             "description": "Multiplayer keep away game with a flag!\n\nFive minute rounds running 24/7",
             "thumbnail": "assets/images/flagtag_splash.png",
             "ageRating": "T",
@@ -11145,9 +11145,14 @@
               "game"
             ],
             "author": "ile",
-            "email": "",
-            "tags": [],
+            "tags": [
+              ""
+            ],
             "layout": {
+              "base": {
+                "x": 0,
+                "y": 0
+              },
               "parcels": [
                 {
                   "x": 0,
@@ -15245,13 +15250,8 @@
                   "x": 31,
                   "y": 0
                 }
-              ],
-              "base": {
-                "x": 0,
-                "y": 0
-              }
+              ]
             },
-            "silenceVoiceChat": false,
             "disablePortableExperiences": true,
             "spawnPoints": [
               {
@@ -15266,11 +15266,8 @@
                     ]
                   },
                   "y": {
-                    "$case": "range",
-                    "value": [
-                      47.47999954223633,
-                      47.47999954223633
-                    ]
+                    "$case": "single",
+                    "value": 47.47999954223633
                   },
                   "z": {
                     "$case": "range",
@@ -15288,8 +15285,7 @@
               }
             ],
             "skyboxConfig": {},
-            "creator": "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b",
-            "disableNearbyVoiceChat": false
+            "creator": "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b"
           }
         }
       }

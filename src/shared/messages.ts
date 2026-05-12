@@ -2,105 +2,91 @@ import { Schemas } from '@dcl/sdk/ecs'
 import { registerMessages } from '@dcl/sdk/network'
 
 export const Messages = {
-  // Client → Server
+  // ── Client → Server ──
   registerName: Schemas.Map({ name: Schemas.String }),
-  requestPickup: Schemas.Map({ t: Schemas.Int }),
-  requestDrop: Schemas.Map({ t: Schemas.Int }),
-  // requestAttack removed — proximity steal replaced melee attack
+
+  // Sword pickup/drop (same pattern as old flag)
+  requestSwordPickup: Schemas.Map({ t: Schemas.Int }),
+  requestSwordDrop: Schemas.Map({ t: Schemas.Int }),
   reportGroundY: Schemas.Map({ y: Schemas.Float }),
+
+  // Sword attack — sword holder swings at nearby slimes
+  requestSwordAttack: Schemas.Map({ t: Schemas.Int }),
+
+  // Traps (humans drop traps to slow slimes)
   requestBanana: Schemas.Map({ t: Schemas.Int }),
   reportBananaGroundY: Schemas.Map({ bananaX: Schemas.Float, bananaZ: Schemas.Float, groundY: Schemas.Float }),
-  requestShell: Schemas.Map({ dirX: Schemas.Float, dirZ: Schemas.Float, color: Schemas.String, chargeSpeed: Schemas.Float, chargeRange: Schemas.Float, chargeScale: Schemas.Float }),
-  reportShellWallDist: Schemas.Map({ shellId: Schemas.Float, maxDist: Schemas.Float }),
-  reportShellGroundY: Schemas.Map({ shellX: Schemas.Float, shellZ: Schemas.Float, groundY: Schemas.Float }),
 
-  // Server → Client
-  hitVfx: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
-  missVfx: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
-  stagger: Schemas.Map({ victimId: Schemas.String }),
-  pickupConfirmed: Schemas.Map({ playerId: Schemas.String }),
-  pickupSound: Schemas.Map({ t: Schemas.Int }),
-  dropSound: Schemas.Map({ t: Schemas.Int }),
-  bananaDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String }),
-  bananaTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
-  shellDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, dirX: Schemas.Float, dirZ: Schemas.Float, color: Schemas.String, firedBy: Schemas.String, chargeSpeed: Schemas.Float, chargeRange: Schemas.Float, chargeScale: Schemas.Float }),
-  shellTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String, peak: Schemas.Optional(Schemas.Boolean), firedBy: Schemas.Optional(Schemas.String) }),
-  shellReturned: Schemas.Map({ firedBy: Schemas.String }),
-
-
-  // Updraft messages
+  // Updraft
   requestUpdraftLocation: Schemas.Map({ t: Schemas.Int }),
-  updraftLocation: Schemas.Map({ index: Schemas.Int }),
-
-  // Mushroom messages
-  requestMushroomPositions: Schemas.Map({ t: Schemas.Int }),
-  pickupMushroom: Schemas.Map({ id: Schemas.Int }),
-  mushroomPositions: Schemas.Map({ mushroomsJson: Schemas.String, fullReset: Schemas.Optional(Schemas.Boolean) }),   // JSON array of {id, candidates: [{x,z}]}
-  mushroomPickedUp: Schemas.Map({ id: Schemas.Int, playerId: Schemas.String }),
-  mushroomShield: Schemas.Map({ durationMs: Schemas.Int, playerId: Schemas.String }),
-  shieldConsumed: Schemas.Map({ playerId: Schemas.String }),
-  flagImmunity: Schemas.Map({ playerId: Schemas.String, durationMs: Schemas.Int }),
-  playerShieldActive: Schemas.Map({ playerId: Schemas.String, active: Schemas.Int }),
-
-  // Boomerang color sync
-  colorChanged: Schemas.Map({ color: Schemas.String }),
-  playerColorChanged: Schemas.Map({ playerId: Schemas.String, color: Schemas.String }),
-
-  // Green orbit mechanic
-  requestOrbit: Schemas.Map({ t: Schemas.Int, startAngle: Schemas.Float }),
-  orbitHitWall: Schemas.Map({ t: Schemas.Int }),
-  orbitStarted: Schemas.Map({ playerId: Schemas.String, durationMs: Schemas.Int, startAngle: Schemas.Float }),
-  orbitHit: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String, attackerId: Schemas.String }),
-  orbitEnded: Schemas.Map({ playerId: Schemas.String }),
 
   // Speed boost trail sync (client → server)
   reportBoost: Schemas.Map({ tier: Schemas.String, duration: Schemas.Float }),
+
+  // Coin pickup
+  requestCoinPickup: Schemas.Map({ coinId: Schemas.String }),
+  requestWalletBalance: Schemas.Map({ t: Schemas.Int }),
+
+  // Store / upgrades
+  requestUpgrades: Schemas.Map({ t: Schemas.Int }),
+  buyBoomerang: Schemas.Map({ color: Schemas.String }),
+  equipBoomerang: Schemas.Map({ color: Schemas.String }),
+
+  // Death penalty
+  deathPenalty: Schemas.Map({ cause: Schemas.String }),
+
+  // Reload respawn
+  requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
+
+  // Admin
+  testDiscord: Schemas.Map({ t: Schemas.Int }),
+
+  // ── Server → Client ──
+
+  // Infection events
+  playerInfected: Schemas.Map({ victimId: Schemas.String, attackerId: Schemas.String }),
+  roundStartInfection: Schemas.Map({ patientZeroId: Schemas.String }),
+  lastHumanWin: Schemas.Map({ winnerId: Schemas.String, survivalSeconds: Schemas.Float }),
+  allHumansInfected: Schemas.Map({ t: Schemas.Int }),
+
+  // Sword events
+  swordPickupConfirmed: Schemas.Map({ playerId: Schemas.String }),
+  swordPickupSound: Schemas.Map({ t: Schemas.Int }),
+  swordDropSound: Schemas.Map({ t: Schemas.Int }),
+  swordAttackVfx: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, attackerId: Schemas.String }),
+
+  // Slime killed by sword → enters respawn cooldown
+  slimeKilled: Schemas.Map({ slimeId: Schemas.String, killedBy: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+  slimeRespawned: Schemas.Map({ slimeId: Schemas.String }),
+
+  // Stagger (from traps or sword hits)
+  stagger: Schemas.Map({ victimId: Schemas.String }),
+
+  // Traps
+  bananaDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String }),
+  bananaTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
+
+  // Updraft
+  updraftLocation: Schemas.Map({ index: Schemas.Int }),
+
   // Speed boost trail sync (server → all clients)
   playerBoosted: Schemas.Map({ playerId: Schemas.String, tier: Schemas.String, duration: Schemas.Float }),
 
-  // Boomerang charge sync
-  chargeStart: Schemas.Map({ t: Schemas.Int }),
-  chargeStop: Schemas.Map({ t: Schemas.Int }),
-  chargeBurnout: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
-  playerChargeStart: Schemas.Map({ playerId: Schemas.String, t: Schemas.Int }),
-  playerChargeStop: Schemas.Map({ playerId: Schemas.String, t: Schemas.Int }),
-
-  // Lightning (carrier client → all clients)
-  lightningWarning: Schemas.Map({ t: Schemas.Int }),
-  lightningStrike: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
-
   // Round end respawn
-  requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
   respawnPlayers: Schemas.Map({ t: Schemas.Int, winnersJson: Schemas.String }),
 
-  // Admin: trigger Discord report manually
-  testDiscord: Schemas.Map({ t: Schemas.Int }),
+  // Coins
+  coinPickedUp: Schemas.Map({ coinId: Schemas.String, playerId: Schemas.String, newBalance: Schemas.Int }),
+  coinRespawned: Schemas.Map({ coinId: Schemas.String }),
+  walletBalance: Schemas.Map({ playerId: Schemas.String, coins: Schemas.Int }),
+  roundCoinsEarned: Schemas.Map({ playerId: Schemas.String, total: Schemas.Int, participation: Schemas.Int, holdTime: Schemas.Int, placement: Schemas.Int, rank: Schemas.Int, newBalance: Schemas.Int }),
 
-  // Coin messages
-  requestCoinPickup: Schemas.Map({ coinId: Schemas.String }),           // Client → Server: player wants to pick up a coin
-  coinPickedUp: Schemas.Map({ coinId: Schemas.String, playerId: Schemas.String, newBalance: Schemas.Int }),  // Server → Client: coin was picked up
-  coinRespawned: Schemas.Map({ coinId: Schemas.String }),               // Server → Client: coin is back
-  requestWalletBalance: Schemas.Map({ t: Schemas.Int }),                // Client → Server: request current balance on join
-  walletBalance: Schemas.Map({ playerId: Schemas.String, coins: Schemas.Int }),  // Server → Client: your current balance
-  roundCoinsEarned: Schemas.Map({ playerId: Schemas.String, total: Schemas.Int, participation: Schemas.Int, holdTime: Schemas.Int, placement: Schemas.Int, rank: Schemas.Int, newBalance: Schemas.Int }), // Server → Client: round-end earnings breakdown
-
-  // Store / upgrade messages
-  requestUpgrades: Schemas.Map({ t: Schemas.Int }),                    // Client → Server: request my upgrades + lifetime wins on join
-  upgradesResponse: Schemas.Map({ upgradesJson: Schemas.String, wins: Schemas.Int }),  // Server → Client: direct response with upgrade data
-  buyBoomerang: Schemas.Map({ color: Schemas.String }),                // Client → Server: purchase a boomerang
-  buyResult: Schemas.Map({ success: Schemas.Boolean, color: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),  // Server → Client
-  equipBoomerang: Schemas.Map({ color: Schemas.String }),              // Client → Server: equip an owned boomerang
-
-  // Zombie messages
-  zombieHit: Schemas.Map({ zombieId: Schemas.Float }),          // Client → Server: boomerang hit a zombie
-  zombieKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: zombie died (VFX)
-  // zombieStagger and ghostDeath removed — replaced by ghostTouching + scare meter
-  ghostTouching: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: ghost is touching a player this frame
+  // Store / upgrades
+  upgradesResponse: Schemas.Map({ upgradesJson: Schemas.String, wins: Schemas.Int }),
+  buyResult: Schemas.Map({ success: Schemas.Boolean, color: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),
 
   // Death penalty
-  deathPenalty: Schemas.Map({ cause: Schemas.String }),           // Client → Server: player died, deduct coins
-  deathPenaltyApplied: Schemas.Map({ playerId: Schemas.String, penalty: Schemas.Int, newBalance: Schemas.Int }),  // Server → Client
-
+  deathPenaltyApplied: Schemas.Map({ playerId: Schemas.String, penalty: Schemas.Int, newBalance: Schemas.Int }),
 }
 
 export const room = registerMessages(Messages)
