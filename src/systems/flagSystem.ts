@@ -238,6 +238,8 @@ const AUTO_PICKUP_COOLDOWN_MS = 500 // don't spam server
 let lastAutoPickupRequestMs = 0
 const DROP_PICKUP_COOLDOWN_MS = 2000 // after dropping, can't auto-pickup for 2s
 let lastDropTimeMs = 0
+const WITNESSED_DROP_COOLDOWN_MS = 750 // after seeing anyone drop, brief cooldown to let server settle
+let lastWitnessedDropTimeMs = 0
 
 // Sound entities
 let pickupSoundEntity: Entity | null = null
@@ -398,7 +400,7 @@ export function flagClientSystem(dt: number): void {
       }
     }
 
-    if (!amCarrying && !isLightningRespawning() && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS) {
+    if (!amCarrying && !isLightningRespawning() && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS && now - lastWitnessedDropTimeMs >= WITNESSED_DROP_COOLDOWN_MS) {
       const myPos = Transform.get(engine.PlayerEntity).position
       for (const [flagEnt, flag] of engine.getEntitiesWith(Flag, Transform)) {
         if (flag.state === FlagState.Carried) continue
@@ -525,6 +527,9 @@ export function flagClientSystem(dt: number): void {
       }
 
     } else if (needsCloneRemove) {
+      // Brief cooldown so auto-pickup doesn't fire before the server has fully settled the drop
+      lastWitnessedDropTimeMs = Date.now()
+
       // CRDT confirms flag is no longer carried — clear any grace period
       confirmedGraceUntil = 0
       confirmedGraceCarrier = ''

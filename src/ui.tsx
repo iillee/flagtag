@@ -1586,8 +1586,8 @@ function DesktopLayout() {
               <Label value={"Drop bananas (F) to block\nboomerangs and stun pursuers"} fontSize={S(13)} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: S(10) } }} />
               {/* Trap image */}
               <UiEntity
-                uiTransform={{ width: S(120), height: S(120) }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
+                uiTransform={{ width: S(81), height: S(81) }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: Color4.White() }}
               />
               <Label value={GAME_VERSION} fontSize={S(10)} color={Color4.create(1, 1, 1, 0.35)} font="sans-serif" uiTransform={{ margin: { top: S(8) } }} />
             </UiEntity>
@@ -2153,7 +2153,7 @@ function DesktopLayout() {
 
                   {sectionHeader('EQUIPMENT')}
                   {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
-                  {iconRow('Trap', 'Banana', 'assets/images/banana-color.png')}
+                  {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
                 </UiEntity>
               )
             })()}
@@ -2589,10 +2589,10 @@ function DesktopLayout() {
               uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) } }}
             />
             <UiEntity
-              uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3, height: S(_ABILITY_ICON_SIZE) * 1.3, margin: { top: S(2) } }}
+              uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675, height: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675, margin: { top: S(2) } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: 'assets/images/banana-color.png' },
+                texture: { src: 'assets/images/banana.png' },
                 color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
               }}
             />
@@ -2953,10 +2953,10 @@ function MobileLayout() {
             onMouseDown={() => { triggerTrapFromUI() }}
           >
             <UiEntity
-              uiTransform={{ width: Math.round(AB_ICON * 1.25), height: Math.round(AB_ICON * 1.25) }}
+              uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1 * 1.1) }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: 'assets/images/banana-color.png' },
+                texture: { src: 'assets/images/banana.png' },
                 color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White()
               }}
             />
@@ -3223,8 +3223,8 @@ function MobileLayout() {
               <Label value={"Drop bananas (F) to block\nboomerangs and stun pursuers"} fontSize={13} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ margin: { bottom: 10 } }} />
               {/* Trap image */}
               <UiEntity
-                uiTransform={{ width: 120, height: 120 }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana-color.png' }, color: Color4.White() }}
+                uiTransform={{ width: 81, height: 81 }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: Color4.White() }}
               />
               <Label value={GAME_VERSION} fontSize={10} color={Color4.create(1, 1, 1, 0.35)} font="sans-serif" uiTransform={{ margin: { top: 8 } }} />
             </UiEntity>

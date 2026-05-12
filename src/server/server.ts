@@ -257,9 +257,12 @@ let lastDropperId = ''  // Who dropped the flag — only accept reportGroundY fr
 const CARRIER_NO_POSITION_TIMEOUT_MS = 5000   // No position data → likely disconnected
 let lastCarrierPositionMs = 0          // Last time we got a valid position from carrier
 
+let lastKnownCarrierPos: Vector3 | null = null  // Best-effort position for force-drops when getPlayerPosition is null
+
 function resetCarrierTracking(): void {
   lastCarrierPositionMs = 0
   carrierYSamples.length = 0
+  lastKnownCarrierPos = null
 }
 
 function isRealName(name: string): boolean {
@@ -2000,6 +2003,7 @@ function handlePickup(playerId: string): void {
   mutable.carrierPlayerId = playerId
 
   resetGravityState()
+  lastCarrierPositionMs = Date.now() // Start staleness timer so force-drop works even if position never syncs
   lastStealTime.set(playerId, Date.now()) // Grant immunity on pickup too
   room.send('pickupConfirmed', { playerId })
   room.send('flagImmunity', { playerId, durationMs: STEAL_IMMUNITY_MS })
@@ -2020,6 +2024,10 @@ function handleDrop(playerId: string): void {
   if (playerPos) {
     // Drop at player's feet (not behind them) to prevent wall clipping
     dropPos = Vector3.add(playerPos, Vector3.create(0, 0.5, 0))
+  } else if (lastKnownCarrierPos) {
+    // Use last tracked position instead of stale flagEntity Transform
+    dropPos = Vector3.add(lastKnownCarrierPos, Vector3.create(0, 0.5, 0))
+    console.log('[Server] ⚠️ handleDrop: no live position for', playerId.slice(0, 8), '— using last known carrier pos')
   } else {
     dropPos = Transform.get(flagEntity).position
   }
@@ -2058,6 +2066,7 @@ function handleFlagSteal(victimId: string, attackerId: string): void {
 
   lastStealTime.set(attackerId, Date.now())
   resetGravityState()
+  lastCarrierPositionMs = Date.now() // Start staleness timer for new carrier
   room.send('pickupConfirmed', { playerId: attackerId })
   room.send('flagImmunity', { playerId: attackerId, durationMs: STEAL_IMMUNITY_MS })
   room.send('pickupSound', { t: 0 })
@@ -2610,6 +2619,7 @@ function flagServerSystem(dt: number): void {
     const carrierPos = getPlayerPosition(flag.carrierPlayerId)
     if (carrierPos) {
       lastCarrierPositionMs = nowMs
+      lastKnownCarrierPos = Vector3.create(carrierPos.x, carrierPos.y, carrierPos.z)
 
       // Y samples for gravity estimation
       const nowSec = nowMs / 1000
@@ -2623,16 +2633,19 @@ function flagServerSystem(dt: number): void {
     if (lastCarrierPositionMs > 0 && (nowMs - lastCarrierPositionMs) > CARRIER_NO_POSITION_TIMEOUT_MS) {
       console.log('[Server] ⚠️ STALE CARRIER DETECTED:', flag.carrierPlayerId.slice(0, 8), '- no position data for', Math.round((nowMs - lastCarrierPositionMs) / 1000) + 's — force-dropping flag')
       flushHoldTimeAccum()
-      const flagPos = Transform.get(flagEntity).position
+      // Use last known carrier position if available, otherwise fall back to stale flagEntity Transform
+      const dropPos = lastKnownCarrierPos
+        ? Vector3.create(lastKnownCarrierPos.x, lastKnownCarrierPos.y + 0.5, lastKnownCarrierPos.z)
+        : Transform.get(flagEntity).position
       const mutable = Flag.getMutable(flagEntity)
       mutable.state = FlagState.Dropped
       mutable.carrierPlayerId = ''
-      mutable.dropAnchorX = flagPos.x
-      mutable.dropAnchorY = flagPos.y
-      mutable.dropAnchorZ = flagPos.z
+      mutable.dropAnchorX = dropPos.x
+      mutable.dropAnchorY = dropPos.y
+      mutable.dropAnchorZ = dropPos.z
       lastDropperId = ''  // No specific dropper — accept first non-quarantined report
       resetCarrierTracking()
-      computeGravityTarget(flagPos.y)
+      computeGravityTarget(dropPos.y)
       room.send('dropSound', { t: 0 })
       persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
     }
@@ -2702,17 +2715,19 @@ function flagServerSystem(dt: number): void {
     if (!carrierConnected) {
       console.log('[Server] ⚠️ Carrier', carrierLower.slice(0, 8), 'disconnected (PlayerIdentityData gone) — dropping flag')
       flushHoldTimeAccum()
-      const flagPos = Transform.get(flagEntity).position
+      const dropPos = lastKnownCarrierPos
+        ? Vector3.create(lastKnownCarrierPos.x, lastKnownCarrierPos.y + 0.5, lastKnownCarrierPos.z)
+        : Transform.get(flagEntity).position
       const mutable = Flag.getMutable(flagEntity)
       mutable.state = FlagState.Dropped
       mutable.carrierPlayerId = ''
-      mutable.dropAnchorX = flagPos.x
-      mutable.dropAnchorY = flagPos.y
-      mutable.dropAnchorZ = flagPos.z
+      mutable.dropAnchorX = dropPos.x
+      mutable.dropAnchorY = dropPos.y
+      mutable.dropAnchorZ = dropPos.z
       lastDropperId = ''  // No specific dropper — accept first non-quarantined report
 
       resetCarrierTracking()
-      computeGravityTarget(flagPos.y)
+      computeGravityTarget(dropPos.y)
 
       room.send('dropSound', { t: 0 })
       persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))

@@ -25,6 +25,7 @@
     "trailingComma": "none"
   },
   "dependencies": {
-    "@dcl/js-runtime": "7.23.2-25521226778.commit-1828100"
+    "@dcl/js-runtime": "7.23.2-25521226778.commit-1828100",
+    "sharp": "^0.34.5"
   }
 }
