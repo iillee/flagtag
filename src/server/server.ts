@@ -10,8 +10,7 @@ import {
   playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
   deathPenaltyCooldowns, lastStealTime,
   visitorSessions, monthlyVisitorSessions, currentlyConnected,
-  PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
-  SPLASH_DURATION_MS, FLAG_GRAVITY, FLAG_MIN_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
+  SPLASH_DURATION_MS, FLAG_GRAVITY,
   MUSHROOM_CX, MUSHROOM_CZ, MUSHROOM_RADIUS, MUSHROOM_CANDIDATES,
   isRealName, getPlayerPosition,
   lastVisitorResetDay, setLastVisitorResetDay,
@@ -42,7 +41,7 @@ import {
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
   Zombie, ZOMBIE_DETECT_RADIUS, ZOMBIE_SPEED, ZOMBIE_FAST_SPEED, ZOMBIE_FAST_DIST, ZOMBIE_HIT_RADIUS, ZOMBIE_SPAWN_INTERVAL, ZOMBIE_MAX_ACTIVE,
   getNextZombieSyncId, recycleZombieSyncId,
-  getHoldTimeEntityEnumId, getNextTrapSyncId, recycleTrapSyncId, getNextProjectileSyncId, recycleProjectileSyncId,
+  getNextTrapSyncId, recycleTrapSyncId, getNextProjectileSyncId, recycleProjectileSyncId,
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString
 } from '../shared/components'
 import { room } from '../shared/messages'
@@ -56,6 +55,12 @@ import {
   loadPlayerLifetimeWins, addPlayerLifetimeWin, getOrCreateLifetimeWinsEntity,
   coinServerSystem, awardRoundCoins, registerEconomyHandlers
 } from './economy'
+import {
+  handleDrop, flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor,
+  resetGravityState, getOrCreateHoldTimeEntity,
+  flagServerSystem, holdTimeServerSystem, checkProximitySteal,
+  registerFlagHandlers
+} from './flagLogic'
 import type { BoomerangColor } from '../gameState/boomerangColor'
 
 // Constants moved to serverState.ts
@@ -76,8 +81,7 @@ let mushroomIdCounter = 0
 
 // Entity references moved to serverState.ts
 
-let holdTimeAccum = 0
-let holdTimeCarrierKey = '' // Track WHO we're accumulating for
+// holdTimeAccum, holdTimeCarrierKey moved to flagLogic.ts
 
 // ── Lightning state ──
 const LIGHTNING_ROLL_INTERVAL = 5 // seconds between probability rolls
@@ -101,31 +105,13 @@ function getCarrierHoldSeconds(): number {
   const key = flag.carrierPlayerId.toLowerCase()
   const entity = holdTimeEntities.get(key)
   if (!entity) return 0
-  return (PlayerFlagHoldTime.getOrNull(entity)?.seconds ?? 0) + (holdTimeCarrierKey === key ? holdTimeAccum : 0)
+  return (PlayerFlagHoldTime.getOrNull(entity)?.seconds ?? 0) + getHoldTimeAccumFor(key)
 }
 
 // lastStealTime, holdTimeEntities, knownPlayers, playerNames moved to serverState.ts
 // lastLeaderboardResetDay moved to serverState.ts
 
-/**
- * Single entry point for creating/retrieving a PlayerFlagHoldTime entity.
- * Prevents the race condition where both playerTrackingSystem and
- * holdTimeServerSystem create duplicate entities for the same player.
- */
-function getOrCreateHoldTimeEntity(userKey: string): Entity {
-  const key = userKey.toLowerCase()
-  let entity = holdTimeEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: 0 })
-  syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(key))
-  holdTimeEntities.set(key, entity)
-  knownPlayers.add(key)
-  console.log('[Server] Created hold-time entity for', key.slice(0, 8))
-  return entity
-}
-// Note: getOrCreateHoldTimeEntity stays here for now — uses holdTimeEntities/knownPlayers from serverState
+// getOrCreateHoldTimeEntity moved to flagLogic.ts
 
 // visitorSessions, monthlyVisitorSessions, playerBoomerangColors, deathPenaltyCooldowns moved to serverState.ts
 // lastVisitorResetDay, lastMonthlyVisitorResetMonth, hourlyPeakConcurrent, peakConcurrent, peakConcurrentTime moved to serverState.ts
@@ -210,24 +196,7 @@ interface ActiveProjectile {
 const activeProjectiles: ActiveProjectile[] = []
 
 
-// Gravity state for dropped flag
-let flagFalling = false
-let flagFallVelocity = 0
-let flagGravityTargetY = FLAG_MIN_Y
-const carrierYSamples: { y: number; time: number }[] = []
-let lastDropperId = ''  // Who dropped the flag — only accept reportGroundY from them
-
-// CARRIER_NO_POSITION_TIMEOUT_MS moved to serverState.ts
-// Carrier staleness detection — force-drop if carrier position is unavailable
-let lastCarrierPositionMs = 0          // Last time we got a valid position from carrier
-
-let lastKnownCarrierPos: Vector3 | null = null  // Best-effort position for force-drops when getPlayerPosition is null
-
-function resetCarrierTracking(): void {
-  lastCarrierPositionMs = 0
-  carrierYSamples.length = 0
-  lastKnownCarrierPos = null
-}
+// Gravity state, carrier tracking moved to flagLogic.ts
 
 // isRealName moved to serverState.ts
 
@@ -472,6 +441,7 @@ export async function setupServer(): Promise<void> {
 
   // Register message handlers
   registerHandlers()
+  registerFlagHandlers()
   registerEconomyHandlers()
 
   // Register systems
@@ -505,44 +475,8 @@ export async function setupServer(): Promise<void> {
 
 // ── Gravity helpers ──
 
-/**
- * Compute where the flag should land based on the carrier's recent ground-level Y.
- * We track the carrier's Y over the last ~2 seconds. The minimum Y in that window
- * is our best estimate of the terrain they were walking on. If the flag is dropped
- * above that level (e.g. mid-jump), gravity pulls it down to the estimated ground.
- */
-function computeGravityTarget(dropY: number): void {
-  let minY = Infinity
-  for (const s of carrierYSamples) {
-    if (s.y < minY) minY = s.y
-  }
-  // If we have history, use the lowest recent Y + small offset; otherwise assume near drop point
-  const groundEstimate = minY === Infinity ? dropY - 0.5 : minY
-  flagGravityTargetY = Math.max(FLAG_MIN_Y, groundEstimate + 0.5)
-  carrierYSamples.length = 0
-
-  if (dropY > flagGravityTargetY + 0.1) {
-    flagFalling = true
-    flagFallVelocity = 0
-  } else {
-    flagFalling = false
-  }
-}
-
-function resetGravityState(): void {
-  flagFalling = false
-  flagFallVelocity = 0
-  carrierYSamples.length = 0
-  resetCarrierTracking()
-}
-
-/**
- * Update a player's display name across all server data stores.
- * Called when a real name is resolved (via registerName message or AvatarBase scan).
- * Returns true if the name was actually updated (was different from what we had).
- */
+// computeGravityTarget, resetGravityState moved to flagLogic.ts
 // updatePlayerName moved to leaderboard.ts
-
 // Coin helpers, upgrade helpers, store logic, coinServerSystem, awardRoundCoins moved to economy.ts
 
 // ── Message handlers ──
@@ -563,39 +497,8 @@ function registerHandlers(): void {
       }
     } catch (err) { console.error('[Server] ❌ registerName handler error:', err) }
   })
-  room.onMessage('requestPickup', (_data, context) => {
-    try {
-      if (!context) return
-      handlePickup(context.from.toLowerCase())
-    } catch (err) { console.error('[Server] ❌ requestPickup handler error:', err) }
-  })
-  room.onMessage('requestDrop', (_data, context) => {
-    try {
-      if (!context) return
-      handleDrop(context.from.toLowerCase())
-    } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
-  })
-
+  // requestPickup, requestDrop, requestReloadRespawn moved to flagLogic.ts (registerFlagHandlers)
   // deathPenalty handler moved to economy.ts (registerEconomyHandlers)
-  // Reload-respawn: player reloaded scene while carrying flag → respawn at random point
-  room.onMessage('requestReloadRespawn', (_data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const flag = Flag.getOrNull(flagEntity)
-      if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== from) return
-      const spawn = getRandomSpawnPoint()
-      const mutable = Flag.getMutable(flagEntity)
-      mutable.state = FlagState.AtBase
-      mutable.carrierPlayerId = ''
-      mutable.baseX = spawn.x
-      mutable.baseY = spawn.y
-      mutable.baseZ = spawn.z
-      const t = Transform.getMutable(flagEntity)
-      t.position = Vector3.create(spawn.x, spawn.y, spawn.z)
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-    } catch (err) { console.error('[Server] ❌ requestReloadRespawn handler error:', err) }
-  })
   room.onMessage('requestBanana', (_data, context) => {
     try {
       if (!context) return
@@ -678,31 +581,7 @@ function registerHandlers(): void {
       }
     } catch (err) { console.error('[Server] ❌ reportBananaGroundY handler error:', err) }
   })
-  room.onMessage('reportGroundY', (data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      // Only accept ground report from the player who dropped the flag
-      if (lastDropperId && from !== lastDropperId) return
-      const flag = Flag.getOrNull(flagEntity)
-      if (!flag || flag.state !== FlagState.Dropped) return
-
-      const newTarget = Math.max(FLAG_MIN_Y, data.y + 0.5)
-      flagGravityTargetY = newTarget
-
-      const currentAnchorY = flag.dropAnchorY
-      if (currentAnchorY <= newTarget) {
-        const flagMutable = Flag.getMutable(flagEntity)
-        flagMutable.dropAnchorY = newTarget
-        flagFalling = false
-        flagFallVelocity = 0
-        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-      } else if (!flagFalling) {
-        flagFalling = true
-        flagFallVelocity = 0
-      }
-    } catch (err) { console.error('[Server] ❌ reportGroundY handler error:', err) }
-  })
+  // reportGroundY moved to flagLogic.ts (registerFlagHandlers)
 
   // ── Mushroom position request (client asks on connect) ──
   room.onMessage('requestMushroomPositions', (_data, _context) => {
@@ -834,134 +713,7 @@ function updraftServerSystem(dt: number) {
 // LeaderboardEntry, parseLeaderboardJson, incrementLeaderboardWins,
 // patchLeaderboardNames, patchAllLeaderboardNames moved to leaderboard.ts
 
-function handlePickup(playerId: string): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  if (flag.state !== FlagState.AtBase && flag.state !== FlagState.Dropped) return
-
-  const playerPos = getPlayerPosition(playerId)
-  if (playerPos) {
-    const flagPos = Transform.get(flagEntity).position
-    const dist = Vector3.distance(playerPos, flagPos)
-    if (dist > PICKUP_RADIUS) return
-  } else {
-    // Player position not yet synced — trust client-side proximity check
-    console.log('[Server] ⚠️ handlePickup: no position for', playerId.slice(0, 8), '— trusting client proximity')
-  }
-
-  // Flush any leftover hold time from a previous carrier (safety)
-  flushHoldTimeAccum()
-
-  const mutable = Flag.getMutable(flagEntity)
-  mutable.state = FlagState.Carried
-  mutable.carrierPlayerId = playerId
-
-  resetGravityState()
-  lastCarrierPositionMs = Date.now() // Start staleness timer so force-drop works even if position never syncs
-  lastStealTime.set(playerId, Date.now()) // Grant immunity on pickup too
-  room.send('pickupConfirmed', { playerId })
-  room.send('flagImmunity', { playerId, durationMs: STEAL_IMMUNITY_MS })
-  room.send('pickupSound', { t: 0 })
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-}
-
-function handleDrop(playerId: string): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return
-
-  // Flush accumulated hold time to the carrier BEFORE dropping
-  flushHoldTimeAccum()
-
-  const playerPos = getPlayerPosition(playerId)
-  let dropPos: Vector3
-  if (playerPos) {
-    // Drop at player's feet (not behind them) to prevent wall clipping
-    dropPos = Vector3.add(playerPos, Vector3.create(0, 0.5, 0))
-  } else if (lastKnownCarrierPos) {
-    // Use last tracked position instead of stale flagEntity Transform
-    dropPos = Vector3.add(lastKnownCarrierPos, Vector3.create(0, 0.5, 0))
-    console.log('[Server] ⚠️ handleDrop: no live position for', playerId.slice(0, 8), '— using last known carrier pos')
-  } else {
-    dropPos = Transform.get(flagEntity).position
-  }
-
-  const mutable = Flag.getMutable(flagEntity)
-  mutable.state = FlagState.Dropped
-  mutable.carrierPlayerId = ''
-  mutable.dropAnchorX = dropPos.x
-  mutable.dropAnchorY = dropPos.y
-  mutable.dropAnchorZ = dropPos.z
-
-  const t = Transform.getMutable(flagEntity)
-  t.position = dropPos
-
-  // Track who dropped — only accept reportGroundY from this player
-  lastDropperId = playerId
-
-  // Start gravity — estimate ground from carrier's recent Y history
-  computeGravityTarget(dropPos.y)
-
-  room.send('dropSound', { t: 0 })
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-}
-
-function handleFlagSteal(victimId: string, attackerId: string): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) return
-
-  // Flush accumulated hold time to the VICTIM before transferring flag
-  flushHoldTimeAccum()
-
-  const mutable = Flag.getMutable(flagEntity)
-  mutable.state = FlagState.Carried
-  mutable.carrierPlayerId = attackerId
-
-  lastStealTime.set(attackerId, Date.now())
-  resetGravityState()
-  lastCarrierPositionMs = Date.now() // Start staleness timer for new carrier
-  room.send('pickupConfirmed', { playerId: attackerId })
-  room.send('flagImmunity', { playerId: attackerId, durationMs: STEAL_IMMUNITY_MS })
-  room.send('pickupSound', { t: 0 })
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-}
-
-/** Proximity steal — called every server tick to check if any player is close enough to steal the flag. */
-function checkProximitySteal(): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) return
-
-  const carrierId = flag.carrierPlayerId
-  const carrierPos = getPlayerPosition(carrierId)
-  if (!carrierPos) return
-
-  const now = Date.now()
-  // Carrier has steal immunity — nobody can take it from them yet
-  const carrierStealTime = lastStealTime.get(carrierId) ?? 0
-  if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
-
-  let closestId: string | null = null
-  let closestDist = PROXIMITY_STEAL_RADIUS
-
-  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    const addr = identity.address.toLowerCase()
-    if (addr === carrierId) continue
-
-    const pos = getPlayerPosition(addr)
-    if (!pos) continue
-    const dist = Vector3.distance(carrierPos, pos)
-    if (dist < closestDist) {
-      closestDist = dist
-      closestId = addr
-    }
-  }
-
-  if (closestId) {
-    console.log('[Server] 🚩 Proximity steal:', closestId.slice(0, 8), '<-', carrierId.slice(0, 8))
-    handleFlagSteal(carrierId, closestId)
-  }
-}
+// handlePickup, handleDrop, handleFlagSteal, checkProximitySteal moved to flagLogic.ts
 
 function handleTrapDrop(playerId: string): void {
   const now = Date.now()
@@ -1472,176 +1224,9 @@ function shellServerSystem(dt: number): void {
 
 // ── Server Systems ──
 
-function flagServerSystem(dt: number): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
+// flagServerSystem moved to flagLogic.ts
 
-  const clampedDt = Math.min(dt, 0.1)
-
-  // Track carrier Y for gravity target estimation + staleness detection
-  if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
-    const nowMs = Date.now()
-    const carrierPos = getPlayerPosition(flag.carrierPlayerId)
-    if (carrierPos) {
-      lastCarrierPositionMs = nowMs
-      lastKnownCarrierPos = Vector3.create(carrierPos.x, carrierPos.y, carrierPos.z)
-
-      // Y samples for gravity estimation
-      const nowSec = nowMs / 1000
-      carrierYSamples.push({ y: carrierPos.y, time: nowSec })
-      while (carrierYSamples.length > 0 && nowSec - carrierYSamples[0].time > CARRIER_Y_WINDOW_SEC) {
-        carrierYSamples.shift()
-      }
-    }
-
-    // Staleness check: force-drop if carrier position is unavailable for 5s
-    if (lastCarrierPositionMs > 0 && (nowMs - lastCarrierPositionMs) > CARRIER_NO_POSITION_TIMEOUT_MS) {
-      console.log('[Server] ⚠️ STALE CARRIER DETECTED:', flag.carrierPlayerId.slice(0, 8), '- no position data for', Math.round((nowMs - lastCarrierPositionMs) / 1000) + 's — force-dropping flag')
-      flushHoldTimeAccum()
-      // Use last known carrier position if available, otherwise fall back to stale flagEntity Transform
-      const dropPos = lastKnownCarrierPos
-        ? Vector3.create(lastKnownCarrierPos.x, lastKnownCarrierPos.y + 0.5, lastKnownCarrierPos.z)
-        : Transform.get(flagEntity).position
-      const mutable = Flag.getMutable(flagEntity)
-      mutable.state = FlagState.Dropped
-      mutable.carrierPlayerId = ''
-      mutable.dropAnchorX = dropPos.x
-      mutable.dropAnchorY = dropPos.y
-      mutable.dropAnchorZ = dropPos.z
-      lastDropperId = ''  // No specific dropper — accept first non-quarantined report
-      resetCarrierTracking()
-      computeGravityTarget(dropPos.y)
-      room.send('dropSound', { t: 0 })
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-    }
-  } else {
-    // Not carried — reset tracking so next pickup starts fresh
-    resetCarrierTracking()
-  }
-
-  // Gravity for dropped flag — accelerate downward until reaching ground estimate
-  let currentAnchorY = flag.dropAnchorY
-  if (flag.state === FlagState.Dropped && flagFalling) {
-    flagFallVelocity += FLAG_GRAVITY * clampedDt
-    let newY = currentAnchorY - flagFallVelocity * clampedDt
-    if (newY <= flagGravityTargetY) {
-      newY = flagGravityTargetY
-      flagFalling = false
-      flagFallVelocity = 0
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-    }
-    currentAnchorY = newY
-    const flagMutable = Flag.getMutable(flagEntity)
-    flagMutable.dropAnchorY = newY
-  }
-
-  // Water respawn: if flag drops below water level, respawn at a random spawn point
-  const WATER_RESPAWN_Y = 1.58
-  if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y) {
-    const spawn = getRandomSpawnPoint()
-    console.log('[Server] 🌊 Flag fell in water (Y=' + currentAnchorY.toFixed(2) + ') — respawning at', spawn.x, spawn.y, spawn.z)
-    const flagMutable2 = Flag.getMutable(flagEntity)
-    flagMutable2.state = FlagState.AtBase
-    flagMutable2.carrierPlayerId = ''
-    flagMutable2.baseX = spawn.x
-    flagMutable2.baseY = spawn.y
-    flagMutable2.baseZ = spawn.z
-    flagMutable2.dropAnchorX = spawn.x
-    flagMutable2.dropAnchorY = spawn.y
-    flagMutable2.dropAnchorZ = spawn.z
-    const t2 = Transform.getMutable(flagEntity)
-    t2.position = Vector3.create(spawn.x, spawn.y, spawn.z)
-    flagFalling = false
-    flagFallVelocity = 0
-    persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-  }
-
-  // Server only writes the raw rest position — no bob/spin animation.
-  // Bob and spin are handled client-side to eliminate ~10Hz CRDT writes.
-  // Only write Transform when the flag is falling (gravity updates).
-  if (flag.state !== FlagState.Carried && flagFalling) {
-    const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
-    const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
-    const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
-    const t = Transform.getMutable(flagEntity)
-    t.position = Vector3.create(restX, restY, restZ)
-  }
-
-  // Detect carrier disconnect (case-insensitive address comparison)
-  if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
-    let carrierConnected = false
-    const carrierLower = flag.carrierPlayerId.toLowerCase()
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-      if (identity.address.toLowerCase() === carrierLower) {
-        carrierConnected = true
-        break
-      }
-    }
-    if (!carrierConnected) {
-      console.log('[Server] ⚠️ Carrier', carrierLower.slice(0, 8), 'disconnected (PlayerIdentityData gone) — dropping flag')
-      flushHoldTimeAccum()
-      const dropPos = lastKnownCarrierPos
-        ? Vector3.create(lastKnownCarrierPos.x, lastKnownCarrierPos.y + 0.5, lastKnownCarrierPos.z)
-        : Transform.get(flagEntity).position
-      const mutable = Flag.getMutable(flagEntity)
-      mutable.state = FlagState.Dropped
-      mutable.carrierPlayerId = ''
-      mutable.dropAnchorX = dropPos.x
-      mutable.dropAnchorY = dropPos.y
-      mutable.dropAnchorZ = dropPos.z
-      lastDropperId = ''  // No specific dropper — accept first non-quarantined report
-
-      resetCarrierTracking()
-      computeGravityTarget(dropPos.y)
-
-      room.send('dropSound', { t: 0 })
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-    }
-  }
-}
-
-/**
- * Flush any accumulated hold time to the specified player.
- * Called when the carrier changes or the flag is dropped so that
- * no accumulated time is lost or credited to the wrong player.
- */
-function flushHoldTimeAccum(): void {
-  if (holdTimeAccum > 0 && holdTimeCarrierKey) {
-    const entity = getOrCreateHoldTimeEntity(holdTimeCarrierKey)
-    const mutable = PlayerFlagHoldTime.getMutable(entity)
-    mutable.seconds += holdTimeAccum
-    console.log('[Server] Flushed', holdTimeAccum.toFixed(2), 's hold time to', holdTimeCarrierKey.slice(0, 8), '(total:', mutable.seconds.toFixed(1), 's)')
-  }
-  holdTimeAccum = 0
-  holdTimeCarrierKey = ''
-}
-
-function holdTimeServerSystem(dt: number): void {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) {
-    // Flag not carried — flush any remaining time to the previous carrier
-    flushHoldTimeAccum()
-    return
-  }
-
-  const carrierKey = flag.carrierPlayerId.toLowerCase()
-
-  // Carrier changed — flush accumulated time to the PREVIOUS carrier first
-  if (carrierKey !== holdTimeCarrierKey) {
-    flushHoldTimeAccum()
-    holdTimeCarrierKey = carrierKey
-  }
-
-  holdTimeAccum += Math.min(dt, 0.1)
-  if (holdTimeAccum < HOLD_TIME_SYNC_INTERVAL) return
-
-  // Use centralized helper — safe to call even if entity already exists
-  const entity = getOrCreateHoldTimeEntity(carrierKey)
-
-  const mutable = PlayerFlagHoldTime.getMutable(entity)
-  mutable.seconds += holdTimeAccum
-  holdTimeAccum = 0
-}
+// flushHoldTimeAccum, holdTimeServerSystem moved to flagLogic.ts
 
 function lightningServerSystem(dt: number): void {
   const flag = Flag.getOrNull(flagEntity)
@@ -1977,8 +1562,7 @@ async function handleRoundEnd(): Promise<void> {
 
   // Force-clear accumulator again (holdTimeServerSystem cannot have run since
   // step 0a because we haven't hit any await yet, but be defensive)
-  holdTimeAccum = 0
-  holdTimeCarrierKey = ''
+  clearHoldTimeAccum()
 
   // ── 3. Remove all active traps ──
   for (const trap of activeTraps) {
