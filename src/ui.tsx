@@ -1146,10 +1146,9 @@ function PlayerListUi() {
                         {/* Flag requirement as fraction */}
                         {item.flagsRequired > 0 && (
                           <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: mobile ? 3 : S(3) } }}>
-                            <Label value={`${Math.min(lifetimeWins, item.flagsRequired)}/${item.flagsRequired}`} fontSize={mobile ? 13 : S(12)} color={hasFlags ? GOLD : RED_DIM}
-                              uiTransform={{ margin: { right: mobile ? 3 : S(3) } }} />
-                            <UiEntity uiTransform={{ width: mobile ? 13 : S(12), height: mobile ? 13 : S(12) }}
+                            <UiEntity uiTransform={{ width: mobile ? 13 : S(12), height: mobile ? 13 : S(12), margin: { right: mobile ? 3 : S(3) } }}
                               uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: hasFlags ? GOLD : Color4.create(0.5, 0.5, 0.5, 1) }} />
+                            <Label value={`${Math.min(lifetimeWins, item.flagsRequired)}/${item.flagsRequired}`} fontSize={mobile ? 13 : S(12)} color={hasFlags ? GOLD : RED_DIM} />
                           </UiEntity>
                         )}
                         {/* Buy button or locked indicator */}
