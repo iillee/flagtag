@@ -11,12 +11,12 @@ import {
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
   getNextTrapSyncId, recycleTrapSyncId, getNextProjectileSyncId, recycleProjectileSyncId,
-  recycleZombieSyncId,
+  recycleGhostSyncId,
 } from '../shared/components'
 import { room } from '../shared/messages'
 import {
   flagEntity, getPlayerPosition, FLAG_GRAVITY,
-  activeZombies, zombieRespawnCooldown, setZombieRespawnCooldown, ZOMBIE_RESPAWN_COOLDOWN,
+  activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
 } from './serverState'
 import { handleDrop } from './flagLogic'
 
@@ -189,8 +189,8 @@ export function bananaServerSystem(dt: number): void {
     let trapConsumed = false
 
     // Ghost-trap collision
-    for (let gi = activeZombies.length - 1; gi >= 0; gi--) {
-      const z = activeZombies[gi]
+    for (let gi = activeGhosts.length - 1; gi >= 0; gi--) {
+      const z = activeGhosts[gi]
       const dx = z.posX - trapPos.x
       const dy = z.posY - trapPos.y
       const dz = z.posZ - trapPos.z
@@ -198,10 +198,10 @@ export function bananaServerSystem(dt: number): void {
       if (dist < TRAP_TRIGGER_RADIUS) {
         console.log('[Server] 🪤👻 Trap hit ghost! Killing ghost.')
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
-        room.send('zombieKilled', { x: z.posX, y: z.posY, z: z.posZ })
-        engine.removeEntity(z.entity); recycleZombieSyncId(z.syncId)
-        activeZombies.splice(gi, 1)
-        setZombieRespawnCooldown(ZOMBIE_RESPAWN_COOLDOWN)
+        room.send('ghostKilled', { x: z.posX, y: z.posY, z: z.posZ })
+        engine.removeEntity(z.entity); recycleGhostSyncId(z.syncId)
+        activeGhosts.splice(gi, 1)
+        setGhostRespawnCooldown(GHOST_RESPAWN_COOLDOWN)
         removeTrap(trap)
         activeTraps.splice(i, 1)
         trapConsumed = true

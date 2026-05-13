@@ -89,7 +89,7 @@ import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjecti
 import { isSpectatorMode, isSpectatorTransitioning, exitSpectatorMode } from './systems/spectatorSystem'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
-import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/zombieSystem'
+import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/ghostSystem'
 
 // Reusable components
 import { CloseButton } from './ui/components/CloseButton'

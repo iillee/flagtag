@@ -274,9 +274,9 @@ export function recycleProjectileSyncId(id: number): void {
   }
 }
 
-// ── Zombie ──
+// ── Ghost ──
 
-export const Zombie = engine.defineComponent('ctf-zombie', {
+export const Ghost = engine.defineComponent('ctf-ghost', {
   hp: Schemas.Int,
   spawnX: Schemas.Float,
   spawnY: Schemas.Float,
@@ -292,34 +292,34 @@ export const Zombie = engine.defineComponent('ctf-zombie', {
   targetX: 0, targetY: 0, targetZ: 0,
 })
 
-Zombie.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+Ghost.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** Zombie detection radius (meters) — starts homing when player is within this. */
-export const ZOMBIE_DETECT_RADIUS = 20
-/** Zombie base speed (m/s). */
-export const ZOMBIE_SPEED = 3
-/** Zombie fast speed when close (m/s). */
-export const ZOMBIE_FAST_SPEED = 5
-/** Distance at which zombie speeds up (meters). */
-export const ZOMBIE_FAST_DIST = 8
-/** Zombie hit radius — staggers player on contact (meters). */
-export const ZOMBIE_HIT_RADIUS = 1.5
-/** Zombie spawn interval (seconds). */
-export const ZOMBIE_SPAWN_INTERVAL = 20
-/** Max active zombies. */
-export const ZOMBIE_MAX_ACTIVE = 5
+/** Ghost detection radius (meters) — starts homing when player is within this. */
+export const GHOST_DETECT_RADIUS = 20
+/** Ghost base speed (m/s). */
+export const GHOST_SPEED = 3
+/** Ghost fast speed when close (m/s). */
+export const GHOST_FAST_SPEED = 5
+/** Distance at which ghost speeds up (meters). */
+export const GHOST_FAST_DIST = 8
+/** Ghost hit radius — staggers player on contact (meters). */
+export const GHOST_HIT_RADIUS = 1.5
+/** Ghost spawn interval (seconds). */
+export const GHOST_SPAWN_INTERVAL = 20
+/** Max active ghosts. */
+export const GHOST_MAX_ACTIVE = 5
 
-const ZOMBIE_SYNC_ID_BASE = 3000000
-const ZOMBIE_POOL_SIZE = 5
-const zombieIdPool: number[] = []
-for (let i = 0; i < ZOMBIE_POOL_SIZE; i++) zombieIdPool.push(ZOMBIE_SYNC_ID_BASE + i)
-export function getNextZombieSyncId(): number {
-  if (zombieIdPool.length > 0) return zombieIdPool.shift()!
-  return ZOMBIE_SYNC_ID_BASE + (Math.floor(Math.random() * ZOMBIE_POOL_SIZE))
+const GHOST_SYNC_ID_BASE = 3000000
+const GHOST_POOL_SIZE = 5
+const ghostIdPool: number[] = []
+for (let i = 0; i < GHOST_POOL_SIZE; i++) ghostIdPool.push(GHOST_SYNC_ID_BASE + i)
+export function getNextGhostSyncId(): number {
+  if (ghostIdPool.length > 0) return ghostIdPool.shift()!
+  return GHOST_SYNC_ID_BASE + (Math.floor(Math.random() * GHOST_POOL_SIZE))
 }
-export function recycleZombieSyncId(id: number): void {
-  if (id >= ZOMBIE_SYNC_ID_BASE && id < ZOMBIE_SYNC_ID_BASE + ZOMBIE_POOL_SIZE) {
-    if (!zombieIdPool.includes(id)) zombieIdPool.push(id)
+export function recycleGhostSyncId(id: number): void {
+  if (id >= GHOST_SYNC_ID_BASE && id < GHOST_SYNC_ID_BASE + GHOST_POOL_SIZE) {
+    if (!ghostIdPool.includes(id)) ghostIdPool.push(id)
   }
 }
 

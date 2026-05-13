@@ -9,7 +9,7 @@ import {
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
-import { Zombie } from '../shared/components'
+import { Ghost } from '../shared/components'
 import { room } from '../shared/messages'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { showHitEffect, initPools as initCombatPools } from './combatSystem'
@@ -19,12 +19,12 @@ import { isNightTime, updateWorldTime } from '../shared/dayNight'
 // ── Visual constants ──
 const GHOST_MODEL_SRC = 'models/ghost.glb'
 
-// ── Client-side zombie tracking ──
+// ── Client-side ghost tracking ──
 const SPAWN_RISE_DURATION = 2.0  // seconds to rise from ground
 const SPAWN_SINK_DURATION = 1.5  // seconds to sink into ground
 const SPAWN_DEPTH = 3.0          // how far below ground to start/end
 
-interface ClientZombie {
+interface ClientGhost {
   entity: Entity
   modelEntity: Entity    // GLB model
   time: number           // accumulated time for bob/drift
@@ -38,7 +38,7 @@ interface ClientZombie {
   sinking: boolean       // true when death sink is active
 }
 
-const clientZombies = new Map<Entity, ClientZombie>()
+const clientGhosts = new Map<Entity, ClientGhost>()
 
 // ── Ghost sound replay timer ──
 const GHOST_SOUND_INTERVAL = 5.0 // seconds between sound replays (clip length + gap)
@@ -126,16 +126,16 @@ room.onMessage('ghostTouching', (data) => {
 // ── Death VFX from server ──
 const pendingDeathPositions: Vector3[] = []
 
-room.onMessage('zombieKilled', (data) => {
+room.onMessage('ghostKilled', (data) => {
   pendingDeathPositions.push(Vector3.create(data.x, data.y, data.z))
 })
 
-// ── Detect boomerang hits on zombies (client reports to server) ──
-// We check distance from active projectiles to zombie positions each frame.
+// ── Detect boomerang hits on ghosts (client reports to server) ──
+// We check distance from active projectiles to ghost positions each frame.
 // Import projectile tracking if needed — for now we use a simpler approach:
-// The server checks projectile-zombie collisions directly.
+// The server checks projectile-ghost collisions directly.
 
-export function zombieClientSystem(dt: number): void {
+export function ghostClientSystem(dt: number): void {
   initCombatPools()
   ensureGhostDeathSound()
 
@@ -143,7 +143,7 @@ export function zombieClientSystem(dt: number): void {
   updateWorldTime()
 
   // Ghost visibility is determined by the server — if the server sends active
-  // Zombie entities via CRDT, we render them. No client-side night check needed.
+  // Ghost entities via CRDT, we render them. No client-side night check needed.
   // This prevents desync where some players see ghosts and others don't.
 
   // ── Scare meter: drain while ghost is touching, recharge when safe ──
@@ -220,28 +220,28 @@ export function zombieClientSystem(dt: number): void {
   }
   pendingDeathPositions.length = 0
 
-  // Track which zombie entities currently exist (server-synced via CRDT)
-  const activeZombieEntities = new Set<Entity>()
+  // Track which ghost entities currently exist (server-synced via CRDT)
+  const activeGhostEntities = new Set<Entity>()
 
-  for (const [entity] of engine.getEntitiesWith(Zombie)) {
-    activeZombieEntities.add(entity)
-    const zombie = Zombie.get(entity)
+  for (const [entity] of engine.getEntitiesWith(Ghost)) {
+    activeGhostEntities.add(entity)
+    const ghost = Ghost.get(entity)
 
-    if (!zombie.active) {
-      // Zombie deactivated — remove visual if exists
-      removeZombieVisual(entity)
+    if (!ghost.active) {
+      // Ghost deactivated — remove visual if exists
+      removeGhostVisual(entity)
       continue
     }
 
-    // Read position from Zombie component fields (throttled at 5Hz by server)
+    // Read position from Ghost component fields (throttled at 5Hz by server)
     // instead of Transform (which is no longer synced to avoid CRDT saturation)
-    const serverPos = Vector3.create(zombie.targetX, zombie.targetY, zombie.targetZ)
+    const serverPos = Vector3.create(ghost.targetX, ghost.targetY, ghost.targetZ)
 
-    let cz = clientZombies.get(entity)
+    let cz = clientGhosts.get(entity)
     if (!cz) {
-      // Create visual for new zombie
-      cz = createZombieVisual(entity, serverPos)
-      clientZombies.set(entity, cz)
+      // Create visual for new ghost
+      cz = createGhostVisual(entity, serverPos)
+      clientGhosts.set(entity, cz)
     }
 
     // Update time for animations
@@ -316,9 +316,9 @@ export function zombieClientSystem(dt: number): void {
     modelT.scale = Vector3.create(1.2 * pulse, 1.2 * pulse, 1.2 * pulse)
   }
 
-  // Clean up visuals for zombies that no longer exist — start sinking
-  for (const [entity, cz] of clientZombies) {
-    if (!activeZombieEntities.has(entity)) {
+  // Clean up visuals for ghosts that no longer exist — start sinking
+  for (const [entity, cz] of clientGhosts) {
+    if (!activeGhostEntities.has(entity)) {
       if (!cz.sinking) {
         // Start sinking animation
         cz.sinking = true
@@ -339,14 +339,14 @@ export function zombieClientSystem(dt: number): void {
       )
       // Remove once fully sunk
       if (sinkProgress >= 1) {
-        destroyZombieVisual(cz)
-        clientZombies.delete(entity)
+        destroyGhostVisual(cz)
+        clientGhosts.delete(entity)
       }
     }
   }
 }
 
-function createZombieVisual(serverEntity: Entity, pos: Vector3): ClientZombie {
+function createGhostVisual(serverEntity: Entity, pos: Vector3): ClientGhost {
   const modelEntity = engine.addEntity()
   Transform.create(modelEntity, {
     position: Vector3.create(pos.x, pos.y + 1.0, pos.z),
@@ -375,15 +375,15 @@ function createZombieVisual(serverEntity: Entity, pos: Vector3): ClientZombie {
   }
 }
 
-function removeZombieVisual(entity: Entity): void {
-  const cz = clientZombies.get(entity)
+function removeGhostVisual(entity: Entity): void {
+  const cz = clientGhosts.get(entity)
   if (cz) {
-    destroyZombieVisual(cz)
-    clientZombies.delete(entity)
+    destroyGhostVisual(cz)
+    clientGhosts.delete(entity)
   }
 }
 
-function destroyZombieVisual(cz: ClientZombie): void {
+function destroyGhostVisual(cz: ClientGhost): void {
   engine.removeEntity(cz.modelEntity)
   ghostSoundTimer = 0
 }

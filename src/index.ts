@@ -35,7 +35,7 @@ import { setupLadder } from './systems/ladderSystem'
 import { setupBoundaryWalls } from './systems/boundaryWalls'
 import { setupTeleportOrbs } from './systems/teleportOrbs'
 import { setupCinematicSystem } from './systems/cinematicSystem'
-import { zombieClientSystem } from './systems/zombieSystem'
+import { ghostClientSystem } from './systems/ghostSystem'
 import { Portal } from './systems/portals/portal'
 import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
 // sceneTime removed — visitor tracking is fully server-side via VisitorAnalytics
@@ -394,7 +394,7 @@ export async function main() {
   engine.addSystem(speedBoostSystem)
   engine.addSystem(boostTrailSystem)
   engine.addSystem(shieldSystem)
-  engine.addSystem(zombieClientSystem) // Ghost system enabled
+  engine.addSystem(ghostClientSystem) // Ghost system enabled
   engine.addSystem(updateHoldTimeInterpolation)
 
   // ── Day/Night Cycle ──

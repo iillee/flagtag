@@ -92,9 +92,9 @@ export const Messages = {
   buyResult: Schemas.Map({ success: Schemas.Boolean, color: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),  // Server → Client
   equipBoomerang: Schemas.Map({ color: Schemas.String }),              // Client → Server: equip an owned boomerang
 
-  // Zombie messages
-  zombieHit: Schemas.Map({ zombieId: Schemas.Float }),          // Client → Server: boomerang hit a zombie
-  zombieKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: zombie died (VFX)
+  // Ghost messages
+  ghostHit: Schemas.Map({ ghostId: Schemas.Float }),          // Client → Server: boomerang hit a ghost
+  ghostKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: ghost died (VFX)
   // zombieStagger and ghostDeath removed — replaced by ghostTouching + scare meter
   ghostTouching: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: ghost is touching a player this frame
 

@@ -12,7 +12,7 @@
  *   economy.ts        — coins, wallets, upgrades, store
  *   flagLogic.ts      — flag pickup/drop/steal, gravity, hold-time
  *   combat.ts         — traps, projectiles, orbits
- *   zombieSystem.ts   — ghost AI, spawning, collisions
+ *   ghostSystem.ts   — ghost AI, spawning, collisions
  *   mushroomSystem.ts — mushroom spawning and pickup
  *   playerTracking.ts — join/leave detection, name resolution
  *   roundManager.ts   — countdown, round end, lightning, updraft
@@ -50,7 +50,7 @@ import { CoinState, COIN_STATE_SYNC_ID } from '../shared/coins'
 import { registerEconomyHandlers, coinServerSystem } from './economy'
 import { flagServerSystem, holdTimeServerSystem, checkProximitySteal, registerFlagHandlers } from './flagLogic'
 import { bananaServerSystem, shellServerSystem, orbitServerSystem, registerCombatHandlers } from './combat'
-import { registerZombieHandlers, zombieServerSystem } from './zombieSystem'
+import { registerGhostHandlers, ghostServerSystem } from './ghostSystem'
 import { registerMushroomHandlers, spawnMushrooms } from './mushroomSystem'
 import { playerTrackingSystem, nameResolverServerSystem } from './playerTracking'
 import { countdownServerSystem, lightningServerSystem, updraftServerSystem, registerRoundHandlers } from './roundManager'
@@ -137,7 +137,7 @@ export async function setupServer(): Promise<void> {
   registerFlagHandlers()
   registerEconomyHandlers()
   registerCombatHandlers()
-  registerZombieHandlers()
+  registerGhostHandlers()
   registerMushroomHandlers()
   registerRoundHandlers()
   registerSystems()
@@ -238,7 +238,7 @@ function registerSystems() {
   engine.addSystem(safe('shellServerSystem', shellServerSystem))
   engine.addSystem(safe('orbitServerSystem', orbitServerSystem))
   engine.addSystem(safe('updraftServerSystem', updraftServerSystem))
-  engine.addSystem(safe('zombieServerSystem', zombieServerSystem))
+  engine.addSystem(safe('ghostServerSystem', ghostServerSystem))
   engine.addSystem(safe('coinServerSystem', coinServerSystem))
 }
 
