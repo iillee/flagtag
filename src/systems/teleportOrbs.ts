@@ -2,7 +2,7 @@ import { engine, Entity, Transform, AudioSource, GltfContainer, LightSource } fr
 import { Vector3, Quaternion, Color3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 
-const ORB_TRIGGER_RADIUS = 1.5
+const ORB_TRIGGER_RADIUS = 0.9
 const ORB_LAND_OFFSET = 3
 const TELEPORT_COOLDOWN = 1.0
 const ORB_SCALE = 0.7
@@ -105,9 +105,8 @@ export function setupTeleportOrbs(): void {
           const destIndex = i === 0 ? 1 : 0
           const dest = pair.positions[destIndex]
           for (const snd of pair.soundEntities) {
-            // Stop first to interrupt any in-progress playback, then restart
-            AudioSource.createOrReplace(snd, { audioClipUrl: 'assets/sounds/teleport.mp3', playing: false, loop: false, volume: 1, global: false })
-            AudioSource.getMutable(snd).playing = true
+            // Single createOrReplace with playing:true ensures a fresh restart every time
+            AudioSource.createOrReplace(snd, { audioClipUrl: 'assets/sounds/teleport.mp3', playing: true, loop: false, volume: 1, global: false })
           }
           pair.cooldown = TELEPORT_COOLDOWN
           void movePlayerTo({ newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z) })
