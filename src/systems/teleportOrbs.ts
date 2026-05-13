@@ -77,14 +77,14 @@ export function setupTeleportOrbs(): void {
     createOrbPair(
       [{ x: 290.5, y: 2.6, z: 254.7 }, { x: 276.56, y: 52.25, z: 301.5 }],
       Color3.create(1.0, 0.45, 0.0),
-      'models/d20-gold.glb',
-      'models/d20-wire-gold.glb'
+      'assets/models/d20-gold.glb',
+      'assets/models/d20-wire-gold.glb'
     ),
     createOrbPair(
       [{ x: 224, y: 2.0, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
       Color3.create(0.05, 0.3, 1.0),
-      'models/d20-blue.glb',
-      'models/d20-wire-blue.glb'
+      'assets/models/d20-blue.glb',
+      'assets/models/d20-wire-blue.glb'
     ),
   ]
 

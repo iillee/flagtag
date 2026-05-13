@@ -18,7 +18,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { PlayerIdentityData } from '@dcl/sdk/ecs'
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
-import { isCinematicActive } from '../cinematicState'
+import { isCinematicActive } from '../gameState/cinematicState'
 
 // ── VFX Constants ──
 const VFX_DURATION_MS = 250

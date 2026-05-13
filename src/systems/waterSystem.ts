@@ -4,7 +4,7 @@ import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { isSpectatorMode } from './spectatorSystem'
-import { isCinematicActive } from '../cinematicState'
+import { isCinematicActive } from '../gameState/cinematicState'
 
 
 // Water surface Y level

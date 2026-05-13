@@ -13,11 +13,11 @@ import { Ghost } from '../shared/components'
 import { room } from '../shared/messages'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { showHitEffect, initPools as initCombatPools } from './combatSystem'
-import { isCinematicActive } from '../cinematicState'
+import { isCinematicActive } from '../gameState/cinematicState'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
 
 // ── Visual constants ──
-const GHOST_MODEL_SRC = 'models/ghost.glb'
+const GHOST_MODEL_SRC = 'assets/models/ghost.glb'
 
 // ── Client-side ghost tracking ──
 const SPAWN_RISE_DURATION = 2.0  // seconds to rise from ground

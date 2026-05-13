@@ -9,7 +9,7 @@ import { isMobile } from '@dcl/sdk/platform'
 import { S, GOLD, MUTED, WHITE, CLOSE_GREY } from '../uiConstants'
 import { hover, isMusicMuted, notifyOverlayClosed } from '../uiState'
 import { playClickSound } from '../uiSounds'
-import { setWinConditionOverlayVisible } from '../../components/winConditionOverlayState'
+import { setWinConditionOverlayVisible } from '../../gameState/winConditionOverlayState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { KeyBinding } from '../components/KeyBinding'
 

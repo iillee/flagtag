@@ -27,7 +27,7 @@ import { playErrorSound, isServerConnected } from './clientUtils'
 
 import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
-import { isCinematicActive } from '../cinematicState'
+import { isCinematicActive } from '../gameState/cinematicState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect } from './combatSystem'
 

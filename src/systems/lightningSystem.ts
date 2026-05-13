@@ -7,7 +7,7 @@ import { triggerEmote, movePlayerTo } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { setLightningRespawning } from '../gameState/lightningState'
-import { isCinematicActive } from '../cinematicState'
+import { isCinematicActive } from '../gameState/cinematicState'
 
 
 // Lightning bolt config

@@ -71,9 +71,9 @@ import {
 } from './ui/uiState'
 
 // Overlay visibility state
-import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './components/winConditionOverlayState'
-import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './components/leaderboardOverlayState'
-import { getAnalyticsOverlayVisible, setAnalyticsOverlayVisible } from './components/analyticsOverlayState'
+import { getWinConditionOverlayVisible, toggleWinConditionOverlay, setWinConditionOverlayVisible } from './gameState/winConditionOverlayState'
+import { getLeaderboardOverlayVisible, toggleLeaderboardOverlay, setLeaderboardOverlayVisible } from './gameState/leaderboardOverlayState'
+import { getAnalyticsOverlayVisible, setAnalyticsOverlayVisible } from './gameState/analyticsOverlayState'
 
 // Game state
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from './gameState/flagHoldTime'
@@ -81,7 +81,7 @@ import { getBoomerangColor } from './gameState/boomerangColor'
 import { getAllVisitors, getTodayVisitorCount, getCurrentOnlineCount } from './gameState/sceneTime'
 import { getLeaderboardEntries, getAllTimeLeaderboardEntries, getMonthlyLeaderboardEntries } from './gameState/roundsWon'
 import { getCountdownSeconds } from './shared/components'
-import { isCinematicActive } from './cinematicState'
+import { isCinematicActive } from './gameState/cinematicState'
 import { getCoinBalance, isCoinBalanceLoaded } from './systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded, refreshUpgradesFromServer } from './gameState/playerUpgradeState'
 import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from './systems/trapSystem'

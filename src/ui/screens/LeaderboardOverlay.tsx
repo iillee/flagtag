@@ -14,7 +14,7 @@ import {
 } from '../uiConstants'
 import { hover, scroll, tabs, isMetricsOpenedFromTerminal, setMetricsOpenedFromTerminal, notifyOverlayClosed, isWinsFrozen, getDisplayedWins, setDisplayedWins } from '../uiState'
 import { playClickSound } from '../uiSounds'
-import { setLeaderboardOverlayVisible } from '../../components/leaderboardOverlayState'
+import { setLeaderboardOverlayVisible } from '../../gameState/leaderboardOverlayState'
 import { SubTabBar } from '../components/SubTabBar'
 import { Scrollbar } from '../components/Scrollbar'
 import { StatsRow } from '../components/StatsRow'
