@@ -300,6 +300,28 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract economy.ts — coins, wallets, upgrades, store`
 
+### Step 5 — Completed ✅
+
+**Commit:** `5dca9e8` → `refactor: extract economy.ts — coins, wallets, upgrades, store`
+
+**What was done:**
+- Created `src/server/economy.ts` (422 lines) with all 15 functions listed above.
+- Also moved `colorChanged` handler into `registerEconomyHandlers()` since it validates boomerang ownership via `loadPlayerUpgrades` — pure economy logic.
+- `coinCooldowns` and `coinRespawnTimer` kept as module-local state in `economy.ts` (only used there).
+- `DEATH_PENALTY_COINS` constant kept module-local in `economy.ts`.
+- `server.ts` reduced from 2,817 → 2,406 lines.
+- Removed unused `serializeUpgrades` import from `server.ts`.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining local declarations of moved items in `server.ts`.
+- Preview tested in Creator Hub — coins, store, death penalty, flag pickup/drop, round timer all working.
+
+**Concerns:**
+- None. No circular dependencies — `economy.ts` imports from `serverState`, `leaderboard` (for `parseLeaderboardJson` in lifetime wins reconciliation), shared components, and `room`.
+
+**Step 6 note:** `economy.ts` exports `loadPlayerCoinBalance`, `getOrCreateWalletEntity`, `loadPlayerUpgrades`, `savePlayerUpgrades`, `getOrCreateUpgradeEntity`, `loadPlayerLifetimeWins`, `addPlayerLifetimeWin`, `getOrCreateLifetimeWinsEntity`, `awardRoundCoins`, `coinServerSystem`, and `registerEconomyHandlers`. The `playerTrackingSystem` in `server.ts` (future `playerTracking.ts`) still calls `loadPlayerCoinBalance` and `getOrCreateWalletEntity` on player join — these imports will transfer cleanly when that module is extracted in Step 10.
+
 ---
 
 ## Step 6: `flagLogic.ts` — Flag pickup/drop/steal/gravity
