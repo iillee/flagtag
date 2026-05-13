@@ -13,8 +13,16 @@ import {
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   SPLASH_DURATION_MS, FLAG_GRAVITY, FLAG_MIN_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
   MUSHROOM_CX, MUSHROOM_CZ, MUSHROOM_RADIUS, MUSHROOM_CANDIDATES,
-  isRealName, getPlayerPosition
+  isRealName, getPlayerPosition,
+  lastVisitorResetDay, setLastVisitorResetDay,
+  lastMonthlyVisitorResetMonth, setLastMonthlyVisitorResetMonth,
+  hourlyPeakConcurrent, setHourlyPeakConcurrent,
+  peakConcurrent, setPeakConcurrent, peakConcurrentTime, setPeakConcurrentTime
 } from './serverState'
+import {
+  persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard,
+  persistPlayerNames, loadPlayerNames, persistVisitorData, loadVisitorData
+} from './persistence'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage, EnvVar } from '@dcl/sdk/server'
 import {
@@ -118,14 +126,7 @@ function getOrCreateHoldTimeEntity(userKey: string): Entity {
 // Note: getOrCreateHoldTimeEntity stays here for now — uses holdTimeEntities/knownPlayers from serverState
 
 // visitorSessions, monthlyVisitorSessions, playerBoomerangColors, deathPenaltyCooldowns moved to serverState.ts
-let lastVisitorResetDay = ''
-let lastMonthlyVisitorResetMonth = ''
-
-// ── Concurrent user tracking (hourly peaks) ──
-// 24 entries, index = UTC hour. Each stores the max concurrent users seen that hour.
-let hourlyPeakConcurrent: number[] = new Array(24).fill(0)
-let peakConcurrent = 0
-let peakConcurrentTime = '' // HH:MM UTC when peak occurred
+// lastVisitorResetDay, lastMonthlyVisitorResetMonth, hourlyPeakConcurrent, peakConcurrent, peakConcurrentTime moved to serverState.ts
 
 function updateConcurrentTracking(): void {
   const onlineCount = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
@@ -135,10 +136,10 @@ function updateConcurrentTracking(): void {
     hourlyPeakConcurrent[hour] = onlineCount
   }
   if (onlineCount > peakConcurrent) {
-    peakConcurrent = onlineCount
+    setPeakConcurrent(onlineCount)
     const hh = String(now.getUTCHours()).padStart(2, '0')
     const mm = String(now.getUTCMinutes()).padStart(2, '0')
-    peakConcurrentTime = `${hh}:${mm}`
+    setPeakConcurrentTime(`${hh}:${mm}`)
   }
 }
 
@@ -244,136 +245,8 @@ function resetCarrierTracking(): void {
 // isRealName moved to serverState.ts
 
 // ── Persistence helpers ──
-async function persistFlagState(): Promise<void> {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  const pos = Transform.get(flagEntity).position
-  await Storage.set('flagState', JSON.stringify({
-    state: flag.state,
-    x: pos.x, y: pos.y, z: pos.z,
-    carrierPlayerId: flag.carrierPlayerId,
-    dropAnchorX: flag.dropAnchorX,
-    dropAnchorY: flag.dropAnchorY,
-    dropAnchorZ: flag.dropAnchorZ
-  }))
-}
-
-async function persistLeaderboard(json: string): Promise<void> {
-  await Storage.set('leaderboard', json)
-}
-
-async function persistAllTimeLeaderboard(json: string): Promise<void> {
-  await Storage.set('allTimeLeaderboard', json)
-}
-
-async function persistMonthlyLeaderboard(json: string): Promise<void> {
-  await Storage.set('monthlyLeaderboard', json)
-}
-
-async function persistPlayerNames(): Promise<void> {
-  const obj: Record<string, string> = {}
-  for (const [userId, name] of playerNames) {
-    if (isRealName(name)) obj[userId] = name
-  }
-  await Storage.set('playerNames', JSON.stringify(obj))
-}
-
-async function loadPlayerNames(): Promise<void> {
-  try {
-    const saved = await Storage.get<string>('playerNames')
-    if (saved) {
-      const obj: Record<string, string> = JSON.parse(saved)
-      for (const [userId, name] of Object.entries(obj)) {
-        if (isRealName(name)) {
-          playerNames.set(userId.toLowerCase(), name)
-        }
-      }
-      console.log('[Server] Loaded', playerNames.size, 'persisted player names')
-    }
-  } catch (err) {
-    console.error('[Server] Failed to load player names:', err)
-  }
-}
-
-async function persistVisitorData(visitorDataJson: string): Promise<void> {
-  await Storage.set('visitorData', visitorDataJson)
-  await Storage.set('lastVisitorResetDay', lastVisitorResetDay)
-  await Storage.set('concurrentData', JSON.stringify({
-    hourlyPeak: hourlyPeakConcurrent,
-    peak: peakConcurrent,
-    peakTime: peakConcurrentTime
-  }))
-}
-
-async function loadVisitorData(): Promise<void> {
-  let savedData: string | null = null
-  let savedResetDay: string | null = null
-  
-  try {
-    savedData = await Storage.get<string>('visitorData')
-    savedResetDay = await Storage.get<string>('lastVisitorResetDay')
-  } catch (err) {
-    console.error('[Server] Failed to load visitor data from storage:', err)
-    return
-  }
-  
-  console.log('[Server] Storage.get visitorData:', savedData ? `${savedData.length} chars` : 'null')
-  console.log('[Server] Storage.get lastVisitorResetDay:', savedResetDay || 'null')
-
-  if (savedData && savedResetDay) {
-    try {
-      const visitorRecords = JSON.parse(savedData)
-      lastVisitorResetDay = savedResetDay
-      
-      // Restore visitor data if it's from today
-      const currentDay = getTodayDateString()
-      if (lastVisitorResetDay === currentDay) {
-        for (const record of visitorRecords) {
-          // Support both old format (totalMinutes) and new format (totalSeconds)
-          const seconds = record.totalSeconds != null
-            ? record.totalSeconds
-            : (record.totalMinutes || 0) * 60
-          const recordKey = (record.userId || '').toLowerCase()
-          // Use persisted name directory if available, fall back to stored visitor name
-          const bestName = (playerNames.has(recordKey) && isRealName(playerNames.get(recordKey)!))
-            ? playerNames.get(recordKey)!
-            : record.name
-          visitorSessions.set(recordKey, {
-            name: bestName,
-            sessionStartMs: 0, // Not currently online after server restart
-            totalSecondsToday: seconds
-          })
-          if (isRealName(bestName)) {
-            playerNames.set(recordKey, bestName)
-          }
-        }
-        console.log('[Server] Restored visitor data for', currentDay, '- loaded', visitorRecords.length, 'visitors')
-        // Restore concurrent tracking data
-        try {
-          const savedConcurrent = await Storage.get<string>('concurrentData')
-          if (savedConcurrent) {
-            const cd = JSON.parse(savedConcurrent)
-            if (cd.hourlyPeak && cd.hourlyPeak.length === 24) hourlyPeakConcurrent = cd.hourlyPeak
-            if (cd.peak != null) peakConcurrent = cd.peak
-            if (cd.peakTime) peakConcurrentTime = cd.peakTime
-            console.log('[Server] Restored concurrent tracking data, peak:', peakConcurrent, 'at', peakConcurrentTime)
-          }
-        } catch { /* ignore */ }
-      } else {
-        console.log('[Server] Visitor data was from', lastVisitorResetDay, 'but today is', currentDay, '- clearing for new day (report handled via pendingReport snapshot)')
-        // Clear for the new day — the pending report snapshot was already saved during leaderboard reset
-        visitorSessions.clear()
-        lastVisitorResetDay = currentDay
-      }
-    } catch (e) {
-      console.error('[Server] Failed to load visitor data:', e)
-      lastVisitorResetDay = getTodayDateString()
-    }
-  } else {
-    lastVisitorResetDay = getTodayDateString()
-    console.log('[Server] No visitor data found, starting fresh for', lastVisitorResetDay)
-  }
-}
+// persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard,
+// persistPlayerNames, loadPlayerNames, persistVisitorData, loadVisitorData moved to persistence.ts
 
 // Check and perform daily leaderboard reset at 12:00 AM UTC (midnight)
 async function checkLeaderboardDailyReset(): Promise<boolean> {
@@ -752,13 +625,13 @@ async function checkVisitorDailyReset(): Promise<boolean> {
       await sendPendingReport()
     }
     
-    lastVisitorResetDay = currentDay
+    setLastVisitorResetDay(currentDay)
     
     // Clear visitor data for new day
     visitorSessions.clear()
-    hourlyPeakConcurrent = new Array(24).fill(0)
-    peakConcurrent = 0
-    peakConcurrentTime = ''
+    setHourlyPeakConcurrent(new Array(24).fill(0))
+    setPeakConcurrent(0)
+    setPeakConcurrentTime('')
     
     // Sync empty visitor data
     await syncVisitorAnalytics()
@@ -857,7 +730,7 @@ async function checkMonthlyVisitorReset(): Promise<void> {
   if (lastMonthlyVisitorResetMonth !== '' && lastMonthlyVisitorResetMonth !== currentMonth) {
     console.log('[Server] Monthly visitor reset for new month:', currentMonth)
     monthlyVisitorSessions.clear()
-    lastMonthlyVisitorResetMonth = currentMonth
+    setLastMonthlyVisitorResetMonth(currentMonth)
     await syncMonthlyVisitorAnalytics()
     console.log('[Server] Monthly visitor data reset completed')
   }
@@ -1024,7 +897,7 @@ export async function setupServer(): Promise<void> {
   } catch (err) {
     console.error('[Server] Failed to load monthly visitor data:', err)
   }
-  lastMonthlyVisitorResetMonth = savedMonthlyVisitorMonth || currentMonthForVisitors
+  setLastMonthlyVisitorResetMonth(savedMonthlyVisitorMonth || currentMonthForVisitors)
 
   // Restore monthly visitor data if same month
   if (savedMonthlyVisitorData && lastMonthlyVisitorResetMonth === currentMonthForVisitors) {
@@ -1048,7 +921,7 @@ export async function setupServer(): Promise<void> {
     }
   } else if (lastMonthlyVisitorResetMonth !== currentMonthForVisitors) {
     console.log('[Server] Monthly visitor data was from', lastMonthlyVisitorResetMonth, 'but current month is', currentMonthForVisitors, '- starting fresh')
-    lastMonthlyVisitorResetMonth = currentMonthForVisitors
+    setLastMonthlyVisitorResetMonth(currentMonthForVisitors)
   }
 
   setMonthlyVisitorAnalyticsEntity(engine.addEntity())

@@ -74,6 +74,25 @@ export const MUSHROOM_CZ = 255.5
 export const MUSHROOM_RADIUS = 128
 export const MUSHROOM_CANDIDATES = 10
 
+// ── Visitor reset tracking ──
+
+export let lastVisitorResetDay = ''
+export function setLastVisitorResetDay(d: string) { lastVisitorResetDay = d }
+
+export let lastMonthlyVisitorResetMonth = ''
+export function setLastMonthlyVisitorResetMonth(m: string) { lastMonthlyVisitorResetMonth = m }
+
+// ── Concurrent user tracking (hourly peaks) ──
+
+export let hourlyPeakConcurrent: number[] = new Array(24).fill(0)
+export function setHourlyPeakConcurrent(arr: number[]) { hourlyPeakConcurrent = arr }
+
+export let peakConcurrent = 0
+export function setPeakConcurrent(n: number) { peakConcurrent = n }
+
+export let peakConcurrentTime = '' // HH:MM UTC when peak occurred
+export function setPeakConcurrentTime(t: string) { peakConcurrentTime = t }
+
 // ── Shared helpers ──
 
 export function isRealName(name: string): boolean {
