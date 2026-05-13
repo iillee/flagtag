@@ -1,4 +1,4 @@
-import { engine, Transform, PlayerIdentityData, AvatarBase, type Entity } from '@dcl/sdk/ecs'
+import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import {
   flagEntity, setFlagEntity, countdownEntity, setCountdownEntity,
@@ -6,13 +6,13 @@ import {
   monthlyLeaderboardEntity, setMonthlyLeaderboardEntity,
   visitorAnalyticsEntity, setVisitorAnalyticsEntity, monthlyVisitorAnalyticsEntity, setMonthlyVisitorAnalyticsEntity,
   coinStateEntity, setCoinStateEntity,
-  holdTimeEntities, knownPlayers, playerNames, walletEntities, upgradeEntities, lifetimeWinsEntities,
-  playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
-  deathPenaltyCooldowns, lastStealTime,
-  visitorSessions, monthlyVisitorSessions, currentlyConnected,
+  holdTimeEntities, knownPlayers, playerNames,
+  playerBoomerangColors,
+  lastStealTime,
+  visitorSessions, monthlyVisitorSessions,
   SPLASH_DURATION_MS,
 
-  isRealName, getPlayerPosition,
+  isRealName,
   lastVisitorResetDay, setLastVisitorResetDay,
   lastMonthlyVisitorResetMonth, setLastMonthlyVisitorResetMonth,
 } from './serverState'
@@ -21,7 +21,7 @@ import {
   persistPlayerNames, loadPlayerNames, loadVisitorData
 } from './persistence'
 import {
-  updateConcurrentTracking, loadDiscordWebhookUrl, loadDailyReportSentDay,
+  loadDiscordWebhookUrl, loadDailyReportSentDay,
   sendPendingReport, sendDailyAnalyticsToDiscord, snapshotPendingReport,
   syncVisitorAnalytics, syncMonthlyVisitorAnalytics,
   checkPreMidnightReport, checkVisitorDailyReset, checkMonthlyVisitorReset,
@@ -37,7 +37,6 @@ import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState, VisitorAnalytics, MonthlyVisitorAnalytics,
-  PROJECTILE_HIT_RADIUS,
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, SyncIds, getTodayDateString, getCurrentMonthString
 } from '../shared/components'
 import { room } from '../shared/messages'
@@ -45,20 +44,20 @@ import {
   CoinState, COIN_STATE_SYNC_ID, COIN_PICKUP_RADIUS
 } from '../shared/coins'
 import {
-  loadPlayerCoinBalance, setPlayerCoinBalance, addPlayerCoins, getOrCreateWalletEntity,
+  setPlayerCoinBalance, addPlayerCoins,
   loadPlayerUpgrades, savePlayerUpgrades, getOrCreateUpgradeEntity,
   loadPlayerLifetimeWins, addPlayerLifetimeWin, getOrCreateLifetimeWinsEntity,
   coinServerSystem, awardRoundCoins, registerEconomyHandlers
 } from './economy'
 import {
   handleDrop, flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor,
-  resetGravityState, getOrCreateHoldTimeEntity,
+  resetGravityState,
   flagServerSystem, holdTimeServerSystem, checkProximitySteal,
   registerFlagHandlers
 } from './flagLogic'
 import {
   activeTraps, activeProjectiles, activeOrbits,
-  removeTrap, removeProjectile, clearCombatCooldowns, clearAllCombatCooldowns,
+  removeTrap, removeProjectile, clearAllCombatCooldowns,
   bananaServerSystem, shellServerSystem, orbitServerSystem,
   registerCombatHandlers
 } from './combat'
@@ -66,6 +65,7 @@ import {
   registerZombieHandlers, zombieServerSystem,
 } from './zombieSystem'
 import { registerMushroomHandlers, spawnMushrooms } from './mushroomSystem'
+import { playerTrackingSystem, nameResolverServerSystem } from './playerTracking'
 import type { BoomerangColor } from '../gameState/boomerangColor'
 
 // Constants moved to serverState.ts
@@ -564,114 +564,7 @@ function lightningServerSystem(dt: number): void {
   }
 }
 
-// currentlyConnected moved to serverState.ts
-
-function playerTrackingSystem(): void {
-  // Build set of currently connected players (normalized to lowercase)
-  const nowConnected = new Set<string>()
-  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-    nowConnected.add(identity.address.toLowerCase())
-  }
-
-  let changed = false
-
-  // Detect new joins (including reconnections)
-  for (const userKey of nowConnected) {
-    if (!currentlyConnected.has(userKey)) {
-      // Player just connected (or reconnected)
-      currentlyConnected.add(userKey)
-
-      // Create synced hold time entity if this is a new player
-      getOrCreateHoldTimeEntity(userKey)
-      
-      // Load coin balance and create wallet entity
-      loadPlayerCoinBalance(userKey).then(() => {
-        getOrCreateWalletEntity(userKey)
-      }).catch(err => console.error('[Coins] Error loading wallet for', userKey.slice(0, 8), err))
-
-      // Start/restart visitor session — use persisted name if available
-      const playerName = playerNames.get(userKey) || userKey.slice(0, 8)
-      const existingVisitor = visitorSessions.get(userKey)
-
-      if (existingVisitor) {
-        existingVisitor.sessionStartMs = Date.now()
-        // Only upgrade the name, never downgrade a real name to 0x...
-        if (isRealName(playerName) || !isRealName(existingVisitor.name)) {
-          existingVisitor.name = playerName
-        }
-      } else {
-        visitorSessions.set(userKey, {
-          name: playerName,
-          sessionStartMs: Date.now(),
-          totalSecondsToday: 0
-        })
-      }
-
-      // Monthly visitor tracking
-      const existingMonthlyVisitor = monthlyVisitorSessions.get(userKey)
-      if (existingMonthlyVisitor) {
-        existingMonthlyVisitor.sessionStartMs = Date.now()
-        if (isRealName(playerName) || !isRealName(existingMonthlyVisitor.name)) {
-          existingMonthlyVisitor.name = playerName
-        }
-      } else {
-        monthlyVisitorSessions.set(userKey, {
-          name: playerName,
-          sessionStartMs: Date.now(),
-          totalSecondsMonth: 0
-        })
-      }
-
-      console.log('[Server] Player joined:', playerName, '(total visitors today:', visitorSessions.size, ')')
-      changed = true
-    }
-  }
-
-  // Detect disconnects
-  for (const userKey of currentlyConnected) {
-    if (!nowConnected.has(userKey)) {
-      currentlyConnected.delete(userKey)
-
-      const visitor = visitorSessions.get(userKey)
-      if (visitor && visitor.sessionStartMs > 0) {
-        const sessionMs = Date.now() - visitor.sessionStartMs
-        const sessionSeconds = Math.floor(sessionMs / 1000)
-        visitor.totalSecondsToday += sessionSeconds
-        visitor.sessionStartMs = 0 // Mark as offline
-
-        const totalMin = Math.floor(visitor.totalSecondsToday / 60)
-        console.log('[Server] Player left:', visitor.name, 'session:', sessionSeconds, 's, total today:', totalMin, 'min')
-      }
-
-      // Monthly visitor disconnect tracking
-      const monthlyVisitor = monthlyVisitorSessions.get(userKey)
-      if (monthlyVisitor && monthlyVisitor.sessionStartMs > 0) {
-        const sessionMs = Date.now() - monthlyVisitor.sessionStartMs
-        const sessionSeconds = Math.floor(sessionMs / 1000)
-        monthlyVisitor.totalSecondsMonth += sessionSeconds
-        monthlyVisitor.sessionStartMs = 0
-      }
-
-      // Clean up per-player maps to prevent unbounded growth
-      playerBoomerangColors.delete(userKey)
-      playerCoinBalances.delete(userKey)
-      playerUpgradeData.delete(userKey)
-      playerLifetimeWinsCache.delete(userKey)
-      clearCombatCooldowns(userKey)
-      lastStealTime.delete(userKey)
-      deathPenaltyCooldowns.delete(userKey)
-
-      changed = true
-    }
-  }
-
-  // Immediate sync when players join or leave
-  if (changed) {
-    updateConcurrentTracking()
-    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
-    syncMonthlyVisitorAnalytics().catch(e => console.error('[Server] syncMonthlyVisitorAnalytics error:', e))
-  }
-}
+// playerTrackingSystem moved to playerTracking.ts
 
 // Prevent duplicate round end triggers - track the actual roundEndTimeMs we processed
 let lastProcessedRoundEndTime = 0
@@ -945,45 +838,7 @@ async function handleRoundEnd(): Promise<void> {
   await persistFlagState()
 }
 
-/**
- * Server-side name resolver — scans AvatarBase.name for all connected players
- * every few seconds. When a real display name appears (not empty, not 0x...),
- * it updates playerNames, visitorSessions, and leaderboard entries, then persists.
- * This catches names that weren't ready when the player first connected.
- */
-let nameResolveTimer = 0
-const NAME_RESOLVE_INTERVAL = 3.0
-
-function nameResolverServerSystem(dt: number): void {
-  nameResolveTimer += dt
-  if (nameResolveTimer < NAME_RESOLVE_INTERVAL) return
-  nameResolveTimer = 0
-
-  let anyUpdated = false
-
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-    const userId = identity.address.toLowerCase()
-    if (!userId) continue
-
-    // Already have a real name — skip
-    const existing = playerNames.get(userId)
-    if (existing && isRealName(existing)) continue
-
-    // Try reading AvatarBase.name
-    const avatar = AvatarBase.getOrNull(entity)
-    if (avatar && isRealName(avatar.name)) {
-      if (updatePlayerName(userId, avatar.name)) {
-        console.log('[Server] Name resolved via AvatarBase:', userId.slice(0, 8), '->', avatar.name)
-        anyUpdated = true
-      }
-    }
-  }
-
-  if (anyUpdated) {
-    persistPlayerNames().catch(e => console.error('[Server] persistPlayerNames error:', e))
-    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
-  }
-}
+// nameResolverServerSystem moved to playerTracking.ts
 
 // Mushroom spawning moved to mushroomSystem.ts
 
