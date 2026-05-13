@@ -9,7 +9,7 @@ const ORB_SCALE = 0.7
 const ORB_SPIN_SPEED_Y = 0.5
 const ORB_SPIN_SPEED_X = 0.3
 const ORB_BOB_SPEED = 2.0
-const ORB_BOB_RANGE = 0.15
+const ORB_BOB_RANGE = 0.075
 
 interface OrbPair {
   positions: { x: number; y: number; z: number }[]
@@ -75,13 +75,13 @@ function createOrbPair(
 export function setupTeleportOrbs(): void {
   const orbPairs: OrbPair[] = [
     createOrbPair(
-      [{ x: 290.5, y: 2.6, z: 254.7 }, { x: 276.56, y: 52.25, z: 301.5 }],
+      [{ x: 290.5, y: 2.3, z: 254.7 }, { x: 276.56, y: 52.25, z: 301.5 }],
       Color3.create(1.0, 0.45, 0.0),
       'assets/models/d20-gold.glb',
       'assets/models/d20-wire-gold.glb'
     ),
     createOrbPair(
-      [{ x: 224, y: 2.0, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
+      [{ x: 224, y: 1.5, z: 288 }, { x: 226.3, y: 2.3, z: 211.3 }],
       Color3.create(0.05, 0.3, 1.0),
       'assets/models/d20-blue.glb',
       'assets/models/d20-wire-blue.glb'
