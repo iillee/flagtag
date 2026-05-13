@@ -98,6 +98,27 @@ export function setPeakConcurrent(n: number) { peakConcurrent = n }
 export let peakConcurrentTime = '' // HH:MM UTC when peak occurred
 export function setPeakConcurrentTime(t: string) { peakConcurrentTime = t }
 
+// ── Zombie shared state ──
+// Shared here so both combat.ts (ghost-trap collision) and zombieSystem.ts can access without circular imports.
+
+export interface ActiveZombie {
+  entity: Entity
+  syncId: number
+  hp: number
+  posX: number
+  posY: number
+  posZ: number
+  spawnedAtMs: number
+  lastStaggerTime: Map<string, number>
+  lastHitMs: number
+  lastCrdtSyncTime: number
+}
+
+export const activeZombies: ActiveZombie[] = []
+export let zombieRespawnCooldown = 0
+export function setZombieRespawnCooldown(v: number) { zombieRespawnCooldown = v }
+export const ZOMBIE_RESPAWN_COOLDOWN = 30
+
 // ── Shared helpers ──
 
 export function isRealName(name: string): boolean {
