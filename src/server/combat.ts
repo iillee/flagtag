@@ -5,12 +5,10 @@
 
 import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
-import { syncEntity } from '@dcl/sdk/network'
 import {
   Flag, FlagState,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
-  getNextTrapSyncId, recycleTrapSyncId, getNextProjectileSyncId, recycleProjectileSyncId,
   recycleGhostSyncId,
 } from '../shared/components'
 import { room } from '../shared/messages'
@@ -26,7 +24,6 @@ const lastTrapDropTime = new Map<string, number>()
 
 export interface ActiveTrap {
   entity: Entity
-  syncId: number
   droppedBy: string
   droppedAtMs: number
   falling: boolean
@@ -38,7 +35,6 @@ export const activeTraps: ActiveTrap[] = []
 
 function removeTrap(trap: ActiveTrap): void {
   engine.removeEntity(trap.entity)
-  recycleTrapSyncId(trap.syncId)
 }
 
 // ── Projectile state ──
@@ -47,7 +43,6 @@ const lastProjectileFireTime = new Map<string, number>()
 
 export interface ActiveProjectile {
   entity: Entity
-  syncId: number
   firedBy: string
   firedAtMs: number
   startX: number
@@ -74,7 +69,6 @@ export const activeProjectiles: ActiveProjectile[] = []
 
 function removeProjectile(projectile: ActiveProjectile): void {
   engine.removeEntity(projectile.entity)
-  recycleProjectileSyncId(projectile.syncId)
 }
 
 // ── Green orbit state ──
@@ -129,12 +123,8 @@ function handleTrapDrop(playerId: string): void {
     droppedByPlayerId: playerId,
     droppedAtMs: now,
   })
-  const trapSyncId = getNextTrapSyncId()
-  syncEntity(trapEntity, [Transform.componentId, Trap.componentId], trapSyncId)
-
   activeTraps.push({
     entity: trapEntity,
-    syncId: trapSyncId,
     droppedBy: playerId,
     droppedAtMs: now,
     falling: true,
@@ -294,12 +284,8 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     maxDistance: chargeRange,
     active: true,
   })
-  const projectileSyncId = getNextProjectileSyncId()
-  syncEntity(projectileEntity, [Projectile.componentId], projectileSyncId)
-
   activeProjectiles.push({
     entity: projectileEntity,
-    syncId: projectileSyncId,
     firedBy: playerId,
     firedAtMs: now,
     startX: spawnPos.x,
