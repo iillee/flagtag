@@ -74,6 +74,11 @@ export const MUSHROOM_CZ = 255.5
 export const MUSHROOM_RADIUS = 128
 export const MUSHROOM_CANDIDATES = 10
 
+// ── Leaderboard reset tracking ──
+
+export let lastLeaderboardResetDay = ''
+export function setLastLeaderboardResetDay(d: string) { lastLeaderboardResetDay = d }
+
 // ── Visitor reset tracking ──
 
 export let lastVisitorResetDay = ''

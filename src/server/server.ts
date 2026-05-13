@@ -23,6 +23,12 @@ import {
   persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard,
   persistPlayerNames, loadPlayerNames, persistVisitorData, loadVisitorData
 } from './persistence'
+import {
+  type LeaderboardEntry, parseLeaderboardJson, incrementLeaderboardWins,
+  patchLeaderboardNames, patchAllLeaderboardNames,
+  checkLeaderboardDailyReset, checkMonthlyLeaderboardReset,
+  updatePlayerName
+} from './leaderboard'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage, EnvVar } from '@dcl/sdk/server'
 import {
@@ -103,7 +109,7 @@ function getCarrierHoldSeconds(): number {
 }
 
 // lastStealTime, holdTimeEntities, knownPlayers, playerNames moved to serverState.ts
-let lastLeaderboardResetDay = ''
+// lastLeaderboardResetDay moved to serverState.ts
 
 /**
  * Single entry point for creating/retrieving a PlayerFlagHoldTime entity.
@@ -248,57 +254,7 @@ function resetCarrierTracking(): void {
 // persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard,
 // persistPlayerNames, loadPlayerNames, persistVisitorData, loadVisitorData moved to persistence.ts
 
-// Check and perform daily leaderboard reset at 12:00 AM UTC (midnight)
-async function checkLeaderboardDailyReset(): Promise<boolean> {
-  const now = new Date()
-  const currentDay = now.toISOString().slice(0, 10) // YYYY-MM-DD format
-  
-  // Load last reset day from storage if not set
-  if (lastLeaderboardResetDay === '') {
-    const savedResetDay = await Storage.get<string>('lastLeaderboardResetDay')
-    lastLeaderboardResetDay = savedResetDay || currentDay
-  }
-  
-  // Reset at midnight UTC (00:00) - check if new day and we haven't reset today
-  if (lastLeaderboardResetDay !== currentDay) {
-    console.log('[Server] Daily leaderboard reset at midnight UTC for new day:', currentDay)
-    
-    // Snapshot leaderboard wins into pendingReport before clearing
-    const lb = LeaderboardState.getOrNull(leaderboardEntity)
-    const leaderboardJson = (lb && lb.json) ? lb.json : '[]'
-    await snapshotPendingReport(leaderboardJson)
-    
-    lastLeaderboardResetDay = currentDay
-    
-    // Clear the leaderboard
-    const mutable = LeaderboardState.getMutable(leaderboardEntity)
-    mutable.json = '[]'
-    await persistLeaderboard('[]')
-    
-    // Persist the reset day
-    await Storage.set('lastLeaderboardResetDay', currentDay)
-    
-    console.log('[Server] Leaderboard reset completed')
-    return true
-  }
-  
-  return false
-}
-
-// Check and perform monthly leaderboard reset at the start of each month (UTC)
-async function checkMonthlyLeaderboardReset(): Promise<void> {
-  const currentMonth = getCurrentMonthString()
-  const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)
-  if (mlLb && mlLb.month && mlLb.month !== currentMonth) {
-    console.log('[Server] Monthly leaderboard reset for new month:', currentMonth, '(was:', mlLb.month, ')')
-    const mlMutable = MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity)
-    mlMutable.json = '[]'
-    mlMutable.month = currentMonth
-    await persistMonthlyLeaderboard('[]')
-    await Storage.set('monthlyLeaderboardMonth', currentMonth)
-    console.log('[Server] Monthly leaderboard reset completed')
-  }
-}
+// checkLeaderboardDailyReset, checkMonthlyLeaderboardReset moved to leaderboard.ts
 
 // ── Pending report snapshot (deferred Discord report) ──
 // Snapshots daily data before reset so the report can be sent on next server startup
@@ -872,7 +828,7 @@ export async function setupServer(): Promise<void> {
   await sendPendingReport()
 
   // Check for daily/monthly reset on server startup
-  await checkLeaderboardDailyReset()
+  await checkLeaderboardDailyReset(snapshotPendingReport)
   await checkMonthlyLeaderboardReset()
 
   // Initialize visitor analytics
@@ -1033,50 +989,7 @@ function resetGravityState(): void {
  * Called when a real name is resolved (via registerName message or AvatarBase scan).
  * Returns true if the name was actually updated (was different from what we had).
  */
-function updatePlayerName(userId: string, name: string): boolean {
-  if (!isRealName(name)) return false
-  
-  const key = userId.toLowerCase()
-  const existing = playerNames.get(key)
-  if (existing === name) return false
-  
-  playerNames.set(key, name)
-  
-  // Update visitor session
-  const visitor = visitorSessions.get(key)
-  if (visitor) {
-    visitor.name = name
-  }
-  
-  // Update monthly visitor session
-  const monthlyVisitor = monthlyVisitorSessions.get(key)
-  if (monthlyVisitor) {
-    monthlyVisitor.name = name
-  }
-  
-  // Update all three leaderboards
-  const leaderboards: Array<{
-    getState: () => { json?: string } | null
-    getMutable: () => { json: string }
-    persist: (json: string) => Promise<void>
-  }> = [
-    { getState: () => LeaderboardState.getOrNull(leaderboardEntity), getMutable: () => LeaderboardState.getMutable(leaderboardEntity), persist: persistLeaderboard },
-    { getState: () => AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity), getMutable: () => AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity), persist: persistAllTimeLeaderboard },
-    { getState: () => MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity), getMutable: () => MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity), persist: persistMonthlyLeaderboard },
-  ]
-  for (const lb of leaderboards) {
-    const state = lb.getState()
-    if (!state?.json) continue
-    const entries = parseLeaderboardJson(state.json)
-    if (patchLeaderboardNames(entries, userId, name)) {
-      const json = JSON.stringify(entries)
-      lb.getMutable().json = json
-      lb.persist(json).catch(e => console.error('[Server] persist leaderboard error:', e))
-    }
-  }
-  
-  return true
-}
+// updatePlayerName moved to leaderboard.ts
 
 // ── Coin helpers ──
 
@@ -1769,73 +1682,8 @@ function updraftServerSystem(dt: number) {
 
 // ── Leaderboard helpers (deduplicated) ──
 
-type LeaderboardEntry = { userId: string; name: string; roundsWon: number }
-
-/** Parse a leaderboard JSON string into entries (safe — returns [] on error). */
-function parseLeaderboardJson(json: string | undefined | null): LeaderboardEntry[] {
-  if (!json) return []
-  try { return JSON.parse(json) } catch { return [] }
-}
-
-/**
- * Increment roundsWon for each winning player in a leaderboard entry array.
- * Mutates in place for efficiency.
- */
-function incrementLeaderboardWins(
-  entries: LeaderboardEntry[],
-  winners: { userId: string; seconds: number }[],
-  maxSeconds: number
-): void {
-  for (const p of winners) {
-    if (p.seconds < maxSeconds) continue
-    const pKey = p.userId.toLowerCase()
-    const existing = entries.find((e) => e.userId.toLowerCase() === pKey)
-    if (existing) {
-      existing.roundsWon += 1
-      const displayName = playerNames.get(pKey)
-      if (displayName) existing.name = displayName
-    } else {
-      const displayName = playerNames.get(pKey) || pKey.slice(0, 8)
-      entries.push({ userId: pKey, name: displayName, roundsWon: 1 })
-    }
-  }
-}
-
-/**
- * Patch a single player's name in a leaderboard entry array. Returns true if any changed.
- */
-function patchLeaderboardNames(entries: LeaderboardEntry[], userId: string, name: string): boolean {
-  const key = userId.toLowerCase()
-  let changed = false
-  for (const entry of entries) {
-    if (entry.userId.toLowerCase() === key && entry.name !== name) {
-      entry.name = name
-      changed = true
-    }
-  }
-  return changed
-}
-
-/**
- * Patch ALL entries in a leaderboard JSON string using the persisted playerNames directory.
- * Returns the (possibly updated) JSON string.
- */
-function patchAllLeaderboardNames(json: string, label: string): string {
-  const entries = parseLeaderboardJson(json)
-  let patched = false
-  for (const entry of entries) {
-    const knownName = playerNames.get(entry.userId.toLowerCase())
-    if (knownName && isRealName(knownName) && entry.name !== knownName) {
-      entry.name = knownName
-      patched = true
-    }
-  }
-  if (patched) {
-    console.log(`[Server] Patched ${label} names from persisted name directory`)
-    return JSON.stringify(entries)
-  }
-  return json
-}
+// LeaderboardEntry, parseLeaderboardJson, incrementLeaderboardWins,
+// patchLeaderboardNames, patchAllLeaderboardNames moved to leaderboard.ts
 
 function handlePickup(playerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
@@ -3060,7 +2908,7 @@ async function handleRoundEnd(): Promise<void> {
   await awardRoundCoins(players)
 
   // ── 6. Check for daily/monthly leaderboard reset ──
-  await checkLeaderboardDailyReset()
+  await checkLeaderboardDailyReset(snapshotPendingReport)
   await checkMonthlyLeaderboardReset()
 
   // ── 7. Update all three leaderboards (async persistence is safe now) ──
