@@ -251,6 +251,27 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract analytics.ts — visitor tracking, Discord webhooks, daily reports`
 
+### Step 4 — Completed ✅
+
+**Commit:** `eab15f8` → `refactor: extract analytics.ts — visitor tracking, Discord webhooks, daily reports`
+
+**What was done:**
+- Created `src/server/analytics.ts` (475 lines) with all 16 functions listed above.
+- `DISCORD_WEBHOOK_URL`, `dailyReportSentForDay`, and `visitorSyncTimer` kept as module-local state in `analytics.ts` (not moved to `serverState.ts` — they're only used within analytics).
+- `snapshotPendingReport` now exported from `analytics.ts` — `server.ts` imports it and passes it as the callback to `checkLeaderboardDailyReset()`.
+- Cleaned up unused imports from `server.ts`: `EnvVar`, `persistVisitorData`, `hourlyPeakConcurrent`, `setHourlyPeakConcurrent`, `peakConcurrent`, `setPeakConcurrent`, `peakConcurrentTime`, `setPeakConcurrentTime`.
+- `server.ts` reduced from 3,281 → 2,817 lines.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining local declarations of moved items in `server.ts`.
+- Preview tested in Creator Hub — flag pickup/drop, boomerangs, bananas, scoreboard, round timer all working.
+
+**Concerns:**
+- None. No circular dependencies — `analytics.ts` imports only from `serverState`, `persistence`, and `../shared/components`.
+
+**⚠️ Testing note for all future steps:** After code changes, you MUST restart the preview server (not just reload the browser). The Creator Hub preview compiles server code at startup — a browser reload picks up new client code but keeps the OLD server running. This caused a false alarm in Step 4 where boomerangs/bananas appeared to spawn at wrong positions (stale server had old `getPlayerPosition` location, new client had updated message handling). A full preview restart resolved it immediately.
+
 ---
 
 ## Step 5: `economy.ts` — Coins, wallets, upgrades, store
