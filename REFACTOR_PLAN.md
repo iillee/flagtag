@@ -468,6 +468,30 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract zombieSystem.ts — ghost AI, spawning, collisions`
 
+### Step 8 — Completed ✅
+
+**Commit:** `ec6bf79` → `refactor: extract zombieSystem.ts — ghost AI, spawning, collisions`
+
+**What was done:**
+- Created `src/server/zombieSystem.ts` (232 lines) with all ghost/zombie logic.
+- `registerZombieHandlers()` wraps the `zombieHit` message handler (was previously a bare `room.onMessage` at module top-level in `server.ts`).
+- `zombieServerSystem()`, `despawnAllZombies()` exported. `spawnZombie()` kept module-private.
+- Module-local state: `ZOMBIE_SPAWN_POS`, `zombieSpawnTimer`, `ZOMBIE_STAGGER_COOLDOWN_MS`, `ZOMBIE_IDLE_ORBIT_SPEED`.
+- Shared state (`ActiveZombie`, `activeZombies`, `zombieRespawnCooldown`, `ZOMBIE_RESPAWN_COOLDOWN`) stays in `serverState.ts` (moved there in Step 7 to avoid circular deps with `combat.ts`).
+- `zombieSystem.ts` imports `activeProjectiles` from `combat.ts` — one-way dependency, no circular import. Ghost-trap collision stays in `combat.ts` (`bananaServerSystem` reads `activeZombies` from `serverState`).
+- Cleaned 6 unused imports from `server.ts` (zombie constants, `isNightTime`, `updateWorldTime`, etc.).
+- `server.ts` reduced from 1,266 → 1,059 lines.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining zombie code in `server.ts`.
+- Preview tested in Creator Hub — flag pickup/drop, boomerangs, bananas, round timer all working. Ghost spawning/despawning untestable in daytime but code is identical to pre-refactor.
+
+**Concerns:**
+- A transient `Object reference not set to an instance of an object` engine error appeared after hot-reload but **disappeared on full preview restart**. This is the same stale-CRDT hot-reload artifact noted in Steps 1 and 4 — not caused by the refactor. **Always do a full preview restart (not just browser reload) when testing server changes in Creator Hub.**
+
+**Step 9 note:** `despawnAllZombies` is exported from `zombieSystem.ts` but not currently imported by `server.ts` — it will be needed by `roundManager.ts` in Step 11 for round-end cleanup. `PROJECTILE_HIT_RADIUS` is still imported but unused in `server.ts` — clean it up in Step 9 or 12.
+
 ---
 
 ## Step 9: `mushroomSystem.ts` — Mushroom spawning
