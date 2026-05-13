@@ -1,48 +1,9 @@
 import { Vector3 } from '@dcl/sdk/math'
 import { engine, Entity, Transform, AudioSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, GltfContainer } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
-import { isMobile } from '@dcl/sdk/platform'
-import { getPlayer, onEnterScene, onLeaveScene } from '@dcl/sdk/players'
-import { setupUi } from './ui'
-import { flagClientSystem } from './systems/flagSystem'
-import { combatClientSystem, initPools as initCombatPools } from './systems/combatSystem'
-import { trapClientSystem, initTrapPool } from './systems/trapSystem'
-import { projectileClientSystem, initProjectilePool } from './systems/projectileSystem'
-import { mushroomClientSystem } from './systems/mushroomSystem'
-import { shieldSystem } from './systems/shieldSystem'
-import { setupProximityLights, proximityLightSystem } from './systems/proximityLights'
-import { setupSpectator } from './systems/spectatorSystem'
-import { waterSystem } from './systems/waterSystem'
-import { mailboxSystem } from './systems/mailboxSystem'
-import { gravestoneSystem } from './systems/gravestoneSystem'
-import { terminalSystem } from './systems/terminalSystem'
-import { chestSystem } from './systems/chestSystem'
-import { upgradeStateSystem, initUpgradeListeners } from './gameState/playerUpgradeState'
-
-import { updateWorldTime } from './shared/dayNight'
-import { setupUpdraftSystem, updraftSystem } from './systems/updraftSystem'
-import { waterBobSystem } from './systems/waterBobSystem'
-import { coinBobSpinSystem } from './systems/coinBobSpinSystem'
-import { coinPickupSystem, setupCoinMessages } from './systems/coinPickupSystem'
-import { speedBoostSystem } from './systems/speedBoostSystem'
-import { boostTrailSystem, setupBoostTrailMessages } from './systems/boostTrailSystem'
-import { waterSplashSystem } from './systems/waterSplashSystem'
-import { setupLightning, lightningSystem, setupLightningMessages } from './systems/lightningSystem'
-import { setupBeacon, beaconClientSystem } from './systems/beaconSystem'
-import { setupRemoteBoomerangs, cleanupRemoteBoomerang } from './systems/remoteBoomerangSystem'
-import { getBoomerangColor } from './gameState/boomerangColor'
-import { setupHandBoomerangs } from './systems/handBoomerangSetup'
-import { setupLadder } from './systems/ladderSystem'
-import { setupBoundaryWalls } from './systems/boundaryWalls'
-import { setupTeleportOrbs } from './systems/teleportOrbs'
-import { setupCinematicSystem } from './systems/cinematicSystem'
-import { ghostClientSystem } from './systems/ghostSystem'
-import { Portal } from './systems/portalSystem'
-import { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } from './gameState/flagHoldTime'
-import './gameState/overlayState'
+// Shared modules (safe for both client and server)
 import './shared/components'
 import { room } from './shared/messages'
-import { setupDeathPenaltyMessages } from './systems/deathPenaltySystem'
 
 export let musicEntity: ReturnType<typeof engine.addEntity>
 
@@ -61,6 +22,52 @@ export async function main() {
   }
   
   console.log('[Main] 🎮 CLIENT MODE - Starting client...')
+
+  // ── Dynamic imports for client-only modules ──
+  // These must NOT be static imports at the top of the file, because this file
+  // also runs on the authoritative server. Many client modules import from
+  // ~system/RestrictedActions or ~system/Runtime, which don't exist on the
+  // server runtime and would crash it before main() is even called.
+  const { isMobile } = await import('@dcl/sdk/platform')
+  const { getPlayer, onEnterScene, onLeaveScene } = await import('@dcl/sdk/players')
+  const { setupUi } = await import('./ui')
+  const { flagClientSystem } = await import('./systems/flagSystem')
+  const { combatClientSystem, initPools: initCombatPools } = await import('./systems/combatSystem')
+  const { trapClientSystem, initTrapPool } = await import('./systems/trapSystem')
+  const { projectileClientSystem, initProjectilePool } = await import('./systems/projectileSystem')
+  const { mushroomClientSystem } = await import('./systems/mushroomSystem')
+  const { shieldSystem } = await import('./systems/shieldSystem')
+  const { setupProximityLights, proximityLightSystem } = await import('./systems/proximityLights')
+  const { setupSpectator } = await import('./systems/spectatorSystem')
+  const { waterSystem } = await import('./systems/waterSystem')
+  const { mailboxSystem } = await import('./systems/mailboxSystem')
+  const { gravestoneSystem } = await import('./systems/gravestoneSystem')
+  const { terminalSystem } = await import('./systems/terminalSystem')
+  const { chestSystem } = await import('./systems/chestSystem')
+  const { upgradeStateSystem, initUpgradeListeners } = await import('./gameState/playerUpgradeState')
+  const { updateWorldTime } = await import('./shared/dayNight')
+  const { setupUpdraftSystem, updraftSystem } = await import('./systems/updraftSystem')
+  const { waterBobSystem } = await import('./systems/waterBobSystem')
+  const { coinBobSpinSystem } = await import('./systems/coinBobSpinSystem')
+  const { coinPickupSystem, setupCoinMessages } = await import('./systems/coinPickupSystem')
+  const { speedBoostSystem } = await import('./systems/speedBoostSystem')
+  const { boostTrailSystem, setupBoostTrailMessages } = await import('./systems/boostTrailSystem')
+  const { waterSplashSystem } = await import('./systems/waterSplashSystem')
+  const { setupLightning, lightningSystem, setupLightningMessages } = await import('./systems/lightningSystem')
+  const { setupBeacon, beaconClientSystem } = await import('./systems/beaconSystem')
+  const { setupRemoteBoomerangs, cleanupRemoteBoomerang } = await import('./systems/remoteBoomerangSystem')
+  const { getBoomerangColor } = await import('./gameState/boomerangColor')
+  const { setupHandBoomerangs } = await import('./systems/handBoomerangSetup')
+  const { setupLadder } = await import('./systems/ladderSystem')
+  const { setupBoundaryWalls } = await import('./systems/boundaryWalls')
+  const { setupTeleportOrbs } = await import('./systems/teleportOrbs')
+  const { setupCinematicSystem } = await import('./systems/cinematicSystem')
+  const { ghostClientSystem } = await import('./systems/ghostSystem')
+  const { Portal } = await import('./systems/portalSystem')
+  const { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } = await import('./gameState/flagHoldTime')
+  const { setupDeathPenaltyMessages } = await import('./systems/deathPenaltySystem')
+  const { isSpectatorMode } = await import('./systems/spectatorSystem')
+  await import('./gameState/overlayState')
 
   // ── Client setup ──
   // Pre-initialize entity pools so GLB models are loaded before first use
