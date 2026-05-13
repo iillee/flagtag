@@ -518,6 +518,26 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract mushroomSystem.ts — mushroom spawning and pickup`
 
+### Step 9 — Completed ✅
+
+**Commit:** `93495a9` → `refactor: extract mushroomSystem.ts — mushroom spawning and pickup`
+
+**What was done:**
+- Created `src/server/mushroomSystem.ts` (80 lines) with `ServerMushroom` interface, `activeMushrooms` array, `mushroomIdCounter`, and 4 functions: `randomMushroomCandidates`, `mushroomToPayload`, `spawnOneMushroom`, `spawnMushrooms`.
+- Moved 2 message handlers (`requestMushroomPositions`, `pickupMushroom`) into `registerMushroomHandlers()`.
+- Removed `MUSHROOM_CX/CZ/RADIUS/CANDIDATES` imports from `server.ts` (no longer needed there).
+- `server.ts` reduced from 1,059 → 991 lines.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining mushroom logic in `server.ts` (only imports, calls, and comments).
+- Preview tested in Creator Hub — mushroom spawn, pickup, replacement spawn, and reconnect state sync all confirmed working.
+
+**Concerns:**
+- None. `mushroomSystem.ts` imports only from `serverState` and `../shared/messages` — no circular dependencies.
+
+**Step 10 note:** `PROJECTILE_HIT_RADIUS` is still imported but unused in `server.ts` (noted in Step 8) — clean it up in Step 10 or 12.
+
 ---
 
 ## Step 10: `playerTracking.ts` — Join/leave + name resolution
