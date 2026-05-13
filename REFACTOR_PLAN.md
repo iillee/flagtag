@@ -2,7 +2,7 @@
 
 **Goal:** Split `src/server/server.ts` (3,584 lines) into focused modules for readability, reduced complexity, and reusability as an open-source reference project.
 
-**Commit:** Starting from `813f6a6` (bug fixes for memory leaks + visitor time precision already applied).
+**Starting commit:** `813f6a6` (bug fixes for memory leaks + visitor time precision already applied).
 
 ---
 
@@ -24,144 +24,433 @@ src/server/
 ├── playerTracking.ts      (~150 lines) — join/leave detection, name resolution, visitor sessions
 ```
 
+## Dependency Graph (acyclic)
+
+```
+serverState.ts          ← foundation, no imports from other server/ modules
+persistence.ts          ← imports serverState
+leaderboard.ts          ← imports serverState, persistence
+analytics.ts            ← imports serverState, persistence, leaderboard
+economy.ts              ← imports serverState, persistence
+flagLogic.ts            ← imports serverState, persistence
+combat.ts               ← imports serverState, flagLogic (handleDrop)
+zombieSystem.ts         ← imports serverState, combat (activeProjectiles)
+mushroomSystem.ts       ← imports serverState
+playerTracking.ts       ← imports serverState, persistence, economy, analytics
+roundManager.ts         ← imports EVERYTHING (orchestrator, extracted last)
+server.ts               ← imports all modules, wires them together
+```
+
+## Critical Patterns to Preserve
+
+These are non-obvious implementation details that must survive the refactor:
+
+1. **Synchronous-before-await in `handleRoundEnd()`**: All state mutations that affect `holdTimeServerSystem` (flag reset, score reads, score zeroing, accumulator clear) MUST happen synchronously BEFORE any `await`. During `await` gaps the engine runs systems — if the flag is still `Carried`, `holdTimeServerSystem` keeps accumulating time and can write it back AFTER scores are reset.
+
+2. **`holdTimeAccum` / `holdTimeCarrierKey` flush pattern**: Hold time accumulates in a local buffer and flushes to the ECS component every 0.5s. `flushHoldTimeAccum()` MUST be called before any carrier change (drop, steal, round end) or accumulated time is lost/credited to wrong player.
+
+3. **`lastDropperId` gates `reportGroundY`**: When the flag is dropped, only the player who dropped it can report the ground Y via raycast. This prevents other clients from overriding with stale data.
+
+4. **`getOrCreateHoldTimeEntity()` is the single entry point** for creating hold-time entities. Both `playerTrackingSystem` and `holdTimeServerSystem` need these entities — the centralized function prevents duplicate entity creation races.
+
+5. **Combat → flag coupling**: `bananaServerSystem`, `shellServerSystem`, and `orbitServerSystem` all call `handleDrop()` when a victim is carrying the flag. This is the one cross-domain dependency that makes `combat.ts` depend on `flagLogic.ts`.
+
+6. **`zombieServerSystem` reads `activeProjectiles`** for projectile-zombie collision checks. This is why `zombieSystem.ts` depends on `combat.ts` (or the projectile list needs to live in shared state).
+
+7. **Round-end cleanup order matters**: Flag reset → score read → score zero → flush accumulator → clear traps/projectiles/orbits → clear lightning → respawn mushrooms → send respawn message — all synchronous. THEN await coin awards, leaderboard updates, persistence.
+
 ---
 
-## Extraction Order
+## Session Instructions
 
-Order matters — extract leaf dependencies first, then modules that depend on them. Each step should compile and be testable in preview.
+Each step is designed as one session. Start each session by saying:
 
-### Step 1: `serverState.ts` — Shared state
-Extract all module-level variables that are accessed across multiple domains:
-- Entity references: `flagEntity`, `countdownEntity`, `leaderboardEntity`, `allTimeLeaderboardEntity`, `monthlyLeaderboardEntity`, `visitorAnalyticsEntity`, `monthlyVisitorAnalyticsEntity`, `coinStateEntity`
-- Per-player maps: `holdTimeEntities`, `knownPlayers`, `playerNames`, `walletEntities`, `upgradeEntities`, `lifetimeWinsEntities`, `playerBoomerangColors`, `playerCoinBalances`, `playerUpgradeData`, `playerLifetimeWinsCache`, `deathPenaltyCooldowns`
-- Session maps: `visitorSessions`, `monthlyVisitorSessions`, `currentlyConnected`
-- Constants shared across modules: `PICKUP_RADIUS`, `STEAL_IMMUNITY_MS`, `FLAG_GRAVITY`, `FLAG_MIN_Y`, etc.
-- Helper: `isRealName()`, `getPlayerPosition()`
+> "Read REFACTOR_PLAN.md and do Step N of the server refactor."
 
-**Why first:** Every other module imports from here. No dependencies on other new modules.
+After completing a step, commit and push before ending the session.
 
-### Step 2: `persistence.ts` — Storage helpers
-Extract:
-- `persistFlagState()`, `persistLeaderboard()`, `persistAllTimeLeaderboard()`, `persistMonthlyLeaderboard()`
-- `persistPlayerNames()`, `loadPlayerNames()`
-- `persistVisitorData()`, `loadVisitorData()`
+---
 
-**Depends on:** `serverState.ts`
+## Step 1: `serverState.ts` — Shared state
 
-### Step 3: `leaderboard.ts` — Leaderboard logic
-Extract:
-- `LeaderboardEntry` type, `parseLeaderboardJson()`, `incrementLeaderboardWins()`
-- `patchLeaderboardNames()`, `patchAllLeaderboardNames()`
-- `checkLeaderboardDailyReset()`, `checkMonthlyLeaderboardReset()`
-- `updatePlayerName()` (updates leaderboards + visitor sessions + player names)
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 1 of the server refactor."
 
-**Depends on:** `serverState.ts`, `persistence.ts`
+**What to do:** Create `src/server/serverState.ts` and move all module-level state that is accessed by 2+ domains out of `server.ts`. Update `server.ts` to import from `serverState.ts`.
 
-### Step 4: `analytics.ts` — Visitor tracking + Discord
-Extract:
-- Concurrent tracking: `updateConcurrentTracking()`, `hourlyPeakConcurrent`, `peakConcurrent`, `peakConcurrentTime`
-- Discord: `loadDiscordWebhookUrl()`, `sendDailyAnalyticsToDiscord()`, `sendDiscordFallbackText()`, `buildDailyReport()`
-- Pending reports: `snapshotPendingReport()`, `sendPendingReport()`, `checkPreMidnightReport()`, `loadDailyReportSentDay()`
-- Visitor sync: `syncVisitorAnalytics()`, `syncMonthlyVisitorAnalytics()`, `checkVisitorDailyReset()`, `checkMonthlyVisitorReset()`
-- System: `visitorTrackingServerSystem()`
+**Move these entity variables** (they need setter functions since they're assigned during `setupServer`):
+- `flagEntity`, `countdownEntity`, `leaderboardEntity`, `allTimeLeaderboardEntity`, `monthlyLeaderboardEntity`, `visitorAnalyticsEntity`, `monthlyVisitorAnalyticsEntity`, `coinStateEntity`
 
-**Depends on:** `serverState.ts`, `persistence.ts`, `leaderboard.ts`
+**Move these per-player maps:**
+- `holdTimeEntities`, `knownPlayers`, `playerNames`, `walletEntities`, `upgradeEntities`, `lifetimeWinsEntities`
+- `playerBoomerangColors`, `playerCoinBalances`, `playerUpgradeData`, `playerLifetimeWinsCache`
+- `deathPenaltyCooldowns`, `lastStealTime`
+- `visitorSessions`, `monthlyVisitorSessions`, `currentlyConnected`
 
-### Step 5: `economy.ts` — Coins, wallets, upgrades, store
-Extract:
-- Coin helpers: `loadPlayerCoinBalance()`, `setPlayerCoinBalance()`, `addPlayerCoins()`, `getOrCreateWalletEntity()`
-- Upgrade helpers: `loadPlayerUpgrades()`, `savePlayerUpgrades()`, `getOrCreateUpgradeEntity()`
-- Lifetime wins: `loadPlayerLifetimeWins()`, `addPlayerLifetimeWin()`, `getOrCreateLifetimeWinsEntity()`
-- Store: `handleBuyBoomerang()`
-- Coin state: `updateCoinStateCRDT()`, `coinServerSystem()`, `awardRoundCoins()`
-- Coin/upgrade-related message handlers (from `registerHandlers`)
+**Move these shared constants:**
+- `PICKUP_RADIUS`, `PROXIMITY_STEAL_RADIUS`, `STEAL_IMMUNITY_MS`, `HOLD_TIME_SYNC_INTERVAL`
+- `SPLASH_DURATION_MS`, `FLAG_GRAVITY`, `FLAG_MIN_Y`, `CARRIER_Y_WINDOW_SEC`
+- `CARRIER_NO_POSITION_TIMEOUT_MS`
+- Mushroom constants: `MUSHROOM_CX`, `MUSHROOM_CZ`, `MUSHROOM_RADIUS`, `MUSHROOM_CANDIDATES`
 
-**Depends on:** `serverState.ts`, `persistence.ts`
+**Move these shared helpers:**
+- `isRealName()`
+- `getPlayerPosition()`
 
-### Step 6: `flagLogic.ts` — Flag pickup/drop/steal/gravity
-Extract:
-- Flag state: `flagFalling`, `flagFallVelocity`, `flagGravityTargetY`, `carrierYSamples`, `lastDropperId`, `lastKnownCarrierPos`, `lastCarrierPositionMs`
-- Gravity: `computeGravityTarget()`, `resetGravityState()`, `resetCarrierTracking()`
-- Handlers: `handlePickup()`, `handleDrop()`, `handleFlagSteal()`
-- Hold time: `flushHoldTimeAccum()`, `holdTimeServerSystem()`, `getOrCreateHoldTimeEntity()`
-- System: `flagServerSystem()`
-- Proximity steal: `checkProximitySteal()`
+**Pattern for mutable entity refs:** Use `export let` + setter functions:
+```typescript
+export let flagEntity: Entity
+export function setFlagEntity(e: Entity) { flagEntity = e }
+```
 
-**Depends on:** `serverState.ts`, `persistence.ts`
+**Verify:** `npx tsc --noEmit` compiles clean. `grep -rn` in `server.ts` confirms no remaining local declarations of moved items.
 
-### Step 7: `combat.ts` — Traps, projectiles, orbits
-Extract:
-- Trap state + types: `ActiveTrap`, `activeTraps`, `lastTrapDropTime`
-- Trap functions: `handleTrapDrop()`, `removeTrap()`, `bananaServerSystem()`
-- Projectile state + types: `ActiveProjectile`, `activeProjectiles`, `lastProjectileFireTime`
-- Projectile functions: `handleProjectileFire()`, `removeProjectile()`, `shellServerSystem()`
-- Orbit state + types: `ActiveOrbit`, `activeOrbits`, `lastOrbitTime`
-- Orbit functions: `handleOrbitRequest()`, `orbitServerSystem()`
-- Combat-related message handlers (from `registerHandlers`)
+**Commit message:** `refactor: extract serverState.ts — shared state and constants`
 
-**Depends on:** `serverState.ts`, `flagLogic.ts` (calls `handleDrop` when victim is carrying flag)
+---
 
-### Step 8: `zombieSystem.ts` — Ghost AI
-Extract:
-- Zombie state: `ActiveZombie`, `activeZombies`, `zombieSpawnTimer`, `zombieRespawnCooldown`
-- Functions: `spawnZombie()`, `despawnAllZombies()`, `zombieServerSystem()`
-- Zombie message handler (`zombieHit`)
+## Step 2: `persistence.ts` — Storage helpers
 
-**Depends on:** `serverState.ts`, `combat.ts` (reads `activeProjectiles` for projectile-zombie collisions)
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 2 of the server refactor."
 
-### Step 9: `mushroomSystem.ts` — Mushroom spawning
-Extract:
-- Mushroom state: `ServerMushroom`, `activeMushrooms`, `mushroomIdCounter`
-- Functions: `randomMushroomCandidates()`, `mushroomToPayload()`, `spawnOneMushroom()`, `spawnMushrooms()`
-- Mushroom message handlers
+**What to do:** Create `src/server/persistence.ts` and move all `Storage.get`/`Storage.set` wrapper functions out of `server.ts`.
 
-**Depends on:** `serverState.ts`
+**Move these functions:**
+- `persistFlagState()` — reads `Flag` and `Transform` from `flagEntity`, writes to `Storage`
+- `persistLeaderboard(json)`, `persistAllTimeLeaderboard(json)`, `persistMonthlyLeaderboard(json)`
+- `persistPlayerNames()` — iterates `playerNames` map, writes to `Storage`
+- `loadPlayerNames()` — reads from `Storage`, populates `playerNames` map
+- `persistVisitorData(visitorDataJson)` — writes visitor data + concurrent tracking to `Storage`
+- `loadVisitorData()` — reads from `Storage`, populates `visitorSessions` map and concurrent state
 
-### Step 10: `playerTracking.ts` — Join/leave + name resolution
-Extract:
-- `playerTrackingSystem()` (the big join/leave detector)
+**Note:** `loadVisitorData()` is complex — it references `lastVisitorResetDay`, `hourlyPeakConcurrent`, `peakConcurrent`, `peakConcurrentTime`, and `playerNames`. These either come from `serverState.ts` or need to be passed as parameters. Prefer importing from `serverState.ts` where possible. Move `lastVisitorResetDay` and concurrent tracking variables to `serverState.ts` if not already there.
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract persistence.ts — Storage wrapper helpers`
+
+---
+
+## Step 3: `leaderboard.ts` — Leaderboard logic
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 3 of the server refactor."
+
+**What to do:** Create `src/server/leaderboard.ts` and move leaderboard types, helpers, reset logic, and the name-update function.
+
+**Move these:**
+- `type LeaderboardEntry`
+- `parseLeaderboardJson()`
+- `incrementLeaderboardWins()`
+- `patchLeaderboardNames()`
+- `patchAllLeaderboardNames()`
+- `checkLeaderboardDailyReset()` — references `leaderboardEntity`, `lastLeaderboardResetDay`, calls `snapshotPendingReport` (which will be in `analytics.ts` later — for now import from `server.ts` or accept a callback)
+- `checkMonthlyLeaderboardReset()` — references `monthlyLeaderboardEntity`
+- `updatePlayerName()` — the big function that patches names across leaderboards, visitor sessions, and playerNames map
+
+**Tricky part:** `checkLeaderboardDailyReset()` calls `snapshotPendingReport()` which is analytics code not yet extracted. Options:
+- Accept a callback parameter: `checkLeaderboardDailyReset(onReset: (json: string) => Promise<void>)`
+- Or leave `snapshotPendingReport` in `server.ts` temporarily and import it (it moves to `analytics.ts` in Step 4)
+
+**Move `lastLeaderboardResetDay` to `serverState.ts`** if not already there.
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract leaderboard.ts — leaderboard types, helpers, and reset logic`
+
+---
+
+## Step 4: `analytics.ts` — Visitor tracking + Discord
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 4 of the server refactor."
+
+**What to do:** Create `src/server/analytics.ts` and move all visitor analytics, Discord webhook, and daily report code.
+
+**Move these state variables to `serverState.ts`** (if not already there):
+- `hourlyPeakConcurrent`, `peakConcurrent`, `peakConcurrentTime`
+- `lastVisitorResetDay`, `lastMonthlyVisitorResetMonth`
+- `dailyReportSentForDay`
+- `DISCORD_WEBHOOK_URL`
+
+**Move these functions to `analytics.ts`:**
+- `updateConcurrentTracking()`
+- `loadDiscordWebhookUrl()`
+- `buildDailyReport(leaderboardJson)`
+- `snapshotPendingReport(leaderboardJson)`
+- `sendPendingReport()`
+- `sendDailyAnalyticsToDiscord()`
+- `sendDiscordFallbackText(summary, users)`
+- `loadDailyReportSentDay()`
+- `checkPreMidnightReport()`
+- `syncVisitorAnalytics()`
+- `syncMonthlyVisitorAnalytics()`
+- `checkVisitorDailyReset()`
+- `checkMonthlyVisitorReset()`
+- `visitorTrackingServerSystem()`
+
+**If `snapshotPendingReport` was left in `server.ts` during Step 3**, now move it here and update the import in `leaderboard.ts`.
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract analytics.ts — visitor tracking, Discord webhooks, daily reports`
+
+---
+
+## Step 5: `economy.ts` — Coins, wallets, upgrades, store
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 5 of the server refactor."
+
+**What to do:** Create `src/server/economy.ts` and move all coin, wallet, upgrade, and store logic.
+
+**Move these functions:**
+- `loadPlayerCoinBalance()`, `setPlayerCoinBalance()`, `addPlayerCoins()`, `getOrCreateWalletEntity()`
+- `loadPlayerUpgrades()`, `savePlayerUpgrades()`, `getOrCreateUpgradeEntity()`
+- `loadPlayerLifetimeWins()`, `addPlayerLifetimeWin()`, `getOrCreateLifetimeWinsEntity()`
+- `handleBuyBoomerang()`
+- `updateCoinStateCRDT()`, `coinServerSystem()`
+- `awardRoundCoins(players)` — called from `handleRoundEnd`, will be imported by `roundManager.ts` later
+- `coinRespawnTimer` (module-local state for coin respawn)
+
+**Move these message handlers** out of `registerHandlers()` in `server.ts`:
+- `requestCoinPickup`, `requestWalletBalance`
+- `requestUpgrades`, `buyBoomerang`, `equipBoomerang`
+- `deathPenalty`
+
+**Export:** `registerEconomyHandlers(room)` function + `coinServerSystem`
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract economy.ts — coins, wallets, upgrades, store`
+
+---
+
+## Step 6: `flagLogic.ts` — Flag pickup/drop/steal/gravity
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 6 of the server refactor."
+
+**What to do:** Create `src/server/flagLogic.ts` and move all flag-related state, handlers, and systems.
+
+**Move these module-local state variables:**
+- `flagFalling`, `flagFallVelocity`, `flagGravityTargetY`
+- `carrierYSamples`, `lastDropperId`, `lastKnownCarrierPos`, `lastCarrierPositionMs`
+- `holdTimeAccum`, `holdTimeCarrierKey`
+
+**Move these functions:**
+- `computeGravityTarget()`, `resetGravityState()`, `resetCarrierTracking()`
+- `handlePickup()`, `handleDrop()`, `handleFlagSteal()`
+- `flushHoldTimeAccum()` — ⚠️ This is called from `handleRoundEnd` (roundManager), `handleDrop`, `handleFlagSteal`, and `flagServerSystem`. Must be exported.
+- `getOrCreateHoldTimeEntity()` — ⚠️ Single entry point for hold-time entities. Must be exported.
+- `holdTimeServerSystem()`
+- `flagServerSystem()`
+- `checkProximitySteal()`
+
+**Move these message handlers:**
+- `requestPickup`, `requestDrop`, `requestReloadRespawn`, `reportGroundY`
+
+**Export:** `registerFlagHandlers(room)` + `flagServerSystem` + `holdTimeServerSystem` + `checkProximitySteal` + `handleDrop` (needed by combat.ts) + `handleFlagSteal` + `flushHoldTimeAccum` + `resetGravityState` + `getOrCreateHoldTimeEntity`
+
+**⚠️ Critical:** `handleDrop` and `flushHoldTimeAccum` are called from outside this module (combat hits, round end). They MUST be exported.
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract flagLogic.ts — flag pickup/drop/steal/gravity/hold-time`
+
+---
+
+## Step 7: `combat.ts` — Traps, projectiles, orbits
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 7 of the server refactor."
+
+**What to do:** Create `src/server/combat.ts` and move all trap, projectile, and orbit logic.
+
+**Move these types and state:**
+- `ActiveTrap` interface, `activeTraps` array, `lastTrapDropTime` map
+- `ActiveProjectile` interface, `activeProjectiles` array, `lastProjectileFireTime` map
+- `ActiveOrbit` interface, `activeOrbits` array, `lastOrbitTime` map
+- Orbit constants: `ORBIT_DURATION_MS`, `ORBIT_RADIUS`, `ORBIT_HIT_RADIUS`, `ORBIT_COOLDOWN_SEC`
+
+**Move these functions:**
+- `removeTrap()`, `handleTrapDrop()`, `bananaServerSystem()`
+- `removeProjectile()`, `handleProjectileFire()`, `shellServerSystem()`
+- `handleOrbitRequest()`, `orbitServerSystem()`
+
+**Move these message handlers:**
+- `requestBanana`, `reportBananaGroundY`
+- `requestShell`, `reportShellWallDist`, `reportShellGroundY`
+- `requestOrbit`, `orbitHitWall`
+- `chargeBurnout`, `reportBoost`, `chargeStart`, `chargeStop`
+
+**Import from `flagLogic.ts`:** `handleDrop` (called when projectile/trap/orbit hits the flag carrier)
+
+**⚠️ Export `activeProjectiles`** (or a getter) — `zombieSystem.ts` needs to read it for projectile-zombie collision checks.
+
+**⚠️ Export `activeTraps`** — `zombieSystem.ts` checks trap-zombie collisions in `bananaServerSystem`, but that system stays in combat.ts. Actually, re-check: the ghost-trap collision is inside `bananaServerSystem` which stays here. So `activeTraps` may not need exporting. But `activeProjectiles` does (zombie system iterates it).
+
+**Export:** `registerCombatHandlers(room)` + `bananaServerSystem` + `shellServerSystem` + `orbitServerSystem` + `activeProjectiles` + `activeTraps` + `activeOrbits` + cleanup functions for round end
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract combat.ts — traps, projectiles, orbits`
+
+---
+
+## Step 8: `zombieSystem.ts` — Ghost AI
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 8 of the server refactor."
+
+**What to do:** Create `src/server/zombieSystem.ts` and move all ghost/zombie logic.
+
+**Move these types and state:**
+- `ActiveZombie` interface, `activeZombies` array
+- `zombieSpawnTimer`, `zombieRespawnCooldown`
+- `ZOMBIE_SPAWN_POS`, `ZOMBIE_RESPAWN_COOLDOWN`, `ZOMBIE_STAGGER_COOLDOWN_MS`, `ZOMBIE_IDLE_ORBIT_SPEED`
+
+**Move these functions:**
+- `spawnZombie()`
+- `despawnAllZombies()`
+- `zombieServerSystem()` — ⚠️ This reads `activeProjectiles` from combat.ts for projectile-zombie collision. Import it.
+
+**Move the `zombieHit` message handler** (currently registered directly via `room.onMessage` at module level, not inside `registerHandlers`)
+
+**Export:** `registerZombieHandlers(room)` + `zombieServerSystem` + `despawnAllZombies` + `activeZombies` (roundManager needs to know about them? check — actually roundManager doesn't touch zombies directly, but `bananaServerSystem` in combat.ts checks ghost-trap collision by reading `activeZombies`. So export `activeZombies`.)
+
+**⚠️ Re-check cross-references:** `bananaServerSystem` in `combat.ts` iterates `activeZombies` for ghost-trap collisions and calls `recycleZombieSyncId`. This means `combat.ts` needs to import from `zombieSystem.ts`, creating a `combat ↔ zombie` dependency. Solutions:
+- Move the ghost-trap collision check from `bananaServerSystem` into `zombieSystem.ts` (cleaner)
+- Or accept the bidirectional import since it's not truly circular (both import specific exports, not each other's initialization)
+
+**Preferred:** Move ghost-trap collision to zombie system or accept it as a one-way dependency where combat exports traps, zombie reads them.
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract zombieSystem.ts — ghost AI, spawning, collisions`
+
+---
+
+## Step 9: `mushroomSystem.ts` — Mushroom spawning
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 9 of the server refactor."
+
+**What to do:** Create `src/server/mushroomSystem.ts` and move all mushroom logic.
+
+**Move these types and state:**
+- `ServerMushroom` interface, `activeMushrooms` array, `mushroomIdCounter`
+
+**Move these functions:**
+- `randomMushroomCandidates()`
+- `mushroomToPayload()`
+- `spawnOneMushroom()`
+- `spawnMushrooms()` — called from `setupServer` and `handleRoundEnd`. Must be exported.
+
+**Move these message handlers:**
+- `requestMushroomPositions`, `pickupMushroom`
+
+**Export:** `registerMushroomHandlers(room)` + `spawnMushrooms`
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract mushroomSystem.ts — mushroom spawning and pickup`
+
+---
+
+## Step 10: `playerTracking.ts` — Join/leave + name resolution
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 10 of the server refactor."
+
+**What to do:** Create `src/server/playerTracking.ts` and move player join/leave detection and name resolution.
+
+**Move these functions:**
+- `playerTrackingSystem()` — the big system that detects joins/leaves, creates hold-time entities, loads wallets, tracks visitor sessions
 - `nameResolverServerSystem()`
 
-**Depends on:** `serverState.ts`, `persistence.ts`, `economy.ts` (loads wallet on join), `analytics.ts` (syncs visitor data on change)
+**This system calls into multiple modules on join:**
+- `getOrCreateHoldTimeEntity(userKey)` — from `flagLogic.ts`
+- `loadPlayerCoinBalance(userKey)` + `getOrCreateWalletEntity(userKey)` — from `economy.ts`
+- `updateConcurrentTracking()` + `syncVisitorAnalytics()` + `syncMonthlyVisitorAnalytics()` — from `analytics.ts`
+- `updatePlayerName()` — from `leaderboard.ts`
+- `persistPlayerNames()` — from `persistence.ts`
 
-### Step 11: `roundManager.ts` — Countdown + round end
-Extract:
+**All accessed via imports — no circular dependencies** since nothing imports from `playerTracking.ts`.
+
+**Export:** `playerTrackingSystem` + `nameResolverServerSystem`
+
+**Verify:** `npx tsc --noEmit` compiles clean.
+
+**Commit message:** `refactor: extract playerTracking.ts — join/leave detection, name resolution`
+
+---
+
+## Step 11: `roundManager.ts` — Countdown + round end + lightning + updraft
+
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 11 of the server refactor."
+
+**What to do:** Create `src/server/roundManager.ts` and move the round lifecycle, countdown, lightning, and updraft systems. This is the trickiest step because `handleRoundEnd` touches every domain.
+
+**Move these state variables:**
+- `lastProcessedRoundEndTime`, `lastTimerDebugLog`
+- Lightning: `lightningRollTimer`, `lightningStrikeScheduled`, `lightningWarningTimer`, `_lightningOriginalCarrierId`, `LIGHTNING_ROLL_INTERVAL`, `LIGHTNING_WARNING_DURATION`
+- Updraft: `updraftActiveIndex`, `updraftTimer`, `UPDRAFT_CHIMNEY_COUNT`, `UPDRAFT_ROTATE_SEC`
+
+**Move these functions:**
+- `getLightningStrikeChance()`, `getCarrierHoldSeconds()`
+- `lightningServerSystem()`
 - `countdownServerSystem()`
-- `handleRoundEnd()` — this is the nexus function that calls into nearly every other module
-- `lightningServerSystem()`, `getLightningStrikeChance()`, `getCarrierHoldSeconds()`
-- Lightning state variables
-- `updraftServerSystem()` + updraft state
+- `handleRoundEnd()` — the nexus function
+- `updraftServerSystem()`
 
-**Depends on:** Everything (flag, combat, economy, leaderboard, analytics, mushroom, zombie). This is extracted last because it orchestrates all domains.
+**Move these message handlers:**
+- `requestUpdraftLocation`
+- `testDiscord` (admin trigger — or move to analytics)
 
-### Step 12: `server.ts` — Thin orchestrator
-Reduce to:
-- `setupServer()` — calls each module's init/setup, registers all systems
-- `registerHandlers()` — delegates to per-module handler registration, or each module registers its own handlers during setup
+**`handleRoundEnd()` imports from everywhere:**
+- `flagLogic`: `flushHoldTimeAccum()`, `resetGravityState()`, `getOrCreateHoldTimeEntity()`
+- `combat`: `activeTraps`, `activeProjectiles`, `activeOrbits`, `removeTrap()`, `removeProjectile()`
+- `economy`: `awardRoundCoins()`
+- `leaderboard`: `parseLeaderboardJson()`, `incrementLeaderboardWins()`, `checkLeaderboardDailyReset()`, `checkMonthlyLeaderboardReset()`
+- `persistence`: `persistLeaderboard()`, etc.
+- `mushroom`: `spawnMushrooms()`
+- `analytics`: (indirectly via leaderboard reset)
 
----
+**⚠️ CRITICAL:** Preserve the synchronous-before-await order in `handleRoundEnd()`. All flag resets, score reads, score zeros, accumulator clears, trap/projectile cleanup, and respawn messages MUST happen before the first `await`. Do NOT introduce any `await` before the comment line `// Safe to await now`.
 
-## Circular Dependency Strategy
+**Export:** `countdownServerSystem` + `lightningServerSystem` + `updraftServerSystem` + `registerRoundHandlers(room)`
 
-The main risk is `combat.ts` ↔ `flagLogic.ts` (combat calls `handleDrop` when projectile/trap hits carrier, flag logic is otherwise independent).
+**Verify:** `npx tsc --noEmit` compiles clean. This is the step most likely to break things — double-check all imports resolve.
 
-**Solution:** `flagLogic.ts` exports `handleDrop()`. `combat.ts` imports it. No reverse dependency needed — flag logic doesn't need to know about combat.
-
-`roundManager.ts` imports from everything but nothing imports from it (except `server.ts` for system registration). This keeps the dependency graph acyclic.
-
----
-
-## Verification After Each Step
-
-1. `npx tsc --noEmit` — must compile clean
-2. `grep -rn` for any remaining references to moved functions/variables in old locations
-3. Preview test if gameplay-adjacent code was moved
+**Commit message:** `refactor: extract roundManager.ts — countdown, round end, lightning, updraft`
 
 ---
 
-## Notes
+## Step 12: `server.ts` — Final cleanup
 
-- Each module should export a `register*Handlers(room)` function for its message handlers, called from `server.ts`
-- Each module should export its system functions, registered in `server.ts` via `engine.addSystem`
-- The `safeSystem` wrapper stays in `server.ts` and wraps all systems at registration time
-- `serverState.ts` uses mutable exported variables (`export let flagEntity`) — modules reassign them during setup via setter functions
+**Session prompt:** "Read REFACTOR_PLAN.md and do Step 12 of the server refactor."
+
+**What to do:** Clean up `server.ts` to be a thin orchestrator. By now, most code should already be extracted. What remains:
+
+- `setupServer()` — calls each module's setup/init, creates entities, registers systems
+- The `safeSystem` wrapper
+- The `registerHandlers()` call that delegates to per-module `register*Handlers(room)` functions
+- Entity creation code (flag, countdown, leaderboard, coin state, visitor analytics entities) — these can stay in `server.ts` since they're one-time setup
+
+**Verify the final state:**
+- `server.ts` should be ~150-200 lines
+- No function longer than ~30 lines
+- All game logic lives in domain modules
+- `npx tsc --noEmit` compiles clean
+- Start preview and screenshot to verify the game works
+
+**Commit message:** `refactor: finalize server.ts as thin orchestrator — refactor complete`
+
+---
+
+## Post-Refactor Checklist
+
+After all 12 steps are done:
+
+- [ ] `npx tsc --noEmit` — zero errors
+- [ ] Preview test: flag pickup/drop works
+- [ ] Preview test: boomerang throw + return works
+- [ ] Preview test: scoreboard updates during round
+- [ ] Preview test: round end triggers, scores reset, flag respawns
+- [ ] Preview test: coin pickup works
+- [ ] Preview test: store UI opens, can browse items
+- [ ] No circular imports (check with `grep -rn "import.*from.*server/" src/server/`)
+- [ ] Each module file has a brief header comment explaining its responsibility
+- [ ] Delete this file (`REFACTOR_PLAN.md`) or move to `docs/`
