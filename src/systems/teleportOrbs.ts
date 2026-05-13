@@ -1,17 +1,20 @@
-import { engine, Entity, Transform, AudioSource, MeshRenderer, Material, MaterialTransparencyMode, LightSource } from '@dcl/sdk/ecs'
-import { Vector3, Color3, Color4 } from '@dcl/sdk/math'
+import { engine, Entity, Transform, AudioSource, GltfContainer, LightSource } from '@dcl/sdk/ecs'
+import { Vector3, Quaternion, Color3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 
 const ORB_TRIGGER_RADIUS = 1.5
 const ORB_LAND_OFFSET = 3
 const TELEPORT_COOLDOWN = 1.0
-const ORB_BASE_SCALE = 1.2
-const ORB_PULSE_SPEED = 3.0
-const ORB_PULSE_RANGE = 0.15
+const ORB_SCALE = 0.7
+const ORB_SPIN_SPEED_Y = 0.5
+const ORB_SPIN_SPEED_X = 0.3
+const ORB_BOB_SPEED = 2.0
+const ORB_BOB_RANGE = 0.15
 
 interface OrbPair {
   positions: { x: number; y: number; z: number }[]
-  orbEntities: Entity[]
+  orbEntities: Entity[]      // the d20 body (parent for spin/bob)
+  wireEntities: Entity[]     // wireframe overlay (child of orb)
   soundEntities: Entity[]
   wasInside: boolean[]
   cooldown: number
@@ -20,55 +23,68 @@ interface OrbPair {
 function createOrbPair(
   positions: { x: number; y: number; z: number }[],
   color: Color3,
-  albedo: Color4
+  model: string,
+  wireModel: string
 ): OrbPair {
   const orbEntities: Entity[] = []
+  const wireEntities: Entity[] = []
   const soundEntities: Entity[] = []
 
   for (const pos of positions) {
     const baseY = pos.y + 1
+
+    // ── D20 body ──
     const orb = engine.addEntity()
     Transform.create(orb, {
       position: Vector3.create(pos.x, baseY, pos.z),
-      scale: Vector3.create(ORB_BASE_SCALE, ORB_BASE_SCALE, ORB_BASE_SCALE)
+      scale: Vector3.create(ORB_SCALE, ORB_SCALE, ORB_SCALE),
+      rotation: Quaternion.fromEulerDegrees(0, 0, 0)
     })
-    MeshRenderer.setSphere(orb)
-    Material.setPbrMaterial(orb, {
-      albedoColor: albedo,
-      emissiveColor: color,
-      emissiveIntensity: 4.0,
-      roughness: 0.2,
-      metallic: 0.0,
-      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
+    GltfContainer.create(orb, { src: model })
+
+    // ── Wireframe edges (child of orb — spins with it) ──
+    const wire = engine.addEntity()
+    Transform.create(wire, {
+      parent: orb,
+      position: Vector3.Zero(),
+      scale: Vector3.create(1.02, 1.02, 1.02) // slightly larger so edges sit on surface
     })
+    GltfContainer.create(wire, { src: wireModel })
+
+    // ── Point light ──
     const light = engine.addEntity()
     Transform.create(light, { parent: orb, position: Vector3.Zero() })
     LightSource.create(light, { type: LightSource.Type.Point({}), color, intensity: 150, range: 12 })
-    orbEntities.push(orb)
 
+    orbEntities.push(orb)
+    wireEntities.push(wire)
+
+    // ── Sound ──
     const snd = engine.addEntity()
     Transform.create(snd, { position: Vector3.create(pos.x, baseY, pos.z) })
     AudioSource.create(snd, { audioClipUrl: 'assets/sounds/teleport.mp3', playing: false, loop: false, volume: 1, global: false })
     soundEntities.push(snd)
   }
 
-  return { positions, orbEntities, soundEntities, wasInside: positions.map(() => false), cooldown: 0 }
+  return { positions, orbEntities, wireEntities, soundEntities, wasInside: positions.map(() => false), cooldown: 0 }
 }
 
 /**
- * Creates teleport orb pairs and registers the teleportation + pulse system.
+ * Creates teleport orb pairs and registers the teleportation + spin/bob system.
  */
 export function setupTeleportOrbs(): void {
   const orbPairs: OrbPair[] = [
     createOrbPair(
       [{ x: 290.5, y: 2.6, z: 254.7 }, { x: 276.56, y: 52.25, z: 301.5 }],
-      Color3.create(1.0, 0.84, 0.0),    // Gold
-      Color4.create(1.0, 0.84, 0.0, 0.85)
+      Color3.create(1.0, 0.45, 0.0),
+      'models/d20-gold.glb',
+      'models/d20-wire-gold.glb'
     ),
     createOrbPair(
       [{ x: 224, y: 2.0, z: 288 }, { x: 226.3, y: 2.8, z: 211.3 }],
-      Color3.create(0.05, 0.3, 1.0),    // Blue
-      Color4.create(0.0, 0.2, 1.0, 0.85)
+      Color3.create(0.05, 0.3, 1.0),
+      'models/d20-blue.glb',
+      'models/d20-wire-blue.glb'
     ),
   ]
 
@@ -89,7 +105,9 @@ export function setupTeleportOrbs(): void {
           const destIndex = i === 0 ? 1 : 0
           const dest = pair.positions[destIndex]
           for (const snd of pair.soundEntities) {
-            AudioSource.createOrReplace(snd, { audioClipUrl: 'assets/sounds/teleport.mp3', playing: true, loop: false, volume: 1, global: false })
+            // Stop first to interrupt any in-progress playback, then restart
+            AudioSource.createOrReplace(snd, { audioClipUrl: 'assets/sounds/teleport.mp3', playing: false, loop: false, volume: 1, global: false })
+            AudioSource.getMutable(snd).playing = true
           }
           pair.cooldown = TELEPORT_COOLDOWN
           void movePlayerTo({ newRelativePosition: Vector3.create(dest.x + ORB_LAND_OFFSET, dest.y + 1, dest.z) })
@@ -98,14 +116,20 @@ export function setupTeleportOrbs(): void {
       }
     }
 
-    // Pulse all orbs
+    // Spin and bob all orbs
     orbPulseTime += dt
-    const pulse = 1 + ORB_PULSE_RANGE * Math.sin(orbPulseTime * ORB_PULSE_SPEED)
-    const s = ORB_BASE_SCALE * pulse
     for (const pair of orbPairs) {
-      for (const orb of pair.orbEntities) {
+      for (let i = 0; i < pair.orbEntities.length; i++) {
+        const orb = pair.orbEntities[i]
         if (Transform.has(orb)) {
-          Transform.getMutable(orb).scale = Vector3.create(s, s, s)
+          const t = Transform.getMutable(orb)
+          const baseY = pair.positions[i].y + 1
+          t.position.y = baseY + ORB_BOB_RANGE * Math.sin(orbPulseTime * ORB_BOB_SPEED)
+          t.rotation = Quaternion.fromEulerDegrees(
+            orbPulseTime * ORB_SPIN_SPEED_X * 57.3,
+            orbPulseTime * ORB_SPIN_SPEED_Y * 57.3,
+            0
+          )
         }
       }
     }
