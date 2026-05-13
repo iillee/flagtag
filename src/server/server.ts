@@ -141,9 +141,10 @@ function getOrCreateHoldTimeEntity(userKey: string): Entity {
 }
 
 // ── Visitor tracking ──
-const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesToday: number }>()
-const monthlyVisitorSessions = new Map<string, { name: string; sessionStartMs: number; totalMinutesMonth: number }>()
+const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalSecondsToday: number }>()
+const monthlyVisitorSessions = new Map<string, { name: string; sessionStartMs: number; totalSecondsMonth: number }>()
 const playerBoomerangColors = new Map<string, string>() // playerId -> color ('r','y','b','g')
+const deathPenaltyCooldowns = new Map<string, number>() // prevent death penalty spam
 let lastVisitorResetDay = ''
 let lastMonthlyVisitorResetMonth = ''
 
@@ -356,9 +357,9 @@ async function loadVisitorData(): Promise<void> {
       if (lastVisitorResetDay === currentDay) {
         for (const record of visitorRecords) {
           // Support both old format (totalMinutes) and new format (totalSeconds)
-          const minutes = record.totalSeconds != null
-            ? Math.floor(record.totalSeconds / 60)
-            : (record.totalMinutes || 0)
+          const seconds = record.totalSeconds != null
+            ? record.totalSeconds
+            : (record.totalMinutes || 0) * 60
           const recordKey = (record.userId || '').toLowerCase()
           // Use persisted name directory if available, fall back to stored visitor name
           const bestName = (playerNames.has(recordKey) && isRealName(playerNames.get(recordKey)!))
@@ -367,7 +368,7 @@ async function loadVisitorData(): Promise<void> {
           visitorSessions.set(recordKey, {
             name: bestName,
             sessionStartMs: 0, // Not currently online after server restart
-            totalMinutesToday: minutes
+            totalSecondsToday: seconds
           })
           if (isRealName(bestName)) {
             playerNames.set(recordKey, bestName)
@@ -467,7 +468,7 @@ function buildDailyReport(leaderboardJson: string): any {
   } catch { /* ignore */ }
 
   const users = Array.from(visitorSessions.entries()).map(([userId, data]) => {
-    let totalSeconds = data.totalMinutesToday * 60
+    let totalSeconds = data.totalSecondsToday
     if (data.sessionStartMs > 0) {
       totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
     }
@@ -805,7 +806,7 @@ async function syncVisitorAnalytics(): Promise<void> {
   const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
     const isOnline = data.sessionStartMs > 0
     // Calculate total seconds (stored minutes + current session)
-    let totalSeconds = data.totalMinutesToday * 60
+    let totalSeconds = data.totalSecondsToday
     
     if (isOnline) {
       const sessionMs = now - data.sessionStartMs
@@ -851,7 +852,7 @@ async function syncMonthlyVisitorAnalytics(): Promise<void> {
 
   const visitorData = Array.from(monthlyVisitorSessions.entries()).map(([userId, data]) => {
     const isOnline = data.sessionStartMs > 0
-    let totalSeconds = data.totalMinutesMonth * 60
+    let totalSeconds = data.totalSecondsMonth
     if (isOnline) {
       const sessionMs = now - data.sessionStartMs
       totalSeconds += Math.floor(sessionMs / 1000)
@@ -1057,7 +1058,7 @@ export async function setupServer(): Promise<void> {
     try {
       const records = JSON.parse(savedMonthlyVisitorData)
       for (const record of records) {
-        const minutes = record.totalSeconds != null ? Math.floor(record.totalSeconds / 60) : (record.totalMinutes || 0)
+        const seconds = record.totalSeconds != null ? record.totalSeconds : (record.totalMinutes || 0) * 60
         const recordKey = (record.userId || '').toLowerCase()
         const bestName = (playerNames.has(recordKey) && isRealName(playerNames.get(recordKey)!))
           ? playerNames.get(recordKey)!
@@ -1065,7 +1066,7 @@ export async function setupServer(): Promise<void> {
         monthlyVisitorSessions.set(recordKey, {
           name: bestName,
           sessionStartMs: 0,
-          totalMinutesMonth: minutes
+          totalSecondsMonth: seconds
         })
       }
       console.log('[Server] Restored monthly visitor data for', currentMonthForVisitors, '- loaded', records.length, 'visitors')
@@ -1558,7 +1559,7 @@ function registerHandlers(): void {
 
   // Death penalty — deduct coins on death (drowning, lightning, ghost)
   const DEATH_PENALTY_COINS = 10
-  const deathPenaltyCooldowns = new Map<string, number>() // prevent spam
+  // deathPenaltyCooldowns is module-level so playerTrackingSystem can clean it up on disconnect
   room.onMessage('deathPenalty', async (data, context) => {
     try {
       if (!context) return
@@ -2917,7 +2918,7 @@ function playerTrackingSystem(): void {
         visitorSessions.set(userKey, {
           name: playerName,
           sessionStartMs: Date.now(),
-          totalMinutesToday: 0
+          totalSecondsToday: 0
         })
       }
 
@@ -2932,7 +2933,7 @@ function playerTrackingSystem(): void {
         monthlyVisitorSessions.set(userKey, {
           name: playerName,
           sessionStartMs: Date.now(),
-          totalMinutesMonth: 0
+          totalSecondsMonth: 0
         })
       }
 
@@ -2949,24 +2950,33 @@ function playerTrackingSystem(): void {
       const visitor = visitorSessions.get(userKey)
       if (visitor && visitor.sessionStartMs > 0) {
         const sessionMs = Date.now() - visitor.sessionStartMs
-        const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
-        visitor.totalMinutesToday += sessionMinutes
+        const sessionSeconds = Math.floor(sessionMs / 1000)
+        visitor.totalSecondsToday += sessionSeconds
         visitor.sessionStartMs = 0 // Mark as offline
 
-        console.log('[Server] Player left:', visitor.name, 'session:', sessionMinutes, 'min, total today:', visitor.totalMinutesToday, 'min')
+        const totalMin = Math.floor(visitor.totalSecondsToday / 60)
+        console.log('[Server] Player left:', visitor.name, 'session:', sessionSeconds, 's, total today:', totalMin, 'min')
       }
 
       // Monthly visitor disconnect tracking
       const monthlyVisitor = monthlyVisitorSessions.get(userKey)
       if (monthlyVisitor && monthlyVisitor.sessionStartMs > 0) {
         const sessionMs = Date.now() - monthlyVisitor.sessionStartMs
-        const sessionMinutes = Math.floor(sessionMs / (1000 * 60))
-        monthlyVisitor.totalMinutesMonth += sessionMinutes
+        const sessionSeconds = Math.floor(sessionMs / 1000)
+        monthlyVisitor.totalSecondsMonth += sessionSeconds
         monthlyVisitor.sessionStartMs = 0
       }
 
       // Clean up per-player maps to prevent unbounded growth
       playerBoomerangColors.delete(userKey)
+      playerCoinBalances.delete(userKey)
+      playerUpgradeData.delete(userKey)
+      playerLifetimeWinsCache.delete(userKey)
+      lastTrapDropTime.delete(userKey)
+      lastProjectileFireTime.delete(userKey)
+      lastOrbitTime.delete(userKey)
+      lastStealTime.delete(userKey)
+      deathPenaltyCooldowns.delete(userKey)
 
       changed = true
     }
