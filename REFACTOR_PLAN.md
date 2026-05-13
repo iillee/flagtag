@@ -355,6 +355,29 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract flagLogic.ts — flag pickup/drop/steal/gravity/hold-time`
 
+### Step 6 — Completed ✅
+
+**Commit:** `a7a7d3d` → `refactor: extract flagLogic.ts — flag pickup/drop/steal/gravity/hold-time`
+
+**What was done:**
+- Created `src/server/flagLogic.ts` (464 lines) with all items listed above.
+- All 9 module-local state variables, 11 functions, and 4 message handlers (`requestPickup`, `requestDrop`, `requestReloadRespawn`, `reportGroundY`) moved and wrapped in `registerFlagHandlers()`.
+- Added two small accessor helpers to avoid leaking module-local variables:
+  - `getHoldTimeAccumFor(carrierKey)` — used by `getCarrierHoldSeconds()` in lightning system (reads accumulator without direct variable access).
+  - `clearHoldTimeAccum()` — used by `handleRoundEnd()` for the defensive force-clear after synchronous score reset.
+- Cleaned up 7 unused imports from `server.ts` (`PICKUP_RADIUS`, `PROXIMITY_STEAL_RADIUS`, `STEAL_IMMUNITY_MS`, `HOLD_TIME_SYNC_INTERVAL`, `FLAG_MIN_Y`, `CARRIER_Y_WINDOW_SEC`, `CARRIER_NO_POSITION_TIMEOUT_MS`, `getHoldTimeEntityEnumId`).
+- `server.ts` reduced from 2,406 → 1,990 lines.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining local declarations of moved items in `server.ts`.
+- Preview tested in Creator Hub — flag pickup, drop, gravity landing, hold-time scoring, boomerang-forces-drop, banana-forces-drop, round end reset all working.
+
+**Concerns:**
+- None. No circular dependencies — `flagLogic.ts` imports only from `serverState`, `persistence`, and `../shared/components`.
+
+**Step 7 note:** `handleDrop` is already exported from `flagLogic.ts` and imported by `server.ts` (used in `bananaServerSystem`, `shellServerSystem`, `orbitServerSystem`, and `lightningServerSystem`). When combat code moves to `combat.ts` in Step 7, those call sites just change their import source from `server.ts` internal to `import { handleDrop } from './flagLogic'` — no signature changes needed. The `activeZombies` array is referenced by `bananaServerSystem` for ghost-trap collision — this cross-dependency is noted in the Step 7/8 plan.
+
 ---
 
 ## Step 7: `combat.ts` — Traps, projectiles, orbits
