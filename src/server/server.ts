@@ -1056,6 +1056,20 @@ export async function setupServer(): Promise<void> {
   engine.addSystem(safeSystem('updraftServerSystem', updraftServerSystem))
   engine.addSystem(safeSystem('coinServerSystem', coinServerSystem))
 
+  // Auto-start infection round once 2+ players are connected (checked each frame)
+  let infectionAutoStarted = false
+  engine.addSystem(function autoStartInfection() {
+    if (infectionAutoStarted) return
+    if (infectionRoundActive) { infectionAutoStarted = true; return }
+    let count = 0
+    for (const [,] of engine.getEntitiesWith(PlayerIdentityData)) { count++ }
+    if (count >= 2) {
+      infectionAutoStarted = true
+      startInfectionRound()
+      console.log('[Server] 🧟 Auto-started infection round (2+ players connected)')
+    }
+  })
+
   console.log('[Server] Contagion server ready')
 }
 

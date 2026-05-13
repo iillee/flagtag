@@ -9,11 +9,13 @@ import {
   Material,
   MaterialTransparencyMode,
   AudioSource,
+  AvatarAttach,
+  AvatarAnchorPointType,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
-import { InfectionState, PlayerInfected } from '../shared/components'
+import { InfectionState, PlayerInfected, INFECTION_RADIUS } from '../shared/components'
 import { room } from '../shared/messages'
 
 // ── Local infection state (readable by UI) ──
@@ -256,6 +258,87 @@ function setupInfectionListeners(): void {
   })
 }
 
+// ── Slime Aura System ──
+// Green transparent sphere attached to each infected player, sized to INFECTION_RADIUS.
+// Uses AvatarAttach (AAPT_POSITION) → child sphere so it follows the player.
+
+const slimeAuras = new Map<string, { anchor: Entity; orb: Entity }>()
+
+/** Diameter = INFECTION_RADIUS * 2. The sphere mesh has radius 0.5, so scale = diameter. */
+const AURA_DIAMETER = INFECTION_RADIUS * 2
+
+function getOrCreateAura(playerId: string): { anchor: Entity; orb: Entity } {
+  const existing = slimeAuras.get(playerId)
+  if (existing) return existing
+
+  // Anchor — attached to player position
+  const anchor = engine.addEntity()
+  Transform.create(anchor, { position: Vector3.Zero() })
+  AvatarAttach.create(anchor, {
+    avatarId: playerId,
+    anchorPointId: AvatarAnchorPointType.AAPT_POSITION
+  })
+
+  // Orb — child of anchor, centered at waist height
+  const orb = engine.addEntity()
+  Transform.create(orb, {
+    parent: anchor,
+    position: Vector3.create(0, 1, 0), // waist height
+    scale: Vector3.create(AURA_DIAMETER, AURA_DIAMETER, AURA_DIAMETER)
+  })
+  MeshRenderer.setSphere(orb)
+  Material.setPbrMaterial(orb, {
+    albedoColor: Color4.create(0.1, 0.8, 0.05, 0.12),
+    emissiveColor: Color3.create(0.1, 0.6, 0.02),
+    emissiveIntensity: 2,
+    transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+  })
+
+  const entry = { anchor, orb }
+  slimeAuras.set(playerId, entry)
+  return entry
+}
+
+function hideAura(playerId: string): void {
+  const entry = slimeAuras.get(playerId)
+  if (!entry) return
+  if (Transform.has(entry.orb)) {
+    Transform.getMutable(entry.orb).scale = Vector3.Zero()
+  }
+}
+
+function showAura(playerId: string): void {
+  const entry = getOrCreateAura(playerId)
+  if (Transform.has(entry.orb)) {
+    Transform.getMutable(entry.orb).scale = Vector3.create(AURA_DIAMETER, AURA_DIAMETER, AURA_DIAMETER)
+  }
+}
+
+function updateSlimeAuras(infectedIds: string[], active: boolean): void {
+  if (!active) {
+    // Round not active — hide all auras
+    for (const [id] of slimeAuras) {
+      hideAura(id)
+    }
+    return
+  }
+
+  // Build set of currently infected
+  const infectedSet = new Set(infectedIds.map(id => id.toLowerCase()))
+
+  // Show auras for infected players
+  for (const id of infectedSet) {
+    showAura(id)
+  }
+
+  // Hide auras for players no longer infected
+  for (const [id] of slimeAuras) {
+    if (!infectedSet.has(id)) {
+      hideAura(id)
+    }
+  }
+}
+
 // ── Per-frame system ──
 
 export function infectionClientSystem(dt: number): void {
@@ -282,6 +365,10 @@ export function infectionClientSystem(dt: number): void {
       break
     }
   }
+
+  // ── Slime aura management ──
+  // Create/show green orbs for infected players, hide for humans
+  updateSlimeAuras(infectedPlayerIds, roundActive)
 
   // ── Update VFX particles ──
   const now = Date.now()
