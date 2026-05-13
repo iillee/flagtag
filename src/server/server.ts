@@ -2133,6 +2133,7 @@ function handleTrapDrop(playerId: string): void {
   const bananaCd = TRAP_COOLDOWN_SEC
   if (now - lastDrop < bananaCd * 1000) {
     console.log('[Server] Trap denied: cooldown active, wait', ((bananaCd * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
+    room.send('bananaDenied', { reason: 'cooldown' }, { to: [playerId] })
     return
   }
 
@@ -2140,6 +2141,7 @@ function handleTrapDrop(playerId: string): void {
   const playerTraps = activeTraps.filter(b => b.droppedBy === playerId)
   if (playerTraps.length >= TRAP_MAX_ACTIVE) {
     console.log('[Server] Trap denied: max active traps reached (', TRAP_MAX_ACTIVE, ')')
+    room.send('bananaDenied', { reason: 'max_active' }, { to: [playerId] })
     return
   }
 
@@ -2147,6 +2149,7 @@ function handleTrapDrop(playerId: string): void {
   const playerPos = getPlayerPosition(playerId)
   if (!playerPos) {
     console.log('[Server] Trap denied: player position not found')
+    room.send('bananaDenied', { reason: 'no_position' }, { to: [playerId] })
     return
   }
 
@@ -2192,6 +2195,14 @@ function bananaServerSystem(dt: number): void {
 
   for (let i = activeTraps.length - 1; i >= 0; i--) {
     const trap = activeTraps[i]
+
+    // Defensive guard: if the entity's Transform was already removed (race condition
+    // with boomerang/zombie collisions), clean up the ghost entry to prevent pool leaks.
+    if (!Transform.has(trap.entity)) {
+      console.log('[Server] 🪤⚠️ Ghost trap detected (no Transform) — cleaning up. droppedBy:', trap.droppedBy.slice(0, 8))
+      activeTraps.splice(i, 1)
+      continue
+    }
 
     // Gravity — pull trap down to ground
     if (trap.falling) {

@@ -218,6 +218,12 @@ function processTrapRaycasts(): void {
 
 // ── Message listeners ──
 // ── Message listeners (registered at module scope for reliable delivery) ──
+room.onMessage('bananaDenied', (data) => {
+  console.log('[Trap] ⚠️ Server denied banana drop:', data.reason)
+  // Reset cooldown so the player can retry immediately
+  lastLocalTrapDropTime = 0
+})
+
 room.onMessage('bananaDropped', (data) => {
   console.log('[Trap] bananaDropped msg:', JSON.stringify(data))
   playTrapDropSound(Vector3.create(data.x, data.y, data.z))
