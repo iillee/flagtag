@@ -1,5 +1,20 @@
 import { engine, Transform, PlayerIdentityData, AvatarBase, type Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
+import {
+  flagEntity, setFlagEntity, countdownEntity, setCountdownEntity,
+  leaderboardEntity, setLeaderboardEntity, allTimeLeaderboardEntity, setAllTimeLeaderboardEntity,
+  monthlyLeaderboardEntity, setMonthlyLeaderboardEntity,
+  visitorAnalyticsEntity, setVisitorAnalyticsEntity, monthlyVisitorAnalyticsEntity, setMonthlyVisitorAnalyticsEntity,
+  coinStateEntity, setCoinStateEntity,
+  holdTimeEntities, knownPlayers, playerNames, walletEntities, upgradeEntities, lifetimeWinsEntities,
+  playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
+  deathPenaltyCooldowns, lastStealTime,
+  visitorSessions, monthlyVisitorSessions, currentlyConnected,
+  PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
+  SPLASH_DURATION_MS, FLAG_GRAVITY, FLAG_MIN_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
+  MUSHROOM_CX, MUSHROOM_CZ, MUSHROOM_RADIUS, MUSHROOM_CANDIDATES,
+  isRealName, getPlayerPosition
+} from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage, EnvVar } from '@dcl/sdk/server'
 import {
@@ -26,26 +41,10 @@ import {
 } from '../shared/upgrades'
 import type { BoomerangColor } from '../gameState/boomerangColor'
 
-// ── Constants ──
-const PICKUP_RADIUS = 3
-const PROXIMITY_STEAL_RADIUS = 2.0  // Auto-steal flag when within this distance of carrier
-const STEAL_IMMUNITY_MS = 3000    // Immunity for the player who STEALS the flag (time to escape the crowd)
-const HOLD_TIME_SYNC_INTERVAL = 0.5  // Sync hold time every 0.5s (was 0.2s) — reduces CRDT pressure; client interpolates between updates
-// Bob/spin constants removed — animation is now client-side only
-const SPLASH_DURATION_MS = 3000
-const FLAG_GRAVITY = 15          // m/s² (slightly faster than real gravity for snappy game feel)
-const FLAG_MIN_Y = 1.5           // absolute minimum Y (ground plane)
-const CARRIER_Y_WINDOW_SEC = 2.0 // seconds of carrier Y history to estimate ground level
+// Constants moved to serverState.ts
 
-// ── Mushroom constants ──
+// Mushroom constants moved to serverState.ts
 const MUSHROOM_COUNT = 1
-// Shield lasts until hit or round end
-// Mushroom spawn constrained to boundary cylinder
-const MUSHROOM_CX = 250.75
-const MUSHROOM_CZ = 255.5
-const MUSHROOM_RADIUS = 128
-
-const MUSHROOM_CANDIDATES = 10  // Number of candidate positions per mushroom
 
 interface ServerMushroom {
   id: number
@@ -57,34 +56,15 @@ let mushroomIdCounter = 0
 // mushroomShieldActive removed — mushrooms no longer block hits
 
 // ── Coin state ──
-let coinStateEntity: Entity
+// coinStateEntity, playerCoinBalances, walletEntities moved to serverState.ts
 /** Set of coinIds currently picked up (empty spots waiting for random respawn) */
 const coinCooldowns = new Set<string>()
 /** Timer tracking seconds until next random coin respawn */
 let coinRespawnTimer = 0
-/** Map of wallet address → coin balance (in-memory cache, persisted to Storage) */
-const playerCoinBalances = new Map<string, number>()
-/** Map of wallet address → wallet entity */
-const walletEntities = new Map<string, Entity>()
 
-// ── Upgrade / progression state ──
-/** Map of wallet address → upgrade data (in-memory cache, persisted to Storage) */
-const playerUpgradeData = new Map<string, UpgradeData>()
-/** Map of wallet address → upgrade entity */
-const upgradeEntities = new Map<string, Entity>()
-/** Map of wallet address → lifetime wins (in-memory cache, persisted to Storage) */
-const playerLifetimeWinsCache = new Map<string, number>()
-/** Map of wallet address → lifetime wins entity */
-const lifetimeWinsEntities = new Map<string, Entity>()
+// Upgrade/progression state moved to serverState.ts
 
-// ── Server state ──
-let flagEntity: Entity
-let countdownEntity: Entity
-let leaderboardEntity: Entity
-let allTimeLeaderboardEntity: Entity
-let monthlyLeaderboardEntity: Entity
-let visitorAnalyticsEntity: Entity
-let monthlyVisitorAnalyticsEntity: Entity
+// Entity references moved to serverState.ts
 
 let holdTimeAccum = 0
 let holdTimeCarrierKey = '' // Track WHO we're accumulating for
@@ -114,11 +94,7 @@ function getCarrierHoldSeconds(): number {
   return (PlayerFlagHoldTime.getOrNull(entity)?.seconds ?? 0) + (holdTimeCarrierKey === key ? holdTimeAccum : 0)
 }
 
-// lastAttackTime removed — melee attack replaced by proximity steal
-const lastStealTime = new Map<string, number>()  // Track when a player stole the flag (they get immunity to escape)
-const holdTimeEntities = new Map<string, Entity>()
-const knownPlayers = new Set<string>()
-const playerNames = new Map<string, string>()
+// lastStealTime, holdTimeEntities, knownPlayers, playerNames moved to serverState.ts
 let lastLeaderboardResetDay = ''
 
 /**
@@ -139,12 +115,9 @@ function getOrCreateHoldTimeEntity(userKey: string): Entity {
   console.log('[Server] Created hold-time entity for', key.slice(0, 8))
   return entity
 }
+// Note: getOrCreateHoldTimeEntity stays here for now — uses holdTimeEntities/knownPlayers from serverState
 
-// ── Visitor tracking ──
-const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalSecondsToday: number }>()
-const monthlyVisitorSessions = new Map<string, { name: string; sessionStartMs: number; totalSecondsMonth: number }>()
-const playerBoomerangColors = new Map<string, string>() // playerId -> color ('r','y','b','g')
-const deathPenaltyCooldowns = new Map<string, number>() // prevent death penalty spam
+// visitorSessions, monthlyVisitorSessions, playerBoomerangColors, deathPenaltyCooldowns moved to serverState.ts
 let lastVisitorResetDay = ''
 let lastMonthlyVisitorResetMonth = ''
 
@@ -163,7 +136,9 @@ function updateConcurrentTracking(): void {
   }
   if (onlineCount > peakConcurrent) {
     peakConcurrent = onlineCount
-    peakConcurrentTime = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`
+    const hh = String(now.getUTCHours()).padStart(2, '0')
+    const mm = String(now.getUTCMinutes()).padStart(2, '0')
+    peakConcurrentTime = `${hh}:${mm}`
   }
 }
 
@@ -254,8 +229,8 @@ let flagGravityTargetY = FLAG_MIN_Y
 const carrierYSamples: { y: number; time: number }[] = []
 let lastDropperId = ''  // Who dropped the flag — only accept reportGroundY from them
 
+// CARRIER_NO_POSITION_TIMEOUT_MS moved to serverState.ts
 // Carrier staleness detection — force-drop if carrier position is unavailable
-const CARRIER_NO_POSITION_TIMEOUT_MS = 5000   // No position data → likely disconnected
 let lastCarrierPositionMs = 0          // Last time we got a valid position from carrier
 
 let lastKnownCarrierPos: Vector3 | null = null  // Best-effort position for force-drops when getPlayerPosition is null
@@ -266,9 +241,7 @@ function resetCarrierTracking(): void {
   lastKnownCarrierPos = null
 }
 
-function isRealName(name: string): boolean {
-  return name.length > 0 && !name.startsWith('0x')
-}
+// isRealName moved to serverState.ts
 
 // ── Persistence helpers ──
 async function persistFlagState(): Promise<void> {
@@ -928,7 +901,7 @@ export async function setupServer(): Promise<void> {
   }
 
   // Create flag entity
-  flagEntity = engine.addEntity()
+  setFlagEntity(engine.addEntity())
   Transform.create(flagEntity, {
     position: flagStartPos,
     rotation: Quaternion.fromEulerDegrees(0, 0, 0),
@@ -959,7 +932,7 @@ export async function setupServer(): Promise<void> {
   const intervalMs = 5 * 60 * 1000 // 5 minutes
   const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
   
-  countdownEntity = engine.addEntity()
+  setCountdownEntity(engine.addEntity())
   CountdownTimer.create(countdownEntity, {
     roundEndTimeMs: nextBoundary,
     roundEndTriggered: false,
@@ -982,7 +955,7 @@ export async function setupServer(): Promise<void> {
   }
   let leaderboardJson = patchAllLeaderboardNames(savedLeaderboard || '[]', 'leaderboard')
 
-  leaderboardEntity = engine.addEntity()
+  setLeaderboardEntity(engine.addEntity())
   LeaderboardState.create(leaderboardEntity, { json: leaderboardJson, date: '' })
   syncEntity(leaderboardEntity, [LeaderboardState.componentId], SyncIds.LEADERBOARD)
 
@@ -995,7 +968,7 @@ export async function setupServer(): Promise<void> {
   }
   let allTimeJson = patchAllLeaderboardNames(savedAllTime || '[]', 'all-time leaderboard')
 
-  allTimeLeaderboardEntity = engine.addEntity()
+  setAllTimeLeaderboardEntity(engine.addEntity())
   AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: allTimeJson })
   syncEntity(allTimeLeaderboardEntity, [AllTimeLeaderboardState.componentId], SyncIds.ALLTIME_LEADERBOARD)
 
@@ -1015,7 +988,7 @@ export async function setupServer(): Promise<void> {
     'monthly leaderboard'
   )
 
-  monthlyLeaderboardEntity = engine.addEntity()
+  setMonthlyLeaderboardEntity(engine.addEntity())
   MonthlyLeaderboardState.create(monthlyLeaderboardEntity, { json: monthlyJson, month: currentMonth })
   syncEntity(monthlyLeaderboardEntity, [MonthlyLeaderboardState.componentId], SyncIds.MONTHLY_LEADERBOARD)
   
@@ -1031,7 +1004,7 @@ export async function setupServer(): Promise<void> {
 
   // Initialize visitor analytics
   await loadVisitorData()
-  visitorAnalyticsEntity = engine.addEntity()
+  setVisitorAnalyticsEntity(engine.addEntity())
   VisitorAnalytics.create(visitorAnalyticsEntity, { 
     date: getTodayDateString(),
     visitorDataJson: '[]',
@@ -1078,7 +1051,7 @@ export async function setupServer(): Promise<void> {
     lastMonthlyVisitorResetMonth = currentMonthForVisitors
   }
 
-  monthlyVisitorAnalyticsEntity = engine.addEntity()
+  setMonthlyVisitorAnalyticsEntity(engine.addEntity())
   MonthlyVisitorAnalytics.create(monthlyVisitorAnalyticsEntity, {
     month: currentMonthForVisitors,
     visitorDataJson: '[]',
@@ -1112,7 +1085,7 @@ export async function setupServer(): Promise<void> {
   }
 
   // ── Initialize coin state entity ──
-  coinStateEntity = engine.addEntity()
+  setCoinStateEntity(engine.addEntity())
   CoinState.create(coinStateEntity, { cooldownJson: '{}' })
   syncEntity(coinStateEntity, [CoinState.componentId], COIN_STATE_SYNC_ID)
   console.log('[Server] Coin state entity initialized')
@@ -1147,13 +1120,7 @@ export async function setupServer(): Promise<void> {
 }
 
 // ── Helper: find player position by wallet address (case-insensitive) ──
-function getPlayerPosition(address: string): Vector3 | null {
-  const needle = address.toLowerCase()
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === needle) return Transform.get(entity).position
-  }
-  return null
-}
+// getPlayerPosition moved to serverState.ts
 
 // ── Gravity helpers ──
 
@@ -2878,8 +2845,7 @@ function lightningServerSystem(dt: number): void {
   }
 }
 
-// Track which players are currently connected (detected this frame)
-const currentlyConnected = new Set<string>()
+// currentlyConnected moved to serverState.ts
 
 function playerTrackingSystem(): void {
   // Build set of currently connected players (normalized to lowercase)
