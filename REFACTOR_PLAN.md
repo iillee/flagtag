@@ -565,6 +565,27 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract playerTracking.ts — join/leave detection, name resolution`
 
+### Step 10 — Completed ✅
+
+**Commit:** `168a9a2` → `refactor: extract playerTracking.ts — join/leave detection, name resolution`
+
+**What was done:**
+- Created `src/server/playerTracking.ts` (172 lines) with `playerTrackingSystem()` and `nameResolverServerSystem()`.
+- Cleaned up 11 now-unused imports from `server.ts`: `AvatarBase`, `currentlyConnected`, `deathPenaltyCooldowns`, `playerCoinBalances`, `playerUpgradeData`, `playerLifetimeWinsCache`, `clearCombatCooldowns`, `loadPlayerCoinBalance`, `getOrCreateWalletEntity`, `updateConcurrentTracking`, `getPlayerPosition`, `PROJECTILE_HIT_RADIUS` (the latter was noted as unused since Step 8).
+- `server.ts` reduced from 991 → 846 lines.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining `playerTrackingSystem` or `nameResolverServerSystem` definitions in `server.ts`.
+- Preview tested in Creator Hub — player join detected (scoreboard entity created, wallet loaded, visitor session started), name resolution working, flag pickup/drop confirmed functional.
+
+**Concerns:**
+- None. No circular dependencies — `playerTracking.ts` imports from `serverState`, `persistence`, `leaderboard`, `flagLogic`, `economy`, `combat`, and `analytics` (all one-way; nothing imports from `playerTracking.ts` except `server.ts`).
+
+**Step 11 note:** `server.ts` is now 846 lines. The bulk of what remains is `setupServer()` (~250 lines of entity creation + Storage loads), `handleRoundEnd()` (~200 lines), `lightningServerSystem()` (~80 lines), `countdownServerSystem()` (~60 lines), `updraftServerSystem()` (~15 lines), and `registerHandlers()` (~40 lines). Step 11 will extract all the runtime systems and `handleRoundEnd`, leaving only `setupServer` + `registerHandlers` + `safeSystem` wrapper. After Step 11, `server.ts` should be ~350 lines — Step 12 will do final cleanup to get it under 200.
+
+**⚠️ Step 11 reminder:** `handleRoundEnd` currently references `lightningRollTimer`, `lightningStrikeScheduled`, `lightningWarningTimer`, `_lightningOriginalCarrierId` directly (for the emergency recovery reset in the `.catch` block of `countdownServerSystem`). When moving both to `roundManager.ts`, these become module-local — no issue. But the `registerHandlers` in `server.ts` has `requestUpdraftLocation` and `testDiscord` handlers that need to move too — wrap them in `registerRoundHandlers()`.
+
 ---
 
 ## Step 11: `roundManager.ts` — Countdown + round end + lightning + updraft
