@@ -106,6 +106,25 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract serverState.ts — shared state and constants`
 
+### Step 1 — Completed ✅
+
+**Commit:** `594d145` → `refactor: extract serverState.ts — shared state and constants`
+
+**What was done:**
+- Created `src/server/serverState.ts` (~80 lines) with all items listed above.
+- 8 entity refs use `export let` + setter functions. `server.ts` calls `setFlagEntity(engine.addEntity())` etc. in `setupServer`.
+- 12 per-player maps, 3 visitor collections, 14 constants, 2 helpers (`isRealName`, `getPlayerPosition`) moved.
+- `server.ts` updated with a single grouped import from `./serverState`.
+- `getOrCreateHoldTimeEntity()` left in `server.ts` for now — it will move to `flagLogic.ts` in Step 6.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining local declarations of moved items in `server.ts`.
+- Preview tested in Creator Hub — flag pickup, drop, scoreboard, and round timer all working. One transient clone-visibility glitch on first load resolved by reload (stale CRDT from hot-reload, not refactor-related).
+
+**Concerns:**
+- None. The `export let` + setter pattern produces live bindings in TypeScript, so all reads in `server.ts` see the correct value after `setupServer` runs. No module initialization order issues since `serverState.ts` has zero imports from other `server/` modules.
+
 ---
 
 ## Step 2: `persistence.ts` — Storage helpers
