@@ -759,6 +759,20 @@ function PlayerListUi() {
           {(noScorersCreditsVisible || (nextRoundStartingVisible && !cinematicShowing)) && (
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%' }}>
               
+              {/* "Round Over / No coins" fallback — upper area */}
+              {!activeRoundEarnings && (
+                <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '15%' }, flexDirection: 'column', alignItems: 'center' }}>
+                  <UiEntity
+                    uiTransform={{ width: mobile ? 420 : S(320), padding: { top: mobile ? 28 : S(22), bottom: mobile ? 36 : S(28), left: mobile ? 24 : S(18), right: mobile ? 24 : S(18) }, flexDirection: 'column', alignItems: 'center' }}
+                    uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
+                  >
+                    <Label value="Round Over" fontSize={mobile ? 72 : S(46)} color={GOLD} font="sans-serif" />
+                    <UiEntity uiTransform={{ height: mobile ? 16 : S(12) }} />
+                    <Label value="No coins earned" fontSize={mobile ? 38 : S(24)} color={MUTED} font="sans-serif" />
+                  </UiEntity>
+                </UiEntity>
+              )}
+
               {/* "You Earned" coin breakdown — upper area */}
               {activeRoundEarnings && (
                 <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '15%' }, flexDirection: 'column', alignItems: 'center' }}>
@@ -1589,7 +1603,8 @@ function DesktopLayout() {
                 uiTransform={{ width: S(81), height: S(81) }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: Color4.White() }}
               />
-              <Label value={GAME_VERSION} fontSize={S(10)} color={Color4.create(1, 1, 1, 0.35)} font="sans-serif" uiTransform={{ margin: { top: S(8) } }} />
+              <UiEntity uiTransform={{ flexGrow: 1 }} />
+              <Label value={GAME_VERSION} fontSize={S(10)} color={Color4.create(1, 1, 1, 0.35)} font="sans-serif" />
             </UiEntity>
 
             {/* ── Win + Controls Card ── */}
