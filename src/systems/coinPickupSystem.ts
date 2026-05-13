@@ -370,6 +370,12 @@ export function coinPickupSystem(dt: number): void {
   for (const coin of trackedCoins) {
     const onCooldown = cooldowns.has(coin.coinId)
 
+    // Hide coins that are on cooldown but still showing (e.g. already picked up before we joined)
+    if (onCooldown && !coin.hidden) {
+      coin.hidden = true
+      setCoinVisible(coin, false)
+    }
+
     // Respawn: coin is no longer on cooldown, restore visibility + bob/spin
     if (!onCooldown && coin.hidden) {
       coin.hidden = false

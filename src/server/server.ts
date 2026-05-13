@@ -579,7 +579,7 @@ let DISCORD_WEBHOOK_URL = ''
 async function loadDiscordWebhookUrl(): Promise<void> {
   DISCORD_WEBHOOK_URL = (await EnvVar.get('DISCORD_WEBHOOK_URL')) || ''
   if (!DISCORD_WEBHOOK_URL) {
-    console.warn('[Server] ⚠️ DISCORD_WEBHOOK_URL env var not set — Discord reports will be disabled')
+    console.log('[Server] ⚠️ DISCORD_WEBHOOK_URL env var not set — Discord reports will be disabled')
   } else {
     console.log('[Server] ✅ Discord webhook URL loaded from EnvVar')
   }
