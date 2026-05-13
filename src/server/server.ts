@@ -1,7 +1,7 @@
 import { engine, Transform, PlayerIdentityData, AvatarBase, type Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
-import { Storage } from '@dcl/sdk/server'
+import { Storage, EnvVar } from '@dcl/sdk/server'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState, VisitorAnalytics, MonthlyVisitorAnalytics,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
@@ -517,6 +517,7 @@ async function snapshotPendingReport(leaderboardJson: string): Promise<void> {
 
 async function sendPendingReport(): Promise<void> {
   try {
+    if (!DISCORD_WEBHOOK_URL) return
     const { getRealm } = await import('~system/Runtime')
     const realm = await getRealm({})
     if (realm.realmInfo?.isPreview) return
@@ -574,10 +575,22 @@ async function sendPendingReport(): Promise<void> {
 }
 
 // ── Discord webhook for daily analytics ──
-const DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1490808436097679540/wEwupNTGN90YCZ46iPHSt_YEm6SW6xS8x4Ybw4Ls1JVfQzgVXkeJ7VHWl67F2tS8Fug2'
+let DISCORD_WEBHOOK_URL = ''
+async function loadDiscordWebhookUrl(): Promise<void> {
+  DISCORD_WEBHOOK_URL = (await EnvVar.get('DISCORD_WEBHOOK_URL')) || ''
+  if (!DISCORD_WEBHOOK_URL) {
+    console.warn('[Server] ⚠️ DISCORD_WEBHOOK_URL env var not set — Discord reports will be disabled')
+  } else {
+    console.log('[Server] ✅ Discord webhook URL loaded from EnvVar')
+  }
+}
 
 async function sendDailyAnalyticsToDiscord(): Promise<void> {
   try {
+    if (!DISCORD_WEBHOOK_URL) {
+      console.log('[Server] Skipping Discord webhook — no URL configured')
+      return
+    }
     // Skip webhook in local preview
     const { getRealm } = await import('~system/Runtime')
     const realm = await getRealm({})
@@ -880,6 +893,9 @@ async function checkMonthlyVisitorReset(): Promise<void> {
 
 export async function setupServer(): Promise<void> {
   console.log('[Server] Starting Flag Tag server...')
+
+  // Load Discord webhook URL from environment variable
+  await loadDiscordWebhookUrl()
 
   // Load persisted flag state (with error handling)
   let savedFlag: string | null = null
