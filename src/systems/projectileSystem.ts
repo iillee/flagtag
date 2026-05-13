@@ -563,15 +563,20 @@ function processWallRaycasts(): void {
 
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('shellDropped', (data) => {
-  // Create visual from message bus (instant, no CRDT dependency).
-  // Mobile live CRDT sync is unreliable — this ensures the visual always appears.
-  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale)
-
-  // Play release sound for remote blue charged throws so everyone hears it
-  // Local player already plays it in the E-key-up handler — skip for self
+  // Skip for local player — visual is created instantly at throw time (local-first)
   const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
   const throwerId = (data.firedBy || '').toLowerCase()
-  if (throwerId && throwerId !== localUserId && data.color === 'b' && data.chargeSpeed >= 55) {
+  if (throwerId && throwerId === localUserId) {
+    // Mark that server acknowledged our throw (visual already exists)
+    if (localThrowActive && !localThrowSawVisual) localThrowSawVisual = true
+    return
+  }
+
+  // Remote player: create visual from message bus (instant, no CRDT dependency).
+  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale)
+
+  // Play release sound for remote blue charged throws
+  if (throwerId && data.color === 'b' && data.chargeSpeed >= 55) {
     playReleaseSoundAt(Vector3.create(data.x, data.y, data.z))
   }
 })
@@ -860,7 +865,7 @@ function updateLocalProjectiles(dt: number): void {
 // GltfContainer already loaded. This avoids swapping .glb src on reuse, which
 // triggers a Decentraland engine bug where rapid GltfContainer model swaps
 // cause models to stop rendering after repeated use.
-const POOL_SIZE_PER_COLOR = 6
+const POOL_SIZE_PER_COLOR = 10
 const BOOMERANG_COLORS = ['r', 'y', 'b', 'g'] as const
 const projectilePoolByColor: Map<string, Entity[]> = new Map()
 let projectilePoolReady = false
@@ -1110,6 +1115,25 @@ function updateMsgProjectileVisuals(dt: number): void {
   }
 }
 
+/** Fire a projectile via server with instant local visual (local-first rendering). */
+function fireServerProjectile(dirX: number, dirZ: number, color: string, speed: number, range: number, scale: number): void {
+  const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+  localThrowActive = true; localThrowSawVisual = true; localThrowStartMs = Date.now()
+  updateHandBoomerangVisibility()
+
+  // Create visual IMMEDIATELY — don't wait for server echo
+  if (Transform.has(engine.PlayerEntity)) {
+    const playerPos = Transform.get(engine.PlayerEntity).position
+    const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
+    createMsgProjectileVisual(spawnPos.x, spawnPos.y, spawnPos.z, dirX, dirZ, color, localUserId, speed, range, scale)
+    fireWallRaycast(spawnPos, dirX, dirZ)
+  }
+
+  // Tell server to create authoritative projectile
+  room.send('requestShell', { dirX, dirZ, color, chargeSpeed: speed, chargeRange: range, chargeScale: scale })
+  console.log('[Projectile] 🎯 Local-first projectile fired dir:', dirX.toFixed(2), dirZ.toFixed(2), 'speed:', speed, 'range:', range)
+}
+
 /** Fire a projectile from the UI (mobile tap). Same logic as E key press. */
 export function triggerProjectileFromUI(): void {
   if (isDrownRespawning()) return
@@ -1146,17 +1170,9 @@ export function triggerProjectileFromUI(): void {
   const serverUp = isServerConnected()
 
   if (serverUp) {
-    console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
-    localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
-    updateHandBoomerangVisibility()
     const uiRange = uiColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
     const uiSpeed = CHARGE_MIN_SPEED
-    room.send('requestShell', { dirX, dirZ, color: uiColor, chargeSpeed: uiSpeed, chargeRange: uiRange, chargeScale: 1 })
-    if (Transform.has(engine.PlayerEntity)) {
-      const playerPos = Transform.get(engine.PlayerEntity).position
-      const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
-      fireWallRaycast(spawnPos, dirX, dirZ)
-    }
+    fireServerProjectile(dirX, dirZ, uiColor, uiSpeed, uiRange, 1)
   } else {
     console.log('[Projectile] 🎯 UI tap — firing projectile locally (no server)')
     localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
@@ -1245,13 +1261,7 @@ export function projectileClientSystem(dt: number): void {
     yellowSecondThrowAt = 0
     const serverUp = isServerConnected()
     if (serverUp) {
-      room.send('requestShell', { dirX: yellowSecondThrowDir.dirX, dirZ: yellowSecondThrowDir.dirZ, color: 'y', chargeSpeed: CHARGE_MIN_SPEED, chargeRange: CHARGE_MIN_RANGE, chargeScale: 1 })
-      // Fire wall raycast for 2nd throw so it bounces off walls like the 1st
-      if (Transform.has(engine.PlayerEntity)) {
-        const playerPos = Transform.get(engine.PlayerEntity).position
-        const spawnPos = Vector3.create(playerPos.x + yellowSecondThrowDir.dirX * 1.0, playerPos.y + 0.8, playerPos.z + yellowSecondThrowDir.dirZ * 1.0)
-        fireWallRaycast(spawnPos, yellowSecondThrowDir.dirX, yellowSecondThrowDir.dirZ)
-      }
+      fireServerProjectile(yellowSecondThrowDir.dirX, yellowSecondThrowDir.dirZ, 'y', CHARGE_MIN_SPEED, CHARGE_MIN_RANGE, 1)
     } else {
       fireProjectileLocally(CHARGE_MIN_SPEED, CHARGE_MIN_RANGE)
     }
@@ -1311,15 +1321,7 @@ export function projectileClientSystem(dt: number): void {
       const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
       const speed = CHARGE_MIN_SPEED
       if (serverUp) {
-        localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
-        updateHandBoomerangVisibility()
-        room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: speed, chargeRange: range, chargeScale: 1 })
-
-        if (Transform.has(engine.PlayerEntity)) {
-          const playerPos = Transform.get(engine.PlayerEntity).position
-          const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
-          fireWallRaycast(spawnPos, dirX, dirZ)
-        }
+        fireServerProjectile(dirX, dirZ, currentColor, speed, range, 1)
       } else {
         localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
         updateHandBoomerangVisibility()
@@ -1417,15 +1419,7 @@ export function projectileClientSystem(dt: number): void {
     const { dirX, dirZ } = getPlayerForward()
 
     if (serverUp) {
-      localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
-      updateHandBoomerangVisibility()
-      room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed, chargeRange, chargeScale })
-
-      if (Transform.has(engine.PlayerEntity)) {
-        const playerPos = Transform.get(engine.PlayerEntity).position
-        const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
-        fireWallRaycast(spawnPos, dirX, dirZ)
-      }
+      fireServerProjectile(dirX, dirZ, currentColor, chargeSpeed, chargeRange, chargeScale)
     } else {
       localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
       updateHandBoomerangVisibility()
