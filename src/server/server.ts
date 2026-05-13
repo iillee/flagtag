@@ -15,14 +15,19 @@ import {
   MUSHROOM_CX, MUSHROOM_CZ, MUSHROOM_RADIUS, MUSHROOM_CANDIDATES,
   isRealName, getPlayerPosition,
   lastVisitorResetDay, setLastVisitorResetDay,
-  lastMonthlyVisitorResetMonth, setLastMonthlyVisitorResetMonth,
-  hourlyPeakConcurrent, setHourlyPeakConcurrent,
-  peakConcurrent, setPeakConcurrent, peakConcurrentTime, setPeakConcurrentTime
+  lastMonthlyVisitorResetMonth, setLastMonthlyVisitorResetMonth
 } from './serverState'
 import {
   persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard,
-  persistPlayerNames, loadPlayerNames, persistVisitorData, loadVisitorData
+  persistPlayerNames, loadPlayerNames, loadVisitorData
 } from './persistence'
+import {
+  updateConcurrentTracking, loadDiscordWebhookUrl, loadDailyReportSentDay,
+  sendPendingReport, sendDailyAnalyticsToDiscord, snapshotPendingReport,
+  syncVisitorAnalytics, syncMonthlyVisitorAnalytics,
+  checkPreMidnightReport, checkVisitorDailyReset, checkMonthlyVisitorReset,
+  visitorTrackingServerSystem
+} from './analytics'
 import {
   type LeaderboardEntry, parseLeaderboardJson, incrementLeaderboardWins,
   patchLeaderboardNames, patchAllLeaderboardNames,
@@ -30,7 +35,7 @@ import {
   updatePlayerName
 } from './leaderboard'
 import { syncEntity } from '@dcl/sdk/network'
-import { Storage, EnvVar } from '@dcl/sdk/server'
+import { Storage } from '@dcl/sdk/server'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState, VisitorAnalytics, MonthlyVisitorAnalytics,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
@@ -133,21 +138,6 @@ function getOrCreateHoldTimeEntity(userKey: string): Entity {
 
 // visitorSessions, monthlyVisitorSessions, playerBoomerangColors, deathPenaltyCooldowns moved to serverState.ts
 // lastVisitorResetDay, lastMonthlyVisitorResetMonth, hourlyPeakConcurrent, peakConcurrent, peakConcurrentTime moved to serverState.ts
-
-function updateConcurrentTracking(): void {
-  const onlineCount = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
-  const now = new Date()
-  const hour = now.getUTCHours()
-  if (onlineCount > hourlyPeakConcurrent[hour]) {
-    hourlyPeakConcurrent[hour] = onlineCount
-  }
-  if (onlineCount > peakConcurrent) {
-    setPeakConcurrent(onlineCount)
-    const hh = String(now.getUTCHours()).padStart(2, '0')
-    const mm = String(now.getUTCMinutes()).padStart(2, '0')
-    setPeakConcurrentTime(`${hh}:${mm}`)
-  }
-}
 
 // ── Trap state ──
 // TRAP_MODEL_SRC removed — server doesn't create visuals
@@ -256,441 +246,11 @@ function resetCarrierTracking(): void {
 
 // checkLeaderboardDailyReset, checkMonthlyLeaderboardReset moved to leaderboard.ts
 
-// ── Pending report snapshot (deferred Discord report) ──
-// Snapshots daily data before reset so the report can be sent on next server startup
-// even if no one was online at report time.
-
-/** Build the daily analytics report object (shared by snapshot + live send). */
-function buildDailyReport(leaderboardJson: string): any {
-  const now = Date.now()
-  const winsMap = new Map<string, number>()
-  try {
-    const entries = JSON.parse(leaderboardJson) as Array<{ userId: string; roundsWon: number }>
-    for (const e of entries) winsMap.set(e.userId.toLowerCase(), e.roundsWon)
-  } catch { /* ignore */ }
-
-  const users = Array.from(visitorSessions.entries()).map(([userId, data]) => {
-    let totalSeconds = data.totalSecondsToday
-    if (data.sessionStartMs > 0) {
-      totalSeconds += Math.floor((now - data.sessionStartMs) / 1000)
-    }
-    return {
-      address: userId,
-      name: data.name || userId.slice(0, 8),
-      time_seconds: totalSeconds,
-      flags: winsMap.get(userId) || 0
-    }
-  }).sort((a, b) => b.time_seconds - a.time_seconds)
-
-  const totalSeconds = users.reduce((sum, u) => sum + u.time_seconds, 0)
-  return {
-    scene: 'flagtag.dcl.eth',
-    date: lastVisitorResetDay,
-    unique_users: users.length,
-    playtime: `${Math.floor(totalSeconds / 60)} minutes`,
-    total_time_seconds: totalSeconds,
-    peak_concurrent: { count: peakConcurrent, time: peakConcurrentTime },
-    hourly_peak: hourlyPeakConcurrent.map((count, hour) => `${hour}:00 - ${count}`),
-    users
-  }
-}
-
-async function snapshotPendingReport(leaderboardJson: string): Promise<void> {
-  try {
-    // Don't overwrite an existing pending report that hasn't been sent yet
-    const existing = await Storage.get<string>('pendingReport')
-    if (existing) {
-      console.log('[Server] Pending report already exists, skipping snapshot')
-      return
-    }
-
-    // If report was already sent for this day (via pre-midnight), no need to snapshot
-    if (dailyReportSentForDay === lastVisitorResetDay) {
-      console.log('[Server] Report already sent for', lastVisitorResetDay, '- skipping snapshot')
-      return
-    }
-
-    const report = buildDailyReport(leaderboardJson)
-    await Storage.set('pendingReport', JSON.stringify(report))
-    console.log('[Server] 📸 Snapshot saved for deferred report:', lastVisitorResetDay, `(${report.users.length} users)`)
-  } catch (err) {
-    console.error('[Server] Failed to snapshot pending report:', err)
-  }
-}
-
-async function sendPendingReport(): Promise<void> {
-  try {
-    if (!DISCORD_WEBHOOK_URL) return
-    const { getRealm } = await import('~system/Runtime')
-    const realm = await getRealm({})
-    if (realm.realmInfo?.isPreview) return
-
-    const pendingJson = await Storage.get<string>('pendingReport')
-    if (!pendingJson) return
-
-    const report = JSON.parse(pendingJson)
-    console.log('[Server] 📬 Found pending report for', report.date, '- sending now')
-
-    // Build summary text
-    const summaryLines = [
-      `📊 **Flag Tag Daily Report** — ${report.date} *(deferred)*`,
-      `👥 **${report.unique_users}** unique users | ⏱️ **${report.playtime}** total playtime`,
-      `📈 Peak concurrent: **${report.peak_concurrent.count}** at ${report.peak_concurrent.time} UTC`,
-      `See attached JSON for full user details (addresses, names, playtime, flags).`
-    ]
-    const summaryText = summaryLines.join('\n')
-    const fullJson = JSON.stringify(report, null, 2)
-    const fileName = `flagtag-report-${report.date}.json`
-
-    const boundary = '----DCLWebhookBoundary' + Date.now()
-    const multipartBody = [
-      `--${boundary}`,
-      `Content-Disposition: form-data; name="payload_json"`,
-      `Content-Type: application/json`,
-      ``,
-      JSON.stringify({ content: summaryText }),
-      `--${boundary}`,
-      `Content-Disposition: form-data; name="files[0]"; filename="${fileName}"`,
-      `Content-Type: application/json`,
-      ``,
-      fullJson,
-      `--${boundary}--`
-    ].join('\r\n')
-
-    const res = await fetch(DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-      body: multipartBody
-    })
-
-    if (res.status >= 200 && res.status < 300) {
-      console.log('[Server] ✅ Deferred report sent successfully for', report.date)
-      await Storage.delete('pendingReport')
-      // Mark as sent so we don't re-snapshot
-      dailyReportSentForDay = report.date
-      await Storage.set('dailyReportSentForDay', report.date)
-    } else {
-      console.error('[Server] ❌ Deferred report webhook failed:', res.status)
-    }
-  } catch (err) {
-    console.error('[Server] Failed to send pending report:', err)
-  }
-}
-
-// ── Discord webhook for daily analytics ──
-let DISCORD_WEBHOOK_URL = ''
-async function loadDiscordWebhookUrl(): Promise<void> {
-  DISCORD_WEBHOOK_URL = (await EnvVar.get('DISCORD_WEBHOOK_URL')) || ''
-  if (!DISCORD_WEBHOOK_URL) {
-    console.log('[Server] ⚠️ DISCORD_WEBHOOK_URL env var not set — Discord reports will be disabled')
-  } else {
-    console.log('[Server] ✅ Discord webhook URL loaded from EnvVar')
-  }
-}
-
-async function sendDailyAnalyticsToDiscord(): Promise<void> {
-  try {
-    if (!DISCORD_WEBHOOK_URL) {
-      console.log('[Server] Skipping Discord webhook — no URL configured')
-      return
-    }
-    // Skip webhook in local preview
-    const { getRealm } = await import('~system/Runtime')
-    const realm = await getRealm({})
-    if (realm.realmInfo?.isPreview) {
-      console.log('[Server] Skipping Discord webhook — running in preview mode')
-      return
-    }
-
-    console.log('[Server] Discord report: visitorSessions.size =', visitorSessions.size)
-
-    const lb = LeaderboardState.getOrNull(leaderboardEntity)
-    const report = buildDailyReport(lb?.json || '[]')
-    const { users } = report
-
-    // Build a short summary for the Discord message text
-    const summaryLines = [
-      `📊 **Flag Tag Daily Report** — ${report.date}`,
-      `👥 **${report.unique_users}** unique users | ⏱️ **${report.playtime}** total playtime`,
-      `📈 Peak concurrent: **${report.peak_concurrent.count}** at ${report.peak_concurrent.time} UTC`,
-      `See attached JSON for full user details (addresses, names, playtime, flags).`
-    ]
-    const summaryText = summaryLines.join('\n')
-
-    // Full report JSON as file attachment (no truncation, full addresses)
-    const fullJson = JSON.stringify(report, null, 2)
-    const fileName = `flagtag-report-${report.date}.json`
-
-    // Build multipart/form-data manually (FormData not available in DCL runtime)
-    const boundary = '----DCLWebhookBoundary' + Date.now()
-    const multipartBody = [
-      `--${boundary}`,
-      `Content-Disposition: form-data; name="payload_json"`,
-      `Content-Type: application/json`,
-      ``,
-      JSON.stringify({ content: summaryText }),
-      `--${boundary}`,
-      `Content-Disposition: form-data; name="files[0]"; filename="${fileName}"`,
-      `Content-Type: application/json`,
-      ``,
-      fullJson,
-      `--${boundary}--`
-    ].join('\r\n')
-
-    // Send with retry logic
-    console.log(`[Server] Discord webhook: sending report with attachment (${users.length} users, ${fullJson.length} bytes)`)
-    let success = false
-    for (let attempt = 0; attempt < 3 && !success; attempt++) {
-      if (attempt > 0) {
-        console.log(`[Server] Discord webhook retry ${attempt}`)
-        await new Promise(resolve => setTimeout(() => resolve(undefined), 3000))
-      }
-      try {
-        const res = await fetch(DISCORD_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-          body: multipartBody
-        })
-        console.log(`[Server] Discord webhook response:`, res.status)
-        if (res.status === 429) {
-          const body = await res.text()
-          console.log('[Server] Discord rate limited:', body)
-          await new Promise(resolve => setTimeout(() => resolve(undefined), 5000))
-          continue
-        }
-        if (!res.ok) {
-          const text = await res.text()
-          console.error('[Server] Discord webhook error body:', text)
-          // If multipart fails (e.g. runtime doesn't support it), fall back to text-only
-          if (attempt === 2) {
-            console.log('[Server] Multipart failed after retries, falling back to text-only messages')
-            await sendDiscordFallbackText(summaryText, users)
-          }
-        } else {
-          success = true
-        }
-      } catch (fetchErr) {
-        console.error('[Server] Discord webhook fetch error:', fetchErr)
-        if (attempt === 2) {
-          console.log('[Server] Multipart failed after retries, falling back to text-only messages')
-          await sendDiscordFallbackText(summaryText, users)
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[Server] Failed to send Discord webhook:', err)
-  }
-}
-
-// ── Fallback: send report as chunked text messages if multipart fails ──
-async function sendDiscordFallbackText(summary: string, users: Array<{ address: string; name: string; time_seconds: number; flags: number }>): Promise<void> {
-  try {
-    // Send summary first
-    await fetch(DISCORD_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: summary + '\n⚠️ _File attachment failed — sending as text._' })
-    })
-
-    // Build compact user lines and chunk them under 1900 chars
-    const lines = users.map(u => {
-      const mins = Math.floor(u.time_seconds / 60)
-      return `\`${u.name}\` ${u.address.slice(0, 10)}… ${mins}m ${u.flags}🚩`
-    })
-
-    let chunk = '```\n'
-    for (const line of lines) {
-      if (chunk.length + line.length + 5 > 1900) {
-        chunk += '```'
-        await fetch(DISCORD_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: chunk })
-        })
-        await new Promise(resolve => setTimeout(() => resolve(undefined), 1000))
-        chunk = '```\n'
-      }
-      chunk += line + '\n'
-    }
-    if (chunk.length > 4) {
-      chunk += '```'
-      await fetch(DISCORD_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: chunk })
-      })
-    }
-    console.log('[Server] ✅ Fallback text report sent')
-  } catch (err) {
-    console.error('[Server] ❌ Fallback text report failed:', err)
-  }
-}
-
-// ── Pre-midnight Discord report ──
-// Send the daily report once at 23:55 UTC so all data is intact before midnight reset.
-// Persisted to Storage so server restarts don't re-trigger.
-// Only fires on the deployed world (requires ENABLE_DISCORD_REPORTS=true EnvVar).
-let dailyReportSentForDay = ''
-
-
-async function loadDailyReportSentDay(): Promise<void> {
-  try {
-    const saved = await Storage.get<string>('dailyReportSentForDay')
-    if (saved) {
-      dailyReportSentForDay = saved
-      console.log('[Server] Loaded dailyReportSentForDay:', saved)
-    }
-  } catch (err) {
-    console.error('[Server] Failed to load dailyReportSentForDay:', err)
-  }
-}
-
-async function checkPreMidnightReport(): Promise<void> {
-  const now = new Date()
-  const currentDay = now.toISOString().slice(0, 10)
-  
-  // Already sent today's report
-  if (dailyReportSentForDay === currentDay) return
-  
-  // Send during the last hour of the UTC day (23:00–23:59)
-  const hour = now.getUTCHours()
-  if (hour === 23) {
-    console.log('[Server] 📊 Sending pre-midnight daily analytics report for', currentDay)
-    dailyReportSentForDay = currentDay
-    await Storage.set('dailyReportSentForDay', currentDay)
-    await sendDailyAnalyticsToDiscord()
-  }
-}
-
-// Check and perform daily visitor reset at 12:00 AM UTC (midnight)
-async function checkVisitorDailyReset(): Promise<boolean> {
-  const currentDay = getTodayDateString()
-  
-  if (lastVisitorResetDay !== currentDay) {
-    console.log('[Server] Daily visitor reset at midnight UTC for new day:', currentDay)
-    
-    // Snapshot and send report if the pre-midnight report didn't fire
-    if (dailyReportSentForDay !== lastVisitorResetDay) {
-      console.log('[Server] Pre-midnight report was missed, snapshotting and sending before reset')
-      // Snapshot with current leaderboard data (still available since this runs before leaderboard reset)
-      const lb = LeaderboardState.getOrNull(leaderboardEntity)
-      const leaderboardJson = (lb && lb.json) ? lb.json : '[]'
-      await snapshotPendingReport(leaderboardJson)
-      dailyReportSentForDay = lastVisitorResetDay
-      await Storage.set('dailyReportSentForDay', lastVisitorResetDay)
-      await sendPendingReport()
-    }
-    
-    setLastVisitorResetDay(currentDay)
-    
-    // Clear visitor data for new day
-    visitorSessions.clear()
-    setHourlyPeakConcurrent(new Array(24).fill(0))
-    setPeakConcurrent(0)
-    setPeakConcurrentTime('')
-    
-    // Sync empty visitor data
-    await syncVisitorAnalytics()
-    
-    console.log('[Server] Visitor data reset completed')
-    return true
-  }
-  
-  return false
-}
-
-async function syncVisitorAnalytics(): Promise<void> {
-  const currentDay = getTodayDateString()
-  const now = Date.now()
-  const onlineCount = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
-  
-  // Build visitor data array — include ALL visitors (no filtering)
-  const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
-    const isOnline = data.sessionStartMs > 0
-    // Calculate total seconds (stored minutes + current session)
-    let totalSeconds = data.totalSecondsToday
-    
-    if (isOnline) {
-      const sessionMs = now - data.sessionStartMs
-      totalSeconds += Math.floor(sessionMs / 1000)
-    }
-    
-    // Always prefer the authoritative playerNames directory over the session name
-    const bestName = (playerNames.has(userId) && isRealName(playerNames.get(userId)!))
-      ? playerNames.get(userId)!
-      : data.name
-
-    return {
-      userId,
-      name: bestName,
-      isOnline,
-      totalSeconds
-    }
-  })
-  .sort((a, b) => {
-    // Online first, then by time
-    if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
-    return b.totalSeconds - a.totalSeconds
-  })
-  .slice(0, 100) // Limit synced display data — >100 can exceed CRDT string size limits
-  
-  const visitorDataJson = JSON.stringify(visitorData)
-  
-  // Update synced component
-  const mutable = VisitorAnalytics.getMutable(visitorAnalyticsEntity)
-  mutable.date = currentDay
-  mutable.visitorDataJson = visitorDataJson
-  mutable.onlineCount = onlineCount
-  mutable.totalUniqueVisitors = visitorSessions.size
-  
-  // Persist to storage
-  await persistVisitorData(visitorDataJson)
-}
-
-async function syncMonthlyVisitorAnalytics(): Promise<void> {
-  const currentMonth = getCurrentMonthString()
-  const now = Date.now()
-  const onlineCount = Array.from(monthlyVisitorSessions.values()).filter(v => v.sessionStartMs > 0).length
-
-  const visitorData = Array.from(monthlyVisitorSessions.entries()).map(([userId, data]) => {
-    const isOnline = data.sessionStartMs > 0
-    let totalSeconds = data.totalSecondsMonth
-    if (isOnline) {
-      const sessionMs = now - data.sessionStartMs
-      totalSeconds += Math.floor(sessionMs / 1000)
-    }
-    const bestName = (playerNames.has(userId) && isRealName(playerNames.get(userId)!))
-      ? playerNames.get(userId)!
-      : data.name
-    return { userId, name: bestName, isOnline, totalSeconds }
-  })
-  .sort((a, b) => {
-    if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
-    return b.totalSeconds - a.totalSeconds
-  })
-  .slice(0, 100) // Limit synced display data — >100 can exceed CRDT string size limits
-
-  const visitorDataJson = JSON.stringify(visitorData)
-  const mutable = MonthlyVisitorAnalytics.getMutable(monthlyVisitorAnalyticsEntity)
-  mutable.month = currentMonth
-  mutable.visitorDataJson = visitorDataJson
-  mutable.onlineCount = onlineCount
-  mutable.totalUniqueVisitors = monthlyVisitorSessions.size
-
-  await Storage.set('monthlyVisitorData', visitorDataJson)
-  await Storage.set('monthlyVisitorResetMonth', currentMonth)
-}
-
-async function checkMonthlyVisitorReset(): Promise<void> {
-  const currentMonth = getCurrentMonthString()
-  if (lastMonthlyVisitorResetMonth !== '' && lastMonthlyVisitorResetMonth !== currentMonth) {
-    console.log('[Server] Monthly visitor reset for new month:', currentMonth)
-    monthlyVisitorSessions.clear()
-    setLastMonthlyVisitorResetMonth(currentMonth)
-    await syncMonthlyVisitorAnalytics()
-    console.log('[Server] Monthly visitor data reset completed')
-  }
-}
+// updateConcurrentTracking, buildDailyReport, snapshotPendingReport, sendPendingReport,
+// DISCORD_WEBHOOK_URL, loadDiscordWebhookUrl, sendDailyAnalyticsToDiscord, sendDiscordFallbackText,
+// dailyReportSentForDay, loadDailyReportSentDay, checkPreMidnightReport, checkVisitorDailyReset,
+// syncVisitorAnalytics, syncMonthlyVisitorAnalytics, checkMonthlyVisitorReset,
+// visitorTrackingServerSystem moved to analytics.ts
 
 // ── Setup ──
 
@@ -2951,30 +2511,6 @@ async function handleRoundEnd(): Promise<void> {
 
   // ── 8. Persist flag state ──
   await persistFlagState()
-}
-
-let visitorSyncTimer = 0
-
-function visitorTrackingServerSystem(dt: number): void {
-  visitorSyncTimer += dt
-  
-  // Sync visitor analytics every 10 seconds
-  if (visitorSyncTimer >= 10.0) {
-    visitorSyncTimer = 0
-    
-    // Check if it's time to send the pre-midnight report (23:55 UTC)
-    checkPreMidnightReport().catch(e => console.error('[Server] checkPreMidnightReport error:', e))
-    
-    // Check for daily reset (midnight UTC)
-    checkVisitorDailyReset().catch(e => console.error('[Server] checkVisitorDailyReset error:', e))
-    
-    // Check for monthly visitor reset
-    checkMonthlyVisitorReset().catch(e => console.error('[Server] checkMonthlyVisitorReset error:', e))
-    
-    // Sync current visitor data
-    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
-    syncMonthlyVisitorAnalytics().catch(e => console.error('[Server] syncMonthlyVisitorAnalytics error:', e))
-  }
 }
 
 /**
