@@ -431,6 +431,11 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **⚠️ Post-deploy testing needed:** Yellow (Dubs), Green (Orbit), and Blue (Charge) boomerangs could not be tested in preview due to coin/flag-win purchase requirements. Test all three boomerang types after deploying to flagtag.dcl.eth where the player wallet has sufficient coins and lifetime wins.
 
+**Concerns:**
+- None for correctness. The `serverState.ts` approach for shared zombie state is clean and avoids circular deps.
+
+**Step 8 note:** `ActiveZombie` interface and `activeZombies` array are already in `serverState.ts` now (moved during this step), so Step 8 does NOT need to move them again. `zombieSystem.ts` just imports them from `serverState`. The zombie code still in `server.ts` (~200 lines) references `activeProjectiles` from `combat.ts` (already imported) for projectile-zombie collision. The `zombieHit` message handler is registered at module top-level via `room.onMessage` (not inside `registerHandlers`) — wrap it in a `registerZombieHandlers()` function during Step 8.
+
 ---
 
 ## Step 8: `zombieSystem.ts` — Ghost AI
