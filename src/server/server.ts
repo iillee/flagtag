@@ -48,16 +48,14 @@ import {
 import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
 import {
-  CoinState, PlayerWallet, COIN_STATE_SYNC_ID, COIN_RESPAWN_INTERVAL_SEC, COIN_PICKUP_RADIUS,
-  ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
-  getWalletSyncId
+  CoinState, COIN_STATE_SYNC_ID, COIN_PICKUP_RADIUS
 } from '../shared/coins'
 import {
-  PlayerUpgrades, PlayerLifetimeWins,
-  getUpgradesSyncId, getLifetimeWinsSyncId,
-  parseUpgrades, serializeUpgrades, BOOMERANG_STORE,
-  type UpgradeData
-} from '../shared/upgrades'
+  loadPlayerCoinBalance, setPlayerCoinBalance, addPlayerCoins, getOrCreateWalletEntity,
+  loadPlayerUpgrades, savePlayerUpgrades, getOrCreateUpgradeEntity,
+  loadPlayerLifetimeWins, addPlayerLifetimeWin, getOrCreateLifetimeWinsEntity,
+  coinServerSystem, awardRoundCoins, registerEconomyHandlers
+} from './economy'
 import type { BoomerangColor } from '../gameState/boomerangColor'
 
 // Constants moved to serverState.ts
@@ -74,14 +72,7 @@ const activeMushrooms: ServerMushroom[] = []
 let mushroomIdCounter = 0
 // mushroomShieldActive removed — mushrooms no longer block hits
 
-// ── Coin state ──
-// coinStateEntity, playerCoinBalances, walletEntities moved to serverState.ts
-/** Set of coinIds currently picked up (empty spots waiting for random respawn) */
-const coinCooldowns = new Set<string>()
-/** Timer tracking seconds until next random coin respawn */
-let coinRespawnTimer = 0
-
-// Upgrade/progression state moved to serverState.ts
+// Coin state, upgrade/progression state moved to economy.ts
 
 // Entity references moved to serverState.ts
 
@@ -481,6 +472,7 @@ export async function setupServer(): Promise<void> {
 
   // Register message handlers
   registerHandlers()
+  registerEconomyHandlers()
 
   // Register systems
   // Wrap all systems in try/catch — one bad frame shouldn't crash the server
@@ -551,293 +543,7 @@ function resetGravityState(): void {
  */
 // updatePlayerName moved to leaderboard.ts
 
-// ── Coin helpers ──
-
-async function loadPlayerCoinBalance(walletAddress: string): Promise<number> {
-  const key = walletAddress.toLowerCase()
-  // Check in-memory cache first
-  const cached = playerCoinBalances.get(key)
-  if (cached !== undefined) return cached
-
-  try {
-    const saved = await Storage.get<string>(`coins:${key}`)
-    const balance = saved ? parseInt(saved, 10) : 0
-    playerCoinBalances.set(key, balance)
-    return balance
-  } catch (err) {
-    console.error('[Coins] Failed to load balance for', key.slice(0, 8), err)
-    return 0
-  }
-}
-
-async function setPlayerCoinBalance(walletAddress: string, amount: number): Promise<void> {
-  const key = walletAddress.toLowerCase()
-  playerCoinBalances.set(key, amount)
-  
-  // Update synced wallet entity
-  const walletEntity = getOrCreateWalletEntity(key)
-  PlayerWallet.getMutable(walletEntity).coins = amount
-  
-  // Persist
-  try {
-    await Storage.set(`coins:${key}`, String(amount))
-  } catch (err) {
-    console.error('[Coins] Failed to persist balance for', key.slice(0, 8), err)
-  }
-}
-
-async function addPlayerCoins(walletAddress: string, amount: number): Promise<number> {
-  const current = await loadPlayerCoinBalance(walletAddress)
-  const newBalance = Math.min(current + amount, MAX_COINS)
-  await setPlayerCoinBalance(walletAddress, newBalance)
-  return newBalance
-}
-
-function getOrCreateWalletEntity(walletAddress: string): Entity {
-  const key = walletAddress.toLowerCase()
-  let entity = walletEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  const balance = playerCoinBalances.get(key) ?? 0
-  PlayerWallet.create(entity, { playerId: key, coins: balance })
-  syncEntity(entity, [PlayerWallet.componentId], getWalletSyncId(key))
-  walletEntities.set(key, entity)
-  console.log('[Coins] Created wallet entity for', key.slice(0, 8), 'balance:', balance)
-  return entity
-}
-
-// ── Upgrade / progression helpers ──
-
-async function loadPlayerUpgrades(walletAddress: string): Promise<UpgradeData> {
-  const key = walletAddress.toLowerCase()
-  const cached = playerUpgradeData.get(key)
-  if (cached) return cached
-
-  try {
-    const saved = await Storage.get<string>(`upgrades:${key}`)
-    const data = saved ? parseUpgrades(saved) : { boomerangs: ['r'] as BoomerangColor[], equipped: 'r' as BoomerangColor }
-    playerUpgradeData.set(key, data)
-    return data
-  } catch (err) {
-    console.error('[Upgrades] Failed to load for', key.slice(0, 8), err)
-    return { boomerangs: ['r'], equipped: 'r' }
-  }
-}
-
-async function savePlayerUpgrades(walletAddress: string, data: UpgradeData): Promise<void> {
-  const key = walletAddress.toLowerCase()
-  playerUpgradeData.set(key, data)
-
-  // Update synced entity
-  const entity = getOrCreateUpgradeEntity(key)
-  PlayerUpgrades.getMutable(entity).upgradesJson = serializeUpgrades(data)
-
-  try {
-    await Storage.set(`upgrades:${key}`, serializeUpgrades(data))
-  } catch (err) {
-    console.error('[Upgrades] Failed to persist for', key.slice(0, 8), err)
-  }
-}
-
-function getOrCreateUpgradeEntity(walletAddress: string): Entity {
-  const key = walletAddress.toLowerCase()
-  let entity = upgradeEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  const data = playerUpgradeData.get(key) ?? { boomerangs: ['r'], equipped: 'r' }
-  PlayerUpgrades.create(entity, { playerId: key, upgradesJson: serializeUpgrades(data) })
-  syncEntity(entity, [PlayerUpgrades.componentId], getUpgradesSyncId(key))
-  upgradeEntities.set(key, entity)
-  console.log('[Upgrades] Created entity for', key.slice(0, 8))
-  return entity
-}
-
-async function loadPlayerLifetimeWins(walletAddress: string): Promise<number> {
-  const key = walletAddress.toLowerCase()
-  const cached = playerLifetimeWinsCache.get(key)
-  if (cached !== undefined) return cached
-
-  try {
-    const saved = await Storage.get<string>(`lifetimeWins:${key}`)
-    let wins = saved ? parseInt(saved, 10) : 0
-
-    // Reconcile with all-time leaderboard — always take the higher value
-    // (covers initial seeding and any drift from before lifetime wins tracking)
-    const atEntries = parseLeaderboardJson(AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)?.json)
-    const entry = atEntries.find(e => e.userId.toLowerCase() === key)
-    if (entry && entry.roundsWon > wins) {
-      console.log('[LifetimeWins] Reconciled', key.slice(0, 8), 'from', wins, 'to', entry.roundsWon, '(all-time leaderboard)')
-      wins = entry.roundsWon
-      await Storage.set(`lifetimeWins:${key}`, String(wins))
-    }
-
-    playerLifetimeWinsCache.set(key, wins)
-    return wins
-  } catch (err) {
-    console.error('[LifetimeWins] Failed to load for', key.slice(0, 8), err)
-    return 0
-  }
-}
-
-async function addPlayerLifetimeWin(walletAddress: string): Promise<number> {
-  const key = walletAddress.toLowerCase()
-  const current = await loadPlayerLifetimeWins(key)
-  const newWins = current + 1
-  playerLifetimeWinsCache.set(key, newWins)
-
-  // Update synced entity
-  const entity = getOrCreateLifetimeWinsEntity(key)
-  PlayerLifetimeWins.getMutable(entity).wins = newWins
-
-  try {
-    await Storage.set(`lifetimeWins:${key}`, String(newWins))
-  } catch (err) {
-    console.error('[LifetimeWins] Failed to persist for', key.slice(0, 8), err)
-  }
-
-  return newWins
-}
-
-function getOrCreateLifetimeWinsEntity(walletAddress: string): Entity {
-  const key = walletAddress.toLowerCase()
-  let entity = lifetimeWinsEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  const wins = playerLifetimeWinsCache.get(key) ?? 0
-  PlayerLifetimeWins.create(entity, { playerId: key, wins })
-  syncEntity(entity, [PlayerLifetimeWins.componentId], getLifetimeWinsSyncId(key))
-  lifetimeWinsEntities.set(key, entity)
-  console.log('[LifetimeWins] Created entity for', key.slice(0, 8), 'wins:', wins)
-  return entity
-}
-
-async function handleBuyBoomerang(playerId: string, color: string): Promise<void> {
-  const key = playerId.toLowerCase()
-  const boomerangColor = color as BoomerangColor
-  
-  // Find the store item
-  const item = BOOMERANG_STORE.find(i => i.id === boomerangColor)
-  if (!item) {
-    room.send('buyResult', { success: false, color, reason: 'Invalid item', newBalance: 0, upgradesJson: '' }, { to: [key] })
-    return
-  }
-
-  // Already owned?
-  const upgrades = await loadPlayerUpgrades(key)
-  if (upgrades.boomerangs.includes(boomerangColor)) {
-    room.send('buyResult', { success: false, color, reason: 'Already owned', newBalance: 0, upgradesJson: '' }, { to: [key] })
-    return
-  }
-
-  // Check flag requirement
-  const wins = await loadPlayerLifetimeWins(key)
-  if (wins < item.flagsRequired) {
-    room.send('buyResult', { success: false, color, reason: `Need ${item.flagsRequired} flags (you have ${wins})`, newBalance: 0, upgradesJson: '' }, { to: [key] })
-    return
-  }
-
-  // Check coin balance
-  const balance = await loadPlayerCoinBalance(key)
-  if (balance < item.coinCost) {
-    room.send('buyResult', { success: false, color, reason: `Need ${item.coinCost} coins (you have ${balance})`, newBalance: 0, upgradesJson: '' }, { to: [key] })
-    return
-  }
-
-  // Deduct coins
-  const newBalance = balance - item.coinCost
-  await setPlayerCoinBalance(key, newBalance)
-
-  // Add boomerang to owned list + auto-equip
-  upgrades.boomerangs.push(boomerangColor)
-  upgrades.equipped = boomerangColor
-  await savePlayerUpgrades(key, upgrades)
-
-  // Update the player's boomerang color on server side
-  playerBoomerangColors.set(key, boomerangColor)
-
-  console.log('[Store] Player', key.slice(0, 8), 'bought', item.label, 'for', item.coinCost, 'coins. New balance:', newBalance)
-
-  room.send('buyResult', {
-    success: true,
-    color,
-    reason: '',
-    newBalance,
-    upgradesJson: serializeUpgrades(upgrades)
-  }, { to: [key] })
-
-  // Broadcast color change to all players
-  room.send('playerColorChanged', { playerId: key, color: boomerangColor })
-}
-
-function updateCoinStateCRDT(): void {
-  const obj: Record<string, number> = {}
-  for (const coinId of coinCooldowns) {
-    obj[coinId] = 1 // value doesn't matter, just presence
-  }
-  CoinState.getMutable(coinStateEntity).cooldownJson = JSON.stringify(obj)
-}
-
-/** Server system: periodically respawn one random coin from the empty pool */
-function coinServerSystem(dt: number): void {
-  if (coinCooldowns.size === 0) return
-  
-  coinRespawnTimer += dt
-  if (coinRespawnTimer < COIN_RESPAWN_INTERVAL_SEC) return
-  coinRespawnTimer = 0
-  
-  // Pick a random coin from the cooldown set to respawn
-  const cooldownArray = Array.from(coinCooldowns)
-  const idx = Math.floor(Math.random() * cooldownArray.length)
-  const coinId = cooldownArray[idx]
-  
-  coinCooldowns.delete(coinId)
-  room.send('coinRespawned', { coinId })
-  updateCoinStateCRDT()
-  console.log('[Coins] Coin respawned (random):', coinId, '| remaining empty:', coinCooldowns.size)
-}
-
-/** Award coins to players at end of round based on hold time and placement */
-async function awardRoundCoins(players: { userId: string; seconds: number }[]): Promise<void> {
-  if (players.length === 0) return
-  
-  // Sort by seconds descending for placement
-  const sorted = [...players].sort((a, b) => b.seconds - a.seconds)
-  
-  for (let i = 0; i < sorted.length; i++) {
-    const p = sorted[i]
-    let coins = ROUND_PARTICIPATION_COINS
-    
-    // Hold time coins
-    coins += Math.floor(p.seconds * COINS_PER_HOLD_SECOND)
-    
-    // Placement bonus (1st, 2nd, 3rd)
-    if (i < ROUND_PLACEMENT_BONUS.length && p.seconds > 0) {
-      coins += ROUND_PLACEMENT_BONUS[i]
-    }
-    
-    if (coins > 0) {
-      const newBalance = await addPlayerCoins(p.userId, coins)
-      // Send balance update to the specific player
-      room.send('walletBalance', { playerId: p.userId, coins: newBalance }, { to: [p.userId] })
-      // Send detailed breakdown so client can show "You Earned" UI
-      const holdTimeCoins = Math.floor(p.seconds * COINS_PER_HOLD_SECOND)
-      const placementBonus = (i < ROUND_PLACEMENT_BONUS.length && p.seconds > 0) ? ROUND_PLACEMENT_BONUS[i] : 0
-      room.send('roundCoinsEarned', {
-        playerId: p.userId,
-        total: coins,
-        participation: ROUND_PARTICIPATION_COINS,
-        holdTime: holdTimeCoins,
-        placement: placementBonus,
-        rank: i + 1,
-        newBalance
-      }, { to: [p.userId] })
-      console.log('[Coins] Awarded', coins, 'coins to', p.userId.slice(0, 8), '(new balance:', newBalance, ')')
-    }
-  }
-}
+// Coin helpers, upgrade helpers, store logic, coinServerSystem, awardRoundCoins moved to economy.ts
 
 // ── Message handlers ──
 function registerHandlers(): void {
@@ -870,27 +576,7 @@ function registerHandlers(): void {
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
 
-  // Death penalty — deduct coins on death (drowning, lightning, ghost)
-  const DEATH_PENALTY_COINS = 10
-  // deathPenaltyCooldowns is module-level so playerTrackingSystem can clean it up on disconnect
-  room.onMessage('deathPenalty', async (data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const now = Date.now()
-      const lastDeath = deathPenaltyCooldowns.get(from) ?? 0
-      if (now - lastDeath < 3000) return // 3s cooldown to prevent duplicate messages
-      deathPenaltyCooldowns.set(from, now)
-
-      const current = await loadPlayerCoinBalance(from)
-      const penalty = Math.min(DEATH_PENALTY_COINS, current) // don't go negative
-      const newBalance = current - penalty
-      await setPlayerCoinBalance(from, newBalance)
-      room.send('walletBalance', { playerId: from, coins: newBalance }, { to: [from] })
-      room.send('deathPenaltyApplied', { playerId: from, penalty, newBalance }, { to: [from] })
-      console.log(`[Server] 💀 Death penalty: ${from.slice(0, 8)} lost ${penalty} coins (${current} → ${newBalance})`)
-    } catch (err) { console.error('[Server] ❌ deathPenalty handler error:', err) }
-  })
+  // deathPenalty handler moved to economy.ts (registerEconomyHandlers)
   // Reload-respawn: player reloaded scene while carrying flag → respawn at random point
   room.onMessage('requestReloadRespawn', (_data, context) => {
     try {
@@ -1067,26 +753,7 @@ function registerHandlers(): void {
     } catch (err) { console.error('[Server] ❌ orbitHitWall handler error:', err) }
   })
 
-  // ── Boomerang color change ──
-  room.onMessage('colorChanged', async (data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const color = (data.color || 'r') as BoomerangColor
-      // Validate ownership — only allow equipped boomerangs the player owns
-      const upgrades = await loadPlayerUpgrades(from)
-      if (!upgrades.boomerangs.includes(color)) {
-        console.log(`[Server] colorChanged rejected — ${from.slice(0, 8)} doesn't own ${color}`)
-        // Send back their actual equipped color
-        room.send('playerColorChanged', { playerId: from, color: upgrades.equipped })
-        return
-      }
-      playerBoomerangColors.set(from, color)
-      console.log(`[Server] Player ${from.slice(0, 8)} changed boomerang color to ${color}`)
-      // Broadcast to ALL clients (including sender, so they can confirm)
-      room.send('playerColorChanged', { playerId: from, color })
-    } catch (err) { console.error('[Server] ❌ colorChanged handler error:', err) }
-  })
+  // colorChanged handler moved to economy.ts (registerEconomyHandlers)
 
   // ── Boomerang charge sync ──
   // ── Burnout self-stun — rebroadcast hit VFX to all clients ──
@@ -1123,38 +790,7 @@ function registerHandlers(): void {
 
   // Admin: manually trigger Discord analytics report
   const ADMIN_ADDRESSES = ['0x1e93e534c5e26b01ed242410b43ae23dd0faa52b']
-  // ── Coin message handlers ──
-  
-  room.onMessage('requestCoinPickup', (data, context) => {
-    if (!context || !data.coinId) return
-    const from = context.from.toLowerCase()
-    const coinId = data.coinId
-    
-    // Check if coin is already picked up
-    if (coinCooldowns.has(coinId)) {
-      console.log('[Coins] Pickup rejected — coin already picked up:', coinId)
-      return
-    }
-    
-    // Add to empty pool (will respawn randomly later)
-    coinCooldowns.add(coinId)
-    updateCoinStateCRDT()
-    
-    // Award coin to player
-    addPlayerCoins(from, 1).then(newBalance => {
-      room.send('coinPickedUp', { coinId, playerId: from, newBalance })
-      console.log('[Coins] Coin picked up:', coinId, 'by', from.slice(0, 8), 'balance:', newBalance)
-    }).catch(err => console.error('[Coins] Error awarding coin:', err))
-  })
-  
-  room.onMessage('requestWalletBalance', async (_data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    const balance = await loadPlayerCoinBalance(from)
-    getOrCreateWalletEntity(from)  // ensure wallet entity exists and is synced
-    room.send('walletBalance', { playerId: from, coins: balance }, { to: [from] })
-    console.log('[Coins] Sent wallet balance to', from.slice(0, 8), ':', balance)
-  })
+  // requestCoinPickup, requestWalletBalance moved to economy.ts (registerEconomyHandlers)
 
   room.onMessage('testDiscord', (_data, context) => {
     if (!context) return
@@ -1171,54 +807,7 @@ function registerHandlers(): void {
     })
   })
 
-  // ── Store / upgrade handlers ──
-
-  room.onMessage('requestUpgrades', async (_data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    // Load and sync upgrades + lifetime wins
-    const upgrades = await loadPlayerUpgrades(from)
-    getOrCreateUpgradeEntity(from)
-    const wins = await loadPlayerLifetimeWins(from)
-    getOrCreateLifetimeWinsEntity(from)
-    // Send direct message so client gets data immediately (CRDT sync can be slow)
-    room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins }, { to: [from] })
-    console.log('[Store] Sent upgrades to', from.slice(0, 8), '- owned:', upgrades.boomerangs.join(','), 'wins:', wins)
-
-    // Auto-equip their saved boomerang color
-    if (upgrades.equipped && upgrades.equipped !== 'r') {
-      playerBoomerangColors.set(from, upgrades.equipped)
-      room.send('playerColorChanged', { playerId: from, color: upgrades.equipped })
-    }
-  })
-
-  room.onMessage('buyBoomerang', async (data, context) => {
-    if (!context || !data.color) return
-    const from = context.from.toLowerCase()
-    try {
-      await handleBuyBoomerang(from, data.color)
-    } catch (err) {
-      console.error('[Store] buyBoomerang error:', err)
-    }
-  })
-
-  room.onMessage('equipBoomerang', async (data, context) => {
-    if (!context || !data.color) return
-    const from = context.from.toLowerCase()
-    const color = data.color as BoomerangColor
-    
-    const upgrades = await loadPlayerUpgrades(from)
-    if (!upgrades.boomerangs.includes(color)) {
-      console.log('[Store] equipBoomerang rejected — not owned:', color, 'by', from.slice(0, 8))
-      return
-    }
-    
-    upgrades.equipped = color
-    await savePlayerUpgrades(from, upgrades)
-    playerBoomerangColors.set(from, color)
-    room.send('playerColorChanged', { playerId: from, color })
-    console.log('[Store] Player', from.slice(0, 8), 'equipped', color)
-  })
+  // requestUpgrades, buyBoomerang, equipBoomerang moved to economy.ts (registerEconomyHandlers)
 }
 
 // ── Updraft state ──
