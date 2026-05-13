@@ -2574,7 +2574,7 @@ function DesktopLayout() {
               )
             })()}
             <UiEntity
-              uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.35, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.35, margin: { top: S(-2) }, positionType: 'absolute' }}
+              uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.4175, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.4175, margin: { top: S(-2) }, positionType: 'absolute' }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
@@ -2992,7 +2992,7 @@ function MobileLayout() {
             onMouseDown={() => { triggerProjectileFromUI() }}
           >
             <UiEntity
-              uiTransform={{ width: (AB_ICON - 8) * 1.35, height: (AB_ICON - 8) * 1.35, margin: { top: -8 } }}
+              uiTransform={{ width: (AB_ICON - 8) * 1.4175, height: (AB_ICON - 8) * 1.4175, margin: { top: -8 } }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
