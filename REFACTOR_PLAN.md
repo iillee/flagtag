@@ -195,6 +195,26 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract leaderboard.ts — leaderboard types, helpers, and reset logic`
 
+### Step 3 — Completed ✅
+
+**Commit:** `3a8f1b0` → `refactor: extract leaderboard.ts — leaderboard types, helpers, and reset logic`
+
+**What was done:**
+- Created `src/server/leaderboard.ts` (~180 lines) with all 8 items: `LeaderboardEntry` type, `parseLeaderboardJson`, `incrementLeaderboardWins`, `patchLeaderboardNames`, `patchAllLeaderboardNames`, `checkLeaderboardDailyReset`, `checkMonthlyLeaderboardReset`, `updatePlayerName`.
+- Used the callback approach for `snapshotPendingReport`: `checkLeaderboardDailyReset(onReset?: (json: string) => Promise<void>)`. Both call sites in `server.ts` pass `snapshotPendingReport` as the callback. This avoids importing analytics code and will work cleanly when `snapshotPendingReport` moves to `analytics.ts` in Step 4.
+- Added `lastLeaderboardResetDay` + `setLastLeaderboardResetDay` to `serverState.ts`.
+- Used targeted `Edit` calls instead of `sed` (per Step 2 gotcha note) — no corruption issues.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining local declarations of moved items in `server.ts`.
+- Preview tested in Creator Hub — name resolution on scoreboard, hold-time tracking, and round-end leaderboard updates all working correctly.
+
+**Concerns:**
+- None. No circular dependencies — `leaderboard.ts` imports only from `serverState`, `persistence`, `@dcl/sdk/server`, and `../shared/components`.
+
+**Step 4 note:** When `snapshotPendingReport` moves to `analytics.ts`, the call sites in `server.ts` just need to update the import source. The callback signature in `checkLeaderboardDailyReset` stays the same — no changes needed in `leaderboard.ts`.
+
 ---
 
 ## Step 4: `analytics.ts` — Visitor tracking + Discord
