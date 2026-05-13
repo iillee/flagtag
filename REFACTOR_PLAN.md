@@ -415,6 +415,22 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract combat.ts — traps, projectiles, orbits`
 
+### Step 7 — Completed ✅
+
+**Commit:** `d533605` → `refactor: extract combat.ts — traps, projectiles, orbits`
+
+**What was done:**
+- Created `src/server/combat.ts` (692 lines) with all trap, projectile, and orbit logic.
+- Moved `ActiveZombie`, `activeZombies`, `zombieRespawnCooldown`, `ZOMBIE_RESPAWN_COOLDOWN` to `serverState.ts` to avoid circular dependency (ghost-trap collision in `bananaServerSystem` reads `activeZombies`).
+- Added `clearCombatCooldowns` (per-player) and `clearAllCombatCooldowns` (round end) exports.
+- `server.ts` reduced from 1,990 → 1,266 lines.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- Preview tested: red boomerang throw/return, banana trap drop/trigger, flag pickup/drop, hold-time scoring, round timer all working.
+
+**⚠️ Post-deploy testing needed:** Yellow (Dubs), Green (Orbit), and Blue (Charge) boomerangs could not be tested in preview due to coin/flag-win purchase requirements. Test all three boomerang types after deploying to flagtag.dcl.eth where the player wallet has sufficient coins and lifetime wins.
+
 ---
 
 ## Step 8: `zombieSystem.ts` — Ghost AI
