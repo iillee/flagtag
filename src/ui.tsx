@@ -2559,7 +2559,7 @@ function DesktopLayout() {
               )
             })()}
             <UiEntity
-              uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.5, margin: { top: S(-2) }, positionType: 'absolute' }}
+              uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.35, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.35, margin: { top: S(-2) }, positionType: 'absolute' }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
@@ -2589,7 +2589,7 @@ function DesktopLayout() {
               uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) } }}
             />
             <UiEntity
-              uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675, height: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675, margin: { top: S(2) } }}
+              uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, height: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, margin: { top: S(2) } }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: 'assets/images/banana.png' },
@@ -2953,7 +2953,7 @@ function MobileLayout() {
             onMouseDown={() => { triggerTrapFromUI() }}
           >
             <UiEntity
-              uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1 * 1.1) }}
+              uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1 * 1.1 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1 * 1.1 * 1.1) }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: 'assets/images/banana.png' },
@@ -2977,7 +2977,7 @@ function MobileLayout() {
             onMouseDown={() => { triggerProjectileFromUI() }}
           >
             <UiEntity
-              uiTransform={{ width: (AB_ICON - 8) * 1.5, height: (AB_ICON - 8) * 1.5, margin: { top: -8 } }}
+              uiTransform={{ width: (AB_ICON - 8) * 1.35, height: (AB_ICON - 8) * 1.35, margin: { top: -8 } }}
               uiBackground={{
                 textureMode: 'stretch',
                 texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` },
