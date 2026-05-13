@@ -147,6 +147,26 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 
 **Commit message:** `refactor: extract persistence.ts — Storage wrapper helpers`
 
+### Step 2 — Completed ✅
+
+**Commit:** `c72987d` → `refactor: extract persistence.ts — Storage wrapper helpers`
+
+**What was done:**
+- Created `src/server/persistence.ts` (~140 lines) with all 8 Storage wrapper functions listed above.
+- Moved 5 state variables to `serverState.ts` with setter functions: `lastVisitorResetDay`, `lastMonthlyVisitorResetMonth`, `hourlyPeakConcurrent`, `peakConcurrent`, `peakConcurrentTime`.
+- `loadVisitorData()` imports everything it needs from `serverState.ts` — no parameter passing needed.
+- `updateConcurrentTracking()` left in `server.ts` for now — it will move to `analytics.ts` in Step 4.
+
+**Verification:**
+- `npx tsc --noEmit` — zero errors.
+- `grep` confirmed no remaining local declarations of moved items in `server.ts`.
+- Preview tested in Creator Hub — flag pickup, drop, scoreboard, round timer, and coins all working.
+
+**Concerns:**
+- None. The `export let` + setter pattern from Step 1 extended cleanly to the new variables. `persistence.ts` only imports from `serverState` and `../shared/components` — no circular dependencies.
+
+**Gotcha encountered:** A `sed` command intended to fix `lastMonthlyVisitorResetMonth` assignments also corrupted three unrelated `.month = currentMonth` lines (MonthlyLeaderboardState mutations). These were caught by `tsc` and fixed before commit. **Step 3 note:** avoid batch `sed` for assignment rewrites — use targeted `Edit` calls instead.
+
 ---
 
 ## Step 3: `leaderboard.ts` — Leaderboard logic
