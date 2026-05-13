@@ -65,13 +65,9 @@ import {
 } from './uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
-} from '../gameState/winConditionOverlayState'
-import {
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible,
-} from '../gameState/leaderboardOverlayState'
-import {
   getAnalyticsOverlayVisible, setAnalyticsOverlayVisible,
-} from '../gameState/analyticsOverlayState'
+} from '../gameState/overlayState'
 
 let _registered = false
 

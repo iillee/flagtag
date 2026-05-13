@@ -47,8 +47,6 @@ Thumbs.db
 
 # Optional: Comment out the line above if you want to commit CRDT files
 
-# Ensure logs folder is tracked (contains important development documentation)
-!logs/
-!logs/***.bak
+# Runtime artifacts
 nul
 server.log

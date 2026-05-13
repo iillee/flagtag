@@ -14,14 +14,14 @@ import {
 } from '../uiConstants'
 import { hover, scroll, tabs, isMetricsOpenedFromTerminal, setMetricsOpenedFromTerminal, notifyOverlayClosed, isWinsFrozen, getDisplayedWins, setDisplayedWins } from '../uiState'
 import { playClickSound } from '../uiSounds'
-import { setLeaderboardOverlayVisible } from '../../gameState/leaderboardOverlayState'
+import { setLeaderboardOverlayVisible } from '../../gameState/overlayState'
 import { SubTabBar } from '../components/SubTabBar'
 import { Scrollbar } from '../components/Scrollbar'
 import { StatsRow } from '../components/StatsRow'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
-import { getMonthlyVisitors, getMonthlyOnlineCount } from '../../gameState/sceneTime'
+import { getMonthlyVisitors, getMonthlyOnlineCount } from '../../gameState/visitorState'
 
 const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 

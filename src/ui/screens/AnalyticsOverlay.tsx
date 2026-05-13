@@ -13,7 +13,7 @@ import { scroll, notifyOverlayClosed } from '../uiState'
 import { CloseButton } from '../components/CloseButton'
 import { Scrollbar } from '../components/Scrollbar'
 import { StatsRow } from '../components/StatsRow'
-import { setAnalyticsOverlayVisible } from '../../gameState/analyticsOverlayState'
+import { setAnalyticsOverlayVisible } from '../../gameState/overlayState'
 
 interface AnalyticsOverlayProps {
   allVisitors: VisitorOrSeparator[]
