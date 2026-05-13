@@ -473,3 +473,41 @@ export function visitorTrackingServerSystem(dt: number): void {
     syncMonthlyVisitorAnalytics().catch(e => console.error('[Server] syncMonthlyVisitorAnalytics error:', e))
   }
 }
+
+/** Restore monthly visitor session data from Storage. Called once during setupServer. */
+export async function restoreMonthlyVisitorData(): Promise<void> {
+  const currentMonthForVisitors = getCurrentMonthString()
+  let savedMonthlyVisitorData: string | null = null
+  let savedMonthlyVisitorMonth: string | null = null
+  try {
+    savedMonthlyVisitorData = await Storage.get<string>('monthlyVisitorData')
+    savedMonthlyVisitorMonth = await Storage.get<string>('monthlyVisitorResetMonth')
+  } catch (err) {
+    console.error('[Server] Failed to load monthly visitor data:', err)
+  }
+  setLastMonthlyVisitorResetMonth(savedMonthlyVisitorMonth || currentMonthForVisitors)
+
+  if (savedMonthlyVisitorData && lastMonthlyVisitorResetMonth === currentMonthForVisitors) {
+    try {
+      const records = JSON.parse(savedMonthlyVisitorData)
+      for (const record of records) {
+        const seconds = record.totalSeconds != null ? record.totalSeconds : (record.totalMinutes || 0) * 60
+        const recordKey = (record.userId || '').toLowerCase()
+        const bestName = (playerNames.has(recordKey) && isRealName(playerNames.get(recordKey)!))
+          ? playerNames.get(recordKey)!
+          : record.name
+        monthlyVisitorSessions.set(recordKey, {
+          name: bestName,
+          sessionStartMs: 0,
+          totalSecondsMonth: seconds
+        })
+      }
+      console.log('[Server] Restored monthly visitor data for', currentMonthForVisitors, '- loaded', records.length, 'visitors')
+    } catch (e) {
+      console.error('[Server] Failed to parse monthly visitor data:', e)
+    }
+  } else if (lastMonthlyVisitorResetMonth !== currentMonthForVisitors) {
+    console.log('[Server] Monthly visitor data was from', lastMonthlyVisitorResetMonth, 'but current month is', currentMonthForVisitors, '- starting fresh')
+    setLastMonthlyVisitorResetMonth(currentMonthForVisitors)
+  }
+}
