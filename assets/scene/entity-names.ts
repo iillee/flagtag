@@ -163,6 +163,7 @@ export enum EntityNames {
   Solid_Green = "Solid Green",
   Solid_Red = "Solid Red",
   Street_Mailbox = "Street Mailbox",
+  Street_Mailbox_2 = "Street Mailbox_2",
   TNT_Box_Closed_3 = "TNT Box Closed_3",
   TNT_Box_Closed_4 = "TNT Box Closed_4",
   TNT_Box_Closed_5 = "TNT Box Closed_5",

@@ -1,78 +1,51 @@
 import {
-  engine, Transform, pointerEventsSystem, InputAction,
-  MeshRenderer, Material, AudioSource
+  engine, Transform, GltfContainer, pointerEventsSystem, InputAction, AudioSource
 } from '@dcl/sdk/ecs'
-import { Vector3, Quaternion } from '@dcl/sdk/math'
+import { Vector3 } from '@dcl/sdk/math'
 import { showMailboxPopup, hideMailboxPopup, isMailboxPopupVisible } from '../ui'
 
-// Mailbox position/rotation from composite (entity 512)
-const MAILBOX_POS = Vector3.create(214.54, 12.54, 286.28)
-const MATCH_DIST = 2
-const MAILBOX_CLOSE_DISTANCE = 5
+const MAILBOX_MODEL = 'assets/models/MailPost_01/MailPost_01.glb'
+const CLOSE_DISTANCE = 5
 
-let mailboxSetup = false
+const attachedEntities = new Set<number>()
+const mailboxPositions: ReturnType<typeof Vector3.create>[] = []
 
 export function mailboxSystem() {
-  // Close mailbox popup if player walks away
+  // Close popup if player walks away from all mailboxes
   if (isMailboxPopupVisible() && Transform.has(engine.PlayerEntity)) {
     const playerPos = Transform.get(engine.PlayerEntity).position
-    if (Vector3.distance(playerPos, MAILBOX_POS) > MAILBOX_CLOSE_DISTANCE) {
-      hideMailboxPopup()
-    }
+    const nearAny = mailboxPositions.some(pos => Vector3.distance(playerPos, pos) <= CLOSE_DISTANCE)
+    if (!nearAny) hideMailboxPopup()
   }
 
-  if (mailboxSetup) return
+  // Scan for any mailbox model entities we haven't attached to yet
+  for (const [entity] of engine.getEntitiesWith(GltfContainer, Transform)) {
+    if (attachedEntities.has(entity)) continue
+    const gltf = GltfContainer.get(entity)
+    if (gltf.src !== MAILBOX_MODEL) continue
 
-  for (const [entity] of engine.getEntitiesWith(Transform)) {
-    const t = Transform.get(entity)
-    if (Vector3.distance(t.position, MAILBOX_POS) < MATCH_DIST) {
-      if (entity === engine.PlayerEntity || entity === engine.CameraEntity) continue
+    const pos = Transform.get(entity).position
+    mailboxPositions.push(Vector3.create(pos.x, pos.y, pos.z))
 
-      // Mailbox sound effect
-      const mailboxSound = engine.addEntity()
-      Transform.create(mailboxSound, { position: MAILBOX_POS })
-      AudioSource.create(mailboxSound, {
-        audioClipUrl: 'assets/sounds/mailbox.mp3',
-        playing: false,
-        loop: false,
-        volume: 1,
-        global: false
-      })
+    const soundEntity = engine.addEntity()
+    Transform.create(soundEntity, { position: pos })
+    AudioSource.create(soundEntity, {
+      audioClipUrl: 'assets/sounds/mailbox.mp3',
+      playing: false, loop: false, volume: 1, global: false
+    })
 
-      pointerEventsSystem.onPointerDown(
-        { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Leave a Message', maxDistance: 5 } },
-        () => {
-          AudioSource.createOrReplace(mailboxSound, { audioClipUrl: 'assets/sounds/mailbox.mp3', playing: true, loop: false, volume: 1, global: false })
-          showMailboxPopup()
-        }
-      )
+    pointerEventsSystem.onPointerDown(
+      { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Leave a Message', maxDistance: 5 } },
+      () => {
+        AudioSource.createOrReplace(soundEntity, {
+          audioClipUrl: 'assets/sounds/mailbox.mp3',
+          playing: true, loop: false, volume: 1, global: false
+        })
+        showMailboxPopup()
+      }
+    )
 
-      // Place letter.png on front of mailbox
-      const yawDeg = 67.5
-      const yawRad = (yawDeg * Math.PI) / 180
-      // Offset slightly in front of mailbox along its facing direction
-      const offsetDist = 0.45
-      const letter = engine.addEntity()
-      Transform.create(letter, {
-        position: Vector3.create(
-          MAILBOX_POS.x + Math.sin(yawRad) * (offsetDist - 0.3) - Math.cos(yawRad) * 0.35 - 0.15,
-          MAILBOX_POS.y + 0.80,
-          MAILBOX_POS.z + Math.cos(yawRad) * (offsetDist - 0.3) + Math.sin(yawRad) * 0.35 - 0.07
-        ),
-        rotation: Quaternion.fromEulerDegrees(0, yawDeg + 90, 0),
-        scale: Vector3.create(0.3, 0.22, 0.3)
-      })
-      MeshRenderer.setPlane(letter)
-      Material.setPbrMaterial(letter, {
-        texture: Material.Texture.Common({ src: 'assets/images/letter.png' }),
-        roughness: 1,
-        metallic: 0,
-        specularIntensity: 0
-      })
-
-      mailboxSetup = true
-      console.log('[Mailbox] Click handler attached')
-      return
-    }
+    attachedEntities.add(entity)
+    console.log(`[Mailbox] Click handler attached (${attachedEntities.size})`)
   }
 }

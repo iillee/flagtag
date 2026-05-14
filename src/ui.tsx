@@ -8,7 +8,7 @@
  * All ECS systems live in src/ui/uiSystems.ts.
  */
 import { Color4 } from '@dcl/sdk/math'
-import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
+import ReactEcs, { ReactEcsRenderer, UiEntity, Label, Input } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { executeTask } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
@@ -143,18 +143,18 @@ export function isMetricsPanelOpen(): boolean {
 // MAILBOX ACTION
 // ═══════════════════════════════════════════════════════════
 
-let communityListenerRegistered = false
+let feedbackText = ''
+let feedbackListenerRegistered = false
 
-function joinCommunity() {
-  // Register the response listener once
-  if (!communityListenerRegistered) {
-    communityListenerRegistered = true
-    room.onMessage('communityJoinResult', (data) => {
-      setMailboxStatus(data.message)
-    })
+function sendFeedback() {
+  if (!feedbackText.trim()) { setMailboxStatus('Please type a message first.'); return }
+  if (!feedbackListenerRegistered) {
+    feedbackListenerRegistered = true
+    room.onMessage('feedbackResult', (data) => { setMailboxStatus(data.message) })
   }
-  setMailboxStatus('Sending invite...')
-  room.send('requestJoinCommunity', { t: Date.now() % 2147483647 })
+  setMailboxStatus('Sending...')
+  room.send('sendFeedback', { message: feedbackText.trim() })
+  feedbackText = ''
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -234,17 +234,28 @@ function PlayerListUi() {
       {/* Mailbox popup */}
       {isMailboxPopupVisible() && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-          <UiEntity uiTransform={{ width: mobile ? 400 : S(420), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 28, bottom: 28, left: 20, right: 20 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
+          <UiEntity uiTransform={{ width: mobile ? 440 : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 28, bottom: 28, left: 20, right: 20 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
             uiBackground={{ color: PANEL_BG }}
           >
             <CloseButton hoverKey="closeMailbox" onClose={() => { hideMailboxPopup(); notifyOverlayClosed() }} />
             <Label value="Leave a Message" fontSize={mobile ? 36 : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 8 : S(8) } }} />
-            <Label value="Join the Flagtag community to\nleave a review or report a bug" fontSize={mobile ? 20 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 20 : S(20) }, width: mobile ? '95%' : S(360), height: mobile ? 65 : S(50) }} textAlign="middle-center" />
-            <UiEntity uiTransform={{ width: mobile ? 240 : S(240), height: mobile ? 44 : S(44), borderRadius: mobile ? 8 : S(8), justifyContent: 'center', alignItems: 'center' }}
+            <Label value={`Leave feedback, report a bug, or just say hi!`} fontSize={mobile ? 20 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 12 : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? 35 : S(28) }} textAlign="middle-center" />
+            <Input
+              placeholder="Type your message..."
+              fontSize={mobile ? 18 : S(15)}
+              color={Color4.White()}
+              placeholderColor={Color4.create(0.6, 0.6, 0.6, 1)}
+              uiTransform={{ width: mobile ? '95%' : S(420), height: mobile ? 44 : S(40), margin: { bottom: mobile ? 12 : S(12) }, borderRadius: mobile ? 8 : S(8), padding: { left: mobile ? 8 : S(8), right: mobile ? 8 : S(8) } }}
+              uiBackground={{ color: Color4.create(0.15, 0.15, 0.2, 1) }}
+              onChange={(val) => { feedbackText = val }}
+              onSubmit={(val) => { feedbackText = val; sendFeedback() }}
+              value={feedbackText}
+            />
+            <UiEntity uiTransform={{ width: mobile ? 200 : S(200), height: mobile ? 44 : S(44), borderRadius: mobile ? 8 : S(8), justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
-              onMouseDown={() => { playClickSound(); joinCommunity() }}
+              onMouseDown={() => { playClickSound(); sendFeedback() }}
             >
-              <Label value="Join Community" fontSize={mobile ? 20 : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
+              <Label value="Send" fontSize={mobile ? 20 : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
             </UiEntity>
             {getMailboxStatus() ? <Label value={getMailboxStatus()} fontSize={mobile ? 16 : S(13)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 12 : S(12) }, width: mobile ? '95%' : S(360) }} textAlign="middle-center" /> : null}
           </UiEntity>
