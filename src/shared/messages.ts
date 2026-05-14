@@ -102,6 +102,10 @@ export const Messages = {
   deathPenalty: Schemas.Map({ cause: Schemas.String }),           // Client → Server: player died, deduct coins
   deathPenaltyApplied: Schemas.Map({ playerId: Schemas.String, penalty: Schemas.Int, newBalance: Schemas.Int }),  // Server → Client
 
+  // Community join (mailbox)
+  requestJoinCommunity: Schemas.Map({ t: Schemas.Int }),                                    // Client → Server
+  communityJoinResult: Schemas.Map({ success: Schemas.Boolean, message: Schemas.String }),  // Server → Client
+
 }
 
 export const room = registerMessages(Messages)

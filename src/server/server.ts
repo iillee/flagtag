@@ -48,6 +48,7 @@ import {
 import { room } from '../shared/messages'
 import { CoinState, COIN_STATE_SYNC_ID } from '../shared/coins'
 import { registerEconomyHandlers, coinServerSystem } from './economy'
+import { signedFetch } from '~system/SignedFetch'
 import { flagServerSystem, holdTimeServerSystem, checkProximitySteal, registerFlagHandlers } from './flagLogic'
 import { bananaServerSystem, shellServerSystem, orbitServerSystem, registerCombatHandlers } from './combat'
 import { registerGhostHandlers, ghostServerSystem } from './ghostSystem'
@@ -134,6 +135,7 @@ export async function setupServer(): Promise<void> {
 
   // ── Register handlers & systems ──
   registerHandlers()
+  registerCommunityHandlers()
   registerFlagHandlers()
   registerEconomyHandlers()
   registerCombatHandlers()
@@ -240,6 +242,55 @@ function registerSystems() {
   engine.addSystem(safe('updraftServerSystem', updraftServerSystem))
   engine.addSystem(safe('ghostServerSystem', ghostServerSystem))
   engine.addSystem(safe('coinServerSystem', coinServerSystem))
+}
+
+const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
+
+/** Register community join handler (server adds member directly as owner). */
+function registerCommunityHandlers(): void {
+  room.onMessage('requestJoinCommunity', async (_data, context) => {
+    if (!context) return
+    const playerAddress = context.from.toLowerCase()
+    try {
+      // Step 1: Try to add member directly (owner privilege)
+      const addRes = await signedFetch({
+        url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
+        init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberAddress: playerAddress }) },
+      })
+      if (addRes.ok || (addRes.status >= 200 && addRes.status < 300)) {
+        room.send('communityJoinResult', { success: true, message: 'Joined! Welcome to the community.' }, { to: [context.from] })
+        console.log('[Server] Added', playerAddress.slice(0, 8), 'to community directly')
+        return
+      }
+
+      const body = addRes.body || ''
+      // Already a member
+      if (body.includes('already') || body.includes('Already')) {
+        room.send('communityJoinResult', { success: true, message: 'You are already a member!' }, { to: [context.from] })
+        console.log('[Server] Player', playerAddress.slice(0, 8), 'already a member')
+        return
+      }
+
+      // Step 2: If direct add fails, fall back to sending an invite
+      console.log('[Server] Direct add failed (', addRes.status, '), trying invite...')
+      const inviteRes = await signedFetch({
+        url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/requests`,
+        init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetedAddress: playerAddress, type: 'invite' }) },
+      })
+      if (inviteRes.ok || (inviteRes.status >= 200 && inviteRes.status < 300)) {
+        room.send('communityJoinResult', { success: true, message: 'Invite sent! Check your community invites to accept.' }, { to: [context.from] })
+        console.log('[Server] Invite sent to', playerAddress.slice(0, 8))
+      } else {
+        let msg = `Error ${inviteRes.status}`
+        try { msg = JSON.parse(inviteRes.body || '').message || msg } catch (_) {}
+        room.send('communityJoinResult', { success: false, message: msg }, { to: [context.from] })
+        console.log('[Server] Invite also failed for', playerAddress.slice(0, 8), ':', msg)
+      }
+    } catch (err) {
+      console.error('[Server] Community join error:', err)
+      room.send('communityJoinResult', { success: false, message: 'Server error, try again later.' }, { to: [context.from] })
+    }
+  })
 }
 
 /** Register the registerName handler (only handler still in server.ts). */

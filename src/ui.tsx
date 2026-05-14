@@ -12,7 +12,7 @@ import ReactEcs, { ReactEcsRenderer, UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { executeTask } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
-import { signedFetch } from '~system/SignedFetch'
+import { room } from './shared/messages'
 
 // State & infrastructure
 import { playClickSound, playHoverSound } from './ui/uiSounds'
@@ -65,7 +65,6 @@ import {
   isSpectatorExitBlink, setSpectatorExitBlink,
   isWinsFrozen, getDisplayedWins, setDisplayedWins,
   // Admin
-  COMMUNITY_ID,
 } from './ui/uiState'
 
 // Overlay visibility state
@@ -144,32 +143,18 @@ export function isMetricsPanelOpen(): boolean {
 // MAILBOX ACTION
 // ═══════════════════════════════════════════════════════════
 
+let communityListenerRegistered = false
+
 function joinCommunity() {
-  executeTask(async () => {
-    try {
-      const player = getPlayer()
-      if (!player?.userId) { setMailboxStatus('Error: No player data'); return }
-      setMailboxStatus('Joining...')
-      const joinRes = await signedFetch({
-        url: `https://social-api.decentraland.org/v1/communities/${COMMUNITY_ID}/members`,
-        init: { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({}) }
-      })
-      if (joinRes.status >= 200 && joinRes.status < 300) {
-        setMailboxStatus('Joined! Welcome to the community.')
-      } else {
-        const body = joinRes.body || ''
-        if (body.includes('already') || body.includes('Already')) {
-          setMailboxStatus('You are already a member!')
-        } else {
-          let msg = 'Error ' + joinRes.status
-          try { msg = JSON.parse(body).message || JSON.parse(body).error || body } catch (_) {}
-          setMailboxStatus(msg)
-        }
-      }
-    } catch (err) {
-      setMailboxStatus('Error: ' + String(err))
-    }
-  })
+  // Register the response listener once
+  if (!communityListenerRegistered) {
+    communityListenerRegistered = true
+    room.onMessage('communityJoinResult', (data) => {
+      setMailboxStatus(data.message)
+    })
+  }
+  setMailboxStatus('Sending invite...')
+  room.send('requestJoinCommunity', { t: Date.now() % 2147483647 })
 }
 
 // ═══════════════════════════════════════════════════════════
