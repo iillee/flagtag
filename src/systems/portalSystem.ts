@@ -11,7 +11,7 @@ import {
   TriggerArea,
   triggerAreaEventsSystem,
   PlayerIdentityData,
-  Schemas,
+
 } from '@dcl/sdk/ecs'
 import { Color3, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { onLeaveScene } from '@dcl/sdk/players'
@@ -40,34 +40,7 @@ export type PortalOptions = {
   callback?: () => void
 }
 
-const PortalData = engine.defineComponent('portal-data', {
-  doorLeft: Schemas.Entity,
-  doorRight: Schemas.Entity,
-  state: Schemas.Number,   // mirrors PortalState enum (CLOSED=0, AJAR=1, OPEN=2)
-  openCount: Schemas.Array(Schemas.String),
-  ajarCount: Schemas.Array(Schemas.String),
-  closeCount: Schemas.Array(Schemas.String),
-})
-
-const PortalLayer = engine.defineComponent('portal-layer', {
-  baseWorldX: Schemas.Number,  // portal center in world space (for parallax + distance reference)
-  baseWorldY: Schemas.Number,
-  baseWorldZ: Schemas.Number,
-  baseLocalX: Schemas.Number,  // resting local X (frame offset) — parallax adds on top
-  baseLocalY: Schemas.Number,  // resting local Y (frame offset) — parallax adds on top
-  localZ: Schemas.Number,  // this layer's fixed local Z (preserved every frame)
-  parallaxStrength: Schemas.Number,  // negative = window effect (inner layers shift opposite to cam)
-  parallaxLimit: Schemas.Number,  // max local offset in meters
-  lerpSpeed: Schemas.Number,  // how fast this layer follows the target (outer=fast, inner=slow)
-  currentOffsetX: Schemas.Number,  // smoothed parallax offset, updated each frame
-  currentOffsetY: Schemas.Number,
-  baseScale: Schemas.Number,  // nominal scale at construction
-  distanceScaleFactor: Schemas.Number,  // scale sensitivity to player distance (0 = outer, max = inner)
-  portalRotX: Schemas.Number,  // portal root rotation quaternion — used to project cam offset into local space
-  portalRotY: Schemas.Number,
-  portalRotZ: Schemas.Number,
-  portalRotW: Schemas.Number,
-})
+import { PortalData, PortalLayer } from '../shared/components'
 
 let _parallaxActive = false
 // Rotate vector (vx, vy, vz) by the inverse (conjugate) of unit quaternion (qx, qy, qz, qw).

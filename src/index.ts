@@ -2,7 +2,10 @@ import { Vector3 } from '@dcl/sdk/math'
 import { engine, Entity, Transform, AudioSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, GltfContainer } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 // Shared modules (safe for both client and server)
+// These MUST be static imports so components are registered before the engine seals
 import './shared/components'
+import './shared/coins'
+import './shared/upgrades'
 import { room } from './shared/messages'
 
 export let musicEntity: ReturnType<typeof engine.addEntity>
@@ -24,10 +27,9 @@ export async function main() {
   console.log('[Main] 🎮 CLIENT MODE - Starting client...')
 
   // ── Dynamic imports for client-only modules ──
-  // These must NOT be static imports at the top of the file, because this file
-  // also runs on the authoritative server. Many client modules import from
-  // ~system/RestrictedActions or ~system/Runtime, which don't exist on the
-  // server runtime and would crash it before main() is even called.
+  // These must NOT be static imports because this file also runs on the server.
+  // Many client modules import from ~system/RestrictedActions or ~system/Runtime,
+  // which don't exist on the server runtime and would crash it.
   const { isMobile } = await import('@dcl/sdk/platform')
   const { getPlayer, onEnterScene, onLeaveScene } = await import('@dcl/sdk/players')
   const { setupUi } = await import('./ui')
@@ -65,9 +67,8 @@ export async function main() {
   const { ghostClientSystem } = await import('./systems/ghostSystem')
   const { Portal } = await import('./systems/portalSystem')
   const { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } = await import('./gameState/flagHoldTime')
-  const { setupDeathPenaltyMessages } = await import('./systems/deathPenaltySystem')
-  const { isSpectatorMode } = await import('./systems/spectatorSystem')
   await import('./gameState/overlayState')
+  const { setupDeathPenaltyMessages } = await import('./systems/deathPenaltySystem')
 
   // ── Client setup ──
   // Pre-initialize entity pools so GLB models are loaded before first use

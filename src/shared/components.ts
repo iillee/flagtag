@@ -347,3 +347,33 @@ export function getTodayDateString(): string {
   const day = String(d.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+
+// ── Portal components (must be registered before engine seals) ──
+export const PortalData = engine.defineComponent('portal-data', {
+  doorLeft: Schemas.Entity,
+  doorRight: Schemas.Entity,
+  state: Schemas.Number,
+  openCount: Schemas.Array(Schemas.String),
+  ajarCount: Schemas.Array(Schemas.String),
+  closeCount: Schemas.Array(Schemas.String),
+})
+
+export const PortalLayer = engine.defineComponent('portal-layer', {
+  baseWorldX: Schemas.Number,
+  baseWorldY: Schemas.Number,
+  baseWorldZ: Schemas.Number,
+  baseLocalX: Schemas.Number,
+  baseLocalY: Schemas.Number,
+  localZ: Schemas.Number,
+  parallaxStrength: Schemas.Number,
+  parallaxLimit: Schemas.Number,
+  lerpSpeed: Schemas.Number,
+  currentOffsetX: Schemas.Number,
+  currentOffsetY: Schemas.Number,
+  baseScale: Schemas.Number,
+  distanceScaleFactor: Schemas.Number,
+  portalRotX: Schemas.Number,
+  portalRotY: Schemas.Number,
+  portalRotZ: Schemas.Number,
+  portalRotW: Schemas.Number,
+})
