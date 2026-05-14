@@ -77,6 +77,10 @@ export async function main() {
   initTrapPool()
   initCombatPools()
 
+  // Preload all sound effects at volume 0 so there's no delay on first play
+  const { preloadAllSounds } = await import('./preloadSounds')
+  preloadAllSounds()
+
   setupUi()
   setupBeacon()
   setupLadder()
