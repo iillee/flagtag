@@ -34,21 +34,28 @@ const END_FADE_IN_DUR = 0.8
 const END_FADE_HOLD_DUR = 0.3
 const END_FADE_OUT_DUR = 0.8
 
-// ── Grounded emote helper ──
-let pendingEmote: { emote: string } | null = null
+// ── Podium emote helper ──
+// When teleported mid-glide/fall/emote, InputModifier can leave the avatar in a stuck
+// animation state that blocks new emotes. Fix: wait for grounded → re-teleport to settle →
+// remove InputModifier briefly to clear the stuck state → re-apply and fire the emote.
+let pendingEmote: { emote: string; targetPos: { x: number; y: number; z: number } } | null = null
 const STABLE_EPSILON = 0.01
-const STABLE_FRAMES = 5
+const STABLE_FRAMES = 15  // ~250ms of stable Y
 const EMOTE_TIMEOUT = 6.0
-const EMOTE_MIN_DELAY = 0.5
+const EMOTE_MIN_DELAY = 0.3
 let stableCount = 0
 let emoteElapsed = 0
 let lastPlayerY = 0
+let emotePhase = 0  // 0=wait grounded, 1=re-teleport settle, 2=remove InputModifier, 3=fire emote
+let phaseTimer = 0
 
-function waitForGroundedEmote(emote: string) {
-  pendingEmote = { emote }
+function waitForGroundedEmote(emote: string, targetPos: { x: number; y: number; z: number }) {
+  pendingEmote = { emote, targetPos }
   stableCount = 0
   emoteElapsed = 0
   lastPlayerY = -9999
+  emotePhase = 0
+  phaseTimer = 0
 }
 
 /**
@@ -65,27 +72,74 @@ export function setupCinematicSystem(): void {
     defaultTransition: { transitionMode: VirtualCamera.Transition.Time(0.01) }
   })
 
-  // Grounded-emote system
+  // Podium emote system: grounded → re-teleport → clear InputModifier → fire emote
   engine.addSystem((dt: number) => {
     if (!pendingEmote) return
+
     emoteElapsed += dt
+
+    // Hard timeout - fire once and give up
     if (emoteElapsed >= EMOTE_TIMEOUT) {
       void triggerEmote({ predefinedEmote: pendingEmote.emote }).catch(() => {})
       pendingEmote = null
       return
     }
-    if (emoteElapsed < EMOTE_MIN_DELAY) return
-    const playerY = Transform.get(engine.PlayerEntity).position.y
-    const deltaY = Math.abs(playerY - lastPlayerY)
-    lastPlayerY = playerY
-    if (deltaY < STABLE_EPSILON) {
-      stableCount++
-      if (stableCount >= STABLE_FRAMES) {
+
+    if (emotePhase === 0) {
+      // Phase 0: Wait for player Y to stabilize (landed on podium)
+      if (emoteElapsed < EMOTE_MIN_DELAY) return
+      const playerY = Transform.get(engine.PlayerEntity).position.y
+      const deltaY = Math.abs(playerY - lastPlayerY)
+      lastPlayerY = playerY
+
+      if (deltaY < STABLE_EPSILON) {
+        stableCount++
+        if (stableCount >= STABLE_FRAMES) {
+          // Player is grounded — re-teleport to same spot to force-reset animation state
+          const p = pendingEmote.targetPos
+          void movePlayerTo({ newRelativePosition: p })
+          emotePhase = 1
+          phaseTimer = 0
+          stableCount = 0
+          lastPlayerY = -9999
+        }
+      } else {
+        stableCount = 0
+      }
+    } else if (emotePhase === 1) {
+      // Phase 1: Wait for second teleport to stabilize
+      const playerY = Transform.get(engine.PlayerEntity).position.y
+      const deltaY = Math.abs(playerY - lastPlayerY)
+      lastPlayerY = playerY
+
+      if (deltaY < STABLE_EPSILON) {
+        stableCount++
+        if (stableCount >= STABLE_FRAMES) {
+          // Fully settled after reset teleport — now fire the emote
+          emotePhase = 2
+          phaseTimer = 0
+        }
+      } else {
+        stableCount = 0
+      }
+    } else if (emotePhase === 2) {
+      // Phase 2: Remove InputModifier to clear any stuck state, wait a frame
+      if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
+      emotePhase = 3
+      phaseTimer = 0
+    } else if (emotePhase === 3) {
+      // Phase 3: Wait a beat, then re-lock movement and fire emote
+      phaseTimer += dt
+      if (phaseTimer >= 0.5) {
+        InputModifier.createOrReplace(engine.PlayerEntity, {
+          mode: InputModifier.Mode.Standard({
+            disableWalk: true, disableRun: true, disableJump: true,
+            disableJog: true, disableGliding: true, disableDoubleJump: true,
+          })
+        })
         void triggerEmote({ predefinedEmote: pendingEmote.emote }).catch(() => {})
         pendingEmote = null
       }
-    } else {
-      stableCount = 0
     }
   })
 
@@ -202,14 +256,17 @@ export function setupCinematicSystem(): void {
       if (noScorersRound) {
         void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
       } else if (isWinnerLocalPlayer) {
-        void movePlayerTo({ newRelativePosition: { x: 265.57, y: 19.51, z: 219.65 }, cameraTarget: GREEN_CUBE })
-        waitForGroundedEmote('handsair')
+        const pos = { x: 265.57, y: 19.51, z: 219.65 }
+        void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
+        waitForGroundedEmote('handsair', pos)
       } else if (isSecondPlace) {
-        void movePlayerTo({ newRelativePosition: { x: 266.97, y: 18.85, z: 220.87 }, cameraTarget: GREEN_CUBE })
-        waitForGroundedEmote('clap')
+        const pos = { x: 266.97, y: 18.85, z: 220.87 }
+        void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
+        waitForGroundedEmote('clap', pos)
       } else if (isThirdPlace) {
-        void movePlayerTo({ newRelativePosition: { x: 264.25, y: 18.16, z: 218.57 }, cameraTarget: GREEN_CUBE })
-        waitForGroundedEmote('clap')
+        const pos = { x: 264.25, y: 18.16, z: 218.57 }
+        void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
+        waitForGroundedEmote('clap', pos)
       } else {
         void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
       }
