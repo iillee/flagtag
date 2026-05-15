@@ -19,6 +19,7 @@ import { getOrCreateHoldTimeEntity } from './flagLogic'
 import { loadPlayerCoinBalance, getOrCreateWalletEntity } from './economy'
 import { clearCombatCooldowns } from './combat'
 import { updateConcurrentTracking, syncVisitorAnalytics, syncMonthlyVisitorAnalytics } from './analytics'
+import { capture } from './posthog'
 
 // ── Player join/leave detection ──
 
@@ -79,6 +80,11 @@ export function playerTrackingSystem(): void {
       }
 
       console.log('[Server] Player joined:', playerName, '(total visitors today:', visitorSessions.size, ')')
+      capture(userKey, 'player_joined', {
+        name: playerName,
+        concurrent_players: currentlyConnected.size,
+        total_visitors_today: visitorSessions.size
+      })
       changed = true
     }
   }
@@ -97,6 +103,11 @@ export function playerTrackingSystem(): void {
 
         const totalMin = Math.floor(visitor.totalSecondsToday / 60)
         console.log('[Server] Player left:', visitor.name, 'session:', sessionSeconds, 's, total today:', totalMin, 'min')
+        capture(userKey, 'player_left', {
+          name: visitor.name,
+          session_seconds: sessionSeconds,
+          total_seconds_today: visitor.totalSecondsToday
+        })
       }
 
       // Monthly visitor disconnect tracking

@@ -46,6 +46,7 @@ export async function main() {
   const { gravestoneSystem } = await import('./systems/gravestoneSystem')
   const { terminalSystem } = await import('./systems/terminalSystem')
   const { chestSystem } = await import('./systems/chestSystem')
+  const { boomboxSystem } = await import('./systems/boomboxSystem')
   const { upgradeStateSystem, initUpgradeListeners } = await import('./gameState/playerUpgradeState')
   const { updateWorldTime } = await import('./shared/dayNight')
   const { setupUpdraftSystem, updraftSystem } = await import('./systems/updraftSystem')
@@ -267,6 +268,7 @@ export async function main() {
   // Mailbox — click to leave feedback
   engine.addSystem(mailboxSystem)
   engine.addSystem(chestSystem)
+  engine.addSystem(boomboxSystem)
   engine.addSystem(upgradeStateSystem)
   engine.addSystem(gravestoneSystem)
   engine.addSystem(terminalSystem)

@@ -55,6 +55,7 @@ import { registerGhostHandlers, ghostServerSystem } from './ghostSystem'
 import { registerMushroomHandlers, spawnMushrooms } from './mushroomSystem'
 import { playerTrackingSystem, nameResolverServerSystem } from './playerTracking'
 import { countdownServerSystem, lightningServerSystem, updraftServerSystem, registerRoundHandlers } from './roundManager'
+import { initPostHog } from './posthog'
 
 // ── Setup ──
 
@@ -62,6 +63,7 @@ export async function setupServer(): Promise<void> {
   console.log('[Server] Starting Flag Tag server...')
 
   await loadDiscordWebhookUrl()
+  await initPostHog()
 
   // ── Restore flag ──
   const { state: flagStartState, position: flagStartPos, anchor: dropAnchor } = await loadFlagState()

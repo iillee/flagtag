@@ -26,6 +26,7 @@ import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravi
 import { activeTraps, activeProjectiles, activeOrbits, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin } from './economy'
+import { capture } from './posthog'
 
 // ── Lightning state ──
 const LIGHTNING_ROLL_INTERVAL = 5
@@ -384,6 +385,15 @@ async function handleRoundEnd(): Promise<void> {
 
   // ── 8. Persist flag state ──
   await persistFlagState()
+
+  // ── 9. Track round completion in PostHog ──
+  capture('flagtag-server', 'round_ended', {
+    player_count: players.length,
+    max_hold_seconds: Math.floor(maxSeconds),
+    winner_name: topPlayers[0]?.name ?? null,
+    winner_id: topPlayers[0]?.userId ?? null,
+    top_players: topPlayers.map(p => ({ name: p.name, seconds: p.seconds }))
+  })
 }
 
 // ── Message handlers ──
