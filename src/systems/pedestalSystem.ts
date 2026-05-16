@@ -165,6 +165,8 @@ export function pedestalSystem(dt: number) {
     room.onMessage('blessingResult', (data) => {
       if (!data.success && data.reason === 'already_blessed') {
         setBlessingAlreadyUsed(true)
+      } else if (data.success) {
+        setBlessingAlreadyUsed(true)  // prevent repeat in same session
       }
     })
   }
@@ -192,6 +194,10 @@ export function pedestalSystem(dt: number) {
           },
           () => {
             if (isBlessingActive()) return  // already blessing in progress
+            if (isBlessingAlreadyUsed()) {
+              setBlessingCompleted(true)  // show the "already received" popup
+              return
+            }
             startBlessing()
           }
         )
