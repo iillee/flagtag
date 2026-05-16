@@ -51,11 +51,12 @@ const PRAY_EMOTE = 'urn:decentraland:matic:collections-v2:0xc889a77512ef96f6a930
 let blessingStartPos: Vector3 | null = null
 const MOVE_THRESHOLD = 0.5  // meters of movement allowed before cancelling
 
-// Delayed sound (1 second in)
-const BEAM_SOUND_DELAY = 1.0
+// Interval triggers at 4s, 8s, 12s
+const INTERVAL_TIMES = [4, 8, 12] // credit lines + beam pulse at each; sound/emote retrigger at 8s and 12s
 let blessingElapsed = 0
-let beamTriggered = false
-let emoteRetriggered = false
+let intervalsTriggered = 0
+let firstSoundPlayed = false
+const FIRST_SOUND_DELAY = 3.0 // play when beam becomes visible
 
 // Sound entity
 const blessingSoundEntity = engine.addEntity()
@@ -103,6 +104,7 @@ function createBeams() {
   })
 }
 
+let intervalPulse = 0 // decays from 1 to 0 on each interval hit
 function showBeamAtPlayer() {
   if (!beamInner || !beamOuter) createBeams()
   beamTimer = BLESSING_DURATION
@@ -121,9 +123,10 @@ function cancelBlessing() {
   setBlessingLineTimer(0)
   hideBeam()
   blessingStartPos = null
-  beamTriggered = false
-  emoteRetriggered = false
   blessingElapsed = 0
+  intervalsTriggered = 0
+  intervalPulse = 0
+  firstSoundPlayed = false
   console.log('[Pedestal] Blessing interrupted — player moved')
 }
 
@@ -132,19 +135,25 @@ function startBlessing() {
   const pos = Transform.get(engine.PlayerEntity).position
   blessingStartPos = Vector3.create(pos.x, pos.y, pos.z)
 
-  // Trigger emote immediately (8s emote matches 8s blessing)
+  // Trigger emote, beam, and sound immediately on click
   void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
-
-  // Sound triggers after 1s delay, beam starts immediately
-  blessingElapsed = 0
-  beamTriggered = false
-  emoteRetriggered = false
   showBeamAtPlayer()
+  AudioSource.createOrReplace(blessingSoundEntity, {
+    audioClipUrl: 'assets/sounds/blessing.mp3',
+    playing: true,
+    loop: false,
+    volume: 0.8,
+    global: true,
+  })
 
-  // Start credits overlay (no black background)
+  blessingElapsed = 0
+  intervalsTriggered = 0
+  intervalPulse = 0
+
+  // Start credits overlay — no lines visible yet (index -1)
   setBlessingActive(true)
   setBlessingTimer(BLESSING_DURATION)
-  setBlessingLineIndex(0)
+  setBlessingLineIndex(-1)
   setBlessingLineTimer(0)
   setBlessingCompleted(false)
 }
@@ -205,23 +214,28 @@ export function pedestalSystem(dt: number) {
     }
   }
 
-  // ── Delayed beam + sound trigger ──
+  // ── Interval triggers at 4s, 8s, 12s — emote + beam + sound + next credit line ──
   if (isBlessingActive()) {
     blessingElapsed += dt
-    if (!beamTriggered && blessingElapsed >= BEAM_SOUND_DELAY) {
-      beamTriggered = true
-      AudioSource.createOrReplace(blessingSoundEntity, {
+    if (intervalsTriggered < INTERVAL_TIMES.length && blessingElapsed >= INTERVAL_TIMES[intervalsTriggered]) {
+      // Trigger emote, sound, and beam at every interval
+      void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
+      const snd = engine.addEntity()
+      Transform.create(snd, { position: Vector3.Zero() })
+      AudioSource.create(snd, {
         audioClipUrl: 'assets/sounds/blessing.mp3',
         playing: true,
         loop: false,
         volume: 0.8,
         global: true,
       })
-    }
-    // Re-trigger emote at 8s for second loop
-    if (!emoteRetriggered && blessingElapsed >= 8.0) {
-      emoteRetriggered = true
-      void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
+
+      // Show next credit line
+      setBlessingLineIndex(intervalsTriggered)
+      setBlessingLineTimer(0)
+      // Pulse the beam
+      intervalPulse = 1
+      intervalsTriggered++
     }
   }
 
@@ -231,14 +245,17 @@ export function pedestalSystem(dt: number) {
     const playerPos = Transform.get(engine.PlayerEntity).position
     const beaconY = playerPos.y + BEAM_HEIGHT / 2
 
-    // Fade in over 3 seconds, fade out over last 2 seconds
+    // Fade in over 3s, fade out over last 2s
     const beamAge = BLESSING_DURATION - beamTimer
     const fadeIn = Math.min(1, beamAge / 3.0)
     const fadeOut = Math.min(1, beamTimer / 2.0)
     const fade = Math.min(fadeIn, fadeOut)
 
-    // Pulse effect
-    const pulse = 1 + 0.1 * Math.sin(beamTimer * 3)
+    // Decay interval pulse
+    if (intervalPulse > 0) intervalPulse = Math.max(0, intervalPulse - dt * 2) // ~0.5s decay
+
+    // Gentle wobble + interval flare
+    const pulse = 1 + 0.1 * Math.sin(beamTimer * 3) + intervalPulse * 0.6
 
     if (beamInner) {
       const t = Transform.getMutable(beamInner)

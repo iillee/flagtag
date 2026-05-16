@@ -40,6 +40,7 @@ import {
   // Blessing
   isBlessingActive, setBlessingActive, getBlessingTimer,
   getBlessingLineIndex, isBlessingCompleted, setBlessingCompleted,
+  getBlessingFadeOut,
   isBlessingAlreadyUsed, setBlessingAlreadyUsed,
   getBlessingCoinProgress,
   // Earned UI
@@ -219,18 +220,22 @@ function PlayerListUi() {
       )}
 
       {/* Blessing overlay (no background — see through to emoting player) */}
-      {isBlessingActive() && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center' }}>
-          <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '18%' }, flexDirection: 'column', alignItems: 'center' }}>
-            <Label value="Receiving the blessing of..." fontSize={mobile ? 52 : S(34)} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
-            {CREDIT_LINES.slice(0, getBlessingLineIndex() + 1).map((line, i) => (
-              <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 6 : S(4) } }} />
-            ))}
+      {(isBlessingActive() || getBlessingFadeOut() > 0) && (() => {
+        const opacity = isBlessingActive() ? 1 : getBlessingFadeOut()
+        const goldFaded = Color4.create(GOLD.r, GOLD.g, GOLD.b, opacity)
+        const greyFaded = Color4.create(LIGHT_GREY.r, LIGHT_GREY.g, LIGHT_GREY.b, opacity)
+        return (
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center' }}>
+            <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '18%' }, flexDirection: 'column', alignItems: 'center' }}>
+              <Label value="Receiving the blessing of..." fontSize={mobile ? 52 : S(34)} color={goldFaded} font="sans-serif" />
+              <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
+              {getBlessingLineIndex() >= 0 && CREDIT_LINES.slice(0, getBlessingLineIndex() + 1).map((line, i) => (
+                <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={greyFaded} font="sans-serif" uiTransform={{ margin: { top: mobile ? 6 : S(4) } }} />
+              ))}
+            </UiEntity>
           </UiEntity>
-
-        </UiEntity>
-      )}
+        )
+      })()}
 
       {/* Blessing completed notification */}
       {isBlessingCompleted() && (() => {
@@ -249,7 +254,7 @@ function PlayerListUi() {
                   <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
                     <UiEntity uiTransform={{ width: mobile ? 40 : S(36), height: mobile ? 40 : S(36), margin: { right: mobile ? 10 : S(8) } }}
                       uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }} />
-                    <Label value="+5" fontSize={mobile ? 72 : S(50)} color={GOLD} font="sans-serif" />
+                    <Label value="+6" fontSize={mobile ? 72 : S(50)} color={GOLD} font="sans-serif" />
                   </UiEntity>
                   {/* Flying coins */}
                   {(() => {

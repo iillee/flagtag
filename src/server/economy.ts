@@ -403,7 +403,7 @@ export function registerEconomyHandlers(): void {
   })
 
   // ── Blessing (daily pedestal reward) ──
-  const BLESSING_COINS = 5
+  const BLESSING_COINS = 6
   room.onMessage('requestBlessing', async (_data, context) => {
     try {
       if (!context) return

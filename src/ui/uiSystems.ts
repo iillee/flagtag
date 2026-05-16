@@ -72,6 +72,7 @@ import {
   getBlessingCompletedAt,
   getBlessingCoinProgress, setBlessingCoinProgress,
   getBlessingCoinSoundsPlayed, setBlessingCoinSoundsPlayed,
+  getBlessingFadeOut, setBlessingFadeOut,
 } from './uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
@@ -99,33 +100,33 @@ export function registerUiSystems() {
     }
   })
 
-  // ── Blessing credit line rotation ──
-  const BLESSING_LINE_DURATION = 4.0  // pace to fit 16s duration
+  // ── Blessing timer countdown ──
   engine.addSystem((dt: number) => {
     if (!isBlessingActive()) return
     const remaining = getBlessingTimer() - dt
     setBlessingTimer(remaining)
 
-    // Advance credit lines
-    setBlessingLineTimer(getBlessingLineTimer() + dt)
-    if (getBlessingLineTimer() >= BLESSING_LINE_DURATION && getBlessingLineIndex() < CREDIT_LINES.length - 1) {
-      setBlessingLineTimer(0)
-      setBlessingLineIndex(getBlessingLineIndex() + 1)
-    }
-
     if (remaining <= 0) {
-      // Player stayed for entire duration — blessing completed! Now request coins.
+      // Player stayed for entire duration — blessing completed! Start fade-out.
       setBlessingCompleted(true)
       setBlessingActive(false)
       setBlessingTimer(0)
-      setBlessingLineIndex(0)
-      setBlessingLineTimer(0)
+      setBlessingFadeOut(1)
       room.send('requestBlessing', { t: 0 })
     }
   })
 
+  // ── Blessing text fade-out ──
+  const BLESSING_FADE_DURATION = 2.0
+  engine.addSystem((dt: number) => {
+    const fade = getBlessingFadeOut()
+    if (fade <= 0) return
+    const next = fade - dt / BLESSING_FADE_DURATION
+    setBlessingFadeOut(next <= 0.01 ? 0 : next)
+  })
+
   // ── Blessing completed: coin sounds + fly animation + auto-dismiss ──
-  const BLESSING_COIN_COUNT = 5
+  const BLESSING_COIN_COUNT = 6
   const BLESSING_COIN_SOUND_INTERVAL = 0.18
   const BLESSING_FLY_DURATION = 1.2
   engine.addSystem((dt: number) => {
