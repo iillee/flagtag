@@ -409,17 +409,16 @@ export function registerEconomyHandlers(): void {
       if (!context) return
       const from = context.from.toLowerCase()
 
-      // TODO: Re-enable daily limit after testing
-      // const today = new Date().toISOString().slice(0, 10) // UTC date
-      // const lastBlessing = await Storage.get<string>(`blessing:${from}`)
-      // if (lastBlessing === today) {
-      //   room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })
-      //   return
-      // }
+      const today = new Date().toISOString().slice(0, 10) // UTC date
+      const lastBlessing = await Storage.get<string>(`blessing:${from}`)
+      if (lastBlessing === today) {
+        room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })
+        return
+      }
 
       // Award coins
       const newBalance = await addPlayerCoins(from, BLESSING_COINS)
-      // await Storage.set(`blessing:${from}`, today)
+      await Storage.set(`blessing:${from}`, today)
       room.send('walletBalance', { playerId: from, coins: newBalance }, { to: [from] })
       room.send('blessingResult', { success: true, reason: '', newBalance }, { to: [from] })
       console.log(`[Server] 🙏 Blessing: ${from.slice(0, 8)} received ${BLESSING_COINS} coins (balance: ${newBalance})`)
