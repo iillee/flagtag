@@ -107,7 +107,8 @@ export const Messages = {
   feedbackResult: Schemas.Map({ success: Schemas.Boolean, message: Schemas.String }),       // Server → Client
 
   // Blessing (pedestal daily reward)
-  requestBlessing: Schemas.Map({ t: Schemas.Int }),                                         // Client → Server
+  checkBlessing: Schemas.Map({ t: Schemas.Int }),                                           // Client → Server (pre-check)
+  requestBlessing: Schemas.Map({ t: Schemas.Int }),                                         // Client → Server (claim after ritual)
   blessingResult: Schemas.Map({ success: Schemas.Boolean, reason: Schemas.String, newBalance: Schemas.Int }),  // Server → Client
 
 

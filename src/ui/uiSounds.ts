@@ -45,11 +45,11 @@ AudioSource.create(tickEntity, {
 const pending = new Map<Entity, number>() // entity → frames remaining (1 = reset done, fire next frame)
 
 export function playClickSound(): void {
-  pending.set(clickEntity, 0)
+  // Disabled — was causing UI lag on button presses
 }
 
 export function playHoverSound(): void {
-  pending.set(hoverEntity, 0)
+  // Disabled — was causing UI lag on hover
 }
 
 export function playTickSound(): void {

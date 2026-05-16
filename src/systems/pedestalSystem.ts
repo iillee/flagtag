@@ -135,6 +135,9 @@ function startBlessing() {
   const pos = Transform.get(engine.PlayerEntity).position
   blessingStartPos = Vector3.create(pos.x, pos.y, pos.z)
 
+  // Send pre-check immediately so server can reject early if already blessed today
+  room.send('checkBlessing', { t: 0 })
+
   // Trigger emote, beam, and sound immediately on click
   void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
   showBeamAtPlayer()
@@ -165,6 +168,11 @@ export function pedestalSystem(dt: number) {
     room.onMessage('blessingResult', (data) => {
       if (!data.success && data.reason === 'already_blessed') {
         setBlessingAlreadyUsed(true)
+        // If blessing animation is still running, cancel it immediately
+        if (isBlessingActive()) {
+          cancelBlessing()
+          setBlessingCompleted(true)  // show "already received" popup
+        }
       } else if (data.success) {
         setBlessingAlreadyUsed(true)  // prevent repeat in same session
       }
@@ -196,6 +204,7 @@ export function pedestalSystem(dt: number) {
             if (isBlessingActive()) return  // already blessing in progress
             if (isBlessingAlreadyUsed()) {
               setBlessingCompleted(true)  // show the "already received" popup
+              void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
               return
             }
             startBlessing()

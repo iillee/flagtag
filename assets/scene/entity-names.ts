@@ -14,6 +14,7 @@ export enum EntityNames {
   Big_Rock_5 = "Big Rock_5",
   Big_Rock_6 = "Big Rock_6",
   Boombox = "Boombox",
+  Candle_07 = "Candle 07",
   Caribbean_Water = "Caribbean Water",
   Classic_Bench = "Classic Bench",
   Classic_Bench_10 = "Classic Bench_10",

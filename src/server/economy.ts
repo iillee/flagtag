@@ -404,12 +404,31 @@ export function registerEconomyHandlers(): void {
 
   // ── Blessing (daily pedestal reward) ──
   const BLESSING_COINS = 6
+
+  // Pre-check: client asks if blessing is available before starting the ritual
+  room.onMessage('checkBlessing', async (_data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      const today = new Date().toISOString().slice(0, 10)
+      const lastBlessing = await Storage.get<string>(`blessing:${from}`)
+      if (lastBlessing === today) {
+        room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })
+      } else {
+        room.send('blessingResult', { success: true, reason: 'eligible', newBalance: 0 }, { to: [from] })
+      }
+    } catch (err) {
+      console.error('[Server] ❌ checkBlessing handler error:', err)
+    }
+  })
+
+  // Claim: client sends after completing the full ritual
   room.onMessage('requestBlessing', async (_data, context) => {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
 
-      const today = new Date().toISOString().slice(0, 10) // UTC date
+      const today = new Date().toISOString().slice(0, 10)
       const lastBlessing = await Storage.get<string>(`blessing:${from}`)
       if (lastBlessing === today) {
         room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })

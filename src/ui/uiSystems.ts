@@ -73,6 +73,7 @@ import {
   getBlessingCoinProgress, setBlessingCoinProgress,
   getBlessingCoinSoundsPlayed, setBlessingCoinSoundsPlayed,
   getBlessingFadeOut, setBlessingFadeOut,
+  isBlessingAlreadyUsed,
 } from './uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
@@ -112,6 +113,7 @@ export function registerUiSystems() {
       setBlessingActive(false)
       setBlessingTimer(0)
       setBlessingFadeOut(1)
+      // Claim the reward from server
       room.send('requestBlessing', { t: 0 })
     }
   })
@@ -133,6 +135,18 @@ export function registerUiSystems() {
     if (!isBlessingCompleted()) return
 
     const elapsed = (Date.now() - getBlessingCompletedAt()) / 1000
+
+    // Only play coin sounds/animation for actual successful blessings, not "already used" popups
+    if (isBlessingAlreadyUsed()) {
+      // Auto-dismiss after 4s
+      if (elapsed > 4) {
+        setBlessingCompleted(false)
+        setBlessingCoinProgress(0)
+        setBlessingCoinSoundsPlayed(0)
+      }
+      return
+    }
+
     setBlessingCoinProgress(Math.min(1, elapsed / BLESSING_FLY_DURATION))
 
     // Play coin sounds

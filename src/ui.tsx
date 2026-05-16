@@ -246,7 +246,7 @@ function PlayerListUi() {
               uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
             >
               {isBlessingAlreadyUsed() ? (
-                <Label value="You have already received\nthe blessing today" fontSize={mobile ? 36 : S(24)} color={MUTED} font="sans-serif" />
+                <Label value="You have already received the blessing today" fontSize={mobile ? 36 : S(24)} color={MUTED} font="sans-serif" />
               ) : (
                 <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
                   <Label value="Blessing Received!" fontSize={mobile ? 56 : S(38)} color={GOLD} font="sans-serif" />

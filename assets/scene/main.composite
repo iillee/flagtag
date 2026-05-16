@@ -3912,6 +3912,27 @@
             "parent": 0
           }
         },
+        "703": {
+          "json": {
+            "position": {
+              "x": 279.7799987792969,
+              "y": 23.802780151367188,
+              "z": 323.0299987792969
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "parent": 0
+          }
+        },
         "704": {
           "json": {
             "position": {
@@ -5201,6 +5222,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "703": {
+          "json": {
+            "src": "assets/asset-packs/candle_07/HWN20_Candle_07.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "704": {
           "json": {
             "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
@@ -6140,6 +6168,11 @@
         "702": {
           "json": {
             "value": "Doubloon_22"
+          }
+        },
+        "703": {
+          "json": {
+            "value": "Candle 07"
           }
         },
         "704": {
@@ -7191,7 +7224,7 @@
         "serializationType": "map"
       },
       "data": {
-        "696": {
+        "660": {
           "json": {
             "gizmo": 1
           }
@@ -7364,7 +7397,8 @@
                   638,
                   663,
                   662,
-                  696
+                  696,
+                  703
                 ]
               },
               {
@@ -8210,6 +8244,10 @@
               {
                 "entity": 696,
                 "children": []
+              },
+              {
+                "entity": 703,
+                "children": []
               }
             ]
           }
@@ -8597,6 +8635,9 @@
           "json": {}
         },
         "702": {
+          "json": {}
+        },
+        "703": {
           "json": {}
         },
         "704": {
