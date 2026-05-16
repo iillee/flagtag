@@ -20,9 +20,9 @@ export interface StoreItem {
 
 export const BOOMERANG_STORE: StoreItem[] = [
   { id: 'r', label: 'Base',   coinCost: 0,   flagsRequired: 0,  description: 'Standard boomerang' },
-  { id: 'y', label: 'Dubs',   coinCost: 0,  flagsRequired: 0,  description: 'Throws two boomerangs' },
-  { id: 'g', label: 'Orbit',  coinCost: 0, flagsRequired: 0,  description: 'Orbiting boomerang' },
-  { id: 'b', label: 'Charge', coinCost: 0, flagsRequired: 0, description: 'Chargeable boomerang' },
+  { id: 'y', label: 'Dubs',   coinCost: 50,  flagsRequired: 1,  description: 'Throws two boomerangs' },
+  { id: 'g', label: 'Orbit',  coinCost: 150, flagsRequired: 5,  description: 'Orbiting boomerang' },
+  { id: 'b', label: 'Charge', coinCost: 300, flagsRequired: 10, description: 'Chargeable boomerang' },
 ]
 
 // ── Components ──

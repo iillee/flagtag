@@ -76,7 +76,7 @@ export function ChestPopup() {
             const canAfford = coins >= item.coinCost
             const hasFlags = lifetimeWins >= item.flagsRequired
             const locked = !owned && (!canAfford || !hasFlags)
-            const canBuy = !owned && canAfford && hasFlags
+            const canBuy = !owned && canAfford && hasFlags && item.coinCost > 0
 
             const bgColor = selected ? SELECTED_BG : owned ? OWNED_BG : LOCKED_BG
             const cardWidth = mobile ? 100 : S(120)

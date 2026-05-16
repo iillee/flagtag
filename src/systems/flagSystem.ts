@@ -54,7 +54,7 @@ let cloneBobPhase = 0                          // Bob animation phase (radians)
 let cloneSpinAngle = 0                         // Spin animation angle (degrees)
 
 const BANNER_SRC = 'assets/models/Banner_Red_02/Banner_Red_02.glb'
-const BOB_BASE_Y = isMobile() ? 2.4 : 3.0  // Y offset above feet (AAPT_POSITION) to float above head
+function getBobBaseY(): number { return isMobile() ? 2.4 : 3.0 }  // Y offset above feet (AAPT_POSITION) to float above head
 const BOB_AMP = 0.15
 const BOB_SPEED = 2.1             // radians/sec (~3s cycle)
 const SPIN_SPEED = 50             // degrees/sec (~7.2s full rotation)
@@ -80,7 +80,7 @@ function initClonePool(): void {
   carryCloneOffset = engine.addEntity()
   Transform.create(carryCloneOffset, {
     parent: carryCloneAnchor,
-    position: Vector3.create(0, BOB_BASE_Y, 0)
+    position: Vector3.create(0, getBobBaseY(), 0)
   })
 
   // Layer 3: Visual — grandchild with model, animated per-frame (safe)
@@ -120,6 +120,11 @@ function showClone(carrierId: string): void {
     carryCloneCarrierId = carrierId
     cloneBobPhase = 0
     cloneSpinAngle = 0
+  }
+
+  // Update offset Y for mobile (isMobile may not be ready at pool init time)
+  if (carryCloneOffset !== null && Transform.has(carryCloneOffset)) {
+    Transform.getMutable(carryCloneOffset).position = Vector3.create(0, getBobBaseY(), 0)
   }
 
   VisibilityComponent.createOrReplace(carryCloneVisual!, { visible: true })
