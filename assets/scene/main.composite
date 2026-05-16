@@ -741,27 +741,6 @@
             "parent": 0
           }
         },
-        "544": {
-          "json": {
-            "position": {
-              "x": -0.2800000011920929,
-              "y": 0,
-              "z": 0.5600000023841858
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": -0.7071067690849304,
-              "z": 0,
-              "w": 0.7071067690849304
-            },
-            "parent": 550
-          }
-        },
         "545": {
           "json": {
             "position": {
@@ -842,48 +821,6 @@
               "y": 0.9994999766349792,
               "z": 0,
               "w": -0.030500000342726707
-            },
-            "parent": 0
-          }
-        },
-        "549": {
-          "json": {
-            "position": {
-              "x": -0.2800000011920929,
-              "y": 0,
-              "z": -0.4000000059604645
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": -0.7071067690849304,
-              "z": 0,
-              "w": 0.7071067690849304
-            },
-            "parent": 550
-          }
-        },
-        "550": {
-          "json": {
-            "position": {
-              "x": 207.86532020568848,
-              "y": 12.530471801757812,
-              "z": 279.80860900878906
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0.10049021244049072,
-              "z": 0,
-              "w": -0.9949211478233337
             },
             "parent": 0
           }
@@ -3205,16 +3142,16 @@
               "y": 12.506587028503418,
               "z": 265.5130310058594
             },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
             "rotation": {
               "x": 0,
               "y": 0.8178435564041138,
               "z": 0,
               "w": 0.5754406452178955
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
             },
             "parent": 0
           }
@@ -3247,16 +3184,16 @@
               "y": 25.791547775268555,
               "z": 277.6692810058594
             },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
             "rotation": {
               "x": 0.7071067690849304,
               "y": 0,
               "z": 0,
               "w": 0.7071067690849304
-            },
-            "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
             },
             "parent": 0
           }
@@ -3730,16 +3667,16 @@
               "y": 20.791547775268555,
               "z": 270.4796142578125
             },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
             "rotation": {
               "x": 0.7071067690849304,
               "y": 0,
               "z": 0,
               "w": 0.7071067690849304
-            },
-            "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
             },
             "parent": 0
           }
@@ -3751,16 +3688,16 @@
               "y": 30.541547775268555,
               "z": 266.9432067871094
             },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
             "rotation": {
               "x": 0.7071067690849304,
               "y": 0,
               "z": 0,
               "w": 0.7071067690849304
-            },
-            "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
             },
             "parent": 0
           }
@@ -3814,16 +3751,37 @@
               "y": 15.541547775268555,
               "z": 265.9796142578125
             },
+            "scale": {
+              "x": 10,
+              "y": 10,
+              "z": 10
+            },
             "rotation": {
               "x": 0.7071067690849304,
               "y": 0,
               "z": 0,
               "w": 0.7071067690849304
             },
+            "parent": 0
+          }
+        },
+        "696": {
+          "json": {
+            "position": {
+              "x": 207.5399932861328,
+              "y": 12.5,
+              "z": 280.0299987792969
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.14597322046756744,
+              "z": 0,
+              "w": -0.9892885684967041
+            },
             "scale": {
-              "x": 10,
-              "y": 10,
-              "z": 10
+              "x": 0.5,
+              "y": 0.5,
+              "z": 0.5
             },
             "parent": 0
           }
@@ -4084,12 +4042,6 @@
             "entityId": 8026
           }
         },
-        "544": {
-          "json": {
-            "networkId": 0,
-            "entityId": 8029
-          }
-        },
         "546": {
           "json": {
             "networkId": 0,
@@ -4100,12 +4052,6 @@
           "json": {
             "networkId": 0,
             "entityId": 8010
-          }
-        },
-        "549": {
-          "json": {
-            "networkId": 0,
-            "entityId": 8028
           }
         },
         "551": {
@@ -4612,13 +4558,6 @@
           }
         },
         "548": {
-          "json": {
-            "src": "assets/models/Bench_01.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "550": {
           "json": {
             "src": "assets/models/Bench_01.glb",
             "visibleMeshesCollisionMask": 0,
@@ -5213,6 +5152,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "696": {
+          "json": {
+            "src": "assets/asset-packs/ritual_pedestal/Pedestal_01/Pedestal_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "697": {
           "json": {
             "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
@@ -5446,11 +5392,6 @@
             "value": "Classic Bench_13"
           }
         },
-        "544": {
-          "json": {
-            "value": "Sit Spot 1_14"
-          }
-        },
         "545": {
           "json": {
             "value": "TNT Box Closed_4"
@@ -5469,16 +5410,6 @@
         "548": {
           "json": {
             "value": "Classic Bench_5"
-          }
-        },
-        "549": {
-          "json": {
-            "value": "Sit Spot 2_14"
-          }
-        },
-        "550": {
-          "json": {
-            "value": "Classic Bench_14"
           }
         },
         "551": {
@@ -6176,6 +6107,11 @@
             "value": "Doubloon_31"
           }
         },
+        "696": {
+          "json": {
+            "value": "Ritual Pedestal"
+          }
+        },
         "697": {
           "json": {
             "value": "Doubloon_17"
@@ -6297,22 +6233,6 @@
           }
         },
         "548": {
-          "json": {
-            "pointerEvents": [
-              {
-                "eventType": 1,
-                "eventInfo": {
-                  "button": 0,
-                  "hoverText": "Sit Here",
-                  "maxDistance": 10,
-                  "showFeedback": true,
-                  "showHighlight": true
-                }
-              }
-            ]
-          }
-        },
-        "550": {
           "json": {
             "pointerEvents": [
               {
@@ -6835,13 +6755,6 @@
             ]
           }
         },
-        "544": {
-          "json": {
-            "componentIds": [
-              2709697014
-            ]
-          }
-        },
         "546": {
           "json": {
             "componentIds": [
@@ -6850,13 +6763,6 @@
           }
         },
         "547": {
-          "json": {
-            "componentIds": [
-              2709697014
-            ]
-          }
-        },
-        "549": {
           "json": {
             "componentIds": [
               2709697014
@@ -7285,9 +7191,9 @@
         "serializationType": "map"
       },
       "data": {
-        "517": {
+        "696": {
           "json": {
-            "gizmo": 1
+            "gizmo": 2
           }
         }
       }
@@ -7370,7 +7276,6 @@
                   512,
                   658,
                   543,
-                  550,
                   553,
                   565,
                   576,
@@ -7458,7 +7363,8 @@
                   687,
                   638,
                   663,
-                  662
+                  662,
+                  696
                 ]
               },
               {
@@ -7690,21 +7596,6 @@
               },
               {
                 "entity": 541,
-                "children": []
-              },
-              {
-                "entity": 550,
-                "children": [
-                  549,
-                  544
-                ]
-              },
-              {
-                "entity": 549,
-                "children": []
-              },
-              {
-                "entity": 544,
                 "children": []
               },
               {
@@ -8315,6 +8206,10 @@
               {
                 "entity": 695,
                 "children": []
+              },
+              {
+                "entity": 696,
+                "children": []
               }
             ]
           }
@@ -8411,9 +8306,6 @@
           "json": {}
         },
         "548": {
-          "json": {}
-        },
-        "550": {
           "json": {}
         },
         "553": {
@@ -8684,6 +8576,9 @@
           "json": {}
         },
         "695": {
+          "json": {}
+        },
+        "696": {
           "json": {}
         },
         "697": {
@@ -9368,28 +9263,6 @@
             "version": 1
           }
         },
-        "544": {
-          "json": {
-            "isBasicViewEnabled": false,
-            "componentName": "Sit Spot",
-            "fields": [
-              {
-                "name": "Hover Text",
-                "type": "core::PointerEvents"
-              },
-              {
-                "name": "When Clicked",
-                "type": "asset-packs::Triggers",
-                "basicViewId": "trigger-when-clicked"
-              }
-            ],
-            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
-            "helpTooltip": {
-              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
-            },
-            "version": 1
-          }
-        },
         "546": {
           "json": {
             "isBasicViewEnabled": false,
@@ -9435,40 +9308,6 @@
           }
         },
         "548": {
-          "json": {
-            "isBasicViewEnabled": false,
-            "componentName": "Classic Bench",
-            "fields": [],
-            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
-            "helpTooltip": {
-              "text": "A classic bench that players can sit on. Click to sit down at this location."
-            },
-            "version": 1
-          }
-        },
-        "549": {
-          "json": {
-            "isBasicViewEnabled": false,
-            "componentName": "Sit Spot",
-            "fields": [
-              {
-                "name": "Hover Text",
-                "type": "core::PointerEvents"
-              },
-              {
-                "name": "When Clicked",
-                "type": "asset-packs::Triggers",
-                "basicViewId": "trigger-when-clicked"
-              }
-            ],
-            "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
-            "helpTooltip": {
-              "text": "Configure the sit spot's hover text and actions. Players can click to sit here. The spot tracks whether it's free or taken and shows a message when occupied."
-            },
-            "version": 1
-          }
-        },
-        "550": {
           "json": {
             "isBasicViewEnabled": false,
             "componentName": "Classic Bench",
@@ -16354,65 +16193,6 @@
             ]
           }
         },
-        "544": {
-          "json": {
-            "id": 57,
-            "value": [
-              {
-                "name": "Move here",
-                "type": "move_player_here",
-                "jsonPayload": "{}"
-              },
-              {
-                "name": "Sit anim1",
-                "type": "play_default_emote",
-                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
-              },
-              {
-                "name": "Mark as taken",
-                "type": "set_state",
-                "jsonPayload": "{\"state\":\"Taken\"}"
-              },
-              {
-                "name": "Mark as free",
-                "type": "set_state",
-                "jsonPayload": "{\"state\":\"Free\"}",
-                "allowedInBasicView": true
-              },
-              {
-                "name": "Sit Here",
-                "type": "batch",
-                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
-                "allowedInBasicView": true
-              },
-              {
-                "name": "Sit anim2",
-                "type": "play_default_emote",
-                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
-              },
-              {
-                "name": "Random sit anim",
-                "type": "random",
-                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
-              },
-              {
-                "name": "Print text",
-                "type": "show_text",
-                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
-              },
-              {
-                "name": "Hide text",
-                "type": "hide_text",
-                "jsonPayload": "{}"
-              },
-              {
-                "name": "Show text",
-                "type": "batch",
-                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
-              }
-            ]
-          }
-        },
         "546": {
           "json": {
             "id": 17,
@@ -16475,65 +16255,6 @@
         "547": {
           "json": {
             "id": 19,
-            "value": [
-              {
-                "name": "Move here",
-                "type": "move_player_here",
-                "jsonPayload": "{}"
-              },
-              {
-                "name": "Sit anim1",
-                "type": "play_default_emote",
-                "jsonPayload": "{\"emote\":\"sittingChair1\"}"
-              },
-              {
-                "name": "Mark as taken",
-                "type": "set_state",
-                "jsonPayload": "{\"state\":\"Taken\"}"
-              },
-              {
-                "name": "Mark as free",
-                "type": "set_state",
-                "jsonPayload": "{\"state\":\"Free\"}",
-                "allowedInBasicView": true
-              },
-              {
-                "name": "Sit Here",
-                "type": "batch",
-                "jsonPayload": "{\"actions\":[\"Move here\",\"Mark as taken\",\"Random sit anim\"]}",
-                "allowedInBasicView": true
-              },
-              {
-                "name": "Sit anim2",
-                "type": "play_default_emote",
-                "jsonPayload": "{\"emote\":\"sittingChair2\"}"
-              },
-              {
-                "name": "Random sit anim",
-                "type": "random",
-                "jsonPayload": "{\"actions\":[\"Sit anim1\",\"Sit anim2\"]}"
-              },
-              {
-                "name": "Print text",
-                "type": "show_text",
-                "jsonPayload": "{\"text\":\"Seat is taken\",\"hideAfterSeconds\":2,\"font\":0,\"fontSize\":40,\"textAlign\":7}"
-              },
-              {
-                "name": "Hide text",
-                "type": "hide_text",
-                "jsonPayload": "{}"
-              },
-              {
-                "name": "Show text",
-                "type": "batch",
-                "jsonPayload": "{\"actions\":[\"Hide text\",\"Print text\"]}"
-              }
-            ]
-          }
-        },
-        "549": {
-          "json": {
-            "id": 59,
             "value": [
               {
                 "name": "Move here",
@@ -20451,29 +20172,6 @@
             ]
           }
         },
-        "544": {
-          "json": {
-            "value": [
-              {
-                "type": "on_player_leaves_area",
-                "conditions": [
-                  {
-                    "id": 58,
-                    "type": "when_state_is",
-                    "value": "Taken"
-                  }
-                ],
-                "operation": "and",
-                "actions": [
-                  {
-                    "id": 57,
-                    "name": "Mark as free"
-                  }
-                ]
-              }
-            ]
-          }
-        },
         "546": {
           "json": {
             "value": [
@@ -20580,96 +20278,6 @@
                 "actions": [
                   {
                     "id": 17,
-                    "name": "Hide text"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "549": {
-          "json": {
-            "value": [
-              {
-                "type": "on_player_leaves_area",
-                "conditions": [
-                  {
-                    "id": 60,
-                    "type": "when_state_is",
-                    "value": "Taken"
-                  }
-                ],
-                "operation": "and",
-                "actions": [
-                  {
-                    "id": 59,
-                    "name": "Mark as free"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        "550": {
-          "json": {
-            "value": [
-              {
-                "type": "on_click",
-                "conditions": [
-                  {
-                    "id": 58,
-                    "type": "when_state_is",
-                    "value": "Free"
-                  }
-                ],
-                "operation": "and",
-                "actions": [
-                  {
-                    "id": 57,
-                    "name": "Sit Here"
-                  }
-                ]
-              },
-              {
-                "type": "on_click",
-                "conditions": [
-                  {
-                    "id": 58,
-                    "type": "when_state_is",
-                    "value": "Taken"
-                  },
-                  {
-                    "id": 60,
-                    "type": "when_state_is",
-                    "value": "Free"
-                  }
-                ],
-                "operation": "and",
-                "actions": [
-                  {
-                    "id": 59,
-                    "name": "Sit Here"
-                  }
-                ]
-              },
-              {
-                "type": "on_click",
-                "conditions": [
-                  {
-                    "id": 58,
-                    "type": "when_state_is",
-                    "value": "Taken"
-                  },
-                  {
-                    "id": 60,
-                    "type": "when_state_is",
-                    "value": "Taken"
-                  }
-                ],
-                "operation": "and",
-                "actions": [
-                  {
-                    "id": 57,
                     "name": "Hide text"
                   }
                 ]
@@ -23872,16 +23480,6 @@
             "defaultValue": "Free"
           }
         },
-        "544": {
-          "json": {
-            "id": 58,
-            "value": [
-              "Free",
-              "Taken"
-            ],
-            "defaultValue": "Free"
-          }
-        },
         "546": {
           "json": {
             "id": 18,
@@ -23895,16 +23493,6 @@
         "547": {
           "json": {
             "id": 20,
-            "value": [
-              "Free",
-              "Taken"
-            ],
-            "defaultValue": "Free"
-          }
-        },
-        "549": {
-          "json": {
-            "id": 60,
             "value": [
               "Free",
               "Taken"

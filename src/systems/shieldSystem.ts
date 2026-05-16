@@ -17,7 +17,7 @@ const SHIELD_COLOR = Color4.create(1.0, 0.82, 0.2, 0.12)
 const SHIELD_EMISSIVE = Color4.create(1.0, 0.75, 0.1, 1.0)
 const SHIELD_EMISSIVE_INTENSITY = 4.0
 const SHIELD_RADIUS = 0.64475
-function getShieldYOffset(): number { return isMobile() ? 0.4 : 1.45 }
+function getShieldYOffset(): number { return isMobile() ? 1.0 : 1.45 }
 const PLANE_WIDTH = 0.53
 const PLANE_HEIGHT = 1.1
 const NUM_PLANES = 8

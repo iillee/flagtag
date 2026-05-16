@@ -1110,7 +1110,7 @@ function updateMsgProjectileVisuals(dt: number): void {
   }
 }
 
-/** Fire a projectile from the UI (mobile tap). Same logic as E key press. */
+/** Fire a projectile from the UI (mobile tap). For blue: starts charging on press. */
 export function triggerProjectileFromUI(): void {
   if (isDrownRespawning()) return
   const now = Date.now()
@@ -1120,8 +1120,31 @@ export function triggerProjectileFromUI(): void {
   if (now - lastLocalProjectileFireTime < (PROJECTILE_COOLDOWN_SEC + lastThrowExtraCooldown) * 1000) { playErrorSound(); return }
   if (localThrowActive || localProjectiles.length > 0) return
 
-  lastLocalProjectileFireTime = now
   const uiColor = getBoomerangColor()
+
+  // Blue: start charging on press (release fires via triggerProjectileReleaseFromUI)
+  if (uiColor === 'b') {
+    if (isCharging) return
+    // Block charging while airborne
+    if (Transform.has(engine.PlayerEntity)) {
+      const playerY = Transform.get(engine.PlayerEntity).position.y
+      if (Math.abs(playerY - lastChargeGroundY) > 0.15) {
+        lastChargeGroundY = playerY
+        return
+      }
+      lastChargeGroundY = playerY
+    }
+    chargeStartMs = now
+    isCharging = true
+    orbitAngle = 0
+    playChargeSound()
+    applyChargeSlow()
+    room.send('chargeStart', { t: now })
+    console.log('[Projectile] ⚡ UI press — charging started (blue)')
+    return
+  }
+
+  lastLocalProjectileFireTime = now
 
   // Green: orbit mechanic
   if (uiColor === 'g') {
@@ -1169,6 +1192,41 @@ export function triggerProjectileFromUI(): void {
     yellowSecondThrowAt = now + YELLOW_SECOND_THROW_DELAY_MS
     yellowSecondThrowDir = { dirX, dirZ }
   }
+}
+
+/** Release charge from UI (mobile). Fires the blue boomerang with accumulated charge. */
+export function triggerProjectileReleaseFromUI(): void {
+  if (!isCharging) return
+  const now = Date.now()
+  isCharging = false
+  stopChargeSound()
+  removeChargeSlow()
+  room.send('chargeStop', { t: now })
+  const chargeFrac = Math.min(1, (now - chargeStartMs) / 1000 / CHARGE_TIME_SEC)
+  const chargeSpeed = chargeToSpeed(chargeFrac)
+  const chargeRange = chargeToRange(chargeFrac)
+  chargeStartMs = 0
+  lastLocalProjectileFireTime = now
+  const chargeElapsed = chargeFrac * CHARGE_TIME_SEC
+  lastThrowExtraCooldown = chargeElapsed >= 1 ? 2 : 1
+
+  const { dirX, dirZ } = getPlayerForward()
+  const serverUp = isServerConnected()
+  if (serverUp) {
+    localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
+    updateHandBoomerangVisibility()
+    room.send('requestShell', { dirX, dirZ, color: 'b', chargeSpeed, chargeRange, chargeScale: 1 })
+    if (Transform.has(engine.PlayerEntity)) {
+      const playerPos = Transform.get(engine.PlayerEntity).position
+      const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
+      fireWallRaycast(spawnPos, dirX, dirZ)
+    }
+  } else {
+    localThrowActive = true; localThrowSawVisual = false; localThrowStartMs = Date.now()
+    updateHandBoomerangVisibility()
+    fireProjectileLocally(chargeSpeed, chargeRange)
+  }
+  console.log(`[Projectile] ⚡ UI release — blue fired with charge ${(chargeFrac * 100).toFixed(0)}%`)
 }
 
 // ── Main client system ──

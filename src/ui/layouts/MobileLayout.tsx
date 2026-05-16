@@ -25,7 +25,7 @@ import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { getLeaderboardEntries, getAllTimeLeaderboardEntries, getMonthlyLeaderboardEntries } from '../../gameState/roundsWon'
 import { getCountdownSeconds } from '../../shared/components'
 import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from '../../systems/trapSystem'
-import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI } from '../../systems/projectileSystem'
+import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, triggerProjectileReleaseFromUI, getChargeFraction } from '../../systems/projectileSystem'
 import { isSpectatorMode } from '../../systems/spectatorSystem'
 
 import { HowToPlayOverlay } from '../screens/HowToPlay'
@@ -100,17 +100,31 @@ export function MobileLayout() {
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               onMouseDown={() => { triggerTrapFromUI() }}
             >
-              <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1 * 1.1 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1 * 1.1 * 1.1) }}
+              <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
               {isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               onMouseDown={() => { triggerProjectileFromUI() }}
+              onMouseUp={() => { triggerProjectileReleaseFromUI() }}
             >
-              <UiEntity uiTransform={{ width: (AB_ICON - 8) * 1.4175, height: (AB_ICON - 8) * 1.4175, margin: { top: -8 } }}
+              {/* Blue charge circle glow — over black bg, under boomerang icon */}
+              {getBoomerangColor() === 'b' && getChargeFraction() > 0 && (() => {
+                const cf = getChargeFraction()
+                const peak = cf > 0.75
+                const r = 1
+                const g = peak ? 0.84 : 1
+                const b = peak ? 0 : 1
+                const a = 0.15 + cf * 0.5
+                return (
+                  <UiEntity uiTransform={{ positionType: 'absolute', width: AB_SIZE, height: AB_SIZE, pointerFilter: 'none' }}
+                    uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_circle_filled.png' }, color: Color4.create(r, g, b, a) }} />
+                )
+              })()}
+              <UiEntity uiTransform={{ width: (AB_ICON - 8) * 1.4175, height: (AB_ICON - 8) * 1.4175, margin: { top: -8 }, pointerFilter: 'none' }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
-              {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
+              {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', pointerFilter: 'none' }} />}
             </UiEntity>
           </UiEntity>
         )

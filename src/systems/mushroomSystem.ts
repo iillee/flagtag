@@ -5,6 +5,7 @@ import {
   AvatarAttach, AvatarAnchorPointType
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 import { room } from '../shared/messages'
 import { Flag } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
@@ -76,13 +77,13 @@ function spawnHeadBounceMushroom(playerId: string): void {
   const headAnchor = engine.addEntity()
   AvatarAttach.create(headAnchor, {
     avatarId: playerId,
-    anchorPointId: AvatarAnchorPointType.AAPT_HEAD,
+    anchorPointId: isMobile() ? AvatarAnchorPointType.AAPT_POSITION : AvatarAnchorPointType.AAPT_HEAD,
   })
 
   const mushroomClone = engine.addEntity()
   Transform.create(mushroomClone, {
     parent: headAnchor,
-    position: Vector3.create(0, 0.5, 0),
+    position: isMobile() ? Vector3.create(0, 3.0, 0) : Vector3.create(0, 0.5, 0),
     scale: Vector3.create(0.5, 0.5, 0.5),
   })
   GltfContainer.create(mushroomClone, {
@@ -92,10 +93,11 @@ function spawnHeadBounceMushroom(playerId: string): void {
   })
 
   // Pop up fast then fall + shrink away
+  const mobileYOff = isMobile() ? 2.0 : 0
   Tween.create(mushroomClone, {
     mode: Tween.Mode.Move({
-      start: Vector3.create(0, 0.5, 0),
-      end: Vector3.create(0, 2.0, 0),
+      start: Vector3.create(0, 0.5 + mobileYOff, 0),
+      end: Vector3.create(0, 2.0 + mobileYOff, 0),
     }),
     duration: 200,
     easingFunction: EasingFunction.EF_EASEOUTQUAD,
@@ -104,8 +106,8 @@ function spawnHeadBounceMushroom(playerId: string): void {
     sequence: [
       {
         mode: Tween.Mode.Move({
-          start: Vector3.create(0, 2.0, 0),
-          end: Vector3.create(0, 0.8, 0),
+          start: Vector3.create(0, 2.0 + mobileYOff, 0),
+          end: Vector3.create(0, 0.8 + mobileYOff, 0),
         }),
         duration: 350,
         easingFunction: EasingFunction.EF_EASEINQUAD,

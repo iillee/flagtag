@@ -38,9 +38,9 @@ export function setupHandBoomerangs() {
   const leftBoomerangModel = engine.addEntity()
   Transform.create(leftBoomerangModel, {
     parent: leftHandAnchor,
-    position: isMobile() ? Vector3.create(0.12, 0.01, -0.13) : Vector3.create(0.05, 0.03, 0.1),
+    position: isMobile() ? Vector3.create(-0.01, 0.01, -0.08) : Vector3.create(0.05, 0.03, 0.1),
     scale: getBoomerangColor() === 'y' ? Vector3.create(1, 1.5, 1) : Vector3.Zero(),
-    rotation: Quaternion.fromEulerDegrees(isMobile() ? 15 : 0, isMobile() ? 180 : 0, -90)
+    rotation: Quaternion.fromEulerDegrees(isMobile() ? 0 : 0, isMobile() ? 180 : 0, -90)
   })
   GltfContainer.create(leftBoomerangModel, {
     src: `assets/models/boomerang.${getBoomerangColor()}.glb`,

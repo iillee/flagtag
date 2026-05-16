@@ -4,7 +4,7 @@
  * Uses a per-frame system to toggle playing off→on across two frames,
  * which retriggers sounds without the overhead of component recreation.
  */
-import { engine, AudioSource, Transform } from '@dcl/sdk/ecs'
+import { engine, AudioSource, Transform, Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 
 // ── Click sound (buttons, tabs, close) ──
@@ -42,7 +42,7 @@ AudioSource.create(tickEntity, {
 
 // ── Pending sound queue ──
 // Frame 0: set playing=false  |  Frame 1: set playing=true
-const pending = new Map<number, number>() // entity → frames remaining (1 = reset done, fire next frame)
+const pending = new Map<Entity, number>() // entity → frames remaining (1 = reset done, fire next frame)
 
 export function playClickSound(): void {
   pending.set(clickEntity, 0)

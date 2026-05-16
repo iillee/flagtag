@@ -24,6 +24,7 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
@@ -53,7 +54,7 @@ let cloneBobPhase = 0                          // Bob animation phase (radians)
 let cloneSpinAngle = 0                         // Spin animation angle (degrees)
 
 const BANNER_SRC = 'assets/models/Banner_Red_02/Banner_Red_02.glb'
-const BOB_BASE_Y = 3.0            // Y offset above feet (AAPT_POSITION) to float above head
+const BOB_BASE_Y = isMobile() ? 2.4 : 3.0  // Y offset above feet (AAPT_POSITION) to float above head
 const BOB_AMP = 0.15
 const BOB_SPEED = 2.1             // radians/sec (~3s cycle)
 const SPIN_SPEED = 50             // degrees/sec (~7.2s full rotation)
