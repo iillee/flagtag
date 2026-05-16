@@ -402,6 +402,32 @@ export function registerEconomyHandlers(): void {
     } catch (err) { console.error('[Server] ❌ deathPenalty handler error:', err) }
   })
 
+  // ── Blessing (daily pedestal reward) ──
+  const BLESSING_COINS = 5
+  room.onMessage('requestBlessing', async (_data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+
+      // TODO: Re-enable daily limit after testing
+      // const today = new Date().toISOString().slice(0, 10) // UTC date
+      // const lastBlessing = await Storage.get<string>(`blessing:${from}`)
+      // if (lastBlessing === today) {
+      //   room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })
+      //   return
+      // }
+
+      // Award coins
+      const newBalance = await addPlayerCoins(from, BLESSING_COINS)
+      // await Storage.set(`blessing:${from}`, today)
+      room.send('walletBalance', { playerId: from, coins: newBalance }, { to: [from] })
+      room.send('blessingResult', { success: true, reason: '', newBalance }, { to: [from] })
+      console.log(`[Server] 🙏 Blessing: ${from.slice(0, 8)} received ${BLESSING_COINS} coins (balance: ${newBalance})`)
+    } catch (err) {
+      console.error('[Server] ❌ requestBlessing handler error:', err)
+    }
+  })
+
   // colorChanged uses economy (loadPlayerUpgrades) so lives here
   room.onMessage('colorChanged', async (data, context) => {
     try {

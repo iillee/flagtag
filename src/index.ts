@@ -66,6 +66,7 @@ export async function main() {
   const { setupTeleportOrbs } = await import('./systems/teleportOrbs')
   const { setupCinematicSystem } = await import('./systems/cinematicSystem')
   const { ghostClientSystem } = await import('./systems/ghostSystem')
+  const { pedestalSystem } = await import('./systems/pedestalSystem')
   const { Portal } = await import('./systems/portalSystem')
   const { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } = await import('./gameState/flagHoldTime')
   await import('./gameState/overlayState')
@@ -304,6 +305,9 @@ export async function main() {
   engine.addSystem(function dayNightPollSystem(_dt: number) {
     updateWorldTime()
   })
+
+  // Pedestal blessing system
+  engine.addSystem(pedestalSystem)
 
   // Cinematic system (round-end camera, fade state machine, respawnPlayers handler)
   setupCinematicSystem()

@@ -37,6 +37,11 @@ import {
   isNoScorersCreditsVisible, setNoScorersCreditsVisible,
   getCreditsCountdown, setCreditsCountdown,
   getCreditLineIndex, CREDIT_LINES,
+  // Blessing
+  isBlessingActive, setBlessingActive, getBlessingTimer,
+  getBlessingLineIndex, isBlessingCompleted, setBlessingCompleted,
+  isBlessingAlreadyUsed, setBlessingAlreadyUsed,
+  getBlessingCoinProgress,
   // Earned UI
   getActiveRoundEarnings, getEarnedUiPhase, getEarnedCoinsFlyProgress,
   // Overlay
@@ -190,7 +195,6 @@ function PlayerListUi() {
   const earnedUiPhase = getEarnedUiPhase()
   const earnedCoinsFlyProgress = getEarnedCoinsFlyProgress()
   const creditsCountdown = getCreditsCountdown()
-  const creditLineIndex = getCreditLineIndex()
 
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
@@ -208,12 +212,71 @@ function PlayerListUi() {
               earnedUiPhase={earnedUiPhase}
               earnedCoinsFlyProgress={earnedCoinsFlyProgress}
               creditsCountdown={creditsCountdown}
-              creditLineIndex={creditLineIndex}
               mobile={mobile}
             />
           )}
         </UiEntity>
       )}
+
+      {/* Blessing overlay (no background — see through to emoting player) */}
+      {isBlessingActive() && (
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '18%' }, flexDirection: 'column', alignItems: 'center' }}>
+            <Label value="Receiving the blessing of..." fontSize={mobile ? 52 : S(34)} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
+            {CREDIT_LINES.slice(0, getBlessingLineIndex() + 1).map((line, i) => (
+              <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 6 : S(4) } }} />
+            ))}
+          </UiEntity>
+
+        </UiEntity>
+      )}
+
+      {/* Blessing completed notification */}
+      {isBlessingCompleted() && (() => {
+        const coinProgress = getBlessingCoinProgress()
+        return (
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+            <UiEntity uiTransform={{ width: mobile ? 420 : S(340), padding: { top: mobile ? 32 : S(24), bottom: mobile ? 32 : S(24), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(16) }}
+              uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
+            >
+              {isBlessingAlreadyUsed() ? (
+                <Label value="You have already received\nthe blessing today" fontSize={mobile ? 36 : S(24)} color={MUTED} font="sans-serif" />
+              ) : (
+                <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
+                  <Label value="Blessing Received!" fontSize={mobile ? 56 : S(38)} color={GOLD} font="sans-serif" />
+                  <UiEntity uiTransform={{ height: mobile ? 16 : S(12) }} />
+                  <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <UiEntity uiTransform={{ width: mobile ? 40 : S(36), height: mobile ? 40 : S(36), margin: { right: mobile ? 10 : S(8) } }}
+                      uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }} />
+                    <Label value="+5" fontSize={mobile ? 72 : S(50)} color={GOLD} font="sans-serif" />
+                  </UiEntity>
+                  {/* Flying coins */}
+                  {(() => {
+                    const coins = []
+                    for (let i = 0; i < 5; i++) {
+                      const angle = (i / 5) * Math.PI * 2
+                      const startX = Math.cos(angle) * 60
+                      const startY = 40 + Math.sin(angle) * 30
+                      const progress = Math.min(1, coinProgress * 1.5 - (i * 0.08))
+                      const cp = Math.max(0, Math.min(1, progress))
+                      const eased = 1 - Math.pow(1 - cp, 3)
+                      const x = startX * (1 - eased)
+                      const y = startY * (1 - eased) - (250 * eased)
+                      const opacity = cp < 0.1 ? cp * 10 : (cp > 0.85 ? (1 - cp) * 6.67 : 1)
+                      coins.push(
+                        <UiEntity key={`bless-coin-${i}`} uiTransform={{ positionType: 'absolute', position: { top: y, left: x + (mobile ? 180 : S(140)) }, width: mobile ? 28 : S(24), height: mobile ? 28 : S(24) }}
+                          uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.create(1, 1, 1, Math.max(0, Math.min(1, opacity))) }} />
+                      )
+                    }
+                    return <UiEntity uiTransform={{ positionType: 'relative', width: 1, height: 1 }}>{coins}</UiEntity>
+                  })()}
+                </UiEntity>
+              )}
+            </UiEntity>
+          </UiEntity>
+        )
+      })()}
 
       {/* Server-down overlay */}
       {isServerDownVisible() && (
@@ -340,14 +403,14 @@ function PlayerListUi() {
 import type { RoundEarnings } from './gameState/roundEarnings'
 import type { EarnedUiPhase } from './ui/uiState'
 
-function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgress, creditsCountdown, creditLineIndex, mobile }: {
-  activeRoundEarnings: RoundEarnings | null; earnedUiPhase: EarnedUiPhase; earnedCoinsFlyProgress: number; creditsCountdown: number; creditLineIndex: number; mobile: boolean
+function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgress, creditsCountdown, mobile }: {
+  activeRoundEarnings: RoundEarnings | null; earnedUiPhase: EarnedUiPhase; earnedCoinsFlyProgress: number; creditsCountdown: number; mobile: boolean
 }) {
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, flexDirection: 'column', alignItems: 'center', width: '100%', height: '100%' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
       {/* No earnings fallback */}
       {!activeRoundEarnings && (
-        <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '15%' }, flexDirection: 'column', alignItems: 'center' }}>
+        <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
           <UiEntity uiTransform={{ width: mobile ? 420 : S(320), padding: { top: mobile ? 28 : S(22), bottom: mobile ? 36 : S(28), left: mobile ? 24 : S(18), right: mobile ? 24 : S(18) }, flexDirection: 'column', alignItems: 'center' }}
             uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
           >
@@ -360,7 +423,7 @@ function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgr
 
       {/* Earnings breakdown */}
       {activeRoundEarnings && (
-        <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '15%' }, flexDirection: 'column', alignItems: 'center' }}>
+        <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
           <UiEntity uiTransform={{ width: mobile ? 420 : S(320), padding: { top: mobile ? 28 : S(22), bottom: mobile ? 36 : S(28), left: mobile ? 24 : S(18), right: mobile ? 24 : S(18) }, flexDirection: 'column', alignItems: 'center' }}
             uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
           >
@@ -401,15 +464,6 @@ function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgr
           })()}
         </UiEntity>
       )}
-
-      {/* Credits */}
-      <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '62%' }, flexDirection: 'column', alignItems: 'center' }}>
-        <Label value="Special Thanks to:" fontSize={mobile ? 52 : S(34)} color={GOLD} font="sans-serif" />
-        <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
-        {CREDIT_LINES.slice(0, creditLineIndex + 1).map((line, i) => (
-          <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 6 : S(4) } }} />
-        ))}
-      </UiEntity>
 
       {creditsCountdown > 0 && (
         <Label value={`Next round in ${Math.ceil(creditsCountdown)}...`} fontSize={mobile ? 42 : S(26)} color={GOLD} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { bottom: '3%' }, width: '100%', justifyContent: 'center' }} />

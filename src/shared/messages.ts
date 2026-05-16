@@ -106,6 +106,10 @@ export const Messages = {
   sendFeedback: Schemas.Map({ message: Schemas.String }),                                   // Client → Server
   feedbackResult: Schemas.Map({ success: Schemas.Boolean, message: Schemas.String }),       // Server → Client
 
+  // Blessing (pedestal daily reward)
+  requestBlessing: Schemas.Map({ t: Schemas.Int }),                                         // Client → Server
+  blessingResult: Schemas.Map({ success: Schemas.Boolean, reason: Schemas.String, newBalance: Schemas.Int }),  // Server → Client
+
 
 }
 

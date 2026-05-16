@@ -9,6 +9,7 @@ import { Vector3 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 
 import { getCountdownSeconds, CountdownTimer } from '../shared/components'
+import { room } from '../shared/messages'
 import { getKnownPlayerName } from '../gameState/flagHoldTime'
 import { consumePendingRoundEarnings } from '../gameState/roundEarnings'
 import { applyDeferredBalance } from '../systems/coinPickupSystem'
@@ -62,6 +63,15 @@ import {
   // Overlay
   notifyOverlayClosed,
   isAnyOverlayOpen,
+  // Blessing
+  isBlessingActive, setBlessingActive,
+  getBlessingTimer, setBlessingTimer,
+  getBlessingLineIndex, setBlessingLineIndex,
+  getBlessingLineTimer, setBlessingLineTimer,
+  isBlessingCompleted, setBlessingCompleted,
+  getBlessingCompletedAt,
+  getBlessingCoinProgress, setBlessingCoinProgress,
+  getBlessingCoinSoundsPlayed, setBlessingCoinSoundsPlayed,
 } from './uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
@@ -86,6 +96,64 @@ export function registerUiSystems() {
     if (getCreditLineTimer() >= CREDIT_LINE_DURATION && getCreditLineIndex() < CREDIT_LINES.length - 1) {
       setCreditLineTimer(0)
       setCreditLineIndex(getCreditLineIndex() + 1)
+    }
+  })
+
+  // ── Blessing credit line rotation ──
+  const BLESSING_LINE_DURATION = 4.0  // pace to fit 16s duration
+  engine.addSystem((dt: number) => {
+    if (!isBlessingActive()) return
+    const remaining = getBlessingTimer() - dt
+    setBlessingTimer(remaining)
+
+    // Advance credit lines
+    setBlessingLineTimer(getBlessingLineTimer() + dt)
+    if (getBlessingLineTimer() >= BLESSING_LINE_DURATION && getBlessingLineIndex() < CREDIT_LINES.length - 1) {
+      setBlessingLineTimer(0)
+      setBlessingLineIndex(getBlessingLineIndex() + 1)
+    }
+
+    if (remaining <= 0) {
+      // Player stayed for entire duration — blessing completed! Now request coins.
+      setBlessingCompleted(true)
+      setBlessingActive(false)
+      setBlessingTimer(0)
+      setBlessingLineIndex(0)
+      setBlessingLineTimer(0)
+      room.send('requestBlessing', { t: 0 })
+    }
+  })
+
+  // ── Blessing completed: coin sounds + fly animation + auto-dismiss ──
+  const BLESSING_COIN_COUNT = 5
+  const BLESSING_COIN_SOUND_INTERVAL = 0.18
+  const BLESSING_FLY_DURATION = 1.2
+  engine.addSystem((dt: number) => {
+    if (!isBlessingCompleted()) return
+
+    const elapsed = (Date.now() - getBlessingCompletedAt()) / 1000
+    setBlessingCoinProgress(Math.min(1, elapsed / BLESSING_FLY_DURATION))
+
+    // Play coin sounds
+    const soundsDue = Math.min(BLESSING_COIN_COUNT, Math.floor(elapsed / BLESSING_COIN_SOUND_INTERVAL) + 1)
+    if (getBlessingCoinSoundsPlayed() < soundsDue) {
+      setBlessingCoinSoundsPlayed(soundsDue)
+      const snd = engine.addEntity()
+      Transform.create(snd, { position: Vector3.Zero() })
+      AudioSource.create(snd, {
+        audioClipUrl: 'assets/sounds/coin.mp3',
+        playing: true,
+        volume: 0.7,
+        loop: false,
+        global: true,
+      })
+    }
+
+    // Auto-dismiss after 4s
+    if (elapsed > 4) {
+      setBlessingCompleted(false)
+      setBlessingCoinProgress(0)
+      setBlessingCoinSoundsPlayed(0)
     }
   })
 

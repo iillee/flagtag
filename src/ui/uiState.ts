@@ -50,10 +50,9 @@ export function getCreditsCountdown(): number { return _creditsCountdown }
 export function setCreditsCountdown(seconds: number) { _creditsCountdown = seconds }
 
 export const CREDIT_LINES = [
-  'Oskar Stålberg and Townscaper for generating the level',
-  'Dylann Taylor for the track SpriteSprint',
-  'Lastraum, Stom, and Baseddev for resources and support',
-  'All playtesters and bughunters',
+  'Oskar Stålberg and argonlightray2, the gods of townscaping',
+  'Dylan Taylor and Authr, the gods of divine music',
+  'Stom, Lastraum, and Baseddev, the gods of arcane knowledge',
 ]
 export const CREDIT_LINE_DURATION = 3 // seconds per line
 
@@ -63,6 +62,45 @@ export function getCreditLineIndex(): number { return _creditLineIndex }
 export function setCreditLineIndex(v: number) { _creditLineIndex = v }
 export function getCreditLineTimer(): number { return _creditLineTimer }
 export function setCreditLineTimer(v: number) { _creditLineTimer = v }
+
+// ═══════════════════════════════════════════════════════════
+// BLESSING (pedestal daily reward)
+// ═══════════════════════════════════════════════════════════
+let _blessingActive = false
+let _blessingTimer = 0
+let _blessingLineIndex = 0
+let _blessingLineTimer = 0
+let _blessingCompleted = false   // true if player stayed for entire duration
+let _blessingAlreadyUsed = false // true if server said already_blessed today
+
+export function isBlessingActive(): boolean { return _blessingActive }
+export function setBlessingActive(v: boolean) { _blessingActive = v }
+
+export function getBlessingTimer(): number { return _blessingTimer }
+export function setBlessingTimer(v: number) { _blessingTimer = v }
+
+export function getBlessingLineIndex(): number { return _blessingLineIndex }
+export function setBlessingLineIndex(v: number) { _blessingLineIndex = v }
+
+export function getBlessingLineTimer(): number { return _blessingLineTimer }
+export function setBlessingLineTimer(v: number) { _blessingLineTimer = v }
+
+export function isBlessingCompleted(): boolean { return _blessingCompleted }
+export function setBlessingCompleted(v: boolean) { _blessingCompleted = v; if (v) _blessingCompletedAt = Date.now() }
+
+let _blessingCompletedAt = 0
+export function getBlessingCompletedAt(): number { return _blessingCompletedAt }
+
+let _blessingCoinProgress = 0
+export function getBlessingCoinProgress(): number { return _blessingCoinProgress }
+export function setBlessingCoinProgress(v: number) { _blessingCoinProgress = v }
+
+let _blessingCoinSoundsPlayed = 0
+export function getBlessingCoinSoundsPlayed(): number { return _blessingCoinSoundsPlayed }
+export function setBlessingCoinSoundsPlayed(v: number) { _blessingCoinSoundsPlayed = v }
+
+export function isBlessingAlreadyUsed(): boolean { return _blessingAlreadyUsed }
+export function setBlessingAlreadyUsed(v: boolean) { _blessingAlreadyUsed = v }
 
 // ═══════════════════════════════════════════════════════════
 // ROUND-END EARNINGS UI
@@ -350,4 +388,6 @@ export function isAnyOverlayOpen(): boolean {
     || _mailboxPopupVisible
     || _chestPopupVisible
     || _gravestonePopupVisible
+    || _blessingActive
+    || _blessingCompleted
 }
