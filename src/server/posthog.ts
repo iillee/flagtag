@@ -24,6 +24,30 @@ export async function initPostHog(): Promise<void> {
   }
 }
 
+export function identify(distinctId: string, personProperties: Record<string, any>): void {
+  if (!apiKey) return
+  console.log('[PostHog] identifying', distinctId, personProperties)
+
+  const body = JSON.stringify({
+    api_key: apiKey,
+    event: '$identify',
+    distinct_id: distinctId,
+    properties: { $set: personProperties },
+    timestamp: new Date().toISOString()
+  })
+
+  signedFetch({
+    url: `${host}/capture/`,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    }
+  }).catch((err) => {
+    console.error(`[PostHog] identify failed for "${distinctId}"`, err)
+  })
+}
+
 export function capture(distinctId: string, event: string, properties?: Record<string, any>): void {
   if (!apiKey) return
   console.log('[PostHog] capturing event', event, properties)

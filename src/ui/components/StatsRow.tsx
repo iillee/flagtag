@@ -36,12 +36,6 @@ export function StatsRow({ visitorCount, botCount, onlineCount, serverConnected,
         <Label value={`Server: ${serverConnected}`} fontSize={S(13)} color={LIGHT_GREY} font="sans-serif" />
       </UiEntity>
       <UiEntity uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center' }}
-        onMouseDown={localUserId !== null && localUserId.toLowerCase() === ADMIN_ADDRESS ? () => {
-          playClickSound()
-          room.send('testDiscord', { t: Date.now() })
-          setDiscordReportSent(true)
-          setTimeout(() => { setDiscordReportSent(false) }, 200)
-        } : undefined}
       >
         <Label value={dateLabel} fontSize={S(13)} color={isDiscordReportSent() ? GOLD : LIGHT_GREY} font="sans-serif" />
       </UiEntity>

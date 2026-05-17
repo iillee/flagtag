@@ -20,7 +20,7 @@ import {
 } from './serverState'
 import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard } from './persistence'
 import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset, checkMonthlyLeaderboardReset } from './leaderboard'
-import { snapshotPendingReport, sendDailyAnalyticsToDiscord } from './analytics'
+
 import { awardRoundCoins } from './economy'
 import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState } from './flagLogic'
 import { activeTraps, activeProjectiles, activeOrbits, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
@@ -345,7 +345,7 @@ async function handleRoundEnd(): Promise<void> {
   await awardRoundCoins(players)
 
   // ── 6. Check for daily/monthly leaderboard reset ──
-  await checkLeaderboardDailyReset(snapshotPendingReport)
+  await checkLeaderboardDailyReset()
   await checkMonthlyLeaderboardReset()
 
   // ── 7. Update all three leaderboards ──
@@ -406,18 +406,4 @@ export function registerRoundHandlers(): void {
     } catch (err) { console.error('[Server] ❌ requestUpdraftLocation handler error:', err) }
   })
 
-  room.onMessage('testDiscord', (_data, context) => {
-    if (!context) return
-    const from = context.from.toLowerCase()
-    if (!ADMIN_ADDRESSES.includes(from)) {
-      console.log('[Server] testDiscord rejected from non-admin:', from)
-      return
-    }
-    console.log('[Server] 📊 Admin triggered Discord analytics report')
-    sendDailyAnalyticsToDiscord().then(() => {
-      console.log('[Server] ✅ Manual Discord report sent')
-    }).catch(err => {
-      console.error('[Server] ❌ Manual Discord report failed:', err)
-    })
-  })
 }

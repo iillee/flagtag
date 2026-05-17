@@ -32,7 +32,7 @@ import {
 } from './serverState'
 import { persistPlayerNames, loadPlayerNames, loadVisitorData } from './persistence'
 import {
-  loadDiscordWebhookUrl, loadDailyReportSentDay, sendPendingReport, snapshotPendingReport,
+  loadDiscordWebhookUrl,
   syncVisitorAnalytics, syncMonthlyVisitorAnalytics, restoreMonthlyVisitorData,
   visitorTrackingServerSystem,
 } from './analytics'
@@ -104,9 +104,7 @@ export async function setupServer(): Promise<void> {
   await initLeaderboards()
 
   // ── Reports & resets ──
-  await loadDailyReportSentDay()
-  await sendPendingReport()
-  await checkLeaderboardDailyReset(snapshotPendingReport)
+  await checkLeaderboardDailyReset()
   await checkMonthlyLeaderboardReset()
 
   // ── Visitor analytics ──

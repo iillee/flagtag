@@ -19,8 +19,8 @@ import { updatePlayerName } from './leaderboard'
 import { getOrCreateHoldTimeEntity } from './flagLogic'
 import { loadPlayerCoinBalance, getOrCreateWalletEntity } from './economy'
 import { clearCombatCooldowns } from './combat'
-import { updateConcurrentTracking, syncVisitorAnalytics, syncMonthlyVisitorAnalytics } from './analytics'
-import { capture } from './posthog'
+import { syncVisitorAnalytics, syncMonthlyVisitorAnalytics, sendPlayerJoinToDiscord } from './analytics'
+import { capture, identify } from './posthog'
 
 // ── Player join/leave detection ──
 
@@ -81,11 +81,14 @@ export function playerTrackingSystem(): void {
       }
 
       console.log('[Server] Player joined:', playerName, '(total visitors today:', visitorSessions.size, ')')
+      identify(userKey, { wallet_address: userKey, name: playerName })
       capture(userKey, 'player_joined', {
         name: playerName,
         concurrent_players: currentlyConnected.size,
         total_visitors_today: visitorSessions.size
       })
+      sendPlayerJoinToDiscord(playerName, userKey, currentlyConnected.size)
+        .catch(e => console.error('[Server] Discord join notify error:', e))
       changed = true
     }
   }
@@ -142,7 +145,6 @@ export function playerTrackingSystem(): void {
 
   // Immediate sync when players join or leave
   if (changed) {
-    updateConcurrentTracking()
     syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
     syncMonthlyVisitorAnalytics().catch(e => console.error('[Server] syncMonthlyVisitorAnalytics error:', e))
   }

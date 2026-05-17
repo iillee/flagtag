@@ -10,9 +10,6 @@ import { getTodayDateString } from '../shared/components'
 import {
   flagEntity, playerNames, visitorSessions, isRealName,
   lastVisitorResetDay, setLastVisitorResetDay,
-  hourlyPeakConcurrent, setHourlyPeakConcurrent,
-  peakConcurrent, setPeakConcurrent,
-  peakConcurrentTime, setPeakConcurrentTime
 } from './serverState'
 
 export async function persistFlagState(): Promise<void> {
@@ -69,11 +66,6 @@ export async function loadPlayerNames(): Promise<void> {
 export async function persistVisitorData(visitorDataJson: string): Promise<void> {
   await Storage.set('visitorData', visitorDataJson)
   await Storage.set('lastVisitorResetDay', lastVisitorResetDay)
-  await Storage.set('concurrentData', JSON.stringify({
-    hourlyPeak: hourlyPeakConcurrent,
-    peak: peakConcurrent,
-    peakTime: peakConcurrentTime
-  }))
 }
 
 export async function loadVisitorData(): Promise<void> {
@@ -119,17 +111,6 @@ export async function loadVisitorData(): Promise<void> {
           }
         }
         console.log('[Server] Restored visitor data for', currentDay, '- loaded', visitorRecords.length, 'visitors')
-        // Restore concurrent tracking data
-        try {
-          const savedConcurrent = await Storage.get<string>('concurrentData')
-          if (savedConcurrent) {
-            const cd = JSON.parse(savedConcurrent)
-            if (cd.hourlyPeak && cd.hourlyPeak.length === 24) setHourlyPeakConcurrent(cd.hourlyPeak)
-            if (cd.peak != null) setPeakConcurrent(cd.peak)
-            if (cd.peakTime) setPeakConcurrentTime(cd.peakTime)
-            console.log('[Server] Restored concurrent tracking data, peak:', peakConcurrent, 'at', peakConcurrentTime)
-          }
-        } catch { /* ignore */ }
       } else {
         console.log('[Server] Visitor data was from', lastVisitorResetDay, 'but today is', currentDay, '- clearing for new day (report handled via pendingReport snapshot)')
         // Clear for the new day — the pending report snapshot was already saved during leaderboard reset

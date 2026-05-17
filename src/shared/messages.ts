@@ -74,9 +74,6 @@ export const Messages = {
   requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
   respawnPlayers: Schemas.Map({ t: Schemas.Int, winnersJson: Schemas.String }),
 
-  // Admin: trigger Discord report manually
-  testDiscord: Schemas.Map({ t: Schemas.Int }),
-
   // Coin messages
   requestCoinPickup: Schemas.Map({ coinId: Schemas.String }),           // Client → Server: player wants to pick up a coin
   coinPickedUp: Schemas.Map({ coinId: Schemas.String, playerId: Schemas.String, newBalance: Schemas.Int }),  // Server → Client: coin was picked up
