@@ -174,6 +174,7 @@ export enum EntityNames {
   TNT_Box_Closed_6 = "TNT Box Closed_6",
   TNT_Box_Closed_7 = "TNT Box Closed_7",
   TNT_Box_Closed_8 = "TNT Box Closed_8",
+  TNT_Box_Closed_9 = "TNT Box Closed_9",
   Terminal = "Terminal",
   Terminal_2 = "Terminal_2",
   birds_glb = "birds.glb",

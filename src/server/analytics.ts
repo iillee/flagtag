@@ -35,10 +35,6 @@ export async function loadDiscordWebhookUrl(): Promise<void> {
 export async function sendPlayerJoinToDiscord(playerName: string, address: string, onlineCount: number): Promise<void> {
   if (!DISCORD_WEBHOOK_URL) return
   try {
-    const { getRealm } = await import('~system/Runtime')
-    const realm = await getRealm({})
-    if (realm.realmInfo?.isPreview) return
-
     const content = `👋 **${playerName}** joined Flag Tag (${address.slice(0, 6)}…${address.slice(-4)}) — **${onlineCount}** online`
     await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
