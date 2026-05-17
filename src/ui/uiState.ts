@@ -124,10 +124,10 @@ let _displayedWins: number | null = null
 let _winsFrozen = false
 let _wasNextRoundVisible = false
 
-export const EARNED_TEXT_DELAY = 0.6
-export const EARNED_COIN_DELAY = 1.2
+export const EARNED_TEXT_DELAY = 0.4
+export const EARNED_COIN_DELAY = 0.8
 export const EARNED_FLY_DURATION = 1.0
-export const COIN_SOUND_INTERVAL = 0.18
+export const COIN_SOUND_INTERVAL = 0.12
 
 export function getActiveRoundEarnings(): RoundEarnings | null { return _activeRoundEarnings }
 export function setActiveRoundEarnings(v: RoundEarnings | null) { _activeRoundEarnings = v }

@@ -178,7 +178,7 @@ export function setupCinematicSystem(): void {
             void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
           }
           fadePhase = 6
-          fadeTimer = 15.0
+          fadeTimer = 10.0
           setNextRoundStartingVisible(true)
         }
       } else if (fadePhase === 6) {
@@ -243,7 +243,7 @@ export function setupCinematicSystem(): void {
     fadePhase = 1
     fadeTimer = FADE_IN_DUR
     setCinematicActive(true)
-    cinematicTimer = 15
+    cinematicTimer = 10
 
     setWinConditionOverlayVisible(false)
     setLeaderboardOverlayVisible(false)

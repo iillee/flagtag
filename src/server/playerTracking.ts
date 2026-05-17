@@ -11,6 +11,7 @@ import {
   currentlyConnected, playerNames, visitorSessions, monthlyVisitorSessions,
   playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
   lastStealTime, deathPenaltyCooldowns,
+  sessionDeaths, sessionBananasDropped, sessionBoomerangsFired,
   isRealName
 } from './serverState'
 import { persistPlayerNames } from './persistence'
@@ -106,7 +107,11 @@ export function playerTrackingSystem(): void {
         capture(userKey, 'player_left', {
           name: visitor.name,
           session_seconds: sessionSeconds,
-          total_seconds_today: visitor.totalSecondsToday
+          total_seconds_today: visitor.totalSecondsToday,
+          deaths: sessionDeaths.get(userKey) ?? 0,
+          coin_balance: playerCoinBalances.get(userKey) ?? 0,
+          bananas_dropped: sessionBananasDropped.get(userKey) ?? 0,
+          boomerangs_fired: sessionBoomerangsFired.get(userKey) ?? 0,
         })
       }
 
@@ -127,6 +132,9 @@ export function playerTrackingSystem(): void {
       clearCombatCooldowns(userKey)
       lastStealTime.delete(userKey)
       deathPenaltyCooldowns.delete(userKey)
+      sessionDeaths.delete(userKey)
+      sessionBananasDropped.delete(userKey)
+      sessionBoomerangsFired.delete(userKey)
 
       changed = true
     }

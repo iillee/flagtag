@@ -49,6 +49,11 @@ export const playerLifetimeWinsCache = new Map<string, number>()
 export const deathPenaltyCooldowns = new Map<string, number>()
 export const lastStealTime = new Map<string, number>()
 
+// ── Per-session analytics counters ──
+export const sessionDeaths = new Map<string, number>()
+export const sessionBananasDropped = new Map<string, number>()
+export const sessionBoomerangsFired = new Map<string, number>()
+
 // ── Visitor tracking ──
 
 export const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalSecondsToday: number }>()

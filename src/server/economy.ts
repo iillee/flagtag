@@ -7,7 +7,7 @@ import { Storage } from '@dcl/sdk/server'
 import {
   walletEntities, upgradeEntities, lifetimeWinsEntities,
   playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
-  playerBoomerangColors, deathPenaltyCooldowns,
+  playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
   coinStateEntity, allTimeLeaderboardEntity
 } from './serverState'
 import { parseLeaderboardJson } from './leaderboard'
@@ -391,6 +391,7 @@ export function registerEconomyHandlers(): void {
       const lastDeath = deathPenaltyCooldowns.get(from) ?? 0
       if (now - lastDeath < 3000) return
       deathPenaltyCooldowns.set(from, now)
+      sessionDeaths.set(from, (sessionDeaths.get(from) ?? 0) + 1)
 
       const current = await loadPlayerCoinBalance(from)
       const penalty = Math.min(DEATH_PENALTY_COINS, current)
@@ -412,6 +413,7 @@ export function registerEconomyHandlers(): void {
       const from = context.from.toLowerCase()
       const today = new Date().toISOString().slice(0, 10)
       const lastBlessing = await Storage.get<string>(`blessing:${from}`)
+      console.log(`[Server] 🙏 checkBlessing: ${from.slice(0, 8)} | today=${today} | lastBlessing=${lastBlessing}`)
       if (lastBlessing === today) {
         room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })
       } else {

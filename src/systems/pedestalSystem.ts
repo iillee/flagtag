@@ -173,8 +173,9 @@ export function pedestalSystem(dt: number) {
           cancelBlessing()
           setBlessingCompleted(true)  // show "already received" popup
         }
-      } else if (data.success) {
-        setBlessingAlreadyUsed(true)  // prevent repeat in same session
+      } else if (data.success && data.reason !== 'eligible') {
+        // Only mark as used after actual successful claim (not pre-check)
+        setBlessingAlreadyUsed(true)
       }
     })
   }

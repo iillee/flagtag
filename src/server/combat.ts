@@ -15,6 +15,7 @@ import { room } from '../shared/messages'
 import {
   flagEntity, getPlayerPosition, FLAG_GRAVITY,
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
+  sessionBananasDropped, sessionBoomerangsFired,
 } from './serverState'
 import { handleDrop } from './flagLogic'
 
@@ -134,6 +135,7 @@ function handleTrapDrop(playerId: string): void {
   })
   lastTrapDropTime.set(playerId, now)
 
+  sessionBananasDropped.set(playerId, (sessionBananasDropped.get(playerId) ?? 0) + 1)
   room.send('bananaDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z, ownerId: playerId })
   console.log('[Server] 🪤 Trap dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1), '— active traps:', activeTraps.length)
 }
@@ -570,6 +572,7 @@ export function registerCombatHandlers(): void {
       const chargeSpeed = typeof data.chargeSpeed === 'number' ? Math.max(PROJECTILE_SPEED, Math.min(60, data.chargeSpeed)) : PROJECTILE_SPEED
       const chargeRange = typeof data.chargeRange === 'number' ? Math.max(20, Math.min(PROJECTILE_MAX_RANGE, data.chargeRange)) : 20
       const chargeScale = typeof data.chargeScale === 'number' ? Math.max(1, Math.min(3, data.chargeScale)) : 1
+      sessionBoomerangsFired.set(from, (sessionBoomerangsFired.get(from) ?? 0) + 1)
       handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r', chargeSpeed, chargeRange, chargeScale)
     } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
