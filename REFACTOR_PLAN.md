@@ -252,6 +252,26 @@ Each step is independently shippable. Suggested session grouping:
 
 ---
 
+---
+
+## Session Notes
+
+### Session A — 2026-05-18 (Steps 1+2)
+**Commit:** `9bbba69` — "Refactor steps 1+2: sync ID pool factory, fix sound leak, remove duplicate checkBlessing"
+
+**Observations:**
+- The `bind()` calls on pool methods (`trapPool.next.bind(trapPool)`) are needed because the factory returns an object with methods that reference `pool` via closure. Without bind, if someone destructures the export, `this` context would be lost. Verified this works in the SDK bundler.
+- `teleportOrbs.ts` sound entities were already created once at setup and stored in an array — no leak there despite the grep hit. Only `pedestalSystem.ts` had the actual leak (creating new entities at each 8s interval, up to 3 per blessing ritual).
+- The `checkBlessing` call in `startBlessing()` was originally added as a "pre-check so server can reject early" — but the pre-check on first tick already handles this, and the click handler now gates on `isBlessingPreCheckDone()`. Removing it is safe.
+- `index.ts` still has a `checkBlessing`-adjacent comment removed cleanly. No orphaned references remain (verified via grep).
+
+**Concerns for future steps:**
+- **Step 3 (uiState):** The `bind()` pattern won't apply there, but need to be careful with `setBlessingCompleted` which has a side effect (`if (v) _blessingCompletedAt = Date.now()`). When consolidating to plain objects, this side effect needs to either become a dedicated function or be handled at the call site.
+- **Step 4 (projectileSystem):** At 1,490 lines this is the riskiest split. Need to map out all module-level `let` variables and their mutation patterns before cutting. Should read the full file at the start of that session.
+- **Step 7 (circular deps):** The `ui → systems` imports (`applyDeferredBalance`, `clearMushroomShield`, `isSpectatorMode`) may be deeper than just moving a flag. Need to check if those functions have side effects or depend on other system state.
+
+---
+
 ## Post-Refactor Verification Checklist
 - [ ] `npm run build` passes with zero errors
 - [ ] Preview: flag pickup/drop works
