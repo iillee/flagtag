@@ -1,5 +1,4 @@
-import { Vector3 } from '@dcl/sdk/math'
-import { engine, Entity, Transform, AudioSource, AvatarModifierArea, AvatarModifierType, VisibilityComponent, ColliderLayer, GltfContainer } from '@dcl/sdk/ecs'
+import { engine } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 // Shared modules (safe for both client and server)
 // These MUST be static imports so components are registered before the engine seals
@@ -7,8 +6,6 @@ import './shared/components'
 import './shared/coins'
 import './shared/upgrades'
 import { room } from './shared/messages'
-
-export let musicEntity: ReturnType<typeof engine.addEntity>
 
 export async function main() {
   if (isServer()) {
@@ -98,32 +95,15 @@ export async function main() {
   // Broadcast initial boomerang color so other players see our hand model
   room.send('colorChanged', { color: getBoomerangColor() })
 
+  const { setupNameRetry } = await import('./systems/nameRetrySystem')
+
   const local = getPlayer()
-  let registeredName = ''
+  let nameRetry: ReturnType<typeof setupNameRetry> | null = null
   if (local) {
     addPlayer(local.userId, local.name)
-    registeredName = local.name || ''
-    room.send('registerName', { name: registeredName || local.userId.slice(0, 8) })
-
-    // Retry periodically until we get a real name (not empty, not 0x prefix)
-    let retryTimer = 2.0
-    let retryCount = 0
-    engine.addSystem((dt: number) => {
-      if (retryCount >= 10) return
-      retryTimer -= dt
-      if (retryTimer <= 0) {
-        retryCount++
-        retryTimer = 5.0
-        const updated = getPlayer()
-        const newName = updated?.name || ''
-        const isRealName = newName.length > 0 && !newName.startsWith('0x')
-        if (isRealName && newName !== registeredName) {
-          registeredName = newName
-          room.send('registerName', { name: newName })
-          addPlayer(updated!.userId, newName)
-        }
-      }
-    })
+    const initialName = local.name || ''
+    room.send('registerName', { name: initialName || local.userId.slice(0, 8) })
+    nameRetry = setupNameRetry(initialName)
   }
 
   onEnterScene((player) => {
@@ -131,8 +111,8 @@ export async function main() {
     if (local && player.userId.toLowerCase() === local.userId.toLowerCase()) {
       // Update local player name if onEnterScene has better data
       const name = player.name || ''
-      if (name && !name.startsWith('0x') && name !== registeredName) {
-        registeredName = name
+      if (name && !name.startsWith('0x')) {
+        nameRetry?.updateName(name)
         room.send('registerName', { name })
         addPlayer(player.userId, name)
       }
@@ -148,27 +128,12 @@ export async function main() {
   })
 
   // Background music
-  musicEntity = engine.addEntity()
-  Transform.create(musicEntity, { position: Vector3.create(0, 0, 0) })
-  AudioSource.create(musicEntity, {
-    audioClipUrl: 'assets/sounds/SpriteSprint_Loop.wav',
-    playing: true,
-    loop: true,
-    volume: 0.0984375,
-    global: true
-  })
+  const { setupMusic } = await import('./systems/musicSetup')
+  setupMusic()
 
-  // Disable passport UI (clicking on avatars to view profiles)
-  // NOTE: The SDK does not provide a way to disable smart wearables/portable experiences.
-  // Only AMT_HIDE_AVATARS and AMT_DISABLE_PASSPORTS are available as modifiers.
-  // Smart wearables run in a separate context and cannot be disabled by scene code.
-  const avatarModArea = engine.addEntity()
-  Transform.create(avatarModArea, { position: Vector3.create(256, 11, 256) })
-  AvatarModifierArea.create(avatarModArea, {
-    area: Vector3.create(522, 50, 522), // Cover entire scene
-    modifiers: [AvatarModifierType.AMT_DISABLE_PASSPORTS], // Disables passport UI only
-    excludeIds: []
-  })
+  // Disable passport UI scene-wide
+  const { setupAvatarModifier } = await import('./systems/avatarModifierSetup')
+  setupAvatarModifier()
 
   // Boundary walls (cylindrical collider + proximity-fade visuals)
   setupBoundaryWalls()
@@ -176,28 +141,11 @@ export async function main() {
   // Teleport orbs
   setupTeleportOrbs()
 
-  // ── Reload drop: if we were carrying the flag when /reload happened, drop it ──
-  // Flag CRDT data arrives after a few frames, so we poll briefly on startup.
+  // Reload drop: detect flag carry on scene load (e.g. /reload) and request drop
+  // NOTE: This has never worked reliably — kept as-is for now.
   if (local) {
-    const { Flag, FlagState } = await import('./shared/components')
-    let reloadCheckFrames = 0
-    const RELOAD_CHECK_MAX_FRAMES = 60 // ~1 second at 60fps
-    engine.addSystem(function reloadDropSystem() {
-      reloadCheckFrames++
-      for (const [, flag] of engine.getEntitiesWith(Flag)) {
-        if (flag.state === FlagState.Carried && flag.carrierPlayerId === local.userId.toLowerCase()) {
-          console.log('[Main] Detected flag carry on scene load (likely /reload) — requesting respawn')
-          room.send('requestReloadRespawn', { t: 0 })
-        }
-        // Flag data found — remove this system regardless
-        engine.removeSystem(reloadDropSystem)
-        return
-      }
-      // Give up after max frames
-      if (reloadCheckFrames >= RELOAD_CHECK_MAX_FRAMES) {
-        engine.removeSystem(reloadDropSystem)
-      }
-    })
+    const { setupReloadDrop } = await import('./systems/reloadDropSystem')
+    setupReloadDrop(local.userId)
   }
 
   // Portal to Genesis Plaza — placed at parcel (8,8) scene-local
@@ -218,39 +166,9 @@ export async function main() {
   // Spectator camera
   setupSpectator()
 
-  // ── Hide podium cubes (placed in Creator Hub) ──
-  // NOTE: Keep these entities in the composite! They mark podium positions for 1st/2nd/3rd place.
-  // Red=1st, Gold=2nd, Blue=3rd, Green=camera target. Hidden here to be invisible at runtime.
-  const PODIUM_CUBE_SRCS = new Set([
-    'assets/models/solid_red.glb',
-    'assets/models/gold.glb',
-    'assets/models/solid_blue.glb',
-    'assets/models/solid_green.glb',
-  ])
-  const hiddenPodiumCubes = new Set<Entity>()
-
-  engine.addSystem(function hidePodiumCubes() {
-    for (const [entity] of engine.getEntitiesWith(GltfContainer)) {
-      if (hiddenPodiumCubes.has(entity)) continue
-      const gltf = GltfContainer.get(entity)
-      if (PODIUM_CUBE_SRCS.has(gltf.src)) {
-        VisibilityComponent.createOrReplace(entity, { visible: false })
-        // Remove colliders by setting invisible mesh collider layer
-        GltfContainer.createOrReplace(entity, {
-          ...gltf,
-          invisibleMeshesCollisionMask: ColliderLayer.CL_NONE,
-          visibleMeshesCollisionMask: ColliderLayer.CL_NONE,
-        })
-        hiddenPodiumCubes.add(entity)
-        console.log(`[Client] 🎯 Hidden podium cube: ${gltf.src}`)
-      }
-    }
-    // Remove system once all 4 found
-    if (hiddenPodiumCubes.size >= 4) {
-      engine.removeSystem(hidePodiumCubes)
-      console.log('[Client] ✅ All 4 podium cubes hidden')
-    }
-  })
+  // Hide podium cubes (placed in Creator Hub, used by cinematicSystem for positioning)
+  const { setupPodiumCubeHiding } = await import('./systems/podiumCubeSystem')
+  setupPodiumCubeHiding()
 
   // Water slowdown — disable running in water
   engine.addSystem(waterSystem)

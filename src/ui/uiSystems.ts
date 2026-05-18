@@ -15,7 +15,7 @@ import { consumePendingRoundEarnings } from '../gameState/roundEarnings'
 import { applyDeferredBalance } from '../systems/coinPickupSystem'
 import { clearMushroomShield } from '../systems/mushroomSystem'
 import { isSpectatorMode } from '../systems/spectatorSystem'
-import { musicEntity } from '../index'
+import { musicEntity } from '../systems/musicSetup'
 
 import { getServerConnectionStatus, cycleUIScale } from './uiConstants'
 import { playTickSound } from './uiSounds'

@@ -7,7 +7,7 @@ import {
   GltfContainer, pointerEventsSystem, InputAction, AudioSource
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
-import { musicEntity } from '../index'
+import { musicEntity } from '../systems/musicSetup'
 import { musicState } from '../ui/uiState'
 
 const BOOMBOX_SRC = 'assets/asset-packs/boombox/Boombox_01/Boombox_01.glb'

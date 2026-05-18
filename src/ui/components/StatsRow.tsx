@@ -7,7 +7,7 @@ import { AudioSource } from '@dcl/sdk/ecs'
 import { S, LIGHT_GREY, GOLD, _ROW_HEIGHT, formatUTCTime, formatPlaytime } from '../uiConstants'
 import { musicState, miscState, ADMIN_ADDRESS } from '../uiState'
 import { room } from '../../shared/messages'
-import { musicEntity } from '../../index'
+import { musicEntity } from '../../systems/musicSetup'
 
 interface StatsRowProps {
   visitorCount: number
