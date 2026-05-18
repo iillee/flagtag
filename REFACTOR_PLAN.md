@@ -265,6 +265,8 @@ Each step is independently shippable. Suggested session grouping:
 - The `checkBlessing` call in `startBlessing()` was originally added as a "pre-check so server can reject early" — but the pre-check on first tick already handles this, and the click handler now gates on `isBlessingPreCheckDone()`. Removing it is safe.
 - `index.ts` still has a `checkBlessing`-adjacent comment removed cleanly. No orphaned references remain (verified via grep).
 
+**Bugfix (post-commit):** Fixed `blessingResult` listener incorrectly marking `alreadyUsed = true` on a successful first-time claim. The condition `data.success && data.reason !== 'eligible'` matched the claim response (`reason: ''`), causing the UI to show "already blessed" instead of the coin reward animation. Fix: (1) separated `already_blessed` handling from successful claim handling, (2) added `delayedMarkUsed` flag so `alreadyUsed` is only set after the reward UI dismisses (`blessingCompleted` returns to false), (3) added defensive cancellation if `already_blessed` arrives during an active ritual. Also added diagnostic console logs to click handler and listener.
+
 **Concerns for future steps:**
 - **Step 3 (uiState):** The `bind()` pattern won't apply there, but need to be careful with `setBlessingCompleted` which has a side effect (`if (v) _blessingCompletedAt = Date.now()`). When consolidating to plain objects, this side effect needs to either become a dedicated function or be handled at the call site.
 - **Step 4 (projectileSystem):** At 1,490 lines this is the riskiest split. Need to map out all module-level `let` variables and their mutation patterns before cutting. Should read the full file at the start of that session.

@@ -17,7 +17,7 @@ import {
   isBlessingActive, setBlessingActive, setBlessingTimer,
   setBlessingLineIndex, setBlessingLineTimer,
   setBlessingCompleted, setBlessingAlreadyUsed,
-  isBlessingAlreadyUsed,
+  isBlessingAlreadyUsed, isBlessingCompleted,
   isBlessingPreCheckDone, setBlessingPreCheckDone,
   CREDIT_LINES,
 } from '../ui/uiState'
@@ -45,6 +45,8 @@ let beamTimer = 0
 
 // Server response listener registered
 let listenerRegistered = false
+// Delay marking as "already used" until after the reward UI dismisses
+let delayedMarkUsed = false
 
 
 const PRAY_EMOTE = 'urn:decentraland:matic:collections-v2:0xc889a77512ef96f6a93041a1c0054bd8ebde4f1e:1'
@@ -165,13 +167,28 @@ export function pedestalSystem(dt: number) {
   if (!listenerRegistered) {
     listenerRegistered = true
     room.onMessage('blessingResult', (data) => {
+      console.log(`[Pedestal] blessingResult received: success=${data.success}, reason="${data.reason}", preCheckWas=${isBlessingPreCheckDone()}, alreadyUsedWas=${isBlessingAlreadyUsed()}, blessingActive=${isBlessingActive()}`)
       setBlessingPreCheckDone(true)
-      if (!data.success && data.reason === 'already_blessed') {
+      if (data.reason === 'already_blessed') {
         setBlessingAlreadyUsed(true)
+        // If ritual is currently playing, cancel it immediately
+        if (isBlessingActive()) {
+          cancelBlessing()
+          setBlessingCompleted(true)  // show "already received" popup
+          console.log('[Pedestal] ⚠️ Cancelled active ritual — server says already blessed')
+        }
       } else if (data.success && data.reason !== 'eligible') {
-        setBlessingAlreadyUsed(true)
+        // Successful claim — delay marking as used so the coin reward UI
+        // isn't replaced by the "already blessed" dismissal mid-animation
+        delayedMarkUsed = true
       }
     })
+  }
+
+  // ── Deferred "already used" flag — apply after reward UI dismisses ──
+  if (delayedMarkUsed && !isBlessingActive() && !isBlessingCompleted()) {
+    delayedMarkUsed = false
+    setBlessingAlreadyUsed(true)
   }
 
   // ── Pre-check blessing status on scene load ──
@@ -202,9 +219,11 @@ export function pedestalSystem(dt: number) {
             },
           },
           () => {
+            console.log(`[Pedestal] Click: active=${isBlessingActive()}, preCheckDone=${isBlessingPreCheckDone()}, alreadyUsed=${isBlessingAlreadyUsed()}`)
             if (isBlessingActive()) return  // already blessing in progress
             if (!isBlessingPreCheckDone()) {
               // Server hasn't responded yet — re-send check and wait
+              console.log('[Pedestal] Pre-check not done yet, re-sending checkBlessing')
               room.send('checkBlessing', { t: 0 })
               return
             }
