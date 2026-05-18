@@ -5,7 +5,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import {
   WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY, GOLD,
   PANEL_BG,
-  formatCountdown, getSortedLeaderboardEntries,
+  formatCountdown,
 } from '../uiConstants'
 import {
   notifyOverlayClosed,
@@ -13,6 +13,8 @@ import {
   isMobileScoreboardVisible, setMobileScoreboardVisible,
   setMetricsOpenedFromTerminal,
   isMetricsOpenedFromTerminal,
+  isWinsFrozen, getDisplayedWins,
+  isBlessingAlreadyUsed,
 } from '../uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible, toggleWinConditionOverlay,
@@ -21,7 +23,8 @@ import {
 } from '../../gameState/overlayState'
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../../gameState/flagHoldTime'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
-import { getLeaderboardEntries, getAllTimeLeaderboardEntries, getMonthlyLeaderboardEntries } from '../../gameState/roundsWon'
+import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
+import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { getCountdownSeconds } from '../../shared/components'
 import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from '../../systems/trapSystem'
 import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, triggerProjectileReleaseFromUI, getChargeFraction } from '../../systems/projectileSystem'
@@ -79,7 +82,7 @@ export function MobileLayout() {
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 6 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setMobileScoreboardVisible(false); scroll.leaderboardOffset = 0; tabs.leaderboard = 'daily'; tabs.folder = 'leaderboards'; setMetricsOpenedFromTerminal(false); toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setMobileScoreboardVisible(false); toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardVisible ? GOLD : WHITE }} />
               </UiEntity>
@@ -170,80 +173,52 @@ export function MobileLayout() {
       <RoundEndSplash />
       {winConditionVisible && <HowToPlayOverlay />}
 
-      {/* Mobile Leaderboard */}
-      {leaderboardVisible && (() => {
-        const rawLbEntries = tabs.leaderboard === 'monthly' ? getMonthlyLeaderboardEntries() : tabs.leaderboard === 'alltime' ? getAllTimeLeaderboardEntries() : getLeaderboardEntries()
-        const leaderboardEntries = getSortedLeaderboardEntries(rawLbEntries)
-        const PER_PAGE = 8
-        const total = leaderboardEntries.length
-        const maxOff = Math.max(0, total - PER_PAGE)
-        if (scroll.leaderboardOffset > maxOff) scroll.leaderboardOffset = maxOff
-        if (scroll.leaderboardOffset < 0) scroll.leaderboardOffset = 0
-        const visible = leaderboardEntries.slice(scroll.leaderboardOffset, scroll.leaderboardOffset + PER_PAGE)
-        const canUp = scroll.leaderboardOffset > 0
-        const canDown = scroll.leaderboardOffset < maxOff
+      {/* Mobile Status Popup */}
+      {leaderboardVisible && <MobileStatusPopup />}
+    </UiEntity>
+  )
+}
 
-        return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-            <UiEntity uiTransform={{ positionType: 'relative', width: '42%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 28, overflow: 'hidden' }}
-              uiBackground={{ color: PANEL_BG }}
-            >
-              <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 4, right: 4 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-                onMouseDown={() => { setLeaderboardOverlayVisible(false); setMetricsOpenedFromTerminal(false); tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'; notifyOverlayClosed() }}
-              >
-                <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
-              </UiEntity>
-              {(() => { if (!isMetricsOpenedFromTerminal()) { tabs.folder = 'leaderboards'; tabs.leaderboard = tabs.leaderboard === 'metrics' ? 'daily' : tabs.leaderboard } return null })()}
-              <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 40 }}>
-                {(['Daily', 'Monthly', 'All Time'] as const).map((label, i) => {
-                  const keys = ['daily', 'monthly', 'alltime'] as const
-                  return (
-                    <UiEntity key={`m-tab-${keys[i]}`} uiTransform={{ flexGrow: 1, flexDirection: 'row' }}>
-                      {i > 0 && <UiEntity uiTransform={{ width: 6 }} />}
-                      <UiEntity uiTransform={{ flexGrow: 1, height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 6 }}
-                        uiBackground={{ color: tabs.leaderboard === keys[i] ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
-                        onMouseDown={() => { tabs.leaderboard = keys[i]; scroll.leaderboardOffset = 0 }}
-                      >
-                        <Label value={label} fontSize={16} color={tabs.leaderboard === keys[i] ? WHITE : MUTED} font="sans-serif" />
-                      </UiEntity>
-                    </UiEntity>
-                  )
-                })}
-              </UiEntity>
-              <UiEntity uiTransform={{ height: 12 }} />
-              <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
-                {canUp && <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }} onMouseDown={() => { scroll.leaderboardOffset -= 1 }}><Label value="▲ More" fontSize={22} color={WHITE} font="sans-serif" /></UiEntity>}
-                <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
-                  {total === 0 ? (
-                    <UiEntity uiTransform={{ height: 88, justifyContent: 'center', alignItems: 'center' }}><Label value="No champions yet..." fontSize={22} color={MUTED} font="sans-serif" /></UiEntity>
-                  ) : visible.map((entry, i) => {
-                    const isSelf = localUserId !== null && entry.userId === localUserId
-                    const rank = scroll.leaderboardOffset + i + 1
-                    return (
-                      <UiEntity key={`m-lb-${entry.userId}-${scroll.leaderboardOffset}-${i}`} uiTransform={{ height: 44, flexDirection: 'row', alignItems: 'center' }}>
-                        {tabs.leaderboard === 'daily' ? (
-                          <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1 }}>
-                            {Array.from({ length: entry.roundsWon }, (_, ri) => <UiEntity key={`m-rw-${ri}`} uiTransform={{ width: 16, height: 16, margin: { right: 2 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />)}
-                            {entry.roundsWon > 0 && <UiEntity uiTransform={{ width: 4 }} />}
-                            <Label value={entry.name} fontSize={22} color={isSelf ? WHITE : GREY} font="sans-serif" />
-                          </UiEntity>
-                        ) : (
-                          <UiEntity uiTransform={{ flexDirection: "row", alignItems: "center", flexGrow: 1 }}>
-                            <Label value={`${rank}.`} fontSize={22} color={MUTED} font="sans-serif" uiTransform={{ width: 36 }} textAlign="middle-left" />
-                            <Label value={entry.name} fontSize={22} color={isSelf ? WHITE : GREY} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
-                            <Label value={`${entry.roundsWon}`} fontSize={22} color={GOLD} font="sans-serif" />
-                          </UiEntity>
-                        )}
-                      </UiEntity>
-                    )
-                  })}
-                </UiEntity>
-                {canDown && <UiEntity uiTransform={{ width: '100%', height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }} uiBackground={{ color: Color4.create(0.2, 0.2, 0.22, 0.8) }} onMouseDown={() => { scroll.leaderboardOffset += 1 }}><Label value="▼ More" fontSize={22} color={WHITE} font="sans-serif" /></UiEntity>}
-              </UiEntity>
-            </UiEntity>
+function MobileStatusPopup() {
+  const localPlayer = getPlayer()
+  const localName = localPlayer?.name ?? 'Unknown'
+  const coins = getCoinBalance()
+  const liveWins = getLocalLifetimeWins()
+  const myFlags = isWinsFrozen() ? (getDisplayedWins() ?? liveWins) : liveWins
+  const boomerang = getBoomerangColor()
+  const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
+
+  const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White()) => (
+    <UiEntity uiTransform={{ width: '100%', height: 44, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
+      <Label value={label} fontSize={20} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 44 }} textAlign="middle-left" />
+      <Label value={value} fontSize={20} color={valueColor} font="sans-serif" uiTransform={{ height: 44, margin: { right: 6 } }} textAlign="middle-right" />
+      <UiEntity uiTransform={{ width: 28, height: 28 }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
+    </UiEntity>
+  )
+
+  return (
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+      <UiEntity uiTransform={{ width: '42%', flexDirection: 'column', alignItems: 'stretch', padding: 28, borderRadius: 16 }}
+        uiBackground={{ color: PANEL_BG }}
+      >
+        <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 48, alignItems: 'center', margin: { bottom: 8 } }}>
+          <Label value="Status" fontSize={32} color={GOLD} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
+          <UiEntity uiTransform={{ width: 48, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+            onMouseDown={() => { setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
+          >
+            <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
           </UiEntity>
-        )
-      })()}
+        </UiEntity>
+        <Label value={localName} fontSize={24} color={WHITE} font="sans-serif" uiTransform={{ padding: { left: 12, bottom: 4 } }} />
+        <Label value="INVENTORY" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 8 } }} />
+        {iconRow('Coins', isCoinBalanceLoaded() ? `${coins}` : '--', 'assets/images/coin.png', GOLD, GOLD)}
+        {iconRow('Flags', isWinsLoaded() ? `${myFlags}` : '--', 'assets/images/flag-icon-white.png', GOLD, GOLD)}
+        <Label value="DAILY" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
+        {iconRow('Blessed Today', isBlessingAlreadyUsed() ? 'Yes' : 'No', 'assets/images/coin.png', isBlessingAlreadyUsed() ? GOLD : GREY)}
+        <Label value="EQUIPMENT" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
+        {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
+        {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
+      </UiEntity>
     </UiEntity>
   )
 }

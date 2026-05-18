@@ -75,7 +75,7 @@ export function setupWorldLeaderboard(): void {
   dailyTabEntity = dailyTab.box
   dailyTabLabel = dailyTab.label
 
-  const alltimeTab = createTabButton('TOP 10', Vector3.create(1.8, 4.0, 0.06), false)
+  const alltimeTab = createTabButton('TOP 100', Vector3.create(1.8, 4.0, 0.06), false)
   alltimeTabEntity = alltimeTab.box
   alltimeTabLabel = alltimeTab.label
 
@@ -85,14 +85,14 @@ export function setupWorldLeaderboard(): void {
     () => { if (activeTab !== 'daily') { activeTab = 'daily'; pageOffset = 0; lastRenderedText = ''; updateBoard() } }
   )
   pointerEventsSystem.onPointerDown(
-    { entity: alltimeTabEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'Top 10 All-Time', maxDistance: 20 } },
+    { entity: alltimeTabEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'Top 100 All Time', maxDistance: 20 } },
     () => { if (activeTab !== 'alltime') { activeTab = 'alltime'; pageOffset = 0; lastRenderedText = ''; updateBoard() } }
   )
 
   // Leaderboard rows — 3 columns: rank, name, wins
   const COL_RANK_X = -3.2
   const COL_NAME_X = -2.4
-  const COL_WINS_X = 2.2
+  const COL_WINS_X = 2.6
   const ROW_START_Y = 3.2
   const ROW_SPACING = 0.5
 
@@ -253,7 +253,7 @@ function updateBoard(): void {
   lastRenderedText = newText
 
   // Title
-  TextShape.getMutable(titleEntity).text = activeTab === 'daily' ? 'DAILY LEADERBOARD' : 'TOP 10 ALL TIME'
+  TextShape.getMutable(titleEntity).text = activeTab === 'daily' ? 'DAILY LEADERBOARD' : 'TOP 100 ALL TIME'
 
   // Tab styling
   Material.setPbrMaterial(dailyTabEntity, { albedoColor: activeTab === 'daily' ? TAB_ACTIVE_BG : TAB_INACTIVE_BG })
@@ -276,7 +276,7 @@ function updateBoard(): void {
       rankTs.textColor = color
       nameTs.text = displayName
       nameTs.textColor = color
-      winsTs.text = entry.roundsWon === 1 ? '1 win' : `${entry.roundsWon} wins`
+      winsTs.text = `${entry.roundsWon}`
       winsTs.textColor = color
     } else {
       rankTs.text = ''
