@@ -5,7 +5,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { S, GOLD, PANEL_BG, _ROW_HEIGHT, _PADDING, _TITLE_FONT, _BORDER_RADIUS } from '../uiConstants'
 import { hover } from '../uiState'
-import { playClickSound, playHoverSound } from '../uiSounds'
+
 
 interface IconButtonProps {
   hoverKey: keyof typeof hover
@@ -32,9 +32,9 @@ export function IconButton({ hoverKey, label, isActive, iconContent, onClick }: 
       <UiEntity
         uiTransform={{ positionType: 'absolute', position: { top: 0, right: 0 }, width: hovered ? S(140) : S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', padding: { right: S(14) }, borderRadius: S(_BORDER_RADIUS) }}
         uiBackground={{ color: hovered ? Color4.create(0, 0, 0, 0) : PANEL_BG }}
-        onMouseEnter={() => { hover[hoverKey] = true; playHoverSound() }}
+        onMouseEnter={() => { hover[hoverKey] = true;  }}
         onMouseLeave={() => { hover[hoverKey] = false }}
-        onMouseDown={() => { playClickSound(); onClick() }}
+        onMouseDown={() => { onClick() }}
       >
         {iconContent}
       </UiEntity>

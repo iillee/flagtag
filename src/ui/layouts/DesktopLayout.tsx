@@ -17,7 +17,6 @@ import {
   isWinsFrozen, getDisplayedWins, setDisplayedWins,
   setMetricsOpenedFromTerminal,
 } from '../uiState'
-import { playClickSound } from '../uiSounds'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible,
@@ -45,10 +44,6 @@ export function DesktopLayout() {
   const rawPlayers = getPlayersWithHoldTimes()
   const players = rawPlayers
   const localUserId = getPlayer()?.userId ?? null
-  const rawVisitors = getAllVisitors()
-  const allVisitors = sortVisitorsWithBotSection(rawVisitors)
-  const onlineCount = getCurrentOnlineCount()
-  const totalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
   const leaderUserId = players.length > 0 && players[0].seconds > 0 ? players[0].userId : null
   const carrierUserId = getCurrentFlagCarrierUserId()
   const countdownSeconds = getCountdownSeconds()
@@ -58,9 +53,6 @@ export function DesktopLayout() {
   const winConditionVisible = getWinConditionOverlayVisible()
   const leaderboardVisible = getLeaderboardOverlayVisible()
   const analyticsVisible = getAnalyticsOverlayVisible()
-  const rawLbEntries = tabs.leaderboard === 'monthly' ? getMonthlyLeaderboardEntries() : tabs.leaderboard === 'alltime' ? getAllTimeLeaderboardEntries() : getLeaderboardEntries()
-  const leaderboardEntries = getSortedLeaderboardEntries(rawLbEntries)
-  const serverConnected = getServerConnectionStatus()
 
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
@@ -78,8 +70,24 @@ export function DesktopLayout() {
 
       <RoundEndSplash />
       {winConditionVisible && <HowToPlayOverlay />}
-      {leaderboardVisible && <LeaderboardOverlay allVisitors={allVisitors} leaderboardEntries={leaderboardEntries} localUserId={localUserId} onlineCount={onlineCount} totalPlaytimeMin={totalPlaytimeMin} serverConnected={serverConnected} />}
-      {analyticsVisible && <AnalyticsOverlay allVisitors={allVisitors} onlineCount={onlineCount} totalPlaytimeMin={totalPlaytimeMin} serverConnected={serverConnected} localUserId={localUserId} />}
+      {leaderboardVisible && (() => {
+        const rawVisitors = getAllVisitors()
+        const allVisitors = sortVisitorsWithBotSection(rawVisitors)
+        const onlineCount = getCurrentOnlineCount()
+        const totalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
+        const rawLbEntries = tabs.leaderboard === 'monthly' ? getMonthlyLeaderboardEntries() : tabs.leaderboard === 'alltime' ? getAllTimeLeaderboardEntries() : getLeaderboardEntries()
+        const leaderboardEntries = getSortedLeaderboardEntries(rawLbEntries)
+        const serverConnected = getServerConnectionStatus()
+        return <LeaderboardOverlay allVisitors={allVisitors} leaderboardEntries={leaderboardEntries} localUserId={localUserId} onlineCount={onlineCount} totalPlaytimeMin={totalPlaytimeMin} serverConnected={serverConnected} />
+      })()}
+      {analyticsVisible && (() => {
+        const rawVisitors = getAllVisitors()
+        const allVisitors = sortVisitorsWithBotSection(rawVisitors)
+        const onlineCount = getCurrentOnlineCount()
+        const totalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
+        const serverConnected = getServerConnectionStatus()
+        return <AnalyticsOverlay allVisitors={allVisitors} onlineCount={onlineCount} totalPlaytimeMin={totalPlaytimeMin} serverConnected={serverConnected} localUserId={localUserId} />
+      })()}
 
       {/* Ability bar */}
       {!cinematicShowing && !isSpectatorMode() && !isSpectatorTransitioning() && (

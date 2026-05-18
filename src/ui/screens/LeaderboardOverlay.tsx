@@ -13,7 +13,6 @@ import {
   type VisitorOrSeparator,
 } from '../uiConstants'
 import { hover, scroll, tabs, isMetricsOpenedFromTerminal, setMetricsOpenedFromTerminal, notifyOverlayClosed, isWinsFrozen, getDisplayedWins, setDisplayedWins } from '../uiState'
-import { playClickSound } from '../uiSounds'
 import { setLeaderboardOverlayVisible } from '../../gameState/overlayState'
 import { SubTabBar } from '../components/SubTabBar'
 import { Scrollbar } from '../components/Scrollbar'
@@ -106,7 +105,7 @@ export function LeaderboardOverlay({ allVisitors, leaderboardEntries, localUserI
             padding: { bottom: S(_FOLDER_RADIUS) },
           }}
           uiBackground={{ color: folderTab === 'status' ? FOLDER_ACTIVE : FOLDER_INACTIVE }}
-          onMouseDown={() => { playClickSound(); tabs.folder = 'status' }}
+          onMouseDown={() => { tabs.folder = 'status' }}
         >
           <Label value="Status" fontSize={S(28)} color={folderTab === 'status' ? GOLD : MUTED} font="sans-serif" />
         </UiEntity>}
@@ -121,7 +120,7 @@ export function LeaderboardOverlay({ allVisitors, leaderboardEntries, localUserI
             padding: { bottom: S(_FOLDER_RADIUS) },
           }}
           uiBackground={{ color: folderTab === 'leaderboards' ? FOLDER_ACTIVE : FOLDER_INACTIVE }}
-          onMouseDown={() => { playClickSound(); tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'; scroll.leaderboardOffset = 0 }}
+          onMouseDown={() => { tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'; scroll.leaderboardOffset = 0 }}
         >
           <Label value="Leaderboards" fontSize={S(28)} color={folderTab === 'leaderboards' ? GOLD : MUTED} font="sans-serif" />
         </UiEntity>}
@@ -189,7 +188,7 @@ export function LeaderboardOverlay({ allVisitors, leaderboardEntries, localUserI
               uiTransform={{ width: S(80), height: S(80), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(6), margin: { top: S(-6) } }}
               onMouseEnter={() => { hover.closeLeaderboard = true }}
               onMouseLeave={() => { hover.closeLeaderboard = false }}
-              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; setMetricsOpenedFromTerminal(false); tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'; notifyOverlayClosed() }}
+              onMouseDown={() => { setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; setMetricsOpenedFromTerminal(false); tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={S(38)} color={hover.closeLeaderboard ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>

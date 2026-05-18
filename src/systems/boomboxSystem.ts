@@ -9,7 +9,6 @@ import {
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { musicEntity } from '../index'
 import { isMusicMuted, toggleMusicMuted } from '../ui/uiState'
-import { playClickSound } from '../ui/uiSounds'
 
 const BOOMBOX_SRC = 'assets/asset-packs/boombox/Boombox_01/Boombox_01.glb'
 
@@ -67,7 +66,7 @@ function setupBoombox(): void {
           }
         },
         () => {
-          playClickSound()
+          
           toggleMusicMuted()
           try {
             const audio = AudioSource.getMutable(musicEntity)

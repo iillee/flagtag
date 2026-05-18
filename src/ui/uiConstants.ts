@@ -33,24 +33,28 @@ const UI_ADJUST_PRESETS = [
 let uiAdjustIndex = 0
 let autoBaseScale = 1.0
 
-// System that reads screen size and computes auto base scale
+// System that reads screen size and computes auto base scale + cached scale
 engine.addSystem(() => {
   const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
   if (canvas && canvas.width > 0) {
     const raw = canvas.width / 1920
     autoBaseScale = Math.max(0.6, Math.min(1.6, raw))
   }
+  cachedScale = autoBaseScale * UI_ADJUST_PRESETS[uiAdjustIndex].mult
 })
 
-export function getUIScale(): number { return autoBaseScale * UI_ADJUST_PRESETS[uiAdjustIndex].mult }
+let cachedScale = 1.0
+
+export function getUIScale(): number { return cachedScale }
 export function getUIScaleLabel(): string { return UI_ADJUST_PRESETS[uiAdjustIndex].label }
 export function cycleUIScale() {
   uiAdjustIndex = (uiAdjustIndex + 1) % UI_ADJUST_PRESETS.length
+  cachedScale = autoBaseScale * UI_ADJUST_PRESETS[uiAdjustIndex].mult
 }
 
-/** Scale a pixel value by current UI scale. */
+/** Scale a pixel value by current UI scale. Cached per frame. */
 export function S(px: number): number {
-  return Math.round(px * getUIScale())
+  return Math.round(px * cachedScale)
 }
 
 // ═══════════════════════════════════════════════════════════

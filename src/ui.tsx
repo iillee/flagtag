@@ -15,7 +15,7 @@ import { isMobile } from '@dcl/sdk/platform'
 import { room } from './shared/messages'
 
 // State & infrastructure
-import { playClickSound, playHoverSound } from './ui/uiSounds'
+
 import { registerUiSystems } from './ui/uiSystems'
 import {
   S, WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY,
@@ -124,7 +124,7 @@ export function setupUi() {
 // ═══════════════════════════════════════════════════════════
 
 export function openMetricsPanel() {
-  playClickSound()
+  
   setMetricsOpenedFromTerminal(true)
   setLeaderboardOverlayVisible(true)
   tabs.folder = 'metrics'; tabs.leaderboard = 'metrics'; tabs.metrics = 'daily'
@@ -133,7 +133,7 @@ export function openMetricsPanel() {
 
 export function closeMetricsPanel() {
   if (isMetricsOpenedFromTerminal()) {
-    playClickSound()
+    
     setMetricsOpenedFromTerminal(false)
     setLeaderboardOverlayVisible(false)
     tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'
@@ -324,7 +324,7 @@ function PlayerListUi() {
             />
             <UiEntity uiTransform={{ width: mobile ? 200 : S(200), height: mobile ? 44 : S(44), borderRadius: mobile ? 8 : S(8), justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
-              onMouseDown={() => { playClickSound(); sendFeedback() }}
+              onMouseDown={() => { sendFeedback() }}
             >
               <Label value="Send" fontSize={mobile ? 20 : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
             </UiEntity>
@@ -377,7 +377,7 @@ function PlayerListUi() {
             <Label value="WASD = Orbit  |  E/F = Up/Down" fontSize={mobile ? 12 : S(14)} color={Color4.create(1, 1, 1, 0.8)} />
             <UiEntity uiTransform={{ width: mobile ? 120 : S(160), height: mobile ? 32 : S(40), margin: { top: mobile ? 6 : S(8) }, borderRadius: mobile ? 8 : S(10) }}
               uiBackground={{ color: isSpectatorExitBlink() ? Color4.create(0.5, 0.5, 0.5, 0.9) : Color4.create(1, 1, 1, 0.9) }}
-              onMouseDown={() => { playClickSound(); setSpectatorExitBlink(true); executeTask(async () => { await new Promise<void>(r => setTimeout(r, 120)); setSpectatorExitBlink(false) }); exitSpectatorMode() }}
+              onMouseDown={() => { setSpectatorExitBlink(true); executeTask(async () => { await new Promise<void>(r => setTimeout(r, 120)); setSpectatorExitBlink(false) }); exitSpectatorMode() }}
             >
               <Label value="Exit" fontSize={mobile ? 16 : S(18)} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
             </UiEntity>
@@ -388,11 +388,11 @@ function PlayerListUi() {
       {/* Title Splash */}
       {isTitleSplashVisible() && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
-          onMouseDown={() => { playClickSound(); setTitleSplashVisible(false); setWinConditionOverlayVisible(true) }}
+          onMouseDown={() => { setTitleSplashVisible(false); setWinConditionOverlayVisible(true) }}
         >
           <UiEntity uiTransform={{ width: S(420), padding: { top: S(32), bottom: S(32), left: S(24), right: S(24) }, borderRadius: S(16), flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
             uiBackground={{ color: Color4.create(0.12, 0.10, 0.10, 0.95) }}
-            onMouseDown={() => { playClickSound(); setTitleSplashVisible(false); setWinConditionOverlayVisible(true) }}
+            onMouseDown={() => { setTitleSplashVisible(false); setWinConditionOverlayVisible(true) }}
           >
             <Label value="FLAG TAG!" fontSize={S(56)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(6) } }} />
             <Label value="A multiplayer keep away game!" fontSize={S(22)} color={MUTED} font="sans-serif" uiTransform={{ margin: { bottom: S(24) } }} />

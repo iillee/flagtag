@@ -8,7 +8,6 @@ import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { S, GOLD, MUTED, WHITE, CLOSE_GREY } from '../uiConstants'
 import { hover, isMusicMuted, notifyOverlayClosed } from '../uiState'
-import { playClickSound } from '../uiSounds'
 import { setWinConditionOverlayVisible } from '../../gameState/overlayState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { KeyBinding } from '../components/KeyBinding'
@@ -139,7 +138,7 @@ export function HowToPlayOverlay() {
             }}
             onMouseEnter={() => { hover.closeWinCondition = true }}
             onMouseLeave={() => { hover.closeWinCondition = false }}
-            onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); hover.closeWinCondition = false; notifyOverlayClosed() }}
+            onMouseDown={() => { setWinConditionOverlayVisible(false); hover.closeWinCondition = false; notifyOverlayClosed() }}
           >
             <Label value="×" fontSize={mobile ? 52 : S(44)} color={hover.closeWinCondition ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
           </UiEntity>

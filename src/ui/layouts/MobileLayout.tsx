@@ -14,7 +14,6 @@ import {
   setMetricsOpenedFromTerminal,
   isMetricsOpenedFromTerminal,
 } from '../uiState'
-import { playClickSound } from '../uiSounds'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible, toggleWinConditionOverlay,
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible, toggleLeaderboardOverlay,
@@ -39,8 +38,7 @@ export function MobileLayout() {
   const countdownSeconds = getCountdownSeconds()
   const winConditionVisible = getWinConditionOverlayVisible()
   const leaderboardVisible = getLeaderboardOverlayVisible()
-  const rawLbEntries = tabs.leaderboard === 'monthly' ? getMonthlyLeaderboardEntries() : tabs.leaderboard === 'alltime' ? getAllTimeLeaderboardEntries() : getLeaderboardEntries()
-  const leaderboardEntries = getSortedLeaderboardEntries(rawLbEntries)
+  // Leaderboard entries computed lazily inside the overlay conditional below
 
   const M_CIRCLE_SIZE = 68
   const M_CIRCLE_TEXTURE = 'assets/images/UI_circle.png'
@@ -65,7 +63,7 @@ export function MobileLayout() {
               </UiEntity>
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18, right: 30 }, borderRadius: 34 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' } }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); setMobileScoreboardVisible(!isMobileScoreboardVisible()) }}
+                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); setMobileScoreboardVisible(!isMobileScoreboardVisible()) }}
               >
                 <UiEntity uiTransform={{ width: 34, height: 34, margin: { right: 8 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/expand.png' }, color: Color4.White() }} />
                 <Label value="Score:" fontSize={32} color={scoreColor} font="sans-serif" />
@@ -75,13 +73,13 @@ export function MobileLayout() {
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); setMobileScoreboardVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); setMobileScoreboardVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="?" fontSize={36} color={winConditionVisible ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 6 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setMobileScoreboardVisible(false); scroll.leaderboardOffset = 0; tabs.leaderboard = 'daily'; tabs.folder = 'leaderboards'; setMetricsOpenedFromTerminal(false); toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setMobileScoreboardVisible(false); scroll.leaderboardOffset = 0; tabs.leaderboard = 'daily'; tabs.folder = 'leaderboards'; setMetricsOpenedFromTerminal(false); toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardVisible ? GOLD : WHITE }} />
               </UiEntity>
@@ -137,7 +135,7 @@ export function MobileLayout() {
             uiBackground={{ color: PANEL_BG }}
           >
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 4, right: 4 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-              onMouseDown={() => { playClickSound(); setMobileScoreboardVisible(false); notifyOverlayClosed() }}
+              onMouseDown={() => { setMobileScoreboardVisible(false); notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -174,6 +172,8 @@ export function MobileLayout() {
 
       {/* Mobile Leaderboard */}
       {leaderboardVisible && (() => {
+        const rawLbEntries = tabs.leaderboard === 'monthly' ? getMonthlyLeaderboardEntries() : tabs.leaderboard === 'alltime' ? getAllTimeLeaderboardEntries() : getLeaderboardEntries()
+        const leaderboardEntries = getSortedLeaderboardEntries(rawLbEntries)
         const PER_PAGE = 8
         const total = leaderboardEntries.length
         const maxOff = Math.max(0, total - PER_PAGE)
@@ -189,7 +189,7 @@ export function MobileLayout() {
               uiBackground={{ color: PANEL_BG }}
             >
               <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 4, right: 4 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setMetricsOpenedFromTerminal(false); tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'; notifyOverlayClosed() }}
+                onMouseDown={() => { setLeaderboardOverlayVisible(false); setMetricsOpenedFromTerminal(false); tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'; notifyOverlayClosed() }}
               >
                 <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
               </UiEntity>
@@ -202,7 +202,7 @@ export function MobileLayout() {
                       {i > 0 && <UiEntity uiTransform={{ width: 6 }} />}
                       <UiEntity uiTransform={{ flexGrow: 1, height: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 6 }}
                         uiBackground={{ color: tabs.leaderboard === keys[i] ? Color4.create(0.3, 0.3, 0.35, 1) : Color4.create(0.15, 0.15, 0.18, 1) }}
-                        onMouseDown={() => { playClickSound(); tabs.leaderboard = keys[i]; scroll.leaderboardOffset = 0 }}
+                        onMouseDown={() => { tabs.leaderboard = keys[i]; scroll.leaderboardOffset = 0 }}
                       >
                         <Label value={label} fontSize={16} color={tabs.leaderboard === keys[i] ? WHITE : MUTED} font="sans-serif" />
                       </UiEntity>

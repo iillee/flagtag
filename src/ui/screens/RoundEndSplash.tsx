@@ -7,7 +7,6 @@ import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { S, GOLD, SILVER, BRONZE, LIGHT_GREY, CLOSE_GREY, PANEL_BG } from '../uiConstants'
 import { isSplashVisible, setSplashVisible, getSplashPlayers, getCinematicShowing, notifyOverlayClosed } from '../uiState'
-import { playClickSound } from '../uiSounds'
 
 export function RoundEndSplash() {
   const mobile = isMobile()
@@ -53,7 +52,7 @@ export function RoundEndSplash() {
               width: 88, height: 88,
               flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
             }}
-            onMouseDown={() => { playClickSound(); setSplashVisible(false); notifyOverlayClosed() }}
+            onMouseDown={() => { setSplashVisible(false); notifyOverlayClosed() }}
           >
             <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
           </UiEntity>

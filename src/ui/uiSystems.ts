@@ -18,7 +18,7 @@ import { isSpectatorMode } from '../systems/spectatorSystem'
 import { musicEntity } from '../index'
 
 import { getServerConnectionStatus, cycleUIScale } from './uiConstants'
-import { playClickSound, playTickSound } from './uiSounds'
+import { playTickSound } from './uiSounds'
 import {
   // Cinematic/credits
   isNextRoundStartingVisible, isNoScorersCreditsVisible,
@@ -370,7 +370,7 @@ export function registerUiSystems() {
         closed = true
       }
       if (getAnalyticsOverlayVisible()) { setAnalyticsOverlayVisible(false); closed = true }
-      if (closed) { playClickSound(); notifyOverlayClosed() }
+      if (closed) { notifyOverlayClosed() }
     }
   })
 }

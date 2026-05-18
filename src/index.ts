@@ -40,6 +40,7 @@ export async function main() {
   const { mushroomClientSystem } = await import('./systems/mushroomSystem')
   const { shieldSystem } = await import('./systems/shieldSystem')
   const { setupProximityLights, proximityLightSystem } = await import('./systems/proximityLights')
+  const { setupWorldLeaderboard } = await import('./systems/worldLeaderboard')
   const { setupSpectator } = await import('./systems/spectatorSystem')
   const { waterSystem } = await import('./systems/waterSystem')
   const { mailboxSystem } = await import('./systems/mailboxSystem')
@@ -278,6 +279,9 @@ export async function main() {
   engine.addSystem(terminalSystem)
 
 
+
+  // In-world leaderboard
+  setupWorldLeaderboard()
 
   // Proximity lighting
   setupProximityLights()

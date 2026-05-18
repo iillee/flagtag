@@ -6,7 +6,6 @@ import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { S, GOLD, GREY, LIGHT_GREY, WHITE, BRIGHT_WHITE, CORAL_RED, PANEL_BG } from '../uiConstants'
 import { hideChestPopup } from '../uiState'
-import { playClickSound } from '../uiSounds'
 import { CloseButton } from '../components/CloseButton'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalUpgrades, getLocalLifetimeWins, isWinsLoaded, requestBuyBoomerang, requestEquipBoomerang, isBuyPending, getLastBuyError } from '../../gameState/playerUpgradeState'
@@ -99,7 +98,7 @@ export function ChestPopup() {
                 }}
                 uiBackground={{ color: bgColor }}
                 onMouseDown={() => {
-                  playClickSound()
+                  
                   if (owned) {
                     requestEquipBoomerang(item.id)
                   } else if (canBuy && !pending) {
