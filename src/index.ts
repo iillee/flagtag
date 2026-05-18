@@ -104,6 +104,9 @@ export async function main() {
     registeredName = local.name || ''
     room.send('registerName', { name: registeredName || local.userId.slice(0, 8) })
 
+    // Pre-check blessing status so we know immediately on click
+    room.send('checkBlessing', { t: 0 })
+
     // Retry periodically until we get a real name (not empty, not 0x prefix)
     let retryTimer = 2.0
     let retryCount = 0

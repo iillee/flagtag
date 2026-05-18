@@ -227,11 +227,14 @@ function PlayerListUi() {
         return (
           <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center' }}>
             <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '18%' }, flexDirection: 'column', alignItems: 'center' }}>
-              <Label value="Receiving the blessing of..." fontSize={mobile ? 52 : S(34)} color={goldFaded} font="sans-serif" />
-              <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
-              {getBlessingLineIndex() >= 0 && CREDIT_LINES.slice(0, getBlessingLineIndex() + 1).map((line, i) => (
-                <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={greyFaded} font="sans-serif" uiTransform={{ margin: { top: mobile ? 6 : S(4) } }} />
-              ))}
+              <UiEntity uiTransform={{ padding: { top: mobile ? 24 : S(18), bottom: mobile ? 24 : S(18), left: mobile ? 40 : S(32), right: mobile ? 40 : S(32) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 16 : S(12) }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 0.6 * opacity) }}>
+                <Label value="Receiving the blessing of..." fontSize={mobile ? 52 : S(34)} color={goldFaded} font="sans-serif" />
+                <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
+                {getBlessingLineIndex() >= 0 && CREDIT_LINES.slice(0, getBlessingLineIndex() + 1).map((line, i) => (
+                  <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={greyFaded} font="sans-serif" uiTransform={{ margin: { top: mobile ? 6 : S(4) } }} />
+                ))}
+              </UiEntity>
             </UiEntity>
           </UiEntity>
         )

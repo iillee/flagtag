@@ -21,6 +21,7 @@ import { StatsRow } from '../components/StatsRow'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
+import { isBlessingAlreadyUsed } from '../uiState'
 import { getMonthlyVisitors, getMonthlyOnlineCount } from '../../gameState/visitorState'
 
 const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
@@ -369,6 +370,8 @@ function StatusTabContent() {
       {sectionHeader('INVENTORY', true)}
       {iconRow('Coins', isCoinBalanceLoaded() ? `${coins}` : '--', 'assets/images/coin.png', GOLD, GOLD)}
       {iconRow('Flags', isWinsLoaded() ? `${myFlags}` : '--', 'assets/images/flag-icon-white.png', GOLD, GOLD)}
+      {sectionHeader('DAILY')}
+      {iconRow('Blessed Today', isBlessingAlreadyUsed() ? 'Yes' : 'No', 'assets/images/coin.png', isBlessingAlreadyUsed() ? GOLD : GREY)}
       {sectionHeader('EQUIPMENT')}
       {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
       {iconRow('Trap', 'Banana', 'assets/images/banana.png')}

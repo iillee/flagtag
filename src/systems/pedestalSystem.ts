@@ -30,7 +30,7 @@ const BEAM_INNER_ALPHA = 0.5
 const BEAM_OUTER_ALPHA = 0.15
 
 // ── Blessing duration ──
-const BLESSING_DURATION = 16
+const BLESSING_DURATION = 32
 
 // ── State ──
 let pedestalSetup = false
@@ -52,7 +52,7 @@ let blessingStartPos: Vector3 | null = null
 const MOVE_THRESHOLD = 0.5  // meters of movement allowed before cancelling
 
 // Interval triggers at 4s, 8s, 12s
-const INTERVAL_TIMES = [4, 8, 12] // credit lines + beam pulse at each; sound/emote retrigger at 8s and 12s
+const INTERVAL_TIMES = [8, 16, 24] // credit lines + beam pulse at each; emote retrigger to match ~8s emote duration
 let blessingElapsed = 0
 let intervalsTriggered = 0
 let firstSoundPlayed = false
@@ -168,13 +168,7 @@ export function pedestalSystem(dt: number) {
     room.onMessage('blessingResult', (data) => {
       if (!data.success && data.reason === 'already_blessed') {
         setBlessingAlreadyUsed(true)
-        // If blessing animation is still running, cancel it immediately
-        if (isBlessingActive()) {
-          cancelBlessing()
-          setBlessingCompleted(true)  // show "already received" popup
-        }
       } else if (data.success && data.reason !== 'eligible') {
-        // Only mark as used after actual successful claim (not pre-check)
         setBlessingAlreadyUsed(true)
       }
     })
@@ -204,9 +198,8 @@ export function pedestalSystem(dt: number) {
           () => {
             if (isBlessingActive()) return  // already blessing in progress
             if (isBlessingAlreadyUsed()) {
-              setBlessingCompleted(true)  // show the "already received" popup
-              void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
-              return
+              setBlessingCompleted(true)  // show the "already received" popup immediately
+              return  // no emote, no sound, no beam
             }
             startBlessing()
           }
@@ -234,7 +227,7 @@ export function pedestalSystem(dt: number) {
   if (isBlessingActive()) {
     blessingElapsed += dt
     if (intervalsTriggered < INTERVAL_TIMES.length && blessingElapsed >= INTERVAL_TIMES[intervalsTriggered]) {
-      // Trigger emote, sound, and beam at every interval
+      // Re-trigger emote, sound, and beam at each interval (emote is ~6s, matches interval)
       void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
       const snd = engine.addEntity()
       Transform.create(snd, { position: Vector3.Zero() })
