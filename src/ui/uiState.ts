@@ -102,6 +102,10 @@ export function setBlessingCoinSoundsPlayed(v: number) { _blessingCoinSoundsPlay
 export function isBlessingAlreadyUsed(): boolean { return _blessingAlreadyUsed }
 export function setBlessingAlreadyUsed(v: boolean) { _blessingAlreadyUsed = v }
 
+let _blessingPreCheckDone = false
+export function isBlessingPreCheckDone(): boolean { return _blessingPreCheckDone }
+export function setBlessingPreCheckDone(v: boolean) { _blessingPreCheckDone = v }
+
 let _blessingFadeOut = 0 // 1 → 0 over fade duration
 export function getBlessingFadeOut(): number { return _blessingFadeOut }
 export function setBlessingFadeOut(v: number) { _blessingFadeOut = v }

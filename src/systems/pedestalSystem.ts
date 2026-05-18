@@ -18,6 +18,7 @@ import {
   setBlessingLineIndex, setBlessingLineTimer,
   setBlessingCompleted, setBlessingAlreadyUsed,
   isBlessingAlreadyUsed,
+  isBlessingPreCheckDone, setBlessingPreCheckDone,
   CREDIT_LINES,
 } from '../ui/uiState'
 
@@ -167,6 +168,7 @@ export function pedestalSystem(dt: number) {
   if (!listenerRegistered) {
     listenerRegistered = true
     room.onMessage('blessingResult', (data) => {
+      setBlessingPreCheckDone(true)
       if (!data.success && data.reason === 'already_blessed') {
         setBlessingAlreadyUsed(true)
       } else if (data.success && data.reason !== 'eligible') {
@@ -204,6 +206,11 @@ export function pedestalSystem(dt: number) {
           },
           () => {
             if (isBlessingActive()) return  // already blessing in progress
+            if (!isBlessingPreCheckDone()) {
+              // Server hasn't responded yet — re-send check and wait
+              room.send('checkBlessing', { t: 0 })
+              return
+            }
             if (isBlessingAlreadyUsed()) {
               setBlessingCompleted(true)  // show the "already received" popup immediately
               return  // no emote, no sound, no beam
