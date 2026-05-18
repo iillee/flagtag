@@ -295,7 +295,8 @@ function PlayerListUi() {
             <CloseButton hoverKey="closeServerDown" onClose={() => { setServerDownDismissedAt(Date.now()); setServerDownVisible(false) }} />
             <Label value="Server Disconnected" fontSize={mobile ? 36 : S(28)} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: mobile ? 12 : S(12) }} />
-            <Label value="all players please leave scene\nfor 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_GREY} font="sans-serif" />
+            <Label value="all players please leave scene
+for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_GREY} font="sans-serif" />
           </UiEntity>
         </UiEntity>
       )}

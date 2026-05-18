@@ -35,6 +35,7 @@ const BLESSING_DURATION = 32
 // ── State ──
 let pedestalSetup = false
 let pedestalEntity: Entity | null = null
+let blessingStatusChecked = false
 
 // Beam entities
 let beamInner: Entity | null = null
@@ -172,6 +173,12 @@ export function pedestalSystem(dt: number) {
         setBlessingAlreadyUsed(true)
       }
     })
+  }
+
+  // ── Pre-check blessing status on scene load ──
+  if (!blessingStatusChecked) {
+    blessingStatusChecked = true
+    room.send('checkBlessing', { t: 0 })
   }
 
   // ── Find pedestal entity from composite ──
