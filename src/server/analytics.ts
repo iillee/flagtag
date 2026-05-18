@@ -3,6 +3,7 @@
  */
 
 import { Storage, EnvVar } from '@dcl/sdk/server'
+import { getRealm } from '~system/Runtime'
 import {
   visitorSessions, monthlyVisitorSessions, playerNames, isRealName,
   visitorAnalyticsEntity, monthlyVisitorAnalyticsEntity,
@@ -18,10 +19,22 @@ import {
 // ── Module-local state ──
 
 let DISCORD_WEBHOOK_URL = ''
+let isPreview = false
 
 // ── Discord webhook loading ──
 
 export async function loadDiscordWebhookUrl(): Promise<void> {
+  // Detect preview mode to suppress Discord spam during local testing
+  try {
+    const realm = await getRealm({})
+    isPreview = realm.realmInfo?.isPreview ?? false
+    if (isPreview) {
+      console.log('[Server] 🔇 Preview mode detected — Discord notifications disabled')
+    }
+  } catch (err) {
+    console.log('[Server] ⚠️ Could not detect realm info:', err)
+  }
+
   DISCORD_WEBHOOK_URL = (await EnvVar.get('DISCORD_WEBHOOK_URL')) || ''
   if (!DISCORD_WEBHOOK_URL) {
     console.log('[Server] ⚠️ DISCORD_WEBHOOK_URL env var not set — Discord notifications disabled')
@@ -32,17 +45,34 @@ export async function loadDiscordWebhookUrl(): Promise<void> {
 
 // ── Player join Discord notification ──
 
-export async function sendPlayerJoinToDiscord(playerName: string, address: string, onlineCount: number): Promise<void> {
-  if (!DISCORD_WEBHOOK_URL) return
-  try {
-    const content = `👋 **${playerName}** joined Flag Tag (${address.slice(0, 6)}…${address.slice(-4)}) — **${onlineCount}** online`
-    await fetch(DISCORD_WEBHOOK_URL, {
+/** Pending join notifications — we delay sending to allow name resolution */
+const pendingJoinNotifications: Map<string, { address: string, onlineCount: number, scheduledAt: number }> = new Map()
+const JOIN_NOTIFY_DELAY_MS = 5000
+
+export function schedulePlayerJoinDiscord(playerName: string, address: string, onlineCount: number): void {
+  const userKey = address.toLowerCase()
+  pendingJoinNotifications.set(userKey, { address, onlineCount, scheduledAt: Date.now() })
+}
+
+/** Called from visitorTrackingServerSystem to flush any pending notifications whose delay has elapsed */
+export function flushPendingJoinNotifications(): void {
+  if (!DISCORD_WEBHOOK_URL || isPreview) return
+  const now = Date.now()
+  for (const [userKey, pending] of pendingJoinNotifications) {
+    if (now - pending.scheduledAt < JOIN_NOTIFY_DELAY_MS) continue
+    pendingJoinNotifications.delete(userKey)
+
+    // Use the best name available now (name resolver should have run by this point)
+    const resolvedName = (playerNames.has(userKey) && isRealName(playerNames.get(userKey)!))
+      ? playerNames.get(userKey)!
+      : userKey.slice(0, 8)
+
+    const content = `👋 **${resolvedName}** joined Flag Tag (${pending.address.slice(0, 6)}…${pending.address.slice(-4)}) — **${pending.onlineCount}** online`
+    fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
-    })
-  } catch (err) {
-    console.error('[Server] Discord join notification failed:', err)
+    }).catch(err => console.error('[Server] Discord join notification failed:', err))
   }
 }
 
@@ -166,6 +196,7 @@ export function visitorTrackingServerSystem(dt: number): void {
   if (visitorSyncTimer >= 10.0) {
     visitorSyncTimer = 0
 
+    flushPendingJoinNotifications()
     checkVisitorDailyReset().catch(e => console.error('[Server] checkVisitorDailyReset error:', e))
     checkMonthlyVisitorReset().catch(e => console.error('[Server] checkMonthlyVisitorReset error:', e))
     syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))

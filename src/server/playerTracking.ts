@@ -19,7 +19,7 @@ import { updatePlayerName } from './leaderboard'
 import { getOrCreateHoldTimeEntity } from './flagLogic'
 import { loadPlayerCoinBalance, getOrCreateWalletEntity } from './economy'
 import { clearCombatCooldowns } from './combat'
-import { syncVisitorAnalytics, syncMonthlyVisitorAnalytics, sendPlayerJoinToDiscord } from './analytics'
+import { syncVisitorAnalytics, syncMonthlyVisitorAnalytics, schedulePlayerJoinDiscord } from './analytics'
 import { capture, identify } from './posthog'
 
 // ── Player join/leave detection ──
@@ -87,8 +87,7 @@ export function playerTrackingSystem(): void {
         concurrent_players: currentlyConnected.size,
         total_visitors_today: visitorSessions.size
       })
-      sendPlayerJoinToDiscord(playerName, userKey, currentlyConnected.size)
-        .catch(e => console.error('[Server] Discord join notify error:', e))
+      schedulePlayerJoinDiscord(playerName, userKey, currentlyConnected.size)
       changed = true
     }
   }
