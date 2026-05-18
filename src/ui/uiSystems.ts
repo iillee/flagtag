@@ -12,9 +12,8 @@ import { getCountdownSeconds, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
 import { getKnownPlayerName } from '../gameState/flagHoldTime'
 import { consumePendingRoundEarnings } from '../gameState/roundEarnings'
-import { applyDeferredBalance } from '../systems/coinPickupSystem'
-import { clearMushroomShield } from '../systems/mushroomSystem'
-import { isSpectatorMode } from '../systems/spectatorSystem'
+import { applyDeferredBalance } from '../shared/clientState'
+import { spectatorState } from '../shared/clientState'
 import { musicEntity } from '../systems/musicSetup'
 
 import { getServerConnectionStatus, cycleUIScale } from './uiConstants'
@@ -197,7 +196,6 @@ export function registerUiSystems() {
         splashState.lastRoundWinnerJson = timer.roundWinnerJson
         splashState.visible = true
         splashState.hideTime = now + SPLASH_DURATION_MS
-        clearMushroomShield()
 
         try {
           const serverData = JSON.parse(timer.roundWinnerJson) as Array<{ userId?: string; name: string; seconds: number }>
@@ -290,7 +288,7 @@ export function registerUiSystems() {
   // ── Key 1 — cycle UI scale ──
   engine.addSystem(() => {
     if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN)) {
-      if (!isSpectatorMode() && !isMobile()) {
+      if (!spectatorState.active && !isMobile()) {
         cycleUIScale()
         flashUIScale()
       }

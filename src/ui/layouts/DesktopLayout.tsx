@@ -32,7 +32,8 @@ import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSys
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { isTrapOnCooldown, getTrapCooldownRemaining } from '../../systems/trapSystem'
 import { isProjectileOnCooldown, getProjectileCooldownRemaining, getChargeFraction, getIsCharging, getBurnoutFlash } from '../../systems/projectile'
-import { isSpectatorMode, isSpectatorTransitioning } from '../../systems/spectatorSystem'
+import { isSpectatorTransitioning } from '../../systems/spectatorSystem'
+import { spectatorState } from '../../shared/clientState'
 
 import { IconButton } from '../components/IconButton'
 import { HowToPlayOverlay } from '../screens/HowToPlay'
@@ -90,7 +91,7 @@ export function DesktopLayout() {
       })()}
 
       {/* Ability bar */}
-      {!cinematicShowing && !isSpectatorMode() && !isSpectatorTransitioning() && (
+      {!cinematicShowing && !spectatorState.active && !isSpectatorTransitioning() && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(24) }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
           <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
             {/* Projectile (E) */}

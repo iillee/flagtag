@@ -16,6 +16,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { CoinState, COIN_PICKUP_RADIUS } from '../shared/coins'
 import { room } from '../shared/messages'
 import { setPendingRoundEarnings } from '../gameState/roundEarnings'
+import { registerDeferredBalanceApplier } from '../shared/clientState'
 
 
 // ── Types ──
@@ -189,6 +190,9 @@ export function isCoinBalanceLoaded(): boolean {
 export function applyDeferredBalance(newBalance: number): void {
   walletBalance = newBalance
 }
+
+// Register so UI can call via shared/clientState (avoids circular import)
+registerDeferredBalanceApplier(applyDeferredBalance)
 
 /** Generate a deterministic coin ID from position */
 function coinIdFromPosition(x: number, y: number, z: number): string {

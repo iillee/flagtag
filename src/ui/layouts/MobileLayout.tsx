@@ -27,7 +27,7 @@ import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgrad
 import { getCountdownSeconds } from '../../shared/components'
 import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from '../../systems/trapSystem'
 import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, triggerProjectileReleaseFromUI, getChargeFraction } from '../../systems/projectile'
-import { isSpectatorMode } from '../../systems/spectatorSystem'
+import { spectatorState } from '../../shared/clientState'
 
 import { HowToPlayOverlay } from '../screens/HowToPlay'
 import { RoundEndSplash } from '../screens/RoundEndSplash'
@@ -91,7 +91,7 @@ export function MobileLayout() {
       })()}
 
       {/* Mobile Ability Bar */}
-      {!isSpectatorMode() && (() => {
+      {!spectatorState.active && (() => {
         const AB_SIZE = Math.round(M_CIRCLE_SIZE * 1.65)
         const AB_ICON = Math.round(50 * 1.65)
         return (

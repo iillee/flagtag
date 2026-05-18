@@ -56,7 +56,8 @@ import { getWinConditionOverlayVisible, setWinConditionOverlayVisible, getLeader
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from './gameState/flagHoldTime'
 import { isCinematicActive } from './gameState/cinematicState'
 import { refreshUpgradesFromServer } from './gameState/playerUpgradeState'
-import { isSpectatorMode, exitSpectatorMode } from './systems/spectatorSystem'
+import { exitSpectatorMode } from './systems/spectatorSystem'
+import { spectatorState } from './shared/clientState'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
 import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/ghostSystem'
@@ -351,7 +352,7 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
       <DeathOverlay visible={isGhostDeathRespawning()} message="You were scared to death!" fadeOpacity={getGhostDeathFadeOpacity()} showText={isGhostDeathTextVisible()} respawnCountdown={getGhostDeathRespawnCountdown()} />
 
       {/* Spectator mode */}
-      {isSpectatorMode() && (
+      {spectatorState.active && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(20), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center' }}>
           <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 10, bottom: 10, left: 18, right: 18 } : { top: S(14), bottom: S(14), left: S(24), right: S(24) }, borderRadius: mobile ? 14 : S(18) }}
             uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 0.92) }}

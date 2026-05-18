@@ -8,8 +8,9 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 // ── Castle center (target for look-at) ──
 const CASTLE_CENTER = Vector3.create(250.75, 11, 255.5)
 
+import { spectatorState } from '../shared/clientState'
+
 // ── Spectator State ──
-let isSpectating = false
 let camPosX = 256  // center of 512m scene
 let camPosY = 80   // high up
 let camPosZ = 256  // center of 512m scene
@@ -44,7 +45,7 @@ function playBinocularsSound() {
 let exitGracePeriod = 0
 
 export function isSpectatorMode(): boolean {
-  return isSpectating
+  return spectatorState.active
 }
 
 export function isSpectatorTransitioning(): boolean {
@@ -69,7 +70,7 @@ export function setupSpectator() {
   pointerEventsSystem.onPointerDown(
     { entity: spectatorOrbEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
     () => {
-      if (!isSpectating) { playBinocularsSound(); enterSpectatorMode() }
+      if (!spectatorState.active) { playBinocularsSound(); enterSpectatorMode() }
     }
   )
 
@@ -88,7 +89,7 @@ export function setupSpectator() {
   pointerEventsSystem.onPointerDown(
     { entity: spectatorOrb2, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
     () => {
-      if (!isSpectating) { playBinocularsSound(); enterSpectatorMode() }
+      if (!spectatorState.active) { playBinocularsSound(); enterSpectatorMode() }
     }
   )
 
@@ -107,7 +108,7 @@ export function setupSpectator() {
   pointerEventsSystem.onPointerDown(
     { entity: spectatorOrb3, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
     () => {
-      if (!isSpectating) { playBinocularsSound(); enterSpectatorMode() }
+      if (!spectatorState.active) { playBinocularsSound(); enterSpectatorMode() }
     }
   )
 
@@ -126,7 +127,7 @@ export function setupSpectator() {
   pointerEventsSystem.onPointerDown(
     { entity: spectatorOrb4, opts: { button: InputAction.IA_POINTER, hoverText: 'Spectate', maxDistance: 12 } },
     () => {
-      if (!isSpectating) { playBinocularsSound(); enterSpectatorMode() }
+      if (!spectatorState.active) { playBinocularsSound(); enterSpectatorMode() }
     }
   )
 
@@ -149,7 +150,7 @@ export function setupSpectator() {
 }
 
 function enterSpectatorMode() {
-  isSpectating = true
+  spectatorState.active = true
 
   // Reset camera to overview position – far enough back to see the whole castle
   camPosX = 256
@@ -170,8 +171,8 @@ function enterSpectatorMode() {
 }
 
 export function exitSpectatorMode() {
-  if (!isSpectating) return
-  isSpectating = false
+  if (!spectatorState.active) return
+  spectatorState.active = false
   exitGracePeriod = 1.0 // hide UI for 1s while camera returns
 
   // Deactivate virtual camera
@@ -205,7 +206,7 @@ function updateCamTransform() {
 
 function spectatorMovementSystem(dt: number) {
   if (exitGracePeriod > 0) exitGracePeriod -= dt
-  if (!isSpectating) return
+  if (!spectatorState.active) return
 
   // Exit with 1 key
   if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN)) {

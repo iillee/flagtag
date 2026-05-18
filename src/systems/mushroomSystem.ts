@@ -9,8 +9,9 @@ import { isMobile } from '@dcl/sdk/platform'
 import { room } from '../shared/messages'
 import { Flag } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
-import { showShieldForPlayer, hideShieldForPlayer, hideAllShields, setShieldAlpha } from './shieldSystem'
+
 import { addMushroomSpeedBoost } from './speedBoostSystem'
+import { showShieldForPlayer, hideShieldForPlayer, hideAllShields, setShieldAlpha } from './shieldSystem'
 
 
 // ── Constants ──
@@ -397,13 +398,4 @@ export function mushroomClientSystem(dt: number): void {
   }
 }
 
-/** Returns false — mushrooms no longer block hits. */
-export function hasMushroomShield(): boolean {
-  return false
-}
 
-/** Clear effects on round end */
-export function clearMushroomShield(): void {
-  hideAllShields()
-  console.log('[Mushroom] Effects cleared (round end)')
-}
