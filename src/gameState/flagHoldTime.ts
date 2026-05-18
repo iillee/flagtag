@@ -21,6 +21,22 @@ function isRealName(name: string): boolean {
 
 export function addPlayer(userId: string, name: string): void {
   const key = userId.toLowerCase()
+  const localPlayer = getPlayer()
+  const isLocal = localPlayer && localPlayer.userId.toLowerCase() === key
+
+  // For remote players, verify they have a PlayerIdentityData entity.
+  // onEnterScene can fire from stale CRDT data for players not truly present.
+  if (!isLocal) {
+    let found = false
+    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+      if (identity.address.toLowerCase() === key) { found = true; break }
+    }
+    if (!found) {
+      console.log('[FlagHoldTime] Rejected stale onEnterScene for', key.slice(0, 8))
+      return
+    }
+  }
+
   playersInScene.set(key, name)
   // Cache the name permanently if it's a real display name
   if (isRealName(name)) {
@@ -195,16 +211,21 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
   // ANY entity for a player has seconds=0, treat the whole player as 0
   // (the server reset scores to 0 at round end; stale entities must not override).
   const synced = new Map<string, number>()
-  const hasZero = new Set<string>()
+  const entityCount = new Map<string, number>()
+  const zeroCount = new Map<string, number>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
     const key = data.playerId.toLowerCase()
-    if (data.seconds === 0) hasZero.add(key)
+    entityCount.set(key, (entityCount.get(key) ?? 0) + 1)
+    if (data.seconds === 0) zeroCount.set(key, (zeroCount.get(key) ?? 0) + 1)
     const existing = synced.get(key) ?? 0
     synced.set(key, Math.max(existing, data.seconds))
   }
-  // If the server reset a player's score to 0, force it to 0 regardless of stale duplicates
-  for (const key of hasZero) {
-    synced.set(key, 0)
+  // Only force to 0 when ALL entities for a player are 0 (round reset).
+  // If a mix of 0 and non-zero exists (orphaned duplicate), keep the max.
+  for (const [key, total] of entityCount) {
+    if ((zeroCount.get(key) ?? 0) === total) {
+      synced.set(key, 0)
+    }
   }
 
   // Client-side interpolation: add elapsed time since last CRDT update for the current carrier.
