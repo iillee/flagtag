@@ -137,9 +137,6 @@ function startBlessing() {
   const pos = Transform.get(engine.PlayerEntity).position
   blessingStartPos = Vector3.create(pos.x, pos.y, pos.z)
 
-  // Send pre-check immediately so server can reject early if already blessed today
-  room.send('checkBlessing', { t: 0 })
-
   // Trigger emote, beam, and sound immediately on click
   void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
   showBeamAtPlayer()
@@ -243,9 +240,7 @@ export function pedestalSystem(dt: number) {
     if (intervalsTriggered < INTERVAL_TIMES.length && blessingElapsed >= INTERVAL_TIMES[intervalsTriggered]) {
       // Re-trigger emote, sound, and beam at each interval (emote is ~6s, matches interval)
       void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
-      const snd = engine.addEntity()
-      Transform.create(snd, { position: Vector3.Zero() })
-      AudioSource.create(snd, {
+      AudioSource.createOrReplace(blessingSoundEntity, {
         audioClipUrl: 'assets/sounds/blessing.mp3',
         playing: true,
         loop: false,

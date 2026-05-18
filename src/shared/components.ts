@@ -196,24 +196,13 @@ export const TRAP_TRIGGER_RADIUS = 2.0
 
 /**
  * Sync ID pool for traps — fixed pool of reusable IDs.
- * Instead of monotonically increasing (which leaves CRDT tombstones that accumulate
- * and eventually saturate the buffer), we reuse a fixed set of slots.
  * Max concurrent traps: 10 players × 3 each = 30. Pool of 40 gives headroom.
  */
-const TRAP_SYNC_ID_BASE = 1000000
-const TRAP_POOL_SIZE = 40
-const trapIdPool: number[] = []
-for (let i = 0; i < TRAP_POOL_SIZE; i++) trapIdPool.push(TRAP_SYNC_ID_BASE + i)
-export function getNextTrapSyncId(): number {
-  // Recycle from pool; if exhausted, wrap around (oldest trap will be overwritten)
-  if (trapIdPool.length > 0) return trapIdPool.shift()!
-  return TRAP_SYNC_ID_BASE + (Math.floor(Math.random() * TRAP_POOL_SIZE))
-}
-export function recycleTrapSyncId(id: number): void {
-  if (id >= TRAP_SYNC_ID_BASE && id < TRAP_SYNC_ID_BASE + TRAP_POOL_SIZE) {
-    if (!trapIdPool.includes(id)) trapIdPool.push(id)
-  }
-}
+import { createSyncIdPool } from './syncIdPool'
+
+const trapPool = createSyncIdPool(1_000_000, 40)
+export const getNextTrapSyncId = trapPool.next.bind(trapPool)
+export const recycleTrapSyncId = trapPool.recycle.bind(trapPool)
 
 // ── Projectile (powerup) ──
 
@@ -258,21 +247,11 @@ export const PROJECTILE_LIFETIME_SEC = 8
 
 /**
  * Sync ID pool for projectiles — fixed pool of reusable IDs.
- * Max concurrent projectiles: 10 players × 2 (yellow) = 20. Pool of 30 gives headroom.
+ * Max concurrent projectiles: 10 players × 2 = 20. Pool of 30 gives headroom.
  */
-const PROJECTILE_SYNC_ID_BASE = 2000000
-const PROJECTILE_POOL_SIZE = 30
-const projectileIdPool: number[] = []
-for (let i = 0; i < PROJECTILE_POOL_SIZE; i++) projectileIdPool.push(PROJECTILE_SYNC_ID_BASE + i)
-export function getNextProjectileSyncId(): number {
-  if (projectileIdPool.length > 0) return projectileIdPool.shift()!
-  return PROJECTILE_SYNC_ID_BASE + (Math.floor(Math.random() * PROJECTILE_POOL_SIZE))
-}
-export function recycleProjectileSyncId(id: number): void {
-  if (id >= PROJECTILE_SYNC_ID_BASE && id < PROJECTILE_SYNC_ID_BASE + PROJECTILE_POOL_SIZE) {
-    if (!projectileIdPool.includes(id)) projectileIdPool.push(id)
-  }
-}
+const projectilePool = createSyncIdPool(2_000_000, 30)
+export const getNextProjectileSyncId = projectilePool.next.bind(projectilePool)
+export const recycleProjectileSyncId = projectilePool.recycle.bind(projectilePool)
 
 // ── Ghost ──
 
@@ -309,19 +288,9 @@ export const GHOST_SPAWN_INTERVAL = 20
 /** Max active ghosts. */
 export const GHOST_MAX_ACTIVE = 5
 
-const GHOST_SYNC_ID_BASE = 3000000
-const GHOST_POOL_SIZE = 5
-const ghostIdPool: number[] = []
-for (let i = 0; i < GHOST_POOL_SIZE; i++) ghostIdPool.push(GHOST_SYNC_ID_BASE + i)
-export function getNextGhostSyncId(): number {
-  if (ghostIdPool.length > 0) return ghostIdPool.shift()!
-  return GHOST_SYNC_ID_BASE + (Math.floor(Math.random() * GHOST_POOL_SIZE))
-}
-export function recycleGhostSyncId(id: number): void {
-  if (id >= GHOST_SYNC_ID_BASE && id < GHOST_SYNC_ID_BASE + GHOST_POOL_SIZE) {
-    if (!ghostIdPool.includes(id)) ghostIdPool.push(id)
-  }
-}
+const ghostPool = createSyncIdPool(3_000_000, 5)
+export const getNextGhostSyncId = ghostPool.next.bind(ghostPool)
+export const recycleGhostSyncId = ghostPool.recycle.bind(ghostPool)
 
 export enum SyncIds {
   FLAG = 1,

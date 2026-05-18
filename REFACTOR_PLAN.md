@@ -16,7 +16,7 @@
 
 ---
 
-## Step 1 — Sync ID Pool Factory ⬜
+## Step 1 — Sync ID Pool Factory ✅
 **Est: 15 min | Risk: Low | Files: 2**
 
 **Problem:** Three identical copy-pasted sync ID pool implementations in `shared/components.ts` (trap, projectile, ghost). Each is ~10 lines doing the same thing with different base/size constants.
@@ -50,7 +50,7 @@
 
 ---
 
-## Step 2 — Fix Sound Entity Leaks + Duplicate checkBlessing ⬜
+## Step 2 — Fix Sound Entity Leaks + Duplicate checkBlessing ✅
 **Est: 10 min | Risk: Low | Files: 3**
 
 **Problem A:** `pedestalSystem.ts:246` creates a new entity for sound at each 8s interval (up to 3 per blessing). Never removed. `teleportOrbs.ts:63` has the same pattern.
