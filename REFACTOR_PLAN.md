@@ -288,6 +288,50 @@ Each step is independently shippable. Suggested session grouping:
 
 **Files changed:** `ui/uiState.ts`, `ui/uiSystems.ts`, `ui.tsx`, `systems/boomboxSystem.ts`, `systems/pedestalSystem.ts`, `systems/cinematicSystem.ts`, `systems/chestSystem.ts`, `systems/gravestoneSystem.ts`, `systems/mailboxSystem.ts`, `ui/components/StatsRow.tsx`, `ui/layouts/DesktopLayout.tsx`, `ui/layouts/MobileLayout.tsx`, `ui/screens/HowToPlay.tsx`, `ui/screens/LeaderboardOverlay.tsx`, `ui/screens/RoundEndSplash.tsx`
 
+### UI Click Responsiveness Fix — 2026-05-18 (during Session B)
+
+**Problem:** UI buttons frequently required 2-4 clicks to register. Most frustrating UX issue in the game.
+
+**Root cause:** Overlay backdrops (full-screen `UiEntity` wrappers) were missing `uiBackground` and/or `onMouseDown={() => {}}`. Without a background, Decentraland's UI engine doesn't register the element as a click target — clicks pass through to 3D world entities underneath (`pointerEventsSystem` handlers on chests, mailboxes, pedestals, etc.), which consume the click event before the UI button can process it.
+
+**Fix:** Added `uiBackground={{ color: CLICK_BLOCKER }}` (`rgba(0,0,0,0.001)` — nearly invisible) and `onMouseDown={() => {}}` to all 13 full-screen overlay backdrops:
+
+| Overlay | Had bg | Had onMouseDown | Fixed |
+|---------|--------|-----------------|-------|
+| Cinematic fade | ✅ dynamic | ❌ | Added onMouseDown |
+| Blessing active | ❌ | ❌ | Added both |
+| Blessing completed | ❌ | ❌ | Added both |
+| Server down | ✅ 0.6 black | ❌ | Added onMouseDown |
+| Mailbox | ❌ | ❌ | Added both |
+| Gravestone | ❌ | ✅ | Added uiBackground |
+| Chest | ❌ | ✅ | Added uiBackground |
+| Title splash | ❌ | ✅ functional | Added uiBackground |
+| StatusPopup | ❌ | ❌ | Added both |
+| MetricsOverlay | ❌ | ❌ | Added both |
+| HowToPlay | ❌ | ❌ | Added both |
+| AnalyticsOverlay | ❌ | ❌ | Added both |
+| RoundEndSplash | ❌ | ❌ | Added both |
+| Mobile scoreboard | ❌ | ❌ | Added both |
+| Mobile status | ❌ | ❌ | Added both |
+
+`CreditsScreen` has no blocker but is always rendered inside the cinematic fade overlay which already blocks.
+
+**Also cleaned up:**
+- Removed 150ms overlay grace period (`isInOverlayGracePeriod`, `notifyOverlayClosed` timer, `OVERLAY_CLOSE_GRACE_MS`). Was designed to prevent accidental boomerang throws on menu close, but boomerang is E-key not click — entirely pointless.
+- Removed dead attack flicker system (`attackState.lastPressMs` was written every frame but never read anywhere).
+- `notifyOverlayClosed()` kept as an empty hook — callers still invoke it, no need to update call sites.
+
+**Result:** Noticeably improved but user reports "not perfect." Remaining click issues may be related to the SDK's own UI event processing or z-order conflicts between overlapping absolute-positioned elements (e.g., the ability bar at the bottom overlapping with popups). Worth investigating further if complaints persist.
+
+**Concerns:**
+- `CLICK_BLOCKER` at `alpha=0.001` — need to confirm the SDK doesn't cull fully transparent backgrounds. If clicks stop working, try increasing to `0.01`.
+- The `onMouseDown={() => {}}` empty handlers on backdrops block clicks from reaching 3D entities, but they also prevent the player from interacting with the world while overlays are open. This is intentional but worth noting.
+- Some overlays (HowToPlay) had `onMouseDown={() => {}}` only on inner card elements, not the full-screen wrapper — clicks in the gaps between cards still leaked to 3D. Now fixed with the wrapper-level blocker.
+
+**Files changed:** `ui/uiConstants.ts` (new `CLICK_BLOCKER` constant), `ui/uiState.ts` (grace period removal, dead code removal), `ui/uiSystems.ts` (attack flicker removal), `ui.tsx`, `ui/screens/ChestPopup.tsx`, `ui/screens/HowToPlay.tsx`, `ui/screens/LeaderboardOverlay.tsx`, `ui/screens/AnalyticsOverlay.tsx`, `ui/screens/RoundEndSplash.tsx`, `ui/layouts/MobileLayout.tsx`
+
+**Commits:** `8e933be`, `ccf34ec`, `69f9474`
+
 ---
 
 ## Post-Refactor Verification Checklist
