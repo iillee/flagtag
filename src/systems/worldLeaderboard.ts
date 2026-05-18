@@ -62,7 +62,7 @@ export function setupWorldLeaderboard(): void {
     parent: parentEntity,
   })
   TextShape.create(titleEntity, {
-    text: 'DAILY LEADERBOARD',
+    text: 'LEADERBOARD',
     fontSize: 6,
     textColor: GOLD,
     outlineColor: Color4.Black(),
@@ -253,7 +253,7 @@ function updateBoard(): void {
   lastRenderedText = newText
 
   // Title
-  TextShape.getMutable(titleEntity).text = activeTab === 'daily' ? 'DAILY LEADERBOARD' : 'ALL TIME LEADERBOARD'
+  TextShape.getMutable(titleEntity).text = 'LEADERBOARD'
 
   // Tab styling
   Material.setPbrMaterial(dailyTabEntity, { albedoColor: activeTab === 'daily' ? TAB_ACTIVE_BG : TAB_INACTIVE_BG })

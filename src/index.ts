@@ -210,6 +210,7 @@ export async function main() {
     rotation: { x: 0, y: 167, z: 0 },
     size: 1.85,
     name: 'Genesis Plaza',
+    mute: true,
     callback: () => {
       void import('~system/RestrictedActions').then(({ teleportTo }) =>
         teleportTo({ worldCoordinates: { x: 0, y: 0 } })

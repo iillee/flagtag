@@ -181,7 +181,15 @@ export function updateHoldTimeInterpolation(): void {
   }
 }
 
+// Cached result — recomputed at most every 250ms to keep UI render loop lightweight
+let _cachedHoldTimes: { userId: string; name: string; seconds: number }[] = []
+let _holdTimeCacheTime = 0
+const HOLD_TIME_CACHE_MS = 250
+
 export function getPlayersWithHoldTimes(): { userId: string; name: string; seconds: number }[] {
+  const now = Date.now()
+  if (now - _holdTimeCacheTime < HOLD_TIME_CACHE_MS) return _cachedHoldTimes
+  _holdTimeCacheTime = now
   // Build lookup from synced hold-time entities, keyed by lowercase playerId.
   // If duplicates exist (shouldn't after server cleanup), SUM them — but if
   // ANY entity for a player has seconds=0, treat the whole player as 0
@@ -247,6 +255,7 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
   // Update previous rank for next frame
   previousRank.clear()
   result.forEach((p, i) => previousRank.set(p.userId.toLowerCase(), i))
+  _cachedHoldTimes = result
   return result
 }
 

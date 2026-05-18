@@ -38,6 +38,7 @@ export type PortalOptions = {
   locationId: string
   enable?: boolean
   callback?: () => void
+  mute?: boolean
 }
 
 import { PortalData, PortalLayer } from '../shared/components'
@@ -168,6 +169,7 @@ export class Portal {
   private doorRight: Entity
   private audioAmb: Entity
   private portalLight: Entity
+  private mute: boolean
   private ajarTrigger: Entity
   private openTrigger: Entity
   private closeTrigger: Entity
@@ -179,6 +181,7 @@ export class Portal {
     const pos = options.position
     const rot = options.rotation ?? Vector3.Zero()
     const size = options.size ?? 1
+    this.mute = options.mute ?? false
 
     // Root
     this.root = engine.addEntity()
@@ -261,7 +264,7 @@ export class Portal {
       intensity: 10000,
     })
 
-    this.audioAmb = this.createAudioEntity('assets/sounds/portals/doorAmb.mp3', true)
+    this.audioAmb = this.mute ? engine.addEntity() : this.createAudioEntity('assets/sounds/portals/doorAmb.mp3', true)
 
     // Double doors
     const dOpts = options.door ?? {}
@@ -458,7 +461,7 @@ export class Portal {
   private setPortalState(state: PortalState, angle: number, playOpen: boolean, playClose: boolean, playAmb: boolean): void {
     this.fireDoorTween(angle)
     // doorOpen / doorClose sounds removed along with doors
-    AudioSource.createOrReplace(this.audioAmb, { audioClipUrl: 'assets/sounds/portals/doorAmb.mp3', playing: playAmb, loop: true, volume: 1 })
+    if (!this.mute) AudioSource.createOrReplace(this.audioAmb, { audioClipUrl: 'assets/sounds/portals/doorAmb.mp3', playing: playAmb, loop: true, volume: 1 })
     PortalData.getMutable(this.root).state = state
     if (state !== PortalState.CLOSED) activateParallax()
   }
