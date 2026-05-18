@@ -1,5 +1,16 @@
 import { engine, Schemas } from '@dcl/sdk/ecs'
 import { AUTH_SERVER_PEER_ID } from '@dcl/sdk/network/message-bus-sync'
+import { createSyncIdPool } from './syncIdPool'
+
+// ── Re-exports for backward compatibility ──
+// Consumers that imported constants/utils from this file will still work.
+// New code should import from './constants' and './dateUtils' directly.
+export { FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS, PROJECTILE_LIFETIME_SEC, GHOST_DETECT_RADIUS, GHOST_SPEED, GHOST_FAST_SPEED, GHOST_FAST_DIST, GHOST_HIT_RADIUS, GHOST_SPAWN_INTERVAL, GHOST_MAX_ACTIVE } from './constants'
+export { getTodayDateString, getCurrentMonthString, getNextRoundEndTimeMs, getCountdownSeconds } from './dateUtils'
+
+// ══════════════════════════════════════════════
+// ECS Component Definitions
+// ══════════════════════════════════════════════
 
 // ── Flag ──
 
@@ -38,7 +49,6 @@ export const PlayerFlagHoldTime = engine.defineComponent('ctf-player-flag-hold-t
 
 PlayerFlagHoldTime.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** Deterministic numeric id for sync entity (same userId => same id on all clients). */
 const HOLD_TIME_ENTITY_BASE = 10000
 
 function hashString(s: string): number {
@@ -69,25 +79,6 @@ export const CountdownTimer = engine.defineComponent('ctf-countdown-timer', {
 
 CountdownTimer.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** Round length in minutes; aligned to 5-minute UTC boundaries. */
-const ROUND_LENGTH_MINUTES = 5
-
-export function getNextRoundEndTimeMs(): number {
-  const now = Date.now()
-  const intervalMs = ROUND_LENGTH_MINUTES * 60 * 1000
-  // Next boundary strictly after now
-  return (Math.floor(now / intervalMs) + 1) * intervalMs
-}
-
-export function getCountdownSeconds(): number {
-  const now = Date.now()
-  const intervalMs = ROUND_LENGTH_MINUTES * 60 * 1000
-  
-  // Pure UTC-based countdown — never pauses, never overridden
-  const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
-  return Math.max(0, Math.floor((nextBoundary - now) / 1000))
-}
-
 // ── Leaderboard state (synced from server) ──
 
 export const LeaderboardState = engine.defineComponent('ctf-leaderboard-state', {
@@ -114,38 +105,11 @@ export const MonthlyLeaderboardState = engine.defineComponent('ctf-monthly-leade
 
 MonthlyLeaderboardState.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-// ── Shared constants ──
-
-export const FLAG_BASE_POSITION = { x: 230, y: 13, z: 258 }
-
-// ── Red Flag Spawn Points ──
-export const FLAG_SPAWN_POINTS = [
-  { x: 228.4, y: 2.6, z: 192.5 },      // Spawn Point 1
-  { x: 217, y: 8.25, z: 258 },   // Spawn Point 2
-  { x: 211.2, y: 13, z: 305.4 } // Spawn Point 3
-] as const
-
-/**
- * Three spawn locations for the red flag.
- * Flag will randomly spawn at one of these three locations when a round ends.
- */
-
-/**
- * Get a random spawn point for flag respawn.
- * Used at round end to prevent spawn camping.
- */
-export function getRandomSpawnPoint(): { x: number; y: number; z: number } {
-  const index = Math.floor(Math.random() * FLAG_SPAWN_POINTS.length)
-  const spawnPoint = { ...FLAG_SPAWN_POINTS[index] }
-  console.log(`[SpawnSystem] Flag spawning at point ${index + 1}/3: (${spawnPoint.x}, ${spawnPoint.y}, ${spawnPoint.z})`)
-  return spawnPoint
-}
-
 // ── Visitor Analytics (server-synced) ──
 
 export const VisitorAnalytics = engine.defineComponent('ctf-visitor-analytics', {
   date: Schemas.String,
-  visitorDataJson: Schemas.String, // JSON array of visitor records
+  visitorDataJson: Schemas.String,
   onlineCount: Schemas.Int,
   totalUniqueVisitors: Schemas.Int
 }, { 
@@ -161,7 +125,7 @@ VisitorAnalytics.validateBeforeChange((value) => value.senderAddress === AUTH_SE
 
 export const MonthlyVisitorAnalytics = engine.defineComponent('ctf-monthly-visitor-analytics', {
   month: Schemas.String,
-  visitorDataJson: Schemas.String, // JSON array of visitor records
+  visitorDataJson: Schemas.String,
   onlineCount: Schemas.Int,
   totalUniqueVisitors: Schemas.Int
 }, { 
@@ -173,11 +137,11 @@ export const MonthlyVisitorAnalytics = engine.defineComponent('ctf-monthly-visit
 
 MonthlyVisitorAnalytics.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-// ── Trap (powerup) ──
+// ── Trap ──
 
 export const Trap = engine.defineComponent('ctf-banana', {
   droppedByPlayerId: Schemas.String,
-  droppedAtMs: Schemas.Number,       // Date.now() when dropped — used for expiry (server-side only)
+  droppedAtMs: Schemas.Number,
 }, {
   droppedByPlayerId: '',
   droppedAtMs: 0,
@@ -185,46 +149,30 @@ export const Trap = engine.defineComponent('ctf-banana', {
 
 Trap.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** How long a trap stays on the ground before despawning (seconds). */
-export const TRAP_LIFETIME_SEC = 15
-/** Cooldown between trap drops (seconds). */
-export const TRAP_COOLDOWN_SEC = 5
-/** Max traps one player can have on the ground at once. */
-export const TRAP_MAX_ACTIVE = 3
-/** Radius for trap trigger (meters). */
-export const TRAP_TRIGGER_RADIUS = 2.0
-
-/**
- * Sync ID pool for traps — fixed pool of reusable IDs.
- * Max concurrent traps: 10 players × 3 each = 30. Pool of 40 gives headroom.
- */
-import { createSyncIdPool } from './syncIdPool'
+// ── Trap sync ID pool ──
 
 const trapPool = createSyncIdPool(1_000_000, 40)
 export const getNextTrapSyncId = trapPool.next.bind(trapPool)
 export const recycleTrapSyncId = trapPool.recycle.bind(trapPool)
 
-// ── Projectile (powerup) ──
+// ── Projectile ──
 
 export const Projectile = engine.defineComponent('ctf-shell', {
   firedByPlayerId: Schemas.String,
   firedAtMs: Schemas.Number,
-  startX: Schemas.Float,          // spawn position — client uses these for local movement prediction
+  startX: Schemas.Float,
   startY: Schemas.Float,
   startZ: Schemas.Float,
-  dirX: Schemas.Float,           // normalized forward direction (XZ plane)
+  dirX: Schemas.Float,
   dirZ: Schemas.Float,
   distanceTraveled: Schemas.Float,
-  maxDistance: Schemas.Float,     // wall distance reported by client, or default cap
-  active: Schemas.Boolean,       // false once it hits something or expires
+  maxDistance: Schemas.Float,
+  active: Schemas.Boolean,
 }, {
   firedByPlayerId: '',
   firedAtMs: 0,
-  startX: 0,
-  startY: 0,
-  startZ: 0,
-  dirX: 0,
-  dirZ: 0,
+  startX: 0, startY: 0, startZ: 0,
+  dirX: 0, dirZ: 0,
   distanceTraveled: 0,
   maxDistance: 50,
   active: true,
@@ -232,23 +180,8 @@ export const Projectile = engine.defineComponent('ctf-shell', {
 
 Projectile.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** Cooldown between projectile fires (seconds). */
-export const PROJECTILE_COOLDOWN_SEC = 1.0
-/** Max projectiles one player can have in flight at once. */
-export const PROJECTILE_MAX_ACTIVE = 1
-/** Speed of projectile (meters per second). */
-export const PROJECTILE_SPEED = 30
-/** Max range if no wall is detected (meters). */
-export const PROJECTILE_MAX_RANGE = 50
-/** Radius for projectile hitting a player (meters). */
-export const PROJECTILE_HIT_RADIUS = 2.0
-/** Max time a projectile can exist (seconds) — safety net. */
-export const PROJECTILE_LIFETIME_SEC = 8
+// ── Projectile sync ID pool ──
 
-/**
- * Sync ID pool for projectiles — fixed pool of reusable IDs.
- * Max concurrent projectiles: 10 players × 2 = 20. Pool of 30 gives headroom.
- */
 const projectilePool = createSyncIdPool(2_000_000, 30)
 export const getNextProjectileSyncId = projectilePool.next.bind(projectilePool)
 export const recycleProjectileSyncId = projectilePool.recycle.bind(projectilePool)
@@ -273,24 +206,13 @@ export const Ghost = engine.defineComponent('ctf-ghost', {
 
 Ghost.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-/** Ghost detection radius (meters) — starts homing when player is within this. */
-export const GHOST_DETECT_RADIUS = 20
-/** Ghost base speed (m/s). */
-export const GHOST_SPEED = 3
-/** Ghost fast speed when close (m/s). */
-export const GHOST_FAST_SPEED = 5
-/** Distance at which ghost speeds up (meters). */
-export const GHOST_FAST_DIST = 8
-/** Ghost hit radius — staggers player on contact (meters). */
-export const GHOST_HIT_RADIUS = 1.5
-/** Ghost spawn interval (seconds). */
-export const GHOST_SPAWN_INTERVAL = 20
-/** Max active ghosts. */
-export const GHOST_MAX_ACTIVE = 5
+// ── Ghost sync ID pool ──
 
 const ghostPool = createSyncIdPool(3_000_000, 5)
 export const getNextGhostSyncId = ghostPool.next.bind(ghostPool)
 export const recycleGhostSyncId = ghostPool.recycle.bind(ghostPool)
+
+// ── Sync IDs ──
 
 export enum SyncIds {
   FLAG = 1,
@@ -302,22 +224,8 @@ export enum SyncIds {
   MONTHLY_VISITOR_ANALYTICS = 205
 }
 
-export function getCurrentMonthString(): string {
-  const d = new Date()
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  return `${y}-${m}`
-}
-
-export function getTodayDateString(): string {
-  const d = new Date()
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(d.getUTCDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
 // ── Portal components (must be registered before engine seals) ──
+
 export const PortalData = engine.defineComponent('portal-data', {
   doorLeft: Schemas.Entity,
   doorRight: Schemas.Entity,
