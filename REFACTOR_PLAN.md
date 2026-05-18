@@ -152,7 +152,7 @@
 
 ---
 
-## Step 5 — Extract Inline Systems from index.ts ⬜
+## Step 5 — Extract Inline Systems from index.ts ✅
 **Est: 20 min | Risk: Low | Files: 4-5**
 
 **Problem:** `index.ts` has several inline anonymous systems and setup blocks that should be their own modules:
@@ -176,7 +176,7 @@
 
 ---
 
-## Step 6 — Split shared/components.ts ⬜
+## Step 6 — Split shared/components.ts ✅
 **Est: 20 min | Risk: Low | Files: 3-4**
 
 **Problem:** `components.ts` (379 LOC) mixes ECS component definitions, game constants, date utilities, spawn point logic, and sync ID pools.
@@ -198,7 +198,7 @@
 
 ---
 
-## Step 7 — Untangle Circular Dependencies ⬜
+## Step 7 — Untangle Circular Dependencies ✅
 **Est: 20 min | Risk: Medium | Files: 4-5**
 
 **Problem:** `systems/` imports from `ui/uiState` (5 systems) and `ui/` imports from `systems/` (3 imports in uiSystems). One more cross-reference could create a cycle.
@@ -223,7 +223,7 @@
 
 ---
 
-## Step 8 — Webhook to Env Var + Misc Cleanup ⬜
+## Step 8 — Webhook to Env Var + Misc Cleanup ✅
 **Est: 10 min | Risk: Low | Files: 2-3**
 
 **Problem:** Discord webhook URL is hardcoded in `server.ts`. Magic numbers scattered.
@@ -358,6 +358,40 @@ Each step is independently shippable. Suggested session grouping:
 - `systems/projectileSystem.ts` (deleted)
 - `systems/projectile/` (9 new files)
 - `index.ts`, `systems/handBoomerangSetup.ts`, `ui/layouts/DesktopLayout.tsx`, `ui/layouts/MobileLayout.tsx` (import path updates)
+
+---
+
+### Session D — 2026-05-18 (Steps 5+6+7+8)
+
+**Step 5 — Extract inline systems from index.ts:**
+- 5 new files extracted from `index.ts` (~290 → 237 LOC):
+  - `systems/nameRetrySystem.ts` (36 LOC) — player name resolution polling, returns `updateName()` handle
+  - `systems/reloadDropSystem.ts` (32 LOC) — reload-drop detection (still non-functional, extracted as-is)
+  - `systems/podiumCubeSystem.ts` (37 LOC) — hides cinematic podium cubes at runtime
+  - `systems/musicSetup.ts` (21 LOC) — background music entity (exported for mute toggle)
+  - `systems/avatarModifierSetup.ts` (19 LOC) — passport-disable area
+- `musicEntity` export moved from `index.ts` to `musicSetup.ts`; importers updated (boomboxSystem, StatsRow, uiSystems)
+
+**Step 6 — Split shared/components.ts:**
+- `shared/constants.ts` (65 LOC) — all game tuning values and spawn points
+- `shared/dateUtils.ts` (35 LOC) — UTC date/time helpers (round timer, leaderboard resets)
+- `shared/components.ts` kept re-exports for backward compatibility — zero consumer files needed updating
+
+**Step 7 — Untangle circular dependencies:**
+- `shared/clientState.ts` created with:
+  - `spectatorState.active` — replaces `isSpectating` let in spectatorSystem for UI reads
+  - `applyDeferredBalance()` + `registerDeferredBalanceApplier()` — bridge pattern so UI calls via shared/, coinPickupSystem registers the implementation
+- All `ui/ → systems/` imports for these 3 items replaced with `ui/ → shared/` imports
+- `clearMushroomShield` / `hasMushroomShield` removed (dead code — mushrooms changed to boost upgrade)
+- Dead shield-related comments cleaned from mushroomSystem
+- Remaining `ui/ → systems/` imports are acceptable one-way reads (cooldown getters, action triggers)
+- `isSpectatorMode()` kept in spectatorSystem as thin wrapper for systems-layer consumers
+
+**Step 8 — Webhook to EnvVar + cleanup:**
+- `MAILBOX_WEBHOOK` now loads from `MAILBOX_WEBHOOK_URL` EnvVar at server startup, falls back to hardcoded URL
+- Removed stale comments: shield break sound stub, attack flicker placeholder, beacon stub
+
+**Commits:** `96d89ff` (step 5), `e2a6119` (step 6), `52d7f80` (step 7), `386e529` (step 8)
 
 ---
 
