@@ -36,7 +36,7 @@ export async function main() {
   const { flagClientSystem } = await import('./systems/flagSystem')
   const { combatClientSystem, initPools: initCombatPools } = await import('./systems/combatSystem')
   const { trapClientSystem, initTrapPool } = await import('./systems/trapSystem')
-  const { projectileClientSystem, initProjectilePool } = await import('./systems/projectileSystem')
+  const { projectileClientSystem, initProjectilePool } = await import('./systems/projectile')
   const { mushroomClientSystem } = await import('./systems/mushroomSystem')
   const { shieldSystem } = await import('./systems/shieldSystem')
   const { setupProximityLights, proximityLightSystem } = await import('./systems/proximityLights')

@@ -26,7 +26,7 @@ import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSys
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { getCountdownSeconds } from '../../shared/components'
 import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from '../../systems/trapSystem'
-import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, triggerProjectileReleaseFromUI, getChargeFraction } from '../../systems/projectileSystem'
+import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, triggerProjectileReleaseFromUI, getChargeFraction } from '../../systems/projectile'
 import { isSpectatorMode } from '../../systems/spectatorSystem'
 
 import { HowToPlayOverlay } from '../screens/HowToPlay'

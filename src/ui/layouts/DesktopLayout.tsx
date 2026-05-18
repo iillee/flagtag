@@ -31,7 +31,7 @@ import { isCinematicActive } from '../../gameState/cinematicState'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { isTrapOnCooldown, getTrapCooldownRemaining } from '../../systems/trapSystem'
-import { isProjectileOnCooldown, getProjectileCooldownRemaining, getChargeFraction, getIsCharging, getBurnoutFlash } from '../../systems/projectileSystem'
+import { isProjectileOnCooldown, getProjectileCooldownRemaining, getChargeFraction, getIsCharging, getBurnoutFlash } from '../../systems/projectile'
 import { isSpectatorMode, isSpectatorTransitioning } from '../../systems/spectatorSystem'
 
 import { IconButton } from '../components/IconButton'

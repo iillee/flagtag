@@ -5,7 +5,7 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { engine, Entity, Transform, MeshRenderer, Material, MaterialTransparencyMode, GltfContainer, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
-import { setHandBoomerangEntity, setLeftHandBoomerangEntity, getChargeFraction, getChargePhase } from './projectileSystem'
+import { setHandBoomerangEntity, setLeftHandBoomerangEntity, getChargeFraction, getChargePhase } from './projectile'
 import { getBoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
 
 export function setupHandBoomerangs() {

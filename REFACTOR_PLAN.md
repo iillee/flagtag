@@ -128,7 +128,7 @@
 
 ---
 
-## Step 4 — Split projectileSystem.ts (1,490 LOC) ⬜
+## Step 4 — Split projectileSystem.ts (1,490 LOC) ✅
 **Est: 45 min | Risk: Medium | Files: 4-5 new**
 
 **Problem:** Largest file in the codebase. Handles pool creation, firing, movement, collision, VFX, sound, charge mechanics, and wall raycasting all in one file.
@@ -331,6 +331,33 @@ Each step is independently shippable. Suggested session grouping:
 **Files changed:** `ui/uiConstants.ts` (new `CLICK_BLOCKER` constant), `ui/uiState.ts` (grace period removal, dead code removal), `ui/uiSystems.ts` (attack flicker removal), `ui.tsx`, `ui/screens/ChestPopup.tsx`, `ui/screens/HowToPlay.tsx`, `ui/screens/LeaderboardOverlay.tsx`, `ui/screens/AnalyticsOverlay.tsx`, `ui/screens/RoundEndSplash.tsx`, `ui/layouts/MobileLayout.tsx`
 
 **Commits:** `8e933be`, `ccf34ec`, `69f9474`
+
+---
+
+### Session C — 2026-05-18 (Step 4)
+
+**What changed:**
+- `projectileSystem.ts` (1,491 LOC) deleted and replaced with 9 files in `systems/projectile/`:
+  - `state.ts` (148 LOC) — all shared mutable state as exported objects + constants
+  - `sound.ts` (73 LOC) — charge, release, and in-flight loop sounds
+  - `pool.ts` (66 LOC) — per-color entity pool (create/acquire/release) + color-change listener
+  - `charge.ts` (53 LOC) — charge fraction, burnout flash, speed/range calc, movement restriction
+  - `orbit.ts` (107 LOC) — green orbit visual lifecycle
+  - `handVisual.ts` (166 LOC) — hand boomerang show/hide, glow, orbit particles
+  - `flight.ts` (334 LOC) — local projectiles (offline), message-driven visuals (online), wall raycasts
+  - `utils.ts` (14 LOC) — getPlayerForward helper
+  - `index.ts` (502 LOC) — orchestrator: message listeners, input handling, UI triggers, main system loop, re-exports public API
+- Total: 1,463 LOC (net -28 LOC from removing duplicate imports/interface defs)
+- All consumer imports updated: `index.ts`, `handBoomerangSetup.ts`, `DesktopLayout.tsx`, `MobileLayout.tsx`
+- No circular dependencies between sub-modules
+- `MaterialTransparencyMode` import fixed (comes from `@dcl/sdk/ecs`, not `@dcl/sdk/math`)
+
+**Approach:** Shared mutable state extracted into plain exported objects in `state.ts` (e.g. `charge.isCharging`, `cooldown.lastFireTime`, `localThrow.active`). Sub-modules import and mutate these directly. This avoids getter/setter boilerplate while keeping state centralized.
+
+**Files changed:**
+- `systems/projectileSystem.ts` (deleted)
+- `systems/projectile/` (9 new files)
+- `index.ts`, `systems/handBoomerangSetup.ts`, `ui/layouts/DesktopLayout.tsx`, `ui/layouts/MobileLayout.tsx` (import path updates)
 
 ---
 
