@@ -124,7 +124,6 @@ export function setupUi() {
 // ═══════════════════════════════════════════════════════════
 
 export function openMetricsPanel() {
-  
   setMetricsOpenedFromTerminal(true)
   setLeaderboardOverlayVisible(true)
   tabs.folder = 'metrics'; tabs.leaderboard = 'metrics'; tabs.metrics = 'daily'
@@ -133,7 +132,6 @@ export function openMetricsPanel() {
 
 export function closeMetricsPanel() {
   if (isMetricsOpenedFromTerminal()) {
-    
     setMetricsOpenedFromTerminal(false)
     setLeaderboardOverlayVisible(false)
     tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'

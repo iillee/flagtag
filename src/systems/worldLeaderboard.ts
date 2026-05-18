@@ -75,7 +75,7 @@ export function setupWorldLeaderboard(): void {
   dailyTabEntity = dailyTab.box
   dailyTabLabel = dailyTab.label
 
-  const alltimeTab = createTabButton('TOP 100', Vector3.create(1.8, 4.0, 0.06), false)
+  const alltimeTab = createTabButton('ALL TIME', Vector3.create(1.8, 4.0, 0.06), false)
   alltimeTabEntity = alltimeTab.box
   alltimeTabLabel = alltimeTab.label
 
@@ -85,7 +85,7 @@ export function setupWorldLeaderboard(): void {
     () => { if (activeTab !== 'daily') { activeTab = 'daily'; pageOffset = 0; lastRenderedText = ''; updateBoard() } }
   )
   pointerEventsSystem.onPointerDown(
-    { entity: alltimeTabEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'Top 100 All Time', maxDistance: 20 } },
+    { entity: alltimeTabEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'All Time', maxDistance: 20 } },
     () => { if (activeTab !== 'alltime') { activeTab = 'alltime'; pageOffset = 0; lastRenderedText = ''; updateBoard() } }
   )
 
@@ -253,7 +253,7 @@ function updateBoard(): void {
   lastRenderedText = newText
 
   // Title
-  TextShape.getMutable(titleEntity).text = activeTab === 'daily' ? 'DAILY LEADERBOARD' : 'TOP 100 ALL TIME'
+  TextShape.getMutable(titleEntity).text = activeTab === 'daily' ? 'DAILY LEADERBOARD' : 'ALL TIME LEADERBOARD'
 
   // Tab styling
   Material.setPbrMaterial(dailyTabEntity, { albedoColor: activeTab === 'daily' ? TAB_ACTIVE_BG : TAB_INACTIVE_BG })

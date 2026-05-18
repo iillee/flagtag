@@ -5,7 +5,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import {
   S, WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GOLD,
   PANEL_BG, PANEL_BG_SEMI,
-  getServerConnectionStatus, formatCountdown, sortVisitorsWithBotSection,
+  getServerConnectionStatus, formatCountdown, sortVisitorsWithBotSection, getSortedLeaderboardEntries,
   _PANEL_WIDTH, _ROW_HEIGHT, _ROW_FONT, _PADDING, _BORDER_RADIUS,
   _ABILITY_BTN_SIZE, _ABILITY_ICON_SIZE,
 } from '../uiConstants'
@@ -37,7 +37,8 @@ import { isSpectatorMode, isSpectatorTransitioning } from '../../systems/spectat
 import { IconButton } from '../components/IconButton'
 import { HowToPlayOverlay } from '../screens/HowToPlay'
 import { RoundEndSplash } from '../screens/RoundEndSplash'
-import { StatusPopup } from '../screens/LeaderboardOverlay'
+import { LeaderboardOverlay } from '../screens/LeaderboardOverlay'
+import { getLeaderboardEntries, getAllTimeLeaderboardEntries, getMonthlyLeaderboardEntries } from '../../gameState/roundsWon'
 import { AnalyticsOverlay } from '../screens/AnalyticsOverlay'
 
 export function DesktopLayout() {
@@ -70,7 +71,16 @@ export function DesktopLayout() {
 
       <RoundEndSplash />
       {winConditionVisible && <HowToPlayOverlay />}
-      {leaderboardVisible && <StatusPopup />}
+      {leaderboardVisible && (() => {
+        const rawVisitors = getAllVisitors()
+        const allVisitors = sortVisitorsWithBotSection(rawVisitors)
+        const onlineCount = getCurrentOnlineCount()
+        const totalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
+        const rawLbEntries = tabs.leaderboard === 'monthly' ? getMonthlyLeaderboardEntries() : tabs.leaderboard === 'alltime' ? getAllTimeLeaderboardEntries() : getLeaderboardEntries()
+        const leaderboardEntries = getSortedLeaderboardEntries(rawLbEntries)
+        const serverConnected = getServerConnectionStatus()
+        return <LeaderboardOverlay allVisitors={allVisitors} leaderboardEntries={leaderboardEntries} localUserId={localUserId} onlineCount={onlineCount} totalPlaytimeMin={totalPlaytimeMin} serverConnected={serverConnected} />
+      })()}
       {analyticsVisible && (() => {
         const rawVisitors = getAllVisitors()
         const allVisitors = sortVisitorsWithBotSection(rawVisitors)
@@ -117,9 +127,9 @@ export function DesktopLayout() {
       <UiEntity uiTransform={{ positionType: 'absolute', position: { right: S(16), top: S(14) }, flexDirection: 'row', alignItems: 'flex-start' }}>
         {/* Icon buttons */}
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
-          <IconButton hoverKey="squareIcon" label="Status" isActive={leaderboardVisible}
+          <IconButton hoverKey="squareIcon" label="Menus" isActive={leaderboardVisible}
             iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE }} />}
-            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); scroll.leaderboardOffset = 0; tabs.leaderboard = 'daily'; tabs.folder = 'leaderboards'; setMetricsOpenedFromTerminal(false); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
           <UiEntity uiTransform={{ height: S(4) }} />
           <IconButton hoverKey="questionIcon" label="Help" isActive={winConditionVisible}
