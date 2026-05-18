@@ -8,7 +8,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { musicEntity } from '../index'
-import { isMusicMuted, toggleMusicMuted } from '../ui/uiState'
+import { musicState } from '../ui/uiState'
 
 const BOOMBOX_SRC = 'assets/asset-packs/boombox/Boombox_01/Boombox_01.glb'
 
@@ -61,16 +61,16 @@ function setupBoombox(): void {
           entity,
           opts: {
             button: InputAction.IA_POINTER,
-            hoverText: isMusicMuted() ? '♪ Unmute' : '♪ Mute',
+            hoverText: musicState.muted ? '♪ Unmute' : '♪ Mute',
             maxDistance: 12
           }
         },
         () => {
           
-          toggleMusicMuted()
+          musicState.muted = !musicState.muted
           try {
             const audio = AudioSource.getMutable(musicEntity)
-            audio.volume = isMusicMuted() ? 0 : 0.0984375
+            audio.volume = musicState.muted ? 0 : 0.0984375
           } catch {}
           // Update hover text
           pointerEventsSystem.onPointerDown(
@@ -78,7 +78,7 @@ function setupBoombox(): void {
               entity: entity,
               opts: {
                 button: InputAction.IA_POINTER,
-                hoverText: isMusicMuted() ? '♪ Unmute' : '♪ Mute',
+                hoverText: musicState.muted ? '♪ Unmute' : '♪ Mute',
                 maxDistance: 12
               }
             },
@@ -109,7 +109,7 @@ export function boomboxSystem(dt: number): void {
     if (!initialized) return
   }
 
-  const muted = isMusicMuted()
+  const muted = musicState.muted
 
   // Spawn rings when not muted
   if (!muted) {

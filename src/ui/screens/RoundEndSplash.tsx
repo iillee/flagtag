@@ -5,15 +5,15 @@
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
-import { S, GOLD, SILVER, BRONZE, LIGHT_GREY, CLOSE_GREY, PANEL_BG } from '../uiConstants'
-import { isSplashVisible, setSplashVisible, getSplashPlayers, getCinematicShowing, notifyOverlayClosed } from '../uiState'
+import { S, GOLD, SILVER, BRONZE, LIGHT_GREY, CLOSE_GREY, PANEL_BG, CLICK_BLOCKER } from '../uiConstants'
+import { splashState, cinematicState, notifyOverlayClosed } from '../uiState'
 
 export function RoundEndSplash() {
   const mobile = isMobile()
-  const splashPlayers = getSplashPlayers()
-  const cinematicShowing = getCinematicShowing()
+  const splashPlayers = splashState.players
+  const cinematicShowing = cinematicState.showing
 
-  if (!isSplashVisible() || !cinematicShowing || splashPlayers.length === 0) return null
+  if (!splashState.visible || !cinematicShowing || splashPlayers.length === 0) return null
 
   return (
     <UiEntity
@@ -27,6 +27,8 @@ export function RoundEndSplash() {
         alignItems: 'flex-end',
         padding: { bottom: mobile ? 114 : S(40) },
       }}
+      uiBackground={{ color: CLICK_BLOCKER }}
+      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{
@@ -52,7 +54,7 @@ export function RoundEndSplash() {
               width: 88, height: 88,
               flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
             }}
-            onMouseDown={() => { setSplashVisible(false); notifyOverlayClosed() }}
+            onMouseDown={() => { splashState.visible = false; notifyOverlayClosed() }}
           >
             <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
           </UiEntity>

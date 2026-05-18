@@ -2,7 +2,7 @@ import { engine, Transform, VirtualCamera, MainCamera, InputModifier } from '@dc
 import { Vector3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
-import { setCinematicFade, setCinematicShowing, setNextRoundStartingVisible, setCreditsCountdown, setNoScorersCreditsVisible, hideMailboxPopup, hideChestPopup } from '../ui'
+import { setCinematicFade, cinematicState, creditsState, hideMailboxPopup, hideChestPopup } from '../ui'
 import { setCinematicActive } from '../gameState/cinematicState'
 import { setWinConditionOverlayVisible, setLeaderboardOverlayVisible, setAnalyticsOverlayVisible } from '../gameState/overlayState'
 import { cancelDrownRespawn } from './waterSystem'
@@ -154,8 +154,8 @@ export function setupCinematicSystem(): void {
       } else if (fadePhase === 2) {
         setCinematicFade(1)
         if (fadeTimer <= 0) {
-          setCinematicShowing(true)
-          if (noScorersRound) { setNoScorersCreditsVisible(true); fadePhase = 4 }
+          cinematicState.showing = true
+          if (noScorersRound) { creditsState.noScorersVisible = true; fadePhase = 4 }
           else { fadePhase = 3; fadeTimer = FADE_OUT_DUR }
         }
       } else if (fadePhase === 3) {
@@ -163,13 +163,13 @@ export function setupCinematicSystem(): void {
         setCinematicFade(progress)
         if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 4 }
       } else if (fadePhase === 4) {
-        if (noScorersRound) setCreditsCountdown(Math.max(0, cinematicTimer))
+        if (noScorersRound) creditsState.countdown = Math.max(0, cinematicTimer)
       } else if (fadePhase === 5) {
         const progress = 1 - Math.max(0, fadeTimer / END_FADE_IN_DUR)
         setCinematicFade(progress)
         if (fadeTimer <= 0) {
           setCinematicFade(1)
-          setCinematicShowing(false)
+          cinematicState.showing = false
           MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
           if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
           if (isPodiumPlayer) {
@@ -179,12 +179,12 @@ export function setupCinematicSystem(): void {
           }
           fadePhase = 6
           fadeTimer = 10.0
-          setNextRoundStartingVisible(true)
+          creditsState.nextRoundVisible = true
         }
       } else if (fadePhase === 6) {
         setCinematicFade(1)
-        setCreditsCountdown(Math.max(0, fadeTimer))
-        if (fadeTimer <= 0) { setNextRoundStartingVisible(false); setCreditsCountdown(0); fadePhase = 7; fadeTimer = END_FADE_OUT_DUR }
+        creditsState.countdown = Math.max(0, fadeTimer)
+        if (fadeTimer <= 0) { creditsState.nextRoundVisible = false; creditsState.countdown = 0; fadePhase = 7; fadeTimer = END_FADE_OUT_DUR }
       } else if (fadePhase === 7) {
         const progress = Math.max(0, fadeTimer / END_FADE_OUT_DUR)
         setCinematicFade(progress)
@@ -196,7 +196,7 @@ export function setupCinematicSystem(): void {
     cinematicTimer -= dt
     if (cinematicTimer <= 0 && fadePhase === 4) {
       if (noScorersRound) {
-        setCinematicShowing(false); setNoScorersCreditsVisible(false); setCreditsCountdown(0)
+        cinematicState.showing = false; creditsState.noScorersVisible = false; creditsState.countdown = 0
         if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
         fadePhase = 7; fadeTimer = END_FADE_OUT_DUR
         return

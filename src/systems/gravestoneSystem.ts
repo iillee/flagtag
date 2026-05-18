@@ -2,7 +2,7 @@ import {
   engine, Transform, pointerEventsSystem, InputAction
 } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { showGravestonePopup, hideGravestonePopup, isGravestonePopupVisible } from '../ui'
+import { showGravestonePopup, hideGravestonePopup, popupState } from '../ui'
 
 const GRAVESTONE_POS = Vector3.create(221.93, 2, 286.54)
 const MATCH_DIST = 2
@@ -12,7 +12,7 @@ let gravestoneSetup = false
 
 export function gravestoneSystem() {
   // Close popup if player walks away
-  if (isGravestonePopupVisible() && Transform.has(engine.PlayerEntity)) {
+  if (popupState.gravestone && Transform.has(engine.PlayerEntity)) {
     const playerPos = Transform.get(engine.PlayerEntity).position
     if (Vector3.distance(playerPos, GRAVESTONE_POS) > CLOSE_DISTANCE) {
       hideGravestonePopup()

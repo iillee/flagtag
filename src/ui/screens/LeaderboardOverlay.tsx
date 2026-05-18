@@ -8,13 +8,13 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import {
-  S, WHITE, MUTED, GREY, GOLD, CLOSE_GREY, PANEL_BG,
+  S, WHITE, MUTED, GREY, GOLD, CLOSE_GREY, PANEL_BG, CLICK_BLOCKER,
   _ROW_HEIGHT, _ROW_FONT, _OVERLAY_PANEL_WIDTH, _OVERLAY_PANEL_HEIGHT,
   VISITORS_PER_PAGE,
   sortVisitorsWithBotSection, isLikelyBot, formatVisitorTime, formatUTCDate, formatUTCMonth,
   type VisitorOrSeparator,
 } from '../uiConstants'
-import { hover, scroll, tabs, setMetricsOpenedFromTerminal, notifyOverlayClosed, isWinsFrozen, getDisplayedWins } from '../uiState'
+import { hover, scroll, tabs, metricsState, notifyOverlayClosed, earnedState } from '../uiState'
 import { setLeaderboardOverlayVisible } from '../../gameState/overlayState'
 import { SubTabBar } from '../components/SubTabBar'
 import { Scrollbar } from '../components/Scrollbar'
@@ -22,7 +22,7 @@ import { StatsRow } from '../components/StatsRow'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
-import { isBlessingAlreadyUsed } from '../uiState'
+import { blessingState } from '../uiState'
 import { getMonthlyVisitors, getMonthlyOnlineCount } from '../../gameState/visitorState'
 
 const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
@@ -36,7 +36,7 @@ export function StatusPopup() {
   const localName = localPlayer?.name ?? 'Unknown'
   const coins = getCoinBalance()
   const liveWins = getLocalLifetimeWins()
-  const myFlags = isWinsFrozen() ? (getDisplayedWins() ?? liveWins) : liveWins
+  const myFlags = earnedState.winsFrozen ? (earnedState.displayedWins ?? liveWins) : liveWins
   const boomerang = getBoomerangColor()
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
@@ -66,6 +66,8 @@ export function StatusPopup() {
         justifyContent: 'center',
         alignItems: 'center',
       }}
+      uiBackground={{ color: CLICK_BLOCKER }}
+      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{
@@ -108,7 +110,7 @@ export function StatusPopup() {
         {sectionHeader('DAILY')}
         <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(10), right: S(10) } }}>
           <Label value="Blessed Today" fontSize={S(SF)} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(SR) }} textAlign="middle-left" />
-          <Label value={isBlessingAlreadyUsed() ? 'Yes' : 'No'} fontSize={S(SF)} color={isBlessingAlreadyUsed() ? GOLD : GREY} font="sans-serif" uiTransform={{ height: S(SR) }} textAlign="middle-right" />
+          <Label value={blessingState.alreadyUsed ? 'Yes' : 'No'} fontSize={S(SF)} color={blessingState.alreadyUsed ? GOLD : GREY} font="sans-serif" uiTransform={{ height: S(SR) }} textAlign="middle-right" />
         </UiEntity>
       </UiEntity>
     </UiEntity>
@@ -144,6 +146,8 @@ export function MetricsOverlay({ allVisitors, localUserId, onlineCount, totalPla
         justifyContent: 'center',
         alignItems: 'center',
       }}
+      uiBackground={{ color: CLICK_BLOCKER }}
+      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{
@@ -206,7 +210,7 @@ export function MetricsOverlay({ allVisitors, localUserId, onlineCount, totalPla
               uiTransform={{ width: S(80), height: S(80), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(6), margin: { top: S(-6) } }}
               onMouseEnter={() => { hover.closeLeaderboard = true }}
               onMouseLeave={() => { hover.closeLeaderboard = false }}
-              onMouseDown={() => { setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; setMetricsOpenedFromTerminal(false); notifyOverlayClosed() }}
+              onMouseDown={() => { setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; metricsState.openedFromTerminal = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={S(38)} color={hover.closeLeaderboard ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>

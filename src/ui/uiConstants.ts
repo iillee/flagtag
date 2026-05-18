@@ -20,6 +20,8 @@ export const BRONZE = Color4.create(0.8, 0.5, 0.2, 1)
 export const CORAL_RED = Color4.create(1, 0.5, 0.45, 1)
 
 export const PANEL_BG = Color4.create(0.1, 0.1, 0.1, 0.92)
+/** Nearly-invisible background that blocks click-through to 3D world */
+export const CLICK_BLOCKER = Color4.create(0, 0, 0, 0.001)
 export const PANEL_BG_SEMI = Color4.create(0.08, 0.08, 0.1, 0.87)
 
 // ═══════════════════════════════════════════════════════════

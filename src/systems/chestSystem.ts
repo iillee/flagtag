@@ -4,7 +4,7 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { showChestPopup, hideChestPopup, isChestPopupVisible } from '../ui'
+import { showChestPopup, hideChestPopup, popupState } from '../ui'
 
 const chestSoundEntity = engine.addEntity()
 Transform.create(chestSoundEntity, { position: Vector3.Zero() })
@@ -24,7 +24,7 @@ let lastOpenedChestEntity: Entity | null = null
 
 export function chestSystem() {
   // Close chest popup if player walks away
-  if (isChestPopupVisible() && lastOpenedChestEntity !== null && Transform.has(engine.PlayerEntity) && Transform.has(lastOpenedChestEntity)) {
+  if (popupState.chest && lastOpenedChestEntity !== null && Transform.has(engine.PlayerEntity) && Transform.has(lastOpenedChestEntity)) {
     const playerPos = Transform.get(engine.PlayerEntity).position
     const chestPos = Transform.get(lastOpenedChestEntity).position
     if (Vector3.distance(playerPos, chestPos) > CHEST_CLOSE_DISTANCE) {

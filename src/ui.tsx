@@ -20,57 +20,33 @@ import { registerUiSystems } from './ui/uiSystems'
 import {
   S, WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY,
   GOLD, SILVER, BRONZE, CORAL_RED,
-  PANEL_BG, PANEL_BG_SEMI,
+  PANEL_BG, PANEL_BG_SEMI, CLICK_BLOCKER,
   getUIScaleLabel,
   formatCountdown,
   type VisitorOrSeparator,
 } from './ui/uiConstants'
 import {
-  // Music
-  isMusicMuted,
-  // Cinematic
-  getCinematicFadeOpacity, setCinematicFade,
-  isTitleSplashVisible, setTitleSplashVisible,
-  getCinematicShowing, setCinematicShowing,
-  // Credits
-  isNextRoundStartingVisible, setNextRoundStartingVisible,
-  isNoScorersCreditsVisible, setNoScorersCreditsVisible,
-  getCreditsCountdown, setCreditsCountdown,
-  getCreditLineIndex, CREDIT_LINES,
-  // Blessing
-  isBlessingActive, setBlessingActive, getBlessingTimer,
-  getBlessingLineIndex, isBlessingCompleted, setBlessingCompleted,
-  getBlessingFadeOut,
-  isBlessingAlreadyUsed, setBlessingAlreadyUsed,
-  getBlessingCoinProgress,
-  // Earned UI
-  getActiveRoundEarnings, getEarnedUiPhase, getEarnedCoinsFlyProgress,
-  // Overlay
+  musicState,
+  cinematicState, setCinematicFade,
+  creditsState, CREDIT_LINES,
+  blessingState, markBlessingCompleted,
+  earnedState,
   notifyOverlayClosed, isAnyOverlayOpen,
   registerOverlayChecks,
-  // Popups
-  isChestPopupVisible, showChestPopup, hideChestPopup,
-  isMailboxPopupVisible, showMailboxPopup, hideMailboxPopup,
-  isGravestonePopupVisible, showGravestonePopup, hideGravestonePopup,
+  popupState,
+  showChestPopup, hideChestPopup,
+  showMailboxPopup, hideMailboxPopup,
+  showGravestonePopup, hideGravestonePopup,
   getMailboxStatus, setMailboxStatus,
-  // Metrics
-  isMetricsOpenedFromTerminal, setMetricsOpenedFromTerminal,
-  // Splash
-  isSplashVisible,
-  // Server down
-  isServerDownVisible, setServerDownVisible, setServerDownDismissedAt,
-  // Hover
+  metricsState,
+  splashState,
+  serverDownState,
   hover,
-  // Scroll/tabs
   scroll, tabs,
-  // UI Scale
   getUIScaleFlash,
-  // Mobile
-  isMobileScoreboardVisible, setMobileScoreboardVisible,
-  // Misc
-  isSpectatorExitBlink, setSpectatorExitBlink,
-  isWinsFrozen, getDisplayedWins, setDisplayedWins,
-  // Admin
+  mobileState,
+  miscState,
+  type EarnedUiPhase,
 } from './ui/uiState'
 
 // Overlay visibility state
@@ -101,13 +77,15 @@ import { MobileLayout } from './ui/layouts/MobileLayout'
 // RE-EXPORTS — stable public API for other files
 // ═══════════════════════════════════════════════════════════
 export {
-  setCinematicFade, setCinematicShowing, getCinematicShowing,
-  setNextRoundStartingVisible, setNoScorersCreditsVisible, setCreditsCountdown,
+  setCinematicFade,
   notifyOverlayClosed, isAnyOverlayOpen,
-  showChestPopup, hideChestPopup, isChestPopupVisible,
-  showMailboxPopup, hideMailboxPopup, isMailboxPopupVisible,
-  showGravestonePopup, hideGravestonePopup, isGravestonePopupVisible,
+  showChestPopup, hideChestPopup,
+  showMailboxPopup, hideMailboxPopup,
+  showGravestonePopup, hideGravestonePopup,
 }
+
+// Re-export state objects for systems that need direct access
+export { cinematicState, creditsState, popupState, splashState }
 
 // ═══════════════════════════════════════════════════════════
 // SETUP
@@ -124,15 +102,15 @@ export function setupUi() {
 // ═══════════════════════════════════════════════════════════
 
 export function openMetricsPanel() {
-  setMetricsOpenedFromTerminal(true)
+  metricsState.openedFromTerminal = true
   setLeaderboardOverlayVisible(true)
   tabs.folder = 'metrics'; tabs.leaderboard = 'metrics'; tabs.metrics = 'daily'
   scroll.leaderboardOffset = 0; scroll.visitorOffset = 0
 }
 
 export function closeMetricsPanel() {
-  if (isMetricsOpenedFromTerminal()) {
-    setMetricsOpenedFromTerminal(false)
+  if (metricsState.openedFromTerminal) {
+    metricsState.openedFromTerminal = false
     setLeaderboardOverlayVisible(false)
     tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'
     notifyOverlayClosed()
@@ -140,7 +118,7 @@ export function closeMetricsPanel() {
 }
 
 export function isMetricsPanelOpen(): boolean {
-  return isMetricsOpenedFromTerminal() && getLeaderboardOverlayVisible()
+  return metricsState.openedFromTerminal && getLeaderboardOverlayVisible()
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -186,14 +164,14 @@ function ScareBar() {
 
 function PlayerListUi() {
   const mobile = isMobile()
-  const cinematicFadeOpacity = getCinematicFadeOpacity()
-  const cinematicShowing = getCinematicShowing()
-  const nextRoundStartingVisible = isNextRoundStartingVisible()
-  const noScorersCreditsVisible = isNoScorersCreditsVisible()
-  const activeRoundEarnings = getActiveRoundEarnings()
-  const earnedUiPhase = getEarnedUiPhase()
-  const earnedCoinsFlyProgress = getEarnedCoinsFlyProgress()
-  const creditsCountdown = getCreditsCountdown()
+  const cinematicFadeOpacity = cinematicState.fadeOpacity
+  const cinematicShowing = cinematicState.showing
+  const nextRoundStartingVisible = creditsState.nextRoundVisible
+  const noScorersCreditsVisible = creditsState.noScorersVisible
+  const activeRoundEarnings = earnedState.activeRoundEarnings
+  const earnedUiPhase = earnedState.phase
+  const earnedCoinsFlyProgress = earnedState.coinsFlyProgress
+  const creditsCountdown = creditsState.countdown
 
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
@@ -218,18 +196,19 @@ function PlayerListUi() {
       )}
 
       {/* Blessing overlay (no background — see through to emoting player) */}
-      {(isBlessingActive() || getBlessingFadeOut() > 0) && (() => {
-        const opacity = isBlessingActive() ? 1 : getBlessingFadeOut()
+      {(blessingState.active || blessingState.fadeOut > 0) && (() => {
+        const opacity = blessingState.active ? 1 : blessingState.fadeOut
         const goldFaded = Color4.create(GOLD.r, GOLD.g, GOLD.b, opacity)
         const greyFaded = Color4.create(LIGHT_GREY.r, LIGHT_GREY.g, LIGHT_GREY.b, opacity)
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center' }}
+            uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
             <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '18%' }, flexDirection: 'column', alignItems: 'center' }}>
               <UiEntity uiTransform={{ padding: { top: mobile ? 24 : S(18), bottom: mobile ? 24 : S(18), left: mobile ? 40 : S(32), right: mobile ? 40 : S(32) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 16 : S(12) }}
                 uiBackground={{ color: Color4.create(0, 0, 0, 0.6 * opacity) }}>
                 <Label value="Receiving the blessing of..." fontSize={mobile ? 52 : S(34)} color={goldFaded} font="sans-serif" />
                 <UiEntity uiTransform={{ height: mobile ? 14 : S(12) }} />
-                {getBlessingLineIndex() >= 0 && CREDIT_LINES.slice(0, getBlessingLineIndex() + 1).map((line, i) => (
+                {blessingState.lineIndex >= 0 && CREDIT_LINES.slice(0, blessingState.lineIndex + 1).map((line, i) => (
                   <Label key={i} value={line} fontSize={mobile ? 32 : S(20)} color={greyFaded} font="sans-serif" uiTransform={{ margin: { top: mobile ? 6 : S(4) } }} />
                 ))}
               </UiEntity>
@@ -239,14 +218,15 @@ function PlayerListUi() {
       })()}
 
       {/* Blessing completed notification */}
-      {isBlessingCompleted() && (() => {
-        const coinProgress = getBlessingCoinProgress()
+      {blessingState.completed && (() => {
+        const coinProgress = blessingState.coinProgress
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
+            uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
             <UiEntity uiTransform={{ width: mobile ? 420 : S(340), padding: { top: mobile ? 32 : S(24), bottom: mobile ? 32 : S(24), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(16) }}
               uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
             >
-              {isBlessingAlreadyUsed() ? (
+              {blessingState.alreadyUsed ? (
                 <Label value="You have already received the blessing today" fontSize={mobile ? 36 : S(24)} color={MUTED} font="sans-serif" />
               ) : (
                 <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
@@ -285,14 +265,14 @@ function PlayerListUi() {
       })()}
 
       {/* Server-down overlay */}
-      {isServerDownVisible() && (
+      {serverDownState.visible && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
           uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}
         >
           <UiEntity uiTransform={{ width: mobile ? 400 : S(460), flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: mobile ? 20 : S(16), padding: mobile ? { top: 36, bottom: 32, left: 20, right: 20 } : { top: S(36), bottom: S(32), left: S(40), right: S(40) } }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <CloseButton hoverKey="closeServerDown" onClose={() => { setServerDownDismissedAt(Date.now()); setServerDownVisible(false) }} />
+            <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />
             <Label value="Server Disconnected" fontSize={mobile ? 36 : S(28)} color={GOLD} font="sans-serif" />
             <UiEntity uiTransform={{ height: mobile ? 12 : S(12) }} />
             <Label value="all players please leave scene
@@ -302,8 +282,9 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
       )}
 
       {/* Mailbox popup */}
-      {isMailboxPopupVisible() && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+      {popupState.mailbox && (
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
+          uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
           <UiEntity uiTransform={{ width: mobile ? 440 : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 28, bottom: 28, left: 20, right: 20 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
             uiBackground={{ color: PANEL_BG }}
           >
@@ -333,7 +314,7 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
       )}
 
       {/* Gravestone popup */}
-      {isGravestonePopupVisible() && (
+      {popupState.gravestone && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }} onMouseDown={() => {}}>
           <UiEntity uiTransform={{ width: mobile ? 340 : S(340), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 28, bottom: 28, left: 20, right: 20 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
             uiBackground={{ color: PANEL_BG }}
@@ -346,7 +327,7 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
       )}
 
       {/* Chest / Store popup */}
-      {isChestPopupVisible() && <ChestPopup />}
+      {popupState.chest && <ChestPopup />}
 
       {/* Progress bars */}
       {isDrownBarVisible() && <DrownBar />}
@@ -375,8 +356,8 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
             <Label value="SPECTATOR MODE" fontSize={mobile ? 24 : S(28)} color={Color4.White()} />
             <Label value="WASD = Orbit  |  E/F = Up/Down" fontSize={mobile ? 12 : S(14)} color={Color4.create(1, 1, 1, 0.8)} />
             <UiEntity uiTransform={{ width: mobile ? 120 : S(160), height: mobile ? 32 : S(40), margin: { top: mobile ? 6 : S(8) }, borderRadius: mobile ? 8 : S(10) }}
-              uiBackground={{ color: isSpectatorExitBlink() ? Color4.create(0.5, 0.5, 0.5, 0.9) : Color4.create(1, 1, 1, 0.9) }}
-              onMouseDown={() => { setSpectatorExitBlink(true); executeTask(async () => { await new Promise<void>(r => setTimeout(r, 120)); setSpectatorExitBlink(false) }); exitSpectatorMode() }}
+              uiBackground={{ color: miscState.spectatorExitBlink ? Color4.create(0.5, 0.5, 0.5, 0.9) : Color4.create(1, 1, 1, 0.9) }}
+              onMouseDown={() => { miscState.spectatorExitBlink = true; executeTask(async () => { await new Promise<void>(r => setTimeout(r, 120)); miscState.spectatorExitBlink = false }); exitSpectatorMode() }}
             >
               <Label value="Exit" fontSize={mobile ? 16 : S(18)} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
             </UiEntity>
@@ -385,13 +366,13 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
       )}
 
       {/* Title Splash */}
-      {isTitleSplashVisible() && (
+      {cinematicState.titleSplashVisible && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
-          onMouseDown={() => { setTitleSplashVisible(false); setWinConditionOverlayVisible(true) }}
+          onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
         >
           <UiEntity uiTransform={{ width: S(420), padding: { top: S(32), bottom: S(32), left: S(24), right: S(24) }, borderRadius: S(16), flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
             uiBackground={{ color: Color4.create(0.12, 0.10, 0.10, 0.95) }}
-            onMouseDown={() => { setTitleSplashVisible(false); setWinConditionOverlayVisible(true) }}
+            onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
           >
             <Label value="FLAG TAG!" fontSize={S(56)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(6) } }} />
             <Label value="A multiplayer keep away game!" fontSize={S(22)} color={MUTED} font="sans-serif" uiTransform={{ margin: { bottom: S(24) } }} />
@@ -408,7 +389,6 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
 // ═══════════════════════════════════════════════════════════
 
 import type { RoundEarnings } from './gameState/roundEarnings'
-import type { EarnedUiPhase } from './ui/uiState'
 
 function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgress, creditsCountdown, mobile }: {
   activeRoundEarnings: RoundEarnings | null; earnedUiPhase: EarnedUiPhase; earnedCoinsFlyProgress: number; creditsCountdown: number; mobile: boolean

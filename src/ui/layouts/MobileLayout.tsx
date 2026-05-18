@@ -4,17 +4,16 @@ import { getPlayer } from '@dcl/sdk/players'
 
 import {
   WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY, GOLD,
-  PANEL_BG,
+  PANEL_BG, CLICK_BLOCKER,
   formatCountdown,
 } from '../uiConstants'
 import {
   notifyOverlayClosed,
   scroll, tabs,
-  isMobileScoreboardVisible, setMobileScoreboardVisible,
-  setMetricsOpenedFromTerminal,
-  isMetricsOpenedFromTerminal,
-  isWinsFrozen, getDisplayedWins,
-  isBlessingAlreadyUsed,
+  mobileState,
+  metricsState,
+  earnedState,
+  blessingState,
 } from '../uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible, toggleWinConditionOverlay,
@@ -66,7 +65,7 @@ export function MobileLayout() {
               </UiEntity>
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18, right: 30 }, borderRadius: 34 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' } }}
-                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); setMobileScoreboardVisible(!isMobileScoreboardVisible()) }}
+                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); mobileState.scoreboardVisible = !mobileState.scoreboardVisible }}
               >
                 <UiEntity uiTransform={{ width: 34, height: 34, margin: { right: 8 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/expand.png' }, color: Color4.White() }} />
                 <Label value="Score:" fontSize={32} color={scoreColor} font="sans-serif" />
@@ -76,13 +75,13 @@ export function MobileLayout() {
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); setMobileScoreboardVisible(false); toggleWinConditionOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; toggleWinConditionOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="?" fontSize={36} color={winConditionVisible ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 6 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setMobileScoreboardVisible(false); tabs.folder = 'status'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; tabs.folder = 'status'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardVisible ? GOLD : WHITE }} />
               </UiEntity>
@@ -132,13 +131,14 @@ export function MobileLayout() {
       })()}
 
       {/* Mobile Scoreboard Overlay */}
-      {isMobileScoreboardVisible() && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+      {mobileState.scoreboardVisible && (
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+          uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
           <UiEntity uiTransform={{ positionType: 'relative', width: '42%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 28, overflow: 'hidden' }}
             uiBackground={{ color: PANEL_BG }}
           >
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 4, right: 4 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-              onMouseDown={() => { setMobileScoreboardVisible(false); notifyOverlayClosed() }}
+              onMouseDown={() => { mobileState.scoreboardVisible = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -184,7 +184,7 @@ function MobileStatusPopup() {
   const localName = localPlayer?.name ?? 'Unknown'
   const coins = getCoinBalance()
   const liveWins = getLocalLifetimeWins()
-  const myFlags = isWinsFrozen() ? (getDisplayedWins() ?? liveWins) : liveWins
+  const myFlags = earnedState.winsFrozen ? (earnedState.displayedWins ?? liveWins) : liveWins
   const boomerang = getBoomerangColor()
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
@@ -197,7 +197,8 @@ function MobileStatusPopup() {
   )
 
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+      uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
       <UiEntity uiTransform={{ width: '42%', flexDirection: 'column', alignItems: 'stretch', padding: 28, borderRadius: 16 }}
         uiBackground={{ color: PANEL_BG }}
       >
@@ -214,7 +215,7 @@ function MobileStatusPopup() {
         {iconRow('Coins', isCoinBalanceLoaded() ? `${coins}` : '--', 'assets/images/coin.png', GOLD, GOLD)}
         {iconRow('Flags', isWinsLoaded() ? `${myFlags}` : '--', 'assets/images/flag-icon-white.png', GOLD, GOLD)}
         <Label value="DAILY" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
-        {iconRow('Blessed Today', isBlessingAlreadyUsed() ? 'Yes' : 'No', 'assets/images/coin.png', isBlessingAlreadyUsed() ? GOLD : GREY)}
+        {iconRow('Blessed Today', blessingState.alreadyUsed ? 'Yes' : 'No', 'assets/images/coin.png', blessingState.alreadyUsed ? GOLD : GREY)}
         <Label value="EQUIPMENT" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
         {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
         {iconRow('Trap', 'Banana', 'assets/images/banana.png')}

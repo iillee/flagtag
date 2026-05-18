@@ -2,7 +2,7 @@ import {
   engine, Transform, GltfContainer, pointerEventsSystem, InputAction, AudioSource
 } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { showMailboxPopup, hideMailboxPopup, isMailboxPopupVisible } from '../ui'
+import { showMailboxPopup, hideMailboxPopup, popupState } from '../ui'
 
 const MAILBOX_MODEL = 'assets/models/MailPost_01/MailPost_01.glb'
 const CLOSE_DISTANCE = 5
@@ -12,7 +12,7 @@ const mailboxPositions: ReturnType<typeof Vector3.create>[] = []
 
 export function mailboxSystem() {
   // Close popup if player walks away from all mailboxes
-  if (isMailboxPopupVisible() && Transform.has(engine.PlayerEntity)) {
+  if (popupState.mailbox && Transform.has(engine.PlayerEntity)) {
     const playerPos = Transform.get(engine.PlayerEntity).position
     const nearAny = mailboxPositions.some(pos => Vector3.distance(playerPos, pos) <= CLOSE_DISTANCE)
     if (!nearAny) hideMailboxPopup()

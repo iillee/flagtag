@@ -14,11 +14,7 @@ import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
 import { triggerEmote } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import {
-  isBlessingActive, setBlessingActive, setBlessingTimer,
-  setBlessingLineIndex, setBlessingLineTimer,
-  setBlessingCompleted, setBlessingAlreadyUsed,
-  isBlessingAlreadyUsed, isBlessingCompleted,
-  isBlessingPreCheckDone, setBlessingPreCheckDone,
+  blessingState, markBlessingCompleted,
   CREDIT_LINES,
 } from '../ui/uiState'
 
@@ -121,10 +117,10 @@ function hideBeam() {
 }
 
 function cancelBlessing() {
-  setBlessingActive(false)
-  setBlessingTimer(0)
-  setBlessingLineIndex(0)
-  setBlessingLineTimer(0)
+  blessingState.active = false
+  blessingState.timer = 0
+  blessingState.lineIndex = 0
+  blessingState.lineTimer = 0
   hideBeam()
   blessingStartPos = null
   blessingElapsed = 0
@@ -155,11 +151,11 @@ function startBlessing() {
   intervalPulse = 0
 
   // Start credits overlay — no lines visible yet (index -1)
-  setBlessingActive(true)
-  setBlessingTimer(BLESSING_DURATION)
-  setBlessingLineIndex(-1)
-  setBlessingLineTimer(0)
-  setBlessingCompleted(false)
+  blessingState.active = true
+  blessingState.timer = BLESSING_DURATION
+  blessingState.lineIndex = -1
+  blessingState.lineTimer = 0
+  markBlessingCompleted(false)
 }
 
 export function pedestalSystem(dt: number) {
@@ -167,14 +163,14 @@ export function pedestalSystem(dt: number) {
   if (!listenerRegistered) {
     listenerRegistered = true
     room.onMessage('blessingResult', (data) => {
-      console.log(`[Pedestal] blessingResult received: success=${data.success}, reason="${data.reason}", preCheckWas=${isBlessingPreCheckDone()}, alreadyUsedWas=${isBlessingAlreadyUsed()}, blessingActive=${isBlessingActive()}`)
-      setBlessingPreCheckDone(true)
+      console.log(`[Pedestal] blessingResult received: success=${data.success}, reason="${data.reason}", preCheckWas=${blessingState.preCheckDone}, alreadyUsedWas=${blessingState.alreadyUsed}, blessingActive=${blessingState.active}`)
+      blessingState.preCheckDone = true
       if (data.reason === 'already_blessed') {
-        setBlessingAlreadyUsed(true)
+        blessingState.alreadyUsed = true
         // If ritual is currently playing, cancel it immediately
-        if (isBlessingActive()) {
+        if (blessingState.active) {
           cancelBlessing()
-          setBlessingCompleted(true)  // show "already received" popup
+          markBlessingCompleted(true)  // show "already received" popup
           console.log('[Pedestal] ⚠️ Cancelled active ritual — server says already blessed')
         }
       } else if (data.success && data.reason !== 'eligible') {
@@ -186,9 +182,9 @@ export function pedestalSystem(dt: number) {
   }
 
   // ── Deferred "already used" flag — apply after reward UI dismisses ──
-  if (delayedMarkUsed && !isBlessingActive() && !isBlessingCompleted()) {
+  if (delayedMarkUsed && !blessingState.active && !blessingState.completed) {
     delayedMarkUsed = false
-    setBlessingAlreadyUsed(true)
+    blessingState.alreadyUsed = true
   }
 
   // ── Pre-check blessing status on scene load ──
@@ -219,16 +215,16 @@ export function pedestalSystem(dt: number) {
             },
           },
           () => {
-            console.log(`[Pedestal] Click: active=${isBlessingActive()}, preCheckDone=${isBlessingPreCheckDone()}, alreadyUsed=${isBlessingAlreadyUsed()}`)
-            if (isBlessingActive()) return  // already blessing in progress
-            if (!isBlessingPreCheckDone()) {
+            console.log(`[Pedestal] Click: active=${blessingState.active}, preCheckDone=${blessingState.preCheckDone}, alreadyUsed=${blessingState.alreadyUsed}`)
+            if (blessingState.active) return  // already blessing in progress
+            if (!blessingState.preCheckDone) {
               // Server hasn't responded yet — re-send check and wait
               console.log('[Pedestal] Pre-check not done yet, re-sending checkBlessing')
               room.send('checkBlessing', { t: 0 })
               return
             }
-            if (isBlessingAlreadyUsed()) {
-              setBlessingCompleted(true)  // show the "already received" popup immediately
+            if (blessingState.alreadyUsed) {
+              markBlessingCompleted(true)  // show the "already received" popup immediately
               return  // no emote, no sound, no beam
             }
             startBlessing()
@@ -243,7 +239,7 @@ export function pedestalSystem(dt: number) {
   }
 
   // ── Movement detection: cancel blessing if player moves ──
-  if (isBlessingActive() && blessingStartPos) {
+  if (blessingState.active && blessingStartPos) {
     const currentPos = Transform.get(engine.PlayerEntity).position
     const dx = currentPos.x - blessingStartPos.x
     const dz = currentPos.z - blessingStartPos.z
@@ -254,7 +250,7 @@ export function pedestalSystem(dt: number) {
   }
 
   // ── Interval triggers at 4s, 8s, 12s — emote + beam + sound + next credit line ──
-  if (isBlessingActive()) {
+  if (blessingState.active) {
     blessingElapsed += dt
     if (intervalsTriggered < INTERVAL_TIMES.length && blessingElapsed >= INTERVAL_TIMES[intervalsTriggered]) {
       // Re-trigger emote, sound, and beam at each interval (emote is ~6s, matches interval)
@@ -268,8 +264,8 @@ export function pedestalSystem(dt: number) {
       })
 
       // Show next credit line
-      setBlessingLineIndex(intervalsTriggered)
-      setBlessingLineTimer(0)
+      blessingState.lineIndex = intervalsTriggered
+      blessingState.lineTimer = 0
       // Pulse the beam
       intervalPulse = 1
       intervalsTriggered++

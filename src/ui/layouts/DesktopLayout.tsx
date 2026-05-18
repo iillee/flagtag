@@ -10,13 +10,12 @@ import {
   _ABILITY_BTN_SIZE, _ABILITY_ICON_SIZE,
 } from '../uiConstants'
 import {
-  getCinematicFadeOpacity, getCinematicShowing,
+  cinematicState,
   notifyOverlayClosed,
-  isSplashVisible,
+  splashState,
+  earnedState,
+  metricsState,
   hover, scroll, tabs,
-  isWinsFrozen, getDisplayedWins, setDisplayedWins,
-  setMetricsOpenedFromTerminal,
-  isMetricsOpenedFromTerminal,
 } from '../uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
@@ -49,9 +48,9 @@ export function DesktopLayout() {
   const leaderUserId = players.length > 0 && players[0].seconds > 0 ? players[0].userId : null
   const carrierUserId = getCurrentFlagCarrierUserId()
   const countdownSeconds = getCountdownSeconds()
-  const cinematicFadeOpacity = getCinematicFadeOpacity()
-  const splashVisible = isSplashVisible()
-  const cinematicShowing = getCinematicShowing()
+  const cinematicFadeOpacity = cinematicState.fadeOpacity
+  const splashVisible = splashState.visible
+  const cinematicShowing = cinematicState.showing
   const winConditionVisible = getWinConditionOverlayVisible()
   const leaderboardVisible = getLeaderboardOverlayVisible()
   const analyticsVisible = getAnalyticsOverlayVisible()
@@ -72,8 +71,8 @@ export function DesktopLayout() {
 
       <RoundEndSplash />
       {winConditionVisible && <HowToPlayOverlay />}
-      {leaderboardVisible && !isMetricsOpenedFromTerminal() && <StatusPopup />}
-      {leaderboardVisible && isMetricsOpenedFromTerminal() && (() => {
+      {leaderboardVisible && !metricsState.openedFromTerminal && <StatusPopup />}
+      {leaderboardVisible && metricsState.openedFromTerminal && (() => {
         const rawVisitors = getAllVisitors()
         const allVisitors = sortVisitorsWithBotSection(rawVisitors)
         const onlineCount = getCurrentOnlineCount()
@@ -129,12 +128,12 @@ export function DesktopLayout() {
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
           <IconButton hoverKey="squareIcon" label="Status" isActive={leaderboardVisible}
             iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE }} />}
-            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setMetricsOpenedFromTerminal(false); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsState.openedFromTerminal = false; setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
           <UiEntity uiTransform={{ height: S(4) }} />
           <IconButton hoverKey="questionIcon" label="Help" isActive={winConditionVisible}
             iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17), justifyContent: 'center', alignItems: 'center' }}><Label value="?" fontSize={S(24)} color={winConditionVisible || hover.questionIcon ? GOLD : WHITE} font="sans-serif" textAlign="middle-center" /></UiEntity>}
-            onClick={() => { const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); setMetricsOpenedFromTerminal(false); setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+            onClick={() => { const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsState.openedFromTerminal = false; setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
         </UiEntity>
 
@@ -143,8 +142,8 @@ export function DesktopLayout() {
           const panelH = S(2 * _ROW_HEIGHT + 2 * _PADDING)
           const panelW = S(3 * _ROW_HEIGHT + 2 * _PADDING)
           const liveWins = getLocalLifetimeWins()
-          if (!isWinsFrozen()) setDisplayedWins(liveWins)
-          const myWins = getDisplayedWins() ?? liveWins
+          if (!earnedState.winsFrozen) earnedState.displayedWins = liveWins
+          const myWins = earnedState.displayedWins ?? liveWins
           return (
             <UiEntity uiTransform={{ width: panelW, height: panelH, flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', padding: { left: S(_PADDING) }, margin: { right: S(4) }, borderRadius: S(_BORDER_RADIUS) }}
               uiBackground={{ color: PANEL_BG }}

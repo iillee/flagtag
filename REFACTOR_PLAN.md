@@ -71,7 +71,7 @@
 
 ---
 
-## Step 3 — Consolidate uiState.ts into Typed State Objects ⬜
+## Step 3 — Consolidate uiState.ts into Typed State Objects ✅
 **Est: 30 min | Risk: Medium | Files: ~15**
 
 **Problem:** `uiState.ts` is 401 LOC with ~60 `let` variables and ~120 getter/setter functions. Pure boilerplate. Every new piece of state requires 3 lines (let + getter + setter).
@@ -271,6 +271,22 @@ Each step is independently shippable. Suggested session grouping:
 - **Step 3 (uiState):** The `bind()` pattern won't apply there, but need to be careful with `setBlessingCompleted` which has a side effect (`if (v) _blessingCompletedAt = Date.now()`). When consolidating to plain objects, this side effect needs to either become a dedicated function or be handled at the call site.
 - **Step 4 (projectileSystem):** At 1,490 lines this is the riskiest split. Need to map out all module-level `let` variables and their mutation patterns before cutting. Should read the full file at the start of that session.
 - **Step 7 (circular deps):** The `ui → systems` imports (`applyDeferredBalance`, `clearMushroomShield`, `isSpectatorMode`) may be deeper than just moving a flag. Need to check if those functions have side effects or depend on other system state.
+
+---
+
+### Session B — 2026-05-18 (Step 3)
+
+**What changed:**
+- `uiState.ts` rewritten from 401 LOC → 296 LOC (~105 lines removed). ~60 `let` variables + ~120 getter/setter functions replaced with 13 plain exported state objects: `musicState`, `cinematicState`, `creditsState`, `blessingState`, `earnedState`, `popupState`, `metricsState`, `splashState`, `serverDownState`, `attackState`, `countdownState`, `mobileState`, `miscState`.
+- Kept `uiScaleState` with helper functions (`getUIScaleFlash`, `flashUIScale`) since they have computed logic.
+- `setBlessingCompleted(v)` (which had a side effect stamping `completedAt`) replaced with explicit `markBlessingCompleted(v)` helper.
+- `setCinematicFade(opacity)` kept as a function since it clamps to [0,1].
+- Popup show/hide functions kept since `hide*` calls `notifyOverlayClosed()` as a side effect.
+- `hover`, `scroll`, `tabs` were already plain objects — unchanged.
+- Re-exports from `ui.tsx` updated: now exports `cinematicState`, `creditsState`, `popupState`, `splashState` objects for systems that need direct access.
+- 14 consumer files updated (all mechanical `sed` replacements + manual import rewrites).
+
+**Files changed:** `ui/uiState.ts`, `ui/uiSystems.ts`, `ui.tsx`, `systems/boomboxSystem.ts`, `systems/pedestalSystem.ts`, `systems/cinematicSystem.ts`, `systems/chestSystem.ts`, `systems/gravestoneSystem.ts`, `systems/mailboxSystem.ts`, `ui/components/StatsRow.tsx`, `ui/layouts/DesktopLayout.tsx`, `ui/layouts/MobileLayout.tsx`, `ui/screens/HowToPlay.tsx`, `ui/screens/LeaderboardOverlay.tsx`, `ui/screens/RoundEndSplash.tsx`
 
 ---
 
