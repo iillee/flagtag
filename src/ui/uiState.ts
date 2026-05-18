@@ -309,7 +309,7 @@ export const scroll = {
 }
 
 export const tabs = {
-  folder: 'leaderboards' as 'leaderboards' | 'metrics' | 'status',
+  folder: 'status' as 'leaderboards' | 'metrics' | 'status',
   leaderboard: 'daily' as 'daily' | 'monthly' | 'alltime' | 'metrics',
   metrics: 'daily' as 'daily' | 'monthly',
 }

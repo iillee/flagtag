@@ -1164,7 +1164,7 @@ export function triggerProjectileFromUI(): void {
     return
   }
 
-  lastThrowExtraCooldown = uiColor === 'y' ? 1 : 0
+  lastThrowExtraCooldown = uiColor === 'y' ? 2 : 1
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
@@ -1362,7 +1362,7 @@ export function projectileClientSystem(dt: number): void {
     // Red/Yellow: instant throw (no charge)
     if (currentColor !== 'b') {
       lastLocalProjectileFireTime = now
-      lastThrowExtraCooldown = currentColor === 'y' ? 1 : 0
+      lastThrowExtraCooldown = currentColor === 'y' ? 2 : 1
       const { dirX, dirZ } = getPlayerForward()
       const serverUp = isServerConnected()
       const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
@@ -1465,7 +1465,7 @@ export function projectileClientSystem(dt: number): void {
     lastLocalProjectileFireTime = now
     // Extra cooldown: under 1s charge = +1s, over 1s charge = +2s
     const chargeElapsed = chargeFrac * CHARGE_TIME_SEC
-    lastThrowExtraCooldown = chargeElapsed >= 1.0 ? 1 : 0
+    lastThrowExtraCooldown = chargeElapsed >= 1.0 ? 2 : 1
 
     console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, speed:', chargeSpeed.toFixed(0), 'range:', chargeRange.toFixed(0), 'scale:', chargeScale.toFixed(1), 'extraCD:', lastThrowExtraCooldown)
     if (chargeElapsed >= 1.25) playReleaseSound()

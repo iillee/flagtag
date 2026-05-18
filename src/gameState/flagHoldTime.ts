@@ -62,29 +62,41 @@ export function nameResolverSystem(dt: number): void {
   const localPlayer = getPlayer()
   const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
 
+  // Build set of players actually present in the scene (from engine entities)
+  const presentPlayers = new Set<string>()
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
     const userId = identity.address
     if (!userId) continue
     const key = userId.toLowerCase()
+    presentPlayers.add(key)
 
-    // Already have a real name cached — skip
-    if (knownPlayerNames.has(key)) continue
+    // Name resolution: try to resolve unknown names
+    if (!knownPlayerNames.has(key)) {
+      const data = getPlayer({ userId })
+      if (data && isRealName(data.name)) {
+        knownPlayerNames.set(key, data.name)
 
-    // Try to resolve via getPlayer (reads AvatarBase.name)
-    const data = getPlayer({ userId })
-    if (data && isRealName(data.name)) {
-      knownPlayerNames.set(key, data.name)
+        if (playersInScene.has(key)) {
+          playersInScene.set(key, data.name)
+        }
 
-      // Update playersInScene if they're still here
-      if (playersInScene.has(key)) {
-        playersInScene.set(key, data.name)
+        if (key === localUserId) {
+          room.send('registerName', { name: data.name })
+        }
       }
+    }
+  }
 
-      // Only send registerName to the server for the LOCAL player's own name
-      // (context.from on the server is always the sender's userId)
-      if (key === localUserId) {
-        room.send('registerName', { name: data.name })
-      }
+  // Reconciliation: remove stale entries from playersInScene that no longer
+  // have a PlayerIdentityData entity. onLeaveScene can miss disconnects/teleports,
+  // so this periodic cleanup prevents ghost names on the scoreboard.
+  // Always keep the local player (their own entity is always present).
+  for (const [userId] of playersInScene) {
+    const key = userId.toLowerCase()
+    if (key === localUserId) continue
+    if (!presentPlayers.has(key)) {
+      playersInScene.delete(userId)
+      console.log('[FlagHoldTime] Reconciliation: removed stale player', key.slice(0, 8), 'from playersInScene')
     }
   }
 }
