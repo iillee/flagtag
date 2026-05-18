@@ -39,7 +39,7 @@ import {
 import { patchAllLeaderboardNames, checkLeaderboardDailyReset, checkMonthlyLeaderboardReset, updatePlayerName } from './leaderboard'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
-import { Storage } from '@dcl/sdk/server'
+import { Storage, EnvVar } from '@dcl/sdk/server'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer,
   LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState,
@@ -64,6 +64,13 @@ export async function setupServer(): Promise<void> {
 
   await loadDiscordWebhookUrl()
   await initPostHog()
+
+  // Load mailbox webhook from env var (fallback to hardcoded)
+  const mailboxEnv = await EnvVar.get('MAILBOX_WEBHOOK_URL')
+  if (mailboxEnv) {
+    mailboxWebhook = mailboxEnv
+    console.log('[Server] ✅ Mailbox webhook loaded from EnvVar')
+  }
 
   // ── Restore flag ──
   const { state: flagStartState, position: flagStartPos, anchor: dropAnchor } = await loadFlagState()
@@ -246,7 +253,8 @@ function registerSystems() {
 
 
 /** Register the registerName handler (only handler still in server.ts). */
-const MAILBOX_WEBHOOK = 'https://discordapp.com/api/webhooks/1504487871648632843/usPz24jkxogWcXoS7gYGZjOmHCW90plbLJCBZYLfQzNACEe6fyKQ-fNoYM5Da8Lf0YMD'
+const MAILBOX_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1504487871648632843/usPz24jkxogWcXoS7gYGZjOmHCW90plbLJCBZYLfQzNACEe6fyKQ-fNoYM5Da8Lf0YMD'
+let mailboxWebhook = MAILBOX_WEBHOOK_FALLBACK
 const feedbackCooldowns = new Map<string, number>()
 
 function registerFeedbackHandlers(): void {
@@ -268,7 +276,7 @@ function registerFeedbackHandlers(): void {
     feedbackCooldowns.set(from, now)
     try {
       const name = playerNames.get(from) || from.slice(0, 10)
-      const res = await fetch(MAILBOX_WEBHOOK, {
+      const res = await fetch(mailboxWebhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ embeds: [{ description: msg, author: { name: name }, color: 3447003 }] }),

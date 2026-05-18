@@ -64,9 +64,6 @@ function playBoostSound(): void {
   AudioSource.createOrReplace(boostSoundEntity, { audioClipUrl: 'assets/sounds/powerup.mp3', playing: true, loop: false, volume: 0.0625, global: true })
 }
 
-// ── Shield break sound ──
-// playShieldBreakSound + shieldBreakSoundEntity removed — unused
-
 // ── Head bounce state ──
 interface HeadBounce {
   entity: Entity
@@ -157,13 +154,6 @@ function spawnHeadBounceMushroom(playerId: string): void {
 const mushrooms: MushroomVisual[] = []
 const pickedUpIds = new Set<number>()  // Prevent sending duplicate pickup requests
 let positionsRequested = false
-// shieldActive removed — mushrooms no longer block hits
-
-
-
-// ── Beacon state ──
-// setupMushroomBeacon removed — was never called
-
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('mushroomPositions', (data) => {
     const positions: { id: number, candidates: { x: number, z: number }[] }[] = JSON.parse((data as any).mushroomsJson || '[]')
