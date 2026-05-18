@@ -268,6 +268,7 @@ function PlayerListUi() {
       {serverDownState.visible && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
           uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}
+          onMouseDown={() => {}}
         >
           <UiEntity uiTransform={{ width: mobile ? 400 : S(460), flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: mobile ? 20 : S(16), padding: mobile ? { top: 36, bottom: 32, left: 20, right: 20 } : { top: S(36), bottom: S(32), left: S(40), right: S(40) } }}
             uiBackground={{ color: PANEL_BG }}

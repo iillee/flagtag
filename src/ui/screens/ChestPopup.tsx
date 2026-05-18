@@ -4,7 +4,7 @@
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
-import { S, GOLD, GREY, LIGHT_GREY, WHITE, BRIGHT_WHITE, CORAL_RED, PANEL_BG } from '../uiConstants'
+import { S, GOLD, GREY, LIGHT_GREY, WHITE, BRIGHT_WHITE, CORAL_RED, PANEL_BG, CLICK_BLOCKER } from '../uiConstants'
 import { hideChestPopup } from '../uiState'
 import { CloseButton } from '../components/CloseButton'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
@@ -34,6 +34,7 @@ export function ChestPopup() {
       justifyContent: 'center',
       alignItems: 'center',
     }}
+    uiBackground={{ color: CLICK_BLOCKER }}
     onMouseDown={() => {}}
     >
       <UiEntity uiTransform={{
