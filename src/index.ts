@@ -141,13 +141,6 @@ export async function main() {
   // Teleport orbs
   setupTeleportOrbs()
 
-  // Reload drop: detect flag carry on scene load (e.g. /reload) and request drop
-  // NOTE: This has never worked reliably — kept as-is for now.
-  if (local) {
-    const { setupReloadDrop } = await import('./systems/reloadDropSystem')
-    setupReloadDrop(local.userId)
-  }
-
   // Portal to Genesis Plaza — placed at parcel (8,8) scene-local
   new Portal({
     locationId: 'genesis-plaza',

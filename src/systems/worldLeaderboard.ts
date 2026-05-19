@@ -220,26 +220,8 @@ function createNavButton(arrow: string, localPos: Vector3): { box: Entity; label
   return { box, label: labelEnt }
 }
 
-// Fallback test data shown when no live leaderboard data exists
-const TEST_ENTRIES = [
-  { name: 'CryptoRunner', roundsWon: 12 },
-  { name: 'FlagMaster99', roundsWon: 9 },
-  { name: 'SpeedyGonzalez', roundsWon: 7 },
-  { name: 'NeonNinja', roundsWon: 5 },
-  { name: 'PixelPirate', roundsWon: 3 },
-  { name: 'BlockBreaker', roundsWon: 3 },
-  { name: 'MetaWalker', roundsWon: 2 },
-  { name: 'VoxelViking', roundsWon: 2 },
-  { name: 'ChainChaser', roundsWon: 1 },
-  { name: 'DigitalDruid', roundsWon: 1 },
-  { name: 'ShadowSprinter', roundsWon: 1 },
-  { name: 'CosmicCatcher', roundsWon: 1 },
-  { name: 'TurboTagster', roundsWon: 1 },
-]
-
 function updateBoard(): void {
-  const liveEntries = activeTab === 'daily' ? getLeaderboardEntries() : getAllTimeLeaderboardEntries()
-  const allEntries = liveEntries.length > 0 ? liveEntries : TEST_ENTRIES
+  const allEntries = activeTab === 'daily' ? getLeaderboardEntries() : getAllTimeLeaderboardEntries()
 
   // Clamp page offset
   if (pageOffset >= allEntries.length) pageOffset = Math.max(0, allEntries.length - MAX_ROWS)
