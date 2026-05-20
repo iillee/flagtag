@@ -146,13 +146,67 @@ function removeRemoteBoomerang(playerId: string): void {
   }
   if (rb.charge) {
     engine.removeEntity(rb.charge.glow)
-    for (const p of rb.charge.particles) engine.removeEntity(p)
+    releaseChargeParticles(rb.charge.particles)
   }
   if (rb.leftModel) engine.removeEntity(rb.leftModel)
   if (rb.leftAnchor) engine.removeEntity(rb.leftAnchor)
   engine.removeEntity(rb.model)
   engine.removeEntity(rb.anchor)
   remoteBoomerangs.delete(playerId)
+}
+
+// ── Charge VFX particle pool ──
+// Pre-create a shared pool of sphere particles to avoid entity churn.
+// Over long sessions (45+ min), creating/destroying 21 entities per charge
+// cycle causes the engine to stop rendering GltfContainer models entirely.
+const CHARGE_PARTICLE_POOL_SIZE = REMOTE_ORBIT_PARTICLE_COUNT * 5 // enough for 5 concurrent chargers
+const chargeParticlePool: Entity[] = []
+let chargeParticlePoolReady = false
+const CHARGE_HIDDEN_POS = Vector3.create(0, -300, 0)
+
+function initChargeParticlePool(): void {
+  if (chargeParticlePoolReady) return
+  chargeParticlePoolReady = true
+  for (let i = 0; i < CHARGE_PARTICLE_POOL_SIZE; i++) {
+    const p = engine.addEntity()
+    Transform.create(p, { position: CHARGE_HIDDEN_POS, scale: Vector3.Zero() })
+    MeshRenderer.setSphere(p)
+    Material.setPbrMaterial(p, {
+      albedoColor: Color4.create(0.045, 0.09, 0.15, 1.0),
+      emissiveColor: Color3.create(0.3, 0.6, 1),
+      emissiveIntensity: 5,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+    })
+    chargeParticlePool.push(p)
+  }
+  console.log('[RemoteBoomerang] Pre-created charge particle pool of', CHARGE_PARTICLE_POOL_SIZE)
+}
+
+function acquireChargeParticles(count: number, parentEntity: Entity): Entity[] {
+  initChargeParticlePool()
+  const acquired: Entity[] = []
+  for (const p of chargeParticlePool) {
+    if (acquired.length >= count) break
+    const t = Transform.get(p)
+    if (t.position.y < -100) {
+      Transform.createOrReplace(p, {
+        position: Vector3.Zero(),
+        scale: Vector3.Zero(),
+        parent: parentEntity
+      })
+      acquired.push(p)
+    }
+  }
+  if (acquired.length < count) {
+    console.log('[RemoteBoomerang] ⚠️ Charge particle pool low — got', acquired.length, '/', count)
+  }
+  return acquired
+}
+
+function releaseChargeParticles(particles: Entity[]): void {
+  for (const p of particles) {
+    Transform.createOrReplace(p, { position: CHARGE_HIDDEN_POS, scale: Vector3.Zero() })
+  }
 }
 
 function startRemoteCharge(playerId: string): void {
@@ -163,28 +217,7 @@ function startRemoteCharge(playerId: string): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb || rb.charge) return // no boomerang or already charging
 
-  // Create orbit particles parented to rb.anchor (uniform scale 1,1,1)
-  // No glow sphere — it's invisible locally (alpha:0) but can't be hidden remotely
-  // Particles offset to hand model position so they orbit around the boomerang
-  const modelPos = isMobile() ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
-
-  const particles: Entity[] = []
-  for (let i = 0; i < REMOTE_ORBIT_PARTICLE_COUNT; i++) {
-    const p = engine.addEntity()
-    Transform.create(p, {
-      position: Vector3.Zero(),
-      scale: Vector3.Zero(),
-      parent: rb.model
-    })
-    MeshRenderer.setSphere(p)
-    Material.setPbrMaterial(p, {
-      albedoColor: Color4.create(0.045, 0.09, 0.15, 1.0),
-      emissiveColor: Color3.create(0.3, 0.6, 1),
-      emissiveIntensity: 5,
-      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-    })
-    particles.push(p)
-  }
+  const particles = acquireChargeParticles(REMOTE_ORBIT_PARTICLE_COUNT, rb.model)
 
   rb.charge = { glow: engine.addEntity(), particles, startTime: Date.now(), visible: true }
 }
@@ -197,7 +230,7 @@ function stopRemoteCharge(playerId: string): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb || !rb.charge) return
   engine.removeEntity(rb.charge.glow)
-  for (const p of rb.charge.particles) engine.removeEntity(p)
+  releaseChargeParticles(rb.charge.particles)
   rb.charge = undefined
   chargeStoppedAt.set(playerId, Date.now())
 }
@@ -244,14 +277,18 @@ function remoteChargeAnimSystem(_dt: number): void {
     if (!inRange) return
     rb.charge.visible = true
 
-    // Orbit particles — full material update each frame to match local look
+    // Orbit particles — only update material when charge phase changes (reduces setPbrMaterial calls by ~99%)
     const speed = 2 * Math.PI * (1 + cf * 5)
     const angle = (now / 1000) * speed
     const radius = REMOTE_ORBIT_RADIUS * (0.5 + cf * 0.5)
     const particleSize = 0.03 + cf * 0.04
-    const pr = cf > 0.75 ? 1.0 : 0.3
-    const pg = cf > 0.75 ? 0.84 : 0.6
-    const pb = cf > 0.75 ? 0.0 : 1.0
+    const chargePhase = cf > 0.75 ? 1 : 0  // 0 = blue, 1 = gold
+    const lastPhase = (rb.charge as any)._lastPhase ?? -1
+    const needsMaterialUpdate = chargePhase !== lastPhase
+    if (needsMaterialUpdate) (rb.charge as any)._lastPhase = chargePhase
+    const pr = chargePhase === 1 ? 1.0 : 0.3
+    const pg = chargePhase === 1 ? 0.84 : 0.6
+    const pb = chargePhase === 1 ? 0.0 : 1.0
     for (let i = 0; i < rb.charge.particles.length; i++) {
       const p = rb.charge.particles[i]
       if (!Transform.has(p)) continue
@@ -259,12 +296,14 @@ function remoteChargeAnimSystem(_dt: number): void {
       const t = Transform.getMutable(p)
       t.position = Vector3.create(0, Math.sin(a) * radius, Math.cos(a) * radius)
       t.scale = Vector3.create(particleSize, particleSize, particleSize)
-      Material.setPbrMaterial(p, {
-        albedoColor: Color4.create(pr * 0.15, pg * 0.15, pb * 0.15, 1.0),
-        emissiveColor: Color3.create(pr, pg, pb),
-        emissiveIntensity: 3 + cf * 7,
-        transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-      })
+      if (needsMaterialUpdate) {
+        Material.setPbrMaterial(p, {
+          albedoColor: Color4.create(pr * 0.15, pg * 0.15, pb * 0.15, 1.0),
+          emissiveColor: Color3.create(pr, pg, pb),
+          emissiveIntensity: chargePhase === 1 ? 10 : 5,
+          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+        })
+      }
     }
   })
 }

@@ -122,6 +122,51 @@ export function isLightningTextVisible(): boolean {
   return lightningRespawnDelay >= LIGHTNING_FADE_OUT
 }
 
+// ── Bolt segment pool ──
+// Pre-create a pool of box entities to avoid entity churn on each strike.
+// Each strike needs ~20 segments (main + core + branches). Pool enough for one bolt.
+const BOLT_POOL_SIZE = 30
+const boltPool: Entity[] = []
+let boltPoolReady = false
+const BOLT_HIDDEN_POS = Vector3.create(0, -500, 0)
+
+function initBoltPool(): void {
+  if (boltPoolReady) return
+  boltPoolReady = true
+  for (let i = 0; i < BOLT_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: BOLT_HIDDEN_POS, scale: Vector3.Zero() })
+    MeshRenderer.setBox(e)
+    Material.setPbrMaterial(e, {
+      albedoColor: Color4.create(0.9, 0.95, 1, 1),
+      emissiveColor: BOLT_COLOR,
+      emissiveIntensity: BOLT_INTENSITY,
+      metallic: 0,
+      roughness: 1
+    })
+    VisibilityComponent.create(e, { visible: false })
+    boltPool.push(e)
+  }
+  console.log('[Lightning] Pre-created bolt segment pool of', BOLT_POOL_SIZE)
+}
+
+let boltPoolUsed = 0
+
+function acquireBoltSegment(): Entity | null {
+  initBoltPool()
+  if (boltPoolUsed >= BOLT_POOL_SIZE) return null
+  return boltPool[boltPoolUsed++]
+}
+
+function releaseAllBoltSegments(): void {
+  for (let i = 0; i < boltPoolUsed; i++) {
+    const e = boltPool[i]
+    VisibilityComponent.createOrReplace(e, { visible: false })
+    Transform.createOrReplace(e, { position: BOLT_HIDDEN_POS, scale: Vector3.Zero() })
+  }
+  boltPoolUsed = 0
+}
+
 // State
 const WARNING_LEAD = 3.0  // seconds before strike for visual warning
 const THUNDER_LEAD = 1.5  // seconds before strike for thunder sound
@@ -135,7 +180,7 @@ let flickeredOff = false
 let flickeredBackOn = false
 let isFlashing = false
 let strikeTarget: { x: number; y: number; z: number } | null = null
-let boltEntities: Entity[] = []
+let boltEntities: Entity[] = []  // indices into boltPool for current bolt
 let flashLightEntity: Entity | null = null
 let thunderEntity: Entity | null = null
 let sparkEntities: Entity[] = []
@@ -153,9 +198,11 @@ let buzzEntity: Entity | null = null
 function createSegment(
   ax: number, ay: number, az: number,
   bx: number, by: number, bz: number,
-  thickness: number
-): Entity {
-  const e = engine.addEntity()
+  thickness: number,
+  isCore: boolean = false
+): Entity | null {
+  const e = acquireBoltSegment()
+  if (!e) return null
 
   // Midpoint
   const mx = (ax + bx) / 2
@@ -170,27 +217,34 @@ function createSegment(
 
   // Rotation: orient Y-axis along the segment direction
   const dir = Vector3.normalize(Vector3.create(dx, dy, dz))
-  // Compute rotation to align (0,1,0) to dir
   const q = quatFromTo(Vector3.Up(), dir)
 
-  Transform.create(e, {
+  Transform.createOrReplace(e, {
     position: Vector3.create(mx, my, mz),
     scale: Vector3.create(thickness, len, thickness),
     rotation: q
   })
 
-  MeshRenderer.setBox(e)
+  // Core segments get brighter white material
+  if (isCore) {
+    Material.setPbrMaterial(e, {
+      albedoColor: Color4.White(),
+      emissiveColor: Color3.White(),
+      emissiveIntensity: 15,
+      metallic: 0,
+      roughness: 1
+    })
+  } else {
+    Material.setPbrMaterial(e, {
+      albedoColor: Color4.create(0.9, 0.95, 1, 1),
+      emissiveColor: BOLT_COLOR,
+      emissiveIntensity: BOLT_INTENSITY,
+      metallic: 0,
+      roughness: 1
+    })
+  }
 
-  // Bright emissive white-blue material
-  Material.setPbrMaterial(e, {
-    albedoColor: Color4.create(0.9, 0.95, 1, 1),
-    emissiveColor: BOLT_COLOR,
-    emissiveIntensity: BOLT_INTENSITY,
-    metallic: 0,
-    roughness: 1
-  })
-
-  VisibilityComponent.create(e, { visible: false })
+  VisibilityComponent.createOrReplace(e, { visible: false })
 
   return e
 }
@@ -251,7 +305,8 @@ function createBranch(
     const nx = cx + dirX * segLen * (0.5 + Math.random() * 0.5) + (Math.random() - 0.5) * 0.5
     const ny = cy - segLen * (0.5 + Math.random() * 0.3)
     const nz = cz + dirZ * segLen * (0.5 + Math.random() * 0.5) + (Math.random() - 0.5) * 0.5
-    entities.push(createSegment(cx, cy, cz, nx, ny, nz, 0.2))
+    const seg = createSegment(cx, cy, cz, nx, ny, nz, 0.2)
+    if (seg) entities.push(seg)
     cx = nx; cy = ny; cz = nz
   }
 
@@ -328,10 +383,8 @@ export function setupLightning() {
 }
 
 function rebuildBolt() {
-  // Remove old segments
-  for (const e of boltEntities) {
-    engine.removeEntity(e)
-  }
+  // Release old segments back to pool
+  releaseAllBoltSegments()
   boltEntities = []
 
   // Use the strike target set by the server message, or fall back to live position
@@ -346,17 +399,11 @@ function rebuildBolt() {
     const a = path[i]
     const b = path[i + 1]
     // Main segment (thicker)
-    boltEntities.push(createSegment(a.x, a.y, a.z, b.x, b.y, b.z, 0.4))
+    const main = createSegment(a.x, a.y, a.z, b.x, b.y, b.z, 0.4)
+    if (main) boltEntities.push(main)
     // Inner core (thinner, brighter)
-    const core = createSegment(a.x, a.y, a.z, b.x, b.y, b.z, 0.15)
-    Material.setPbrMaterial(core, {
-      albedoColor: Color4.White(),
-      emissiveColor: Color3.White(),
-      emissiveIntensity: 15,
-      metallic: 0,
-      roughness: 1
-    })
-    boltEntities.push(core)
+    const core = createSegment(a.x, a.y, a.z, b.x, b.y, b.z, 0.15, true)
+    if (core) boltEntities.push(core)
   }
 
   // Add 2-3 branches from random midpoints

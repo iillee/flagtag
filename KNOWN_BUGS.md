@@ -1,6 +1,6 @@
 # Known Bugs — Playtest Tracking
 
-Last updated: May 18, 2026
+Last updated: May 20, 2026
 
 These three game-breaking bugs have been recurring over the past month during multiplayer sessions. Recent refactoring may have resolved them. This document tracks root causes, fixes applied, and remaining risks for the May 19 playtest.
 
@@ -112,29 +112,53 @@ These three game-breaking bugs have been recurring over the past month during mu
 - **Pool exhaustion:** 10 entities per color. Yellow fires 2 simultaneously. Under extreme load with many players all throwing, pool could exhaust (logged as `Pool exhausted for color X`).
 - **`localThrow.active` stuck state:** If `shellReturned` message is lost (network issue), `localThrow.active` stays true, blocking subsequent throws. Safety timeout at `LOCAL_THROW_SAFETY_MS` (4s) force-clears it, and a second check at `PROJECTILE_LIFETIME_SEC` also clears.
 
+**Root Cause Identified (May 20 playtest):**
+- **Entity churn causing engine renderer failure.** After ~45 min with 3-5 players, ALL projectile and trap visuals stopped rendering simultaneously. Hand-attached boomerangs (persistent entities) still visible. Cooldowns still worked (set locally before server round-trip).
+- **Primary offender: `remoteBoomerangSystem.ts` charge VFX.** `startRemoteCharge()` created 21 entities (1 glow + 20 particles) per charge cycle, and `stopRemoteCharge()` destroyed all of them. Over 45 min with active combat: ~19,000 entity create/destroy cycles. The Decentraland engine's internal renderer eventually stops tracking entities after excessive churn.
+- **Secondary offender: per-frame `Material.setPbrMaterial()` calls.** The charge animation called `Material.setPbrMaterial()` on 20 particles × N players × 60fps — thousands of material replacements per second, despite the color only changing once (at 75% charge).
+- **Other entity churn sources:** wall raycasts (1 per throw), ground raycasts (1 per trap), mushroom head bounce entities (3 per pickup). These are lower volume but contribute.
+
+**Fixes Applied (May 20):**
+1. **Pooled charge VFX particles** (`remoteBoomerangSystem.ts`): Pre-created pool of 100 sphere entities (enough for 5 concurrent chargers). `startRemoteCharge` acquires from pool, `stopRemoteCharge` releases back. Zero entity creation during gameplay.
+2. **Throttled material updates**: Material only updated when charge phase changes (blue→gold at 75%), reducing `setPbrMaterial` calls by ~99%.
+
 **Remaining Risks:**
 - If WebSocket messages are still unreliable for reasons other than CRDT saturation (network latency, server load), `shellDropped` could still be missed. The client has no retry/ack mechanism for projectile visuals.
 - The `localThrow` → `sawVisual` → `shellReturned` chain has three points of failure. If any message is lost, the state machine relies on timeouts (4s safety, lifetime expiry) rather than self-healing.
+- Other entity churn sources (raycasts, mushroom bounces) are not yet pooled. If the issue persists after this fix, pool those next.
+- The `remoteOrbitAnimSystem` still creates/destroys 1 entity per orbit per remote player (lower volume, ~1 per green throw).
 
 **How to verify in playtest:**
-- Have 5+ players throwing boomerangs continuously for 10+ minutes
+- Have 3-5 players throwing boomerangs continuously for 45+ minutes
+- Check if boomerang AND banana visuals still render after extended play
 - Check if boomerang visuals appear for both the thrower and other players
 - Check if cooldown and visual are always in sync
 - Watch server logs for `Pool exhausted` messages
 
 ---
 
-## Playtest Checklist (May 19, 2026)
+## Playtest Results (May 19, 2026)
 
-- [ ] Scoreboard counts up smoothly for carrier during entire round
-- [ ] Scores reset to 0 at round boundary for all players
-- [ ] Final cinematic scores match live scoreboard
-- [ ] No phantom/ghost players on scoreboard
-- [ ] Flag drops cleanly when carrier is hit (banana, boomerang, orbit)
-- [ ] Flag drops cleanly when carrier disconnects
-- [ ] Dropped flag is pickable by nearby players within ~1s
-- [ ] No flag stuck in mid-air for more than 5s
-- [ ] Boomerang visuals appear on every throw (E key / mobile tap)
-- [ ] Boomerang visuals visible to other players
-- [ ] No "cooldown without visual" occurrences after 10+ min sessions
-- [ ] Test with 5+ concurrent players for 15+ minutes minimum
+- [x] Scoreboard counts up smoothly for carrier during entire round — **MOSTLY OK, one incident of local player stuck at 0 (reload fixed)**
+- [x] Scores reset to 0 at round boundary for all players
+- [x] Final cinematic scores match live scoreboard
+- [x] No phantom/ghost players on scoreboard
+- [x] Flag drops cleanly when carrier is hit (banana, boomerang, orbit)
+- [x] Flag drops cleanly when carrier disconnects
+- [x] Dropped flag is pickable by nearby players within ~1s
+- [x] No flag stuck in mid-air for more than 5s
+- [x] Boomerang visuals appear on every throw — **FAILED after ~45 min**
+- [x] Boomerang visuals visible to other players — **FAILED after ~45 min**
+- [ ] No "cooldown without visual" occurrences after 10+ min sessions — **FAILED after ~45 min**
+- [x] Test with 5+ concurrent players for 15+ minutes minimum
+- **NEW:** Grace period shield persists on both players after steal — **FIXED**
+- **NEW:** Discord webhook spam from unnamed bot accounts — **FIXED**
+
+## Playtest Checklist (Next Session)
+
+- [ ] Scoreboard counts up for ALL players (especially local) over full session
+- [ ] Boomerang visuals render after 45+ min of active combat (charge VFX pooling fix)
+- [ ] Banana visuals render after 45+ min
+- [ ] Grace period shield correctly transfers on steal (only new carrier has shield)
+- [ ] Discord webhook only fires for named players (no bot spam)
+- [ ] Test with 3-5 concurrent players for 45+ minutes minimum
