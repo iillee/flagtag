@@ -572,6 +572,12 @@ function updateMsgTrapVisuals(dt: number): void {
           mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
         })
         trapStaggerUntil = now + TRAP_STAGGER_MS
+
+        // Remove the visual immediately so it can't re-trigger
+        if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+        releaseTrapToPool(vis.entity)
+        msgTrapVisuals.splice(i, 1)
+        break // exit inner loop since we modified the array
       }
     }
   }
