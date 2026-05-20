@@ -7,7 +7,11 @@ export interface LeaderboardEntry {
   roundsWon: number
 }
 
-/** No addresses are hidden from the leaderboard — all players are shown. */
+/** Addresses hidden from leaderboard display (still tracked server-side). */
+const HIDDEN_ADDRESSES: Set<string> = new Set([
+  '0x1e93e534c5e26b01ed242410b43ae23dd0faa52b', // ile
+  '0x874b9d062b060e004c3167974c42f5e6878fae0c', // tester
+])
 
 // ── Cache: parse + sort only when the raw JSON changes ──
 let _dailyCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
@@ -19,7 +23,7 @@ function parseAndSort(json: string, cache: { json: string; result: LeaderboardEn
   if (!json) { cache.json = json; cache.result = []; return [] }
   try {
     const entries: LeaderboardEntry[] = JSON.parse(json)
-    const visible = entries
+    const visible = entries.filter(e => !HIDDEN_ADDRESSES.has(e.userId.toLowerCase()))
     const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
     visible.sort((a, b) => {
       if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon

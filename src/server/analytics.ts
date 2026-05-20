@@ -48,6 +48,7 @@ export async function loadDiscordWebhookUrl(): Promise<void> {
 /** Pending join notifications — we delay sending to allow name resolution */
 const pendingJoinNotifications: Map<string, { address: string, onlineCount: number, scheduledAt: number }> = new Map()
 const JOIN_NOTIFY_DELAY_MS = 5000
+const JOIN_NOTIFY_MAX_WAIT_MS = 15000 // Max time to wait for name resolution before dropping
 
 export function schedulePlayerJoinDiscord(playerName: string, address: string, onlineCount: number): void {
   const userKey = address.toLowerCase()
@@ -63,10 +64,15 @@ export function flushPendingJoinNotifications(): void {
     pendingJoinNotifications.delete(userKey)
 
     // Use the best name available now (name resolver should have run by this point)
-    const resolvedName = (playerNames.has(userKey) && isRealName(playerNames.get(userKey)!))
-      ? playerNames.get(userKey)!
-      : userKey.slice(0, 8)
+    const knownName = playerNames.get(userKey)
+    if (!knownName || !isRealName(knownName)) {
+      // Not resolved yet — keep waiting up to max wait, then drop (likely a bot)
+      if (now - pending.scheduledAt < JOIN_NOTIFY_MAX_WAIT_MS) continue
+      pendingJoinNotifications.delete(userKey)
+      continue
+    }
 
+    const resolvedName = knownName
     const content = `👋 **${resolvedName}** joined Flag Tag (${pending.address.slice(0, 6)}…${pending.address.slice(-4)}) — **${pending.onlineCount}** online`
     fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',

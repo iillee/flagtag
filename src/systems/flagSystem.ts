@@ -465,6 +465,10 @@ export function flagClientSystem(dt: number): void {
     confirmedCarrierId = null
     pendingPickupUntil = 0
     if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+    // Hide previous carrier's shield and show new carrier's shield (handles steals)
+    hideAllShields()
+    showShieldForPlayer(carrier)
+    setShieldAlpha(carrier, 1.0)
     // Show clone for confirmed carrier (no-op if already showing for same carrier)
     if (carryCloneCarrierId !== carrier || !cloneVisible) {
       showClone(carrier)
@@ -527,6 +531,10 @@ export function flagClientSystem(dt: number): void {
       
       pendingPickupUntil = 0
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+      // Ensure only the current carrier has a shield (handles steals where carrier swaps)
+      hideAllShields()
+      showShieldForPlayer(flag.carrierPlayerId)
+      setShieldAlpha(flag.carrierPlayerId, 1.0)
       // Show clone for carrier (no-op if already showing for same carrier via Phase 1/2)
       if (carryCloneCarrierId !== flag.carrierPlayerId || !cloneVisible) {
         showClone(flag.carrierPlayerId)
