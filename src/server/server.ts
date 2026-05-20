@@ -309,4 +309,14 @@ function registerHandlers(): void {
       }
     } catch (err) { console.error('[Server] ❌ registerName handler error:', err) }
   })
+
+  room.onMessage('requestAllColors', (_data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      for (const [playerId, color] of playerBoomerangColors) {
+        if (playerId !== from) room.send('playerColorChanged', { playerId, color })
+      }
+    } catch (err) { console.error('[Server] ❌ requestAllColors handler error:', err) }
+  })
 }

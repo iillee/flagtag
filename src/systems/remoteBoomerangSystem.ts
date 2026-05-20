@@ -522,6 +522,36 @@ export function setupRemoteBoomerangs(): void {
     endRemoteOrbitEarly(playerId)
   })
 
+  // Reconciliation: periodically check for remote players missing hand boomerangs.
+  // Messages can be lost during scene load or network hiccups.
+  let reconTimer = 0
+  const RECON_INTERVAL = 5.0 // seconds
+  let reconCooldownUntil = 0 // timestamp — don't re-request until this time
+  engine.addSystem((dt: number) => {
+    reconTimer += dt
+    if (reconTimer < RECON_INTERVAL) return
+    reconTimer = 0
+
+    const now = Date.now()
+    if (now < reconCooldownUntil) return
+
+    const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+    let missing = false
+    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+      const addr = identity.address.toLowerCase()
+      if (addr === localUserId) continue
+      if (!remoteBoomerangs.has(addr)) {
+        missing = true
+        break
+      }
+    }
+    if (missing) {
+      reconCooldownUntil = now + 15000 // don't re-request for 15s
+      console.log('[RemoteBoomerang] Reconciliation: requesting all colors from server')
+      room.send('requestAllColors', { t: 0 })
+    }
+  })
+
   // Register animation systems
   engine.addSystem(remoteChargeAnimSystem)
   engine.addSystem(remoteOrbitAnimSystem)

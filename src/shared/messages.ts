@@ -46,6 +46,7 @@ export const Messages = {
   // Boomerang color sync
   colorChanged: Schemas.Map({ color: Schemas.String }),
   playerColorChanged: Schemas.Map({ playerId: Schemas.String, color: Schemas.String }),
+  requestAllColors: Schemas.Map({ t: Schemas.Int }),
 
   // Green orbit mechanic
   requestOrbit: Schemas.Map({ t: Schemas.Int, startAngle: Schemas.Float }),
