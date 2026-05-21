@@ -10,15 +10,14 @@ import { engine, PlayerIdentityData, AvatarBase } from '@dcl/sdk/ecs'
 import {
   currentlyConnected, playerNames, visitorSessions, monthlyVisitorSessions,
   playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
-  playerLifetimeHoldTimeCache,
-  lastStealTime, deathPenaltyCooldowns,
+  playerLifetimeHoldTimeCache, lastStealTime, deathPenaltyCooldowns,
   sessionDeaths, sessionBananasDropped, sessionBoomerangsFired,
   isRealName
 } from './serverState'
 import { persistPlayerNames } from './persistence'
 import { updatePlayerName } from './leaderboard'
 import { getOrCreateHoldTimeEntity } from './flagLogic'
-import { loadPlayerCoinBalance, getOrCreateWalletEntity, loadPlayerLifetimeHoldTime, getOrCreateLifetimeHoldTimeEntity } from './economy'
+import { loadPlayerCoinBalance, getOrCreateWalletEntity } from './economy'
 import { clearCombatCooldowns } from './combat'
 import { syncVisitorAnalytics, syncMonthlyVisitorAnalytics, schedulePlayerJoinDiscord } from './analytics'
 import { capture, identify } from './posthog'
@@ -47,11 +46,6 @@ export function playerTrackingSystem(): void {
       loadPlayerCoinBalance(userKey).then(() => {
         getOrCreateWalletEntity(userKey)
       }).catch(err => console.error('[Coins] Error loading wallet for', userKey.slice(0, 8), err))
-
-      // Load lifetime hold time and create synced entity
-      loadPlayerLifetimeHoldTime(userKey).then(() => {
-        getOrCreateLifetimeHoldTimeEntity(userKey)
-      }).catch(err => console.error('[LifetimeHoldTime] Error loading for', userKey.slice(0, 8), err))
 
       // Start/restart visitor session — use persisted name if available
       const playerName = playerNames.get(userKey) || userKey.slice(0, 8)
@@ -134,7 +128,6 @@ export function playerTrackingSystem(): void {
       }
 
       // Clean up per-player maps to prevent unbounded growth
-      playerLifetimeHoldTimeCache.delete(userKey)
       playerBoomerangColors.delete(userKey)
       playerCoinBalances.delete(userKey)
       playerUpgradeData.delete(userKey)
