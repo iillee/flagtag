@@ -42,7 +42,7 @@ export const InventoryGrid = () => {
       <UiEntity uiTransform={{
         width: gridWidth,
         flexDirection: 'column', alignItems: 'center',
-        padding: { top: S(10), bottom: S(10), left: S(12), right: S(12) },
+        padding: S(12),
         borderRadius: S(14),
       }}
       uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 1) }}
@@ -139,20 +139,7 @@ export const InventoryGrid = () => {
           </UiEntity>
         ))}
 
-        {/* Empty state */}
-        {itemCount === 0 && (
-          <Label value="No extra items yet" fontSize={S(12)} color={LIGHT_GREY}
-            font="sans-serif" textAlign="middle-center"
-            uiTransform={{ height: S(24), margin: { top: S(4) } }} />
-        )}
 
-        {/* Hint */}
-        <Label
-          value="Click to select, click another slot to swap"
-          fontSize={S(10)} color={Color4.create(0.45, 0.45, 0.55, 1)}
-          font="sans-serif" textAlign="middle-center"
-          uiTransform={{ height: S(16), margin: { top: S(6) } }}
-        />
       </UiEntity>
     </UiEntity>
   )

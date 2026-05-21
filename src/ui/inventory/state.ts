@@ -34,36 +34,72 @@ export let grid: (GameItem | null)[] = new Array(GRID_COLS * GRID_ROWS).fill(nul
 
 // ── Sync with upgrade system ──
 
-let lastUpgradesJson = ''
+let lastBoomerangCount = -1
+let lastBoomerangBits = 0
 let initialized = false
+
+/** Fast bitmask check — no allocations on the hot path */
+function boomerangBits(boomerangs: string[]): number {
+  let bits = 0
+  for (const c of boomerangs) {
+    if (c === 'r') bits |= 1
+    else if (c === 'y') bits |= 2
+    else if (c === 'g') bits |= 4
+    else if (c === 'b') bits |= 8
+  }
+  return bits
+}
 
 /**
  * Called each frame (from the Hotbar component).
- * Re-reads PlayerUpgrades and rebuilds slots if the data changed.
+ * Only rebuilds when the set of owned items changes (e.g. a purchase),
+ * NOT when the equipped item changes (that's driven by hotbar swaps).
  */
 export function ensureInventorySync(): void {
   const upgrades = getLocalUpgrades()
-  const json = JSON.stringify(upgrades.boomerangs) + ':' + upgrades.equipped
-  if (json === lastUpgradesJson && initialized) return
-  lastUpgradesJson = json
+  const count = upgrades.boomerangs.length
+  const bits = boomerangBits(upgrades.boomerangs)
+  if (count === lastBoomerangCount && bits === lastBoomerangBits && initialized) return
+
+  const isFirstInit = !initialized
+  lastBoomerangCount = count
+  lastBoomerangBits = bits
   initialized = true
 
   const owned = getOwnedItems(upgrades.boomerangs)
-  const equippedColor = getBoomerangColor()
 
-  // Determine what goes in hotbar
-  const equippedBoomerang = BOOMERANG_ITEMS[equippedColor] || BOOMERANG_ITEMS['r']
-  hotbar[0] = equippedBoomerang  // E slot
-  hotbar[1] = BANANA_ITEM        // F slot
+  if (isFirstInit) {
+    // First load: put equipped boomerang in hotbar, rest in grid
+    const equippedColor = getBoomerangColor()
+    const equippedBoomerang = BOOMERANG_ITEMS[equippedColor] || BOOMERANG_ITEMS['r']
+    hotbar[0] = equippedBoomerang
+    hotbar[1] = BANANA_ITEM
 
-  // Remaining items go to grid
-  const remaining = owned.filter(item =>
-    item.id !== equippedBoomerang.id && item.id !== BANANA_ITEM.id
-  )
-  const gridSize = GRID_COLS * GRID_ROWS
-  grid = new Array(gridSize).fill(null)
-  for (let i = 0; i < remaining.length && i < gridSize; i++) {
-    grid[i] = remaining[i]
+    const remaining = owned.filter(item =>
+      item.id !== equippedBoomerang.id && item.id !== BANANA_ITEM.id
+    )
+    const gridSize = GRID_COLS * GRID_ROWS
+    grid = new Array(gridSize).fill(null)
+    for (let i = 0; i < remaining.length && i < gridSize; i++) {
+      grid[i] = remaining[i]
+    }
+  } else {
+    // Subsequent change (purchase): add any new items to the first empty grid slot
+    const allPlaced = new Set<string>()
+    if (hotbar[0]) allPlaced.add(hotbar[0].id)
+    if (hotbar[1]) allPlaced.add(hotbar[1].id)
+    for (const g of grid) { if (g) allPlaced.add(g.id) }
+
+    for (const item of owned) {
+      if (!allPlaced.has(item.id)) {
+        // New item — find first empty grid slot
+        const emptyIdx = grid.indexOf(null)
+        if (emptyIdx !== -1) {
+          grid[emptyIdx] = item
+        }
+        allPlaced.add(item.id)
+      }
+    }
   }
 }
 

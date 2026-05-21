@@ -96,7 +96,7 @@ export function DesktopLayout() {
       <UiEntity uiTransform={{ positionType: 'absolute', position: { right: S(16), top: S(14) }, flexDirection: 'row', alignItems: 'flex-start' }}>
         {/* Icon buttons */}
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
-          <IconButton hoverKey="squareIcon" label="Inventory" isActive={getShowInventory}
+          <IconButton hoverKey="squareIcon" label="Inventory" isActive={getShowInventory} hoverWidth={160}
             iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: getShowInventory || hover.squareIcon ? GOLD : WHITE }} />}
             onClick={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); metricsState.openedFromTerminal = false; toggleInventory() }}
           />

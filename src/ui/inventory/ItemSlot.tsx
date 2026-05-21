@@ -51,11 +51,6 @@ export function ItemSlot(props: ItemSlotProps) {
             uiTransform={{ width: S(iconSize), height: S(iconSize), pointerFilter: 'none' }}
             uiBackground={{ textureMode: 'stretch', texture: { src: w.icon }, color: dimmed ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }}
           />
-          {/* Rarity bar */}
-          <UiEntity
-            uiTransform={{ width: S(size - 14), height: S(3), margin: { top: S(1) }, borderRadius: S(2), pointerFilter: 'none' }}
-            uiBackground={{ color: rarityColor }}
-          />
         </UiEntity>
       )}
 
