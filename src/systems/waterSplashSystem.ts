@@ -139,21 +139,7 @@ export function waterSplashSystem(dt: number) {
     const baseScale = SPLASH_SIZE * scaleMult
     t.scale = Vector3.create(baseScale, baseScale, baseScale)
 
-    // Only update material when alpha changed meaningfully (saves many setPbrMaterial calls/sec)
-    const alpha = 0.7 * (1 - fadeProgress)
-    if (Math.abs(alpha - splash.lastAlpha) >= 0.08) {
-      splash.lastAlpha = alpha
-      Material.setPbrMaterial(splash.entity, {
-        albedoColor: Color4.create(0.85, 0.92, 1, alpha),
-        emissiveColor: Color4.create(0.7, 0.85, 1, 1),
-        emissiveIntensity: 0.5,
-        roughness: 1,
-        metallic: 0,
-        specularIntensity: 0,
-        transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-        castShadows: false,
-      })
-    }
+    // Fade handled purely via scale shrink — no per-frame material updates needed.
   }
 
   // Spawn splashes while player moves in water

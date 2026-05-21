@@ -90,6 +90,7 @@ export function setupHandBoomerangs() {
   }
 
   // Update charge ring each frame — grows + spins
+  let lastBeadPhase = -1
   engine.addSystem((dt: number) => {
     if (getChargePhase() === 'charging' && getChargeFraction() > 0.15 && getBoomerangColor() !== 'g') {
       const cf = getChargeFraction()
@@ -100,18 +101,23 @@ export function setupHandBoomerangs() {
         Quaternion.fromEulerDegrees(0, spinSpeed * dt, 0),
         Transform.get(ringParent).rotation
       )
-      const r = cf > 0.75 ? 1.0 : 1.0
-      const g = cf > 0.75 ? 0.3 : 0.8
-      const b = cf > 0.75 ? 0.1 : 0.0
-      for (const bead of ringBeads) {
-        Material.setPbrMaterial(bead, {
-          albedoColor: Color4.create(1, 0.85, 0, 0.3 + cf * 0.4),
-          emissiveColor: Color3.create(r, g, b),
-          emissiveIntensity: 3 + cf * 12,
-          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-        })
+      const phase = cf > 0.75 ? 1 : 0
+      if (phase !== lastBeadPhase) {
+        lastBeadPhase = phase
+        const r = phase === 1 ? 1.0 : 1.0
+        const g = phase === 1 ? 0.3 : 0.8
+        const b = phase === 1 ? 0.1 : 0.0
+        for (const bead of ringBeads) {
+          Material.setPbrMaterial(bead, {
+            albedoColor: Color4.create(1, 0.85, 0, phase === 1 ? 0.7 : 0.5),
+            emissiveColor: Color3.create(r, g, b),
+            emissiveIntensity: phase === 1 ? 15 : 5,
+            transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+          })
+        }
       }
     } else {
+      if (lastBeadPhase !== -1) lastBeadPhase = -1
       if (Transform.has(ringParent)) {
         Transform.getMutable(ringParent).scale = Vector3.Zero()
       }

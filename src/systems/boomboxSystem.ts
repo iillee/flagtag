@@ -24,28 +24,51 @@ let boomboxPos = Vector3.create(0, 0, 0)
 let initialized = false
 let waitTimer = 0
 
-// Ring state
+// Ring pool — pre-create ring entities to avoid entity churn
+const RING_POOL_SIZE = RING_COUNT + 1 // one extra for overlap
 interface Ring {
   entity: Entity
   age: number
+  active: boolean
 }
-const rings: Ring[] = []
+const ringPool: Ring[] = []
+let ringPoolReady = false
 let ringSpawnTimer = 0
+const RING_HIDDEN_POS = Vector3.create(0, -200, 0)
+
+function initRingPool(): void {
+  if (ringPoolReady) return
+  ringPoolReady = true
+  for (let i = 0; i < RING_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, {
+      position: RING_HIDDEN_POS,
+      scale: Vector3.Zero(),
+    })
+    MeshRenderer.setCylinder(e, 0.5, 0.5)
+    Material.setPbrMaterial(e, {
+      albedoColor: RING_COLOR,
+      emissiveColor: Color4.create(1, 0.84, 0, 1),
+      emissiveIntensity: 2,
+      transparencyMode: 2
+    })
+    ringPool.push({ entity: e, age: 0, active: false })
+  }
+}
 
 function spawnRing(): void {
-  const e = engine.addEntity()
-  Transform.create(e, {
-    position: Vector3.create(boomboxPos.x, boomboxPos.y, boomboxPos.z),
-    scale: Vector3.create(0.3, 0.02, 0.3),
-  })
-  MeshRenderer.setCylinder(e, 0.5, 0.5)
-  Material.setPbrMaterial(e, {
-    albedoColor: RING_COLOR,
-    emissiveColor: Color4.create(1, 0.84, 0, 1),
-    emissiveIntensity: 2,
-    transparencyMode: 2
-  })
-  rings.push({ entity: e, age: 0 })
+  initRingPool()
+  // Find an inactive ring in the pool
+  let ring: Ring | null = null
+  for (const r of ringPool) {
+    if (!r.active) { ring = r; break }
+  }
+  if (!ring) return // all in use
+  ring.active = true
+  ring.age = 0
+  const t = Transform.getMutable(ring.entity)
+  t.position = Vector3.create(boomboxPos.x, boomboxPos.y, boomboxPos.z)
+  t.scale = Vector3.create(0.3, 0.02, 0.3)
 }
 
 function setupBoombox(): void {
@@ -114,7 +137,9 @@ export function boomboxSystem(dt: number): void {
   // Spawn rings when not muted
   if (!muted) {
     ringSpawnTimer += dt
-    if (ringSpawnTimer >= RING_INTERVAL && rings.length < RING_COUNT) {
+    let activeCount = 0
+    for (const r of ringPool) { if (r.active) activeCount++ }
+    if (ringSpawnTimer >= RING_INTERVAL && activeCount < RING_COUNT) {
       spawnRing()
       ringSpawnTimer = 0
     }
@@ -123,29 +148,22 @@ export function boomboxSystem(dt: number): void {
   }
 
   // Update rings
-  for (let i = rings.length - 1; i >= 0; i--) {
-    const ring = rings[i]
+  for (const ring of ringPool) {
+    if (!ring.active) continue
     ring.age += dt
 
     const scale = 0.3 + ring.age * RING_SPEED
-    const lifeProgress = scale / RING_MAX_SCALE
-    const alpha = Math.max(0, 0.25 * (1 - lifeProgress))
 
     if (scale >= RING_MAX_SCALE || muted) {
-      engine.removeEntity(ring.entity)
-      rings.splice(i, 1)
+      ring.active = false
+      const t = Transform.getMutable(ring.entity)
+      t.position = RING_HIDDEN_POS
+      t.scale = Vector3.Zero()
       continue
     }
 
     const t = Transform.getMutable(ring.entity)
     t.scale = Vector3.create(scale, 0.02, scale)
     t.position.y = boomboxPos.y + ring.age * 0.3
-
-    Material.setPbrMaterial(ring.entity, {
-      albedoColor: Color4.create(1, 0.84, 0, alpha),
-      emissiveColor: Color4.create(1, 0.84, 0, 1),
-      emissiveIntensity: 2 * (1 - lifeProgress),
-      transparencyMode: 2
-    })
   }
 }

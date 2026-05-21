@@ -12,6 +12,11 @@ import {
   hand, localThrow, charge, yellow, HAND_BOOMERANG_SCALE, LEFT_HAND_SCALE,
   ORBIT_PARTICLE_COUNT, ORBIT_RADIUS, EMOTE_MOVE_THRESHOLD
 } from './state'
+
+// Track last material phase to avoid redundant setPbrMaterial calls
+// Phase 0 = blue (< 75%), Phase 1 = gold (>= 75%), Phase -1 = hidden/not charging
+let lastGlowPhase = -1
+let lastParticlePhase = -1
 import { getChargeFraction } from './charge'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { isCinematicActive } from '../../gameState/cinematicState'
@@ -101,35 +106,56 @@ export function updateHandBoomerangVisibility(): void {
     }
 
     // Update glow during charge (blue only)
+    // Material is only updated when crossing the 75% threshold (phase change),
+    // NOT every frame — to avoid exhausting renderer material resources over time.
     if (hand.glowEntity && Transform.has(hand.glowEntity)) {
       if (shouldShow && charge.isCharging && !isGreen) {
         const cf = getChargeFraction()
         const glowSize = 0.3 + cf * 0.7
         Transform.getMutable(hand.glowEntity).scale = Vector3.create(glowSize, glowSize, glowSize)
-        const r = cf > 0.75 ? 1.0 : 0.3
-        const g = cf > 0.75 ? 0.84 : 0.6
-        const b = cf > 0.75 ? 0.0 : 1.0
-        Material.setPbrMaterial(hand.glowEntity, {
-          albedoColor: Color4.create(1, 1, 1, 0),
-          emissiveColor: Color3.create(r, g, b),
-          emissiveIntensity: 2 + cf * 8,
-          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-        })
+        const phase = cf > 0.75 ? 1 : 0
+        if (phase !== lastGlowPhase) {
+          lastGlowPhase = phase
+          const r = phase === 1 ? 1.0 : 0.3
+          const g = phase === 1 ? 0.84 : 0.6
+          const b = phase === 1 ? 0.0 : 1.0
+          Material.setPbrMaterial(hand.glowEntity, {
+            albedoColor: Color4.create(1, 1, 1, 0),
+            emissiveColor: Color3.create(r, g, b),
+            emissiveIntensity: phase === 1 ? 10 : 6,
+            transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+          })
+        }
       } else {
+        if (lastGlowPhase !== -1) lastGlowPhase = -1
         Transform.getMutable(hand.glowEntity).scale = Vector3.Zero()
       }
     }
 
     // Update orbit particles (blue only)
+    // Only positions/scales update per-frame; material only on phase change.
     if (shouldShow && charge.isCharging && !isGreen) {
       const cf = getChargeFraction()
       const speed = 2 * Math.PI * (1 + cf * 5)
       hand.orbitAngle = ((Date.now() - charge.startMs) / 1000) * speed
       const radius = ORBIT_RADIUS * (0.5 + cf * 0.5)
       const particleSize = 0.1 + cf * 0.15
-      const pr = cf > 0.75 ? 1.0 : 0.3
-      const pg = cf > 0.75 ? 0.84 : 0.6
-      const pb = cf > 0.75 ? 0.0 : 1.0
+      const phase = cf > 0.75 ? 1 : 0
+      if (phase !== lastParticlePhase) {
+        lastParticlePhase = phase
+        const pr = phase === 1 ? 1.0 : 0.3
+        const pg = phase === 1 ? 0.84 : 0.6
+        const pb = phase === 1 ? 0.0 : 1.0
+        for (let i = 0; i < hand.orbitParticles.length; i++) {
+          const op = hand.orbitParticles[i]
+          Material.setPbrMaterial(op, {
+            albedoColor: Color4.create(1, 1, 1, 0),
+            emissiveColor: Color3.create(pr, pg, pb),
+            emissiveIntensity: phase === 1 ? 10 : 8,
+            transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+          })
+        }
+      }
       for (let i = 0; i < hand.orbitParticles.length; i++) {
         const op = hand.orbitParticles[i]
         if (!Transform.has(op)) continue
@@ -140,14 +166,9 @@ export function updateHandBoomerangVisibility(): void {
           Math.cos(angle) * radius
         )
         Transform.getMutable(op).scale = Vector3.create(particleSize, particleSize, particleSize)
-        Material.setPbrMaterial(op, {
-          albedoColor: Color4.create(1, 1, 1, 0),
-          emissiveColor: Color3.create(pr, pg, pb),
-          emissiveIntensity: 3 + cf * 7,
-          transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-        })
       }
     } else {
+      if (lastParticlePhase !== -1) lastParticlePhase = -1
       for (let i = 0; i < hand.orbitParticles.length; i++) {
         const op = hand.orbitParticles[i]
         if (Transform.has(op)) Transform.getMutable(op).scale = Vector3.Zero()
