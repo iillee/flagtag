@@ -23,24 +23,22 @@ import {
   getAnalyticsOverlayVisible, setAnalyticsOverlayVisible,
 } from '../../gameState/overlayState'
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../../gameState/flagHoldTime'
-import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { getAllVisitors, getCurrentOnlineCount } from '../../gameState/visitorState'
 
 import { getCountdownSeconds } from '../../shared/components'
 import { isCinematicActive } from '../../gameState/cinematicState'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
-import { isTrapOnCooldown, getTrapCooldownRemaining } from '../../systems/trapSystem'
-import { isProjectileOnCooldown, getProjectileCooldownRemaining, getChargeFraction, getIsCharging, getBurnoutFlash } from '../../systems/projectile'
 import { isSpectatorTransitioning } from '../../systems/spectatorSystem'
 import { spectatorState } from '../../shared/clientState'
 
 import { IconButton } from '../components/IconButton'
 import { HowToPlayOverlay } from '../screens/HowToPlay'
 import { RoundEndSplash } from '../screens/RoundEndSplash'
-import { StatusPopup, MetricsOverlay } from '../screens/LeaderboardOverlay'
+import { MetricsOverlay } from '../screens/LeaderboardOverlay'
 
 import { AnalyticsOverlay } from '../screens/AnalyticsOverlay'
+import { Inventory, toggleInventory, showInventory as getShowInventory } from '../inventory'
 
 export function DesktopLayout() {
   const rawPlayers = getPlayersWithHoldTimes()
@@ -72,7 +70,6 @@ export function DesktopLayout() {
 
       <RoundEndSplash />
       {winConditionVisible && <HowToPlayOverlay />}
-      {leaderboardVisible && !metricsState.openedFromTerminal && <StatusPopup />}
       {leaderboardVisible && metricsState.openedFromTerminal && (() => {
         const rawVisitors = getAllVisitors()
         const allVisitors = sortVisitorsWithBotSection(rawVisitors)
@@ -90,46 +87,18 @@ export function DesktopLayout() {
         return <AnalyticsOverlay allVisitors={allVisitors} onlineCount={onlineCount} totalPlaytimeMin={totalPlaytimeMin} serverConnected={serverConnected} localUserId={localUserId} />
       })()}
 
-      {/* Ability bar */}
+      {/* Inventory hotbar + grid overlay */}
       {!cinematicShowing && !spectatorState.active && !isSpectatorTransitioning() && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(24) }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
-          <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-            {/* Projectile (E) */}
-            <UiEntity uiTransform={{ width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE), flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS), margin: { right: S(8) } }}
-              uiBackground={{ color: PANEL_BG_SEMI }}
-            >
-              <Label value="E" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) } }} />
-              {(getIsCharging() || getBurnoutFlash()) && (() => {
-                const burnout = getBurnoutFlash()
-                const cf = burnout ? 1 : getChargeFraction()
-                const inset = S(6)
-                return <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: inset, left: inset, right: inset }, height: `${Math.round(cf * 100)}%`, maxHeight: S(_ABILITY_BTN_SIZE) - inset * 2, borderRadius: S(_BORDER_RADIUS) }}
-                  uiBackground={{ color: burnout ? Color4.create(1, 0.15, 0.1, 0.9) : cf >= 1.25 / 1.5 ? Color4.create(1, 0.84, 0, 0.85) : Color4.create(1, 1, 1, 0.5) }} />
-              })()}
-              <UiEntity uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.4175, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.4175, margin: { top: S(-2) }, positionType: 'absolute' }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
-              {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
-            </UiEntity>
-            {/* Trap (F) */}
-            <UiEntity uiTransform={{ width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE), flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS), margin: { left: S(8) } }}
-              uiBackground={{ color: PANEL_BG_SEMI }}
-            >
-              <Label value="F" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) } }} />
-              <UiEntity uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, height: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, margin: { top: S(2) } }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
-              {isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
-            </UiEntity>
-          </UiEntity>
-        </UiEntity>
+        <Inventory />
       )}
 
       {/* Right-side: icons + stats + scoreboard */}
       <UiEntity uiTransform={{ positionType: 'absolute', position: { right: S(16), top: S(14) }, flexDirection: 'row', alignItems: 'flex-start' }}>
         {/* Icon buttons */}
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
-          <IconButton hoverKey="squareIcon" label="Status" isActive={leaderboardVisible}
-            iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE }} />}
-            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsState.openedFromTerminal = false; setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+          <IconButton hoverKey="squareIcon" label="Inventory" isActive={getShowInventory}
+            iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: getShowInventory || hover.squareIcon ? GOLD : WHITE }} />}
+            onClick={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); metricsState.openedFromTerminal = false; toggleInventory() }}
           />
           <UiEntity uiTransform={{ height: S(4) }} />
           <IconButton hoverKey="questionIcon" label="Help" isActive={winConditionVisible}

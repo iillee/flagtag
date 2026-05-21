@@ -32,7 +32,7 @@ import {
   blessingState, markBlessingCompleted,
   earnedState,
   notifyOverlayClosed, isAnyOverlayOpen,
-  registerOverlayChecks,
+  registerOverlayChecks, registerInventoryCheck,
   popupState,
   showChestPopup, hideChestPopup,
   showMailboxPopup, hideMailboxPopup,
@@ -74,6 +74,10 @@ import { ChestPopup } from './ui/screens/ChestPopup'
 import { DesktopLayout } from './ui/layouts/DesktopLayout'
 import { MobileLayout } from './ui/layouts/MobileLayout'
 
+// Inventory
+import { setOnHotbarChanged, hotbar, showInventory as inventoryVisible } from './ui/inventory/state'
+import { requestEquipBoomerang } from './gameState/playerUpgradeState'
+
 // ═══════════════════════════════════════════════════════════
 // RE-EXPORTS — stable public API for other files
 // ═══════════════════════════════════════════════════════════
@@ -94,7 +98,17 @@ export { cinematicState, creditsState, popupState, splashState }
 
 export function setupUi() {
   registerOverlayChecks(getWinConditionOverlayVisible, getLeaderboardOverlayVisible, getAnalyticsOverlayVisible)
+  registerInventoryCheck(() => inventoryVisible)
   registerUiSystems()
+
+  // Wire inventory hotbar changes to the boomerang equip system
+  setOnHotbarChanged(() => {
+    const eSlotItem = hotbar[0]
+    if (eSlotItem && eSlotItem.boomerangColor) {
+      requestEquipBoomerang(eSlotItem.boomerangColor)
+    }
+  })
+
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
 }
 
