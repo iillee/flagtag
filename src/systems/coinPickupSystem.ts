@@ -172,8 +172,8 @@ let walletBalance = 0
 let balanceRequested = false
 let balanceReceived = false
 let balanceRetryTimer = 0
-const BALANCE_RETRY_INTERVAL = 2 // seconds
-const BALANCE_MAX_RETRIES = 5
+const BALANCE_RETRY_INTERVAL = 3 // seconds
+const BALANCE_MAX_RETRIES = 20
 let balanceRetryCount = 0
 
 /** Get the current coin balance for UI display */
