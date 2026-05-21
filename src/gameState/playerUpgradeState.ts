@@ -7,14 +7,13 @@
 import { engine, AudioSource, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
-import { PlayerUpgrades, PlayerLifetimeWins, PlayerLifetimeHoldTime, parseUpgrades, type UpgradeData } from '../shared/upgrades'
+import { PlayerUpgrades, PlayerLifetimeWins, parseUpgrades, type UpgradeData } from '../shared/upgrades'
 import { room } from '../shared/messages'
 import { setBoomerangColor, type BoomerangColor } from './boomerangColor'
 
 // ── Local cache ──
 let localUpgrades: UpgradeData = { boomerangs: ['r'], equipped: 'r' }
 let localLifetimeWins = 0
-let localLifetimeHoldTime = 0
 let winsReceived = false
 let winsRetryTimer = 0
 let winsRetryCount = 0
@@ -44,11 +43,6 @@ export function getLocalUpgrades(): UpgradeData {
 /** Get the local player's lifetime wins (flags) */
 export function getLocalLifetimeWins(): number {
   return localLifetimeWins
-}
-
-/** Get the local player's lifetime flag hold time in seconds */
-export function getLocalLifetimeHoldTime(): number {
-  return localLifetimeHoldTime
 }
 
 /** Whether lifetime wins have been loaded from server */
@@ -169,14 +163,6 @@ export function upgradeStateSystem(dt: number): void {
     if (data.playerId === localId) {
       localLifetimeWins = data.wins
       winsReceived = true
-      break
-    }
-  }
-
-  // Read lifetime hold time from synced component
-  for (const [, data] of engine.getEntitiesWith(PlayerLifetimeHoldTime)) {
-    if (data.playerId === localId) {
-      localLifetimeHoldTime = data.totalSeconds
       break
     }
   }

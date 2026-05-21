@@ -15,7 +15,7 @@ import {
   flagEntity, countdownEntity,
   leaderboardEntity, allTimeLeaderboardEntity, monthlyLeaderboardEntity,
   holdTimeEntities, knownPlayers, playerNames,
-  lastStealTime, playerLifetimeHoldTimeCache,
+  lastStealTime,
   SPLASH_DURATION_MS,
 } from './serverState'
 import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard } from './persistence'
@@ -25,7 +25,7 @@ import { awardRoundCoins } from './economy'
 import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState } from './flagLogic'
 import { activeTraps, activeProjectiles, activeOrbits, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
-import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime } from './economy'
+import { addPlayerLifetimeWin } from './economy'
 import { capture } from './posthog'
 
 // ── Lightning state ──
@@ -383,14 +383,6 @@ async function handleRoundEnd(): Promise<void> {
     }
   }
 
-  // ── 7c. Accumulate lifetime flag hold time ──
-  for (const p of players) {
-    if (p.seconds > 0) {
-      const newTotal = await addPlayerLifetimeHoldTime(p.userId, p.seconds)
-      console.log('[LifetimeHoldTime] Player', p.userId.slice(0, 8), '+', p.seconds.toFixed(1), 's -> total:', newTotal.toFixed(1), 's')
-    }
-  }
-
   // ── 8. Persist flag state ──
   await persistFlagState()
 
@@ -400,16 +392,7 @@ async function handleRoundEnd(): Promise<void> {
     max_hold_seconds: Math.floor(maxSeconds),
     winner_name: topPlayers[0]?.name ?? null,
     winner_id: topPlayers[0]?.userId ?? null,
-    top_players: topPlayers.map(p => ({ name: p.name, seconds: p.seconds })),
-    lifetime_hold_times: players.filter(p => p.seconds > 0).map(p => {
-      const pKey = p.userId.toLowerCase()
-      return {
-        userId: pKey,
-        name: playerNames.get(pKey) || pKey.slice(0, 8),
-        round_seconds: p.seconds,
-        lifetime_seconds: playerLifetimeHoldTimeCache.get(pKey) ?? 0
-      }
-    })
+    top_players: topPlayers.map(p => ({ name: p.name, seconds: p.seconds }))
   })
 }
 

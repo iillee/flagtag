@@ -10,7 +10,7 @@ import { engine, PlayerIdentityData, AvatarBase } from '@dcl/sdk/ecs'
 import {
   currentlyConnected, playerNames, visitorSessions, monthlyVisitorSessions,
   playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
-  playerLifetimeHoldTimeCache, lastStealTime, deathPenaltyCooldowns,
+  lastStealTime, deathPenaltyCooldowns,
   sessionDeaths, sessionBananasDropped, sessionBoomerangsFired,
   isRealName
 } from './serverState'
@@ -114,7 +114,6 @@ export function playerTrackingSystem(): void {
           coin_balance: playerCoinBalances.get(userKey) ?? 0,
           bananas_dropped: sessionBananasDropped.get(userKey) ?? 0,
           boomerangs_fired: sessionBoomerangsFired.get(userKey) ?? 0,
-          lifetime_hold_seconds: playerLifetimeHoldTimeCache.get(userKey) ?? 0,
         })
       }
 

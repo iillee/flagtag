@@ -5,8 +5,8 @@ import { engine, type Entity } from '@dcl/sdk/ecs'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
-  walletEntities, upgradeEntities, lifetimeWinsEntities, lifetimeHoldTimeEntities,
-  playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache, playerLifetimeHoldTimeCache,
+  walletEntities, upgradeEntities, lifetimeWinsEntities,
+  playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
   playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
   coinStateEntity, allTimeLeaderboardEntity
 } from './serverState'
@@ -17,8 +17,8 @@ import {
   getWalletSyncId
 } from '../shared/coins'
 import {
-  PlayerUpgrades, PlayerLifetimeWins, PlayerLifetimeHoldTime,
-  getUpgradesSyncId, getLifetimeWinsSyncId, getLifetimeHoldTimeSyncId,
+  PlayerUpgrades, PlayerLifetimeWins,
+  getUpgradesSyncId, getLifetimeWinsSyncId,
   parseUpgrades, serializeUpgrades, BOOMERANG_STORE,
   type UpgradeData
 } from '../shared/upgrades'
@@ -186,56 +186,6 @@ export function getOrCreateLifetimeWinsEntity(walletAddress: string): Entity {
   syncEntity(entity, [PlayerLifetimeWins.componentId], getLifetimeWinsSyncId(key))
   lifetimeWinsEntities.set(key, entity)
   console.log('[LifetimeWins] Created entity for', key.slice(0, 8), 'wins:', wins)
-  return entity
-}
-
-// ── Lifetime flag hold time ──
-
-export async function loadPlayerLifetimeHoldTime(walletAddress: string): Promise<number> {
-  const key = walletAddress.toLowerCase()
-  const cached = playerLifetimeHoldTimeCache.get(key)
-  if (cached !== undefined) return cached
-
-  try {
-    const saved = await Storage.get<string>(`lifetimeHoldTime:${key}`)
-    const seconds = saved ? parseFloat(saved) : 0
-    playerLifetimeHoldTimeCache.set(key, seconds)
-    return seconds
-  } catch (err) {
-    console.error('[LifetimeHoldTime] Failed to load for', key.slice(0, 8), err)
-    return 0
-  }
-}
-
-export async function addPlayerLifetimeHoldTime(walletAddress: string, additionalSeconds: number): Promise<number> {
-  const key = walletAddress.toLowerCase()
-  const current = await loadPlayerLifetimeHoldTime(key)
-  const newTotal = current + additionalSeconds
-  playerLifetimeHoldTimeCache.set(key, newTotal)
-
-  const entity = getOrCreateLifetimeHoldTimeEntity(key)
-  PlayerLifetimeHoldTime.getMutable(entity).totalSeconds = newTotal
-
-  try {
-    await Storage.set(`lifetimeHoldTime:${key}`, String(newTotal))
-  } catch (err) {
-    console.error('[LifetimeHoldTime] Failed to persist for', key.slice(0, 8), err)
-  }
-
-  return newTotal
-}
-
-export function getOrCreateLifetimeHoldTimeEntity(walletAddress: string): Entity {
-  const key = walletAddress.toLowerCase()
-  let entity = lifetimeHoldTimeEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  const totalSeconds = playerLifetimeHoldTimeCache.get(key) ?? 0
-  PlayerLifetimeHoldTime.create(entity, { playerId: key, totalSeconds })
-  syncEntity(entity, [PlayerLifetimeHoldTime.componentId], getLifetimeHoldTimeSyncId(key))
-  lifetimeHoldTimeEntities.set(key, entity)
-  console.log('[LifetimeHoldTime] Created entity for', key.slice(0, 8), 'totalSeconds:', totalSeconds.toFixed(1))
   return entity
 }
 

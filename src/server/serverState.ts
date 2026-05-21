@@ -40,8 +40,6 @@ export const playerNames = new Map<string, string>()
 export const walletEntities = new Map<string, Entity>()
 export const upgradeEntities = new Map<string, Entity>()
 export const lifetimeWinsEntities = new Map<string, Entity>()
-export const lifetimeHoldTimeEntities = new Map<string, Entity>()
-export const playerLifetimeHoldTimeCache = new Map<string, number>()
 
 export const playerBoomerangColors = new Map<string, string>() // playerId -> color ('r','y','b','g')
 export const playerCoinBalances = new Map<string, number>()
