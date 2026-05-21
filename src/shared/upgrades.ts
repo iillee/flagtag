@@ -48,10 +48,21 @@ export const PlayerLifetimeWins = engine.defineComponent('player-lifetime-wins',
 
 PlayerLifetimeWins.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
+/**
+ * Per-player lifetime flag hold time (total seconds across all rounds), synced from server.
+ */
+export const PlayerLifetimeHoldTime = engine.defineComponent('player-lifetime-hold-time', {
+  playerId: Schemas.String,
+  totalSeconds: Schemas.Float,
+}, { playerId: '', totalSeconds: 0 })
+
+PlayerLifetimeHoldTime.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
+
 // ── Sync IDs ──
 
 const UPGRADES_SYNC_ID_BASE = 5000000
 const LIFETIME_WINS_SYNC_ID_BASE = 6000000
+const LIFETIME_HOLD_TIME_SYNC_ID_BASE = 7000000
 
 function hashString(s: string): number {
   let h = 0
@@ -67,6 +78,10 @@ export function getUpgradesSyncId(userId: string): number {
 
 export function getLifetimeWinsSyncId(userId: string): number {
   return LIFETIME_WINS_SYNC_ID_BASE + (hashString(userId.toLowerCase()) % 100000)
+}
+
+export function getLifetimeHoldTimeSyncId(userId: string): number {
+  return LIFETIME_HOLD_TIME_SYNC_ID_BASE + (hashString(userId.toLowerCase()) % 100000)
 }
 
 // ── Helpers ──
