@@ -78,7 +78,7 @@ export function flushPendingJoinNotifications(): void {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
-    }).catch(err => console.error('[Server] Discord join notification failed:', err))
+    }).then(() => {}, () => {})
   }
 }
 

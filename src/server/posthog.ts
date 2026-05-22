@@ -1,9 +1,12 @@
 /**
  * posthog.ts — PostHog analytics via HTTP API (no Node.js dependencies).
+ * 
+ * NOTE: The deployed auth server environment may not be able to reach external
+ * hosts. All fetch calls are fire-and-forget with silent error handling to
+ * prevent ETIMEDOUT errors from destabilizing the server.
  */
 
 import { EnvVar } from '@dcl/sdk/server'
-import { signedFetch } from '~system/SignedFetch'
 
 let apiKey: string | null = null
 let host: string = 'https://us.i.posthog.com'
@@ -26,7 +29,6 @@ export async function initPostHog(): Promise<void> {
 
 export function identify(distinctId: string, personProperties: Record<string, any>): void {
   if (!apiKey) return
-  console.log('[PostHog] identifying', distinctId, personProperties)
 
   const body = JSON.stringify({
     api_key: apiKey,
@@ -36,21 +38,15 @@ export function identify(distinctId: string, personProperties: Record<string, an
     timestamp: new Date().toISOString()
   })
 
-  signedFetch({
-    url: `${host}/capture/`,
-    init: {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    }
-  }).catch((err) => {
-    console.error(`[PostHog] identify failed for "${distinctId}"`, err)
-  })
+  fetch(`${host}/capture/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  }).then(() => {}, () => {})
 }
 
 export function capture(distinctId: string, event: string, properties?: Record<string, any>): void {
   if (!apiKey) return
-  console.log('[PostHog] capturing event', event, properties)
 
   const body = JSON.stringify({
     api_key: apiKey,
@@ -60,14 +56,9 @@ export function capture(distinctId: string, event: string, properties?: Record<s
     timestamp: new Date().toISOString()
   })
 
-  signedFetch({
-    url: `${host}/capture/`,
-    init: {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    }
-  }).catch((err) => {
-    console.error(`[PostHog] capture failed for event "${event}"`, err)
-  })
+  fetch(`${host}/capture/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  }).then(() => {}, () => {})
 }
