@@ -1,6 +1,6 @@
 # Known Bugs — Playtest Tracking
 
-Last updated: May 20, 2026
+Last updated: May 22, 2026
 
 These three game-breaking bugs have been recurring over the past month during multiplayer sessions. Recent refactoring may have resolved them. This document tracks root causes, fixes applied, and remaining risks for the May 19 playtest.
 
@@ -134,6 +134,35 @@ These three game-breaking bugs have been recurring over the past month during mu
 - Check if boomerang visuals appear for both the thrower and other players
 - Check if cooldown and visual are always in sync
 - Watch server logs for `Pool exhausted` messages
+
+---
+
+---
+
+## Bug 4: Lifetime Flag Hold Time Tracking Breaks Server Connection
+
+**Discovered:** May 22, 2026
+
+**Symptoms:**
+- After deploying with lifetime hold time tracking code, the authoritative server never connects
+- Scene loads visually but no CRDT sync, no flag, no round timer — server is completely unreachable
+- The same codebase WITHOUT the hold time tracking deploys and connects fine (verified on both flagtag.dcl.eth and baskervill.dcl.eth)
+
+**What was added (commits `d366380` → `7bd4b82`):**
+- `playerLifetimeHoldTimeCache` Map in `serverState.ts`
+- `loadPlayerLifetimeHoldTime()` and `addPlayerLifetimeHoldTime()` in `economy.ts` — uses `Storage.get`/`Storage.set` with per-player keys (`lifetimeHoldTime:{walletAddress}`)
+- `handleRoundEnd()` in `roundManager.ts` — loops over players with hold time > 0 and calls `await addPlayerLifetimeHoldTime()` for each
+- `playerTrackingSystem` — added `lifetime_hold_seconds` to PostHog player leave event
+
+**What was also tried:**
+- SDK upgrade to `7.23.4-auth-server` tag (commit `bfcd3d3`) — did NOT fix the issue
+- Reverting to SDK `7.23.2-commit-1828100` with hold time code still present — still broken
+- Reverting hold time code on SDK `7.23.2` — **fixed, server connects**
+
+**Likely root cause:**
+- Unknown. The hold time code is server-only (no new CRDT components, no new syncEntity calls). It only uses `Storage.get`/`Storage.set` and a `Map` cache. Possibly the multiple sequential `await Storage.set()` calls inside the `handleRoundEnd` loop are causing a server startup or runtime issue. Or the additional import/reference graph change is triggering a bundler or server initialization problem.
+
+**Status:** REVERTED. Lifetime hold time tracking is not deployed. Need to investigate a safe approach — possibly batching Storage writes, or deferring them outside the round-end flow.
 
 ---
 

@@ -7,7 +7,6 @@ import { Storage } from '@dcl/sdk/server'
 import {
   walletEntities, upgradeEntities, lifetimeWinsEntities,
   playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
-  playerLifetimeHoldTimeCache,
   playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
   coinStateEntity, allTimeLeaderboardEntity
 } from './serverState'
@@ -188,39 +187,6 @@ export function getOrCreateLifetimeWinsEntity(walletAddress: string): Entity {
   lifetimeWinsEntities.set(key, entity)
   console.log('[LifetimeWins] Created entity for', key.slice(0, 8), 'wins:', wins)
   return entity
-}
-
-// ── Lifetime flag hold time (server-only, no CRDT sync) ──
-
-export async function loadPlayerLifetimeHoldTime(walletAddress: string): Promise<number> {
-  const key = walletAddress.toLowerCase()
-  const cached = playerLifetimeHoldTimeCache.get(key)
-  if (cached !== undefined) return cached
-
-  try {
-    const saved = await Storage.get<string>(`lifetimeHoldTime:${key}`)
-    const seconds = saved ? parseFloat(saved) : 0
-    playerLifetimeHoldTimeCache.set(key, seconds)
-    return seconds
-  } catch (err) {
-    console.error('[LifetimeHoldTime] Failed to load for', key.slice(0, 8), err)
-    return 0
-  }
-}
-
-export async function addPlayerLifetimeHoldTime(walletAddress: string, additionalSeconds: number): Promise<number> {
-  const key = walletAddress.toLowerCase()
-  const current = await loadPlayerLifetimeHoldTime(key)
-  const newTotal = current + additionalSeconds
-  playerLifetimeHoldTimeCache.set(key, newTotal)
-
-  try {
-    await Storage.set(`lifetimeHoldTime:${key}`, String(newTotal))
-  } catch (err) {
-    console.error('[LifetimeHoldTime] Failed to persist for', key.slice(0, 8), err)
-  }
-
-  return newTotal
 }
 
 // ── Store purchase ──
