@@ -188,12 +188,17 @@ export function bananaServerSystem(dt: number): void {
       const dz = z.posZ - trapPos.z
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (dist < TRAP_TRIGGER_RADIUS) {
-        console.log('[Server] 🪤👻 Trap hit ghost! Killing ghost.')
+        z.hp--
+        console.log('[Server] 🪤👻 Trap hit ghost! HP:', z.hp)
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
-        room.send('ghostKilled', { x: z.posX, y: z.posY, z: z.posZ })
-        engine.removeEntity(z.entity); recycleGhostSyncId(z.syncId)
-        activeGhosts.splice(gi, 1)
-        setGhostRespawnCooldown(GHOST_RESPAWN_COOLDOWN)
+        room.send('hitVfx', { x: z.posX, y: z.posY + 1, z: z.posZ })
+        if (z.hp <= 0) {
+          console.log('[Server] 🪤👻 Ghost killed by trap!')
+          room.send('ghostKilled', { x: z.posX, y: z.posY, z: z.posZ })
+          engine.removeEntity(z.entity); recycleGhostSyncId(z.syncId)
+          activeGhosts.splice(gi, 1)
+          setGhostRespawnCooldown(GHOST_RESPAWN_COOLDOWN)
+        }
         removeTrap(trap)
         activeTraps.splice(i, 1)
         trapConsumed = true
