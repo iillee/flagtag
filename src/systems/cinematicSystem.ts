@@ -1,4 +1,5 @@
 import { engine, Transform, VirtualCamera, MainCamera, InputModifier } from '@dcl/sdk/ecs'
+import { registerSystem } from './systemManager'
 import { Vector3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
@@ -72,9 +73,10 @@ export function setupCinematicSystem(): void {
     defaultTransition: { transitionMode: VirtualCamera.Transition.Time(0.01) }
   })
 
-  // Podium emote system: grounded → re-teleport → clear InputModifier → fire emote
-  engine.addSystem((dt: number) => {
-    if (!pendingEmote) return
+  // Consolidated cinematic system: podium emotes + fade overlay + cinematic timer
+  registerSystem((dt: number) => {
+    // ── Podium emote: grounded → re-teleport → clear InputModifier → fire emote ──
+    if (pendingEmote) {
 
     emoteElapsed += dt
 
@@ -82,8 +84,7 @@ export function setupCinematicSystem(): void {
     if (emoteElapsed >= EMOTE_TIMEOUT) {
       void triggerEmote({ predefinedEmote: pendingEmote.emote }).catch(() => {})
       pendingEmote = null
-      return
-    }
+    } else
 
     if (emotePhase === 0) {
       // Phase 0: Wait for player Y to stabilize (landed on podium)
@@ -141,10 +142,9 @@ export function setupCinematicSystem(): void {
         pendingEmote = null
       }
     }
-  })
+    } // end pendingEmote
 
-  // Fade overlay + cinematic timer system
-  engine.addSystem((dt: number) => {
+    // ── Fade overlay + cinematic timer ──
     if (fadePhase > 0) {
       fadeTimer -= dt
       if (fadePhase === 1) {

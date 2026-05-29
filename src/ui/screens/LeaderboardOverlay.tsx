@@ -8,7 +8,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import {
-  S, WHITE, MUTED, GREY, GOLD, CLOSE_GREY, PANEL_BG, CLICK_BLOCKER,
+  S, WHITE, MUTED, GREY, GOLD, CLOSE_GREY, PANEL_BG,
   _ROW_HEIGHT, _ROW_FONT, _OVERLAY_PANEL_WIDTH, _OVERLAY_PANEL_HEIGHT,
   VISITORS_PER_PAGE,
   sortVisitorsWithBotSection, isLikelyBot, formatVisitorTime, formatUTCDate, formatUTCMonth,
@@ -68,9 +68,8 @@ export function StatusPopup() {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        pointerFilter: 'none',
       }}
-      uiBackground={{ color: CLICK_BLOCKER }}
-      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{
@@ -148,9 +147,8 @@ export function MetricsOverlay({ allVisitors, localUserId, onlineCount, totalPla
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        pointerFilter: 'none',
       }}
-      uiBackground={{ color: CLICK_BLOCKER }}
-      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{

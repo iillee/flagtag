@@ -11,6 +11,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { getLeaderboardEntries, getAllTimeLeaderboardEntries } from '../gameState/roundsWon'
+import { registerThrottled } from './systemManager'
 
 // ── Board config ──
 // Pulled 0.5m perpendicular (sideways) from the wall surface
@@ -148,14 +149,9 @@ export function setupWorldLeaderboard(): void {
   )
 
   // Auto-refresh system (every 2s)
-  let timer = 0
-  engine.addSystem((dt: number) => {
-    timer += dt
-    if (timer >= 2.0) {
-      timer = 0
-      updateBoard()
-    }
-  })
+  registerThrottled((_dt: number) => {
+    updateBoard()
+  }, 2.0)
 
   updateBoard()
 }

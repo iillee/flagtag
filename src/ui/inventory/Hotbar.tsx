@@ -38,6 +38,7 @@ export const InventoryHotbar = () => {
       width: '100%',
       flexDirection: 'row',
       justifyContent: 'center',
+      pointerFilter: 'none',
     }}>
       {/* Click-away backdrop to dismiss selection */}
       {hasSelection && (

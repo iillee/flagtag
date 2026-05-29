@@ -4,7 +4,7 @@ import { getPlayer } from '@dcl/sdk/players'
 
 import {
   WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY, GOLD,
-  PANEL_BG, CLICK_BLOCKER,
+  PANEL_BG,
   formatCountdown,
 } from '../uiConstants'
 import {
@@ -47,7 +47,7 @@ export function MobileLayout() {
   const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 0.8)
 
   return (
-    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
+    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {/* Top bar */}
       {(() => {
         const localPlayer = players.find(p => localUserId !== null && p.userId === localUserId)
@@ -56,7 +56,7 @@ export function MobileLayout() {
         const hasFlag = localPlayer && carrierUserId !== null && localPlayer.userId === carrierUserId
         const scoreColor = isLeader ? GOLD : WHITE
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 28 }, width: '100%', height: 68, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 28 }, width: '100%', height: 68, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28, right: 28 }, borderRadius: 34, margin: { right: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_timer.png' } }}
@@ -132,8 +132,8 @@ export function MobileLayout() {
 
       {/* Mobile Scoreboard Overlay */}
       {mobileState.scoreboardVisible && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
-          uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+          >
           <UiEntity uiTransform={{ positionType: 'relative', width: '42%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 28, overflow: 'hidden' }}
             uiBackground={{ color: PANEL_BG }}
           >
@@ -200,8 +200,8 @@ function MobileStatusPopup() {
   }
 
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
-      uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+      >
       <UiEntity uiTransform={{ width: '42%', flexDirection: 'column', alignItems: 'stretch', padding: 28, borderRadius: 16 }}
         uiBackground={{ color: PANEL_BG }}
       >

@@ -9,6 +9,7 @@ import { isMobile } from '@dcl/sdk/platform'
 import { room } from '../shared/messages'
 import { Flag } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
+import { registerSystem } from './systemManager'
 
 import { addMushroomSpeedBoost } from './speedBoostSystem'
 import { showShieldForPlayer, hideShieldForPlayer, hideAllShields, setShieldAlpha } from './shieldSystem'
@@ -264,7 +265,7 @@ room.onMessage('mushroomPositions', (data) => {
     flagImmunityTimers.set(pid, durationMs / 1000)
   })
 
-  engine.addSystem((dt: number) => {
+  registerSystem((dt: number) => {
     const expired: string[] = []
     for (const [pid, remaining] of flagImmunityTimers) {
       const next = remaining - dt

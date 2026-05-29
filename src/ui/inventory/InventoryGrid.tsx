@@ -6,7 +6,7 @@ import {
   SLOT_BG, SLOT_EMPTY_BG, RARITY_COLORS, SLOT_RADIUS,
 } from './constants'
 import { ItemSlot } from './ItemSlot'
-import { S, GOLD, LIGHT_GREY, CLOSE_GREY, CLICK_BLOCKER } from '../uiConstants'
+import { S, GOLD, LIGHT_GREY, CLOSE_GREY } from '../uiConstants'
 import {
   selSource, selIndex, grid,
   gridHover, hoveredGridItem, setHoveredGridItem,
@@ -35,9 +35,8 @@ export const InventoryGrid = () => {
       width: '100%', height: '100%',
       flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
+      pointerFilter: 'none',
     }}
-    uiBackground={{ color: CLICK_BLOCKER }}
-    onMouseDown={() => {}}
     >
       <UiEntity uiTransform={{
         width: gridWidth,

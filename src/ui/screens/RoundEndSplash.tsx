@@ -5,7 +5,7 @@
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
-import { S, GOLD, SILVER, BRONZE, LIGHT_GREY, CLOSE_GREY, PANEL_BG, CLICK_BLOCKER } from '../uiConstants'
+import { S, GOLD, SILVER, BRONZE, LIGHT_GREY, CLOSE_GREY, PANEL_BG } from '../uiConstants'
 import { splashState, cinematicState, notifyOverlayClosed } from '../uiState'
 
 export function RoundEndSplash() {
@@ -26,9 +26,8 @@ export function RoundEndSplash() {
         justifyContent: 'center',
         alignItems: 'flex-end',
         padding: { bottom: mobile ? 114 : S(40) },
+        pointerFilter: 'none',
       }}
-      uiBackground={{ color: CLICK_BLOCKER }}
-      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{

@@ -55,10 +55,10 @@ export function DesktopLayout() {
   const analyticsVisible = getAnalyticsOverlayVisible()
 
   return (
-    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
+    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {/* Timer */}
       {!isCinematicActive() && !splashVisible && cinematicFadeOpacity === 0 && countdownSeconds > 0 && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: S(14), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center' }}>
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: S(14), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center', pointerFilter: 'none' }}>
           <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: S(2 * _ROW_HEIGHT + 2 * _PADDING), padding: { left: S(20), right: S(20) }, borderRadius: S(_BORDER_RADIUS) }}
             uiBackground={{ color: PANEL_BG }}
           >

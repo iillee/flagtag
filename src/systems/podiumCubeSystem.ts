@@ -1,4 +1,5 @@
 import { engine, Entity, GltfContainer, VisibilityComponent, ColliderLayer } from '@dcl/sdk/ecs'
+import { registerThrottled, removeSystem } from './systemManager'
 
 /**
  * Hides the 4 podium marker cubes placed via Creator Hub composite.
@@ -16,7 +17,7 @@ const PODIUM_CUBE_SRCS = new Set([
 export function setupPodiumCubeHiding() {
   const hiddenPodiumCubes = new Set<Entity>()
 
-  engine.addSystem(function hidePodiumCubes() {
+  const hidePodiumCubes = (_dt: number) => {
     for (const [entity] of engine.getEntitiesWith(GltfContainer)) {
       if (hiddenPodiumCubes.has(entity)) continue
       const gltf = GltfContainer.get(entity)
@@ -32,8 +33,9 @@ export function setupPodiumCubeHiding() {
       }
     }
     if (hiddenPodiumCubes.size >= 4) {
-      engine.removeSystem(hidePodiumCubes)
+      removeSystem(hidePodiumCubes)
       console.log('[Client] ✅ All 4 podium cubes hidden')
     }
-  })
+  }
+  registerThrottled(hidePodiumCubes, 1.0)
 }

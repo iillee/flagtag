@@ -6,6 +6,7 @@ import './shared/components'
 import './shared/coins'
 import './shared/upgrades'
 import { room } from './shared/messages'
+import { registerSystem, registerThrottled, initSystemManager } from './systems/systemManager'
 
 export async function main() {
   if (isServer()) {
@@ -163,68 +164,69 @@ export async function main() {
   const { setupPodiumCubeHiding } = await import('./systems/podiumCubeSystem')
   setupPodiumCubeHiding()
 
-  // Water slowdown — disable running in water
-  engine.addSystem(waterSystem)
-  engine.addSystem(waterBobSystem)
-  engine.addSystem(coinBobSpinSystem)
+  // Message handlers (no systems, just wire up listeners)
   setupCoinMessages()
   setupBoostTrailMessages()
   initUpgradeListeners()
   setupDeathPenaltyMessages()
-  engine.addSystem(coinPickupSystem)
-  engine.addSystem(waterSplashSystem)
-
-  // Lightning bolt system (probability-based, synced via messages)
   setupLightning()
   setupLightningMessages()
-  engine.addSystem(lightningSystem)
-
-  // Mailbox — click to leave feedback
-  engine.addSystem(mailboxSystem)
-  engine.addSystem(chestSystem)
-  engine.addSystem(boomboxSystem)
-  engine.addSystem(upgradeStateSystem)
-  engine.addSystem(gravestoneSystem)
-  engine.addSystem(terminalSystem)
-
-
-
-  // In-world leaderboard
   setupWorldLeaderboard()
-
-  // Proximity lighting
   setupProximityLights()
-  engine.addSystem(proximityLightSystem)
-
-  // Updraft smoke stacks
   setupUpdraftSystem()
-  engine.addSystem(updraftSystem)
 
-  // Client systems
-  engine.addSystem(flagClientSystem)
-  engine.addSystem(combatClientSystem)
-  engine.addSystem(beaconClientSystem)
-  engine.addSystem(nameResolverSystem)
-  engine.addSystem(trapClientSystem)
-  engine.addSystem(projectileClientSystem)
-  engine.addSystem(mushroomClientSystem)
-  engine.addSystem(speedBoostSystem)
-  engine.addSystem(boostTrailSystem)
-  engine.addSystem(shieldSystem)
-  engine.addSystem(ghostClientSystem) // Ghost system enabled
-  engine.addSystem(updateHoldTimeInterpolation)
+  // ── Register all systems through the system manager ──
 
-  // ── Day/Night Cycle ──
-  // Polls getWorldTime() to keep server-side ghost spawn logic in sync.
-  // Skybox is NOT overridden — players can use auto or manual settings.
-  // Ghost appears regardless of local skybox (server-authoritative).
-  engine.addSystem(function dayNightPollSystem(_dt: number) {
-    updateWorldTime()
+  // Per-frame visual/animation
+  registerSystem((dt) => {
+    waterBobSystem(dt)
+    coinBobSpinSystem(dt)
+    waterSplashSystem(dt)
+    boostTrailSystem(dt)
+    shieldSystem(dt)
+    speedBoostSystem(dt)
+    updateHoldTimeInterpolation()
   })
 
-  // Pedestal blessing system
-  engine.addSystem(pedestalSystem)
+  // Per-frame gameplay
+  registerSystem((dt) => {
+    waterSystem(dt)
+    flagClientSystem(dt)
+    combatClientSystem(dt)
+    trapClientSystem(dt)
+    projectileClientSystem(dt)
+    mushroomClientSystem(dt)
+    ghostClientSystem(dt)
+    lightningSystem(dt)
+    updraftSystem(dt)
+    coinPickupSystem(dt)
+    beaconClientSystem(dt)
+  })
+
+  // Throttled checks (every 0.25s)
+  registerThrottled((_elapsed) => {
+    mailboxSystem()
+    chestSystem()
+    gravestoneSystem()
+    terminalSystem()
+  }, 0.25)
+
+  registerThrottled((elapsed) => {
+    boomboxSystem(elapsed)
+    upgradeStateSystem(elapsed)
+    proximityLightSystem(elapsed)
+    pedestalSystem(elapsed)
+  }, 0.25)
+
+  // Rare checks (every 2s)
+  registerThrottled((elapsed) => {
+    nameResolverSystem(elapsed)
+    updateWorldTime()
+  }, 2.0)
 
   // Cinematic system (round-end camera, fade state machine, respawnPlayers handler)
   setupCinematicSystem()
+
+  // ── Initialize the system manager LAST — registers the 2 actual engine systems ──
+  initSystemManager()
 }

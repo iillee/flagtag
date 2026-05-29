@@ -4,6 +4,7 @@
  */
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { engine, Entity, Transform, MeshRenderer, Material, MaterialTransparencyMode, GltfContainer, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
+import { registerSystem } from './systemManager'
 import { isMobile } from '@dcl/sdk/platform'
 import { setHandBoomerangEntity, setLeftHandBoomerangEntity, getChargeFraction, getChargePhase } from './projectile'
 import { getBoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
@@ -91,7 +92,7 @@ export function setupHandBoomerangs() {
 
   // Update charge ring each frame — grows + spins
   let lastBeadPhase = -1
-  engine.addSystem((dt: number) => {
+  registerSystem((dt: number) => {
     if (getChargePhase() === 'charging' && getChargeFraction() > 0.15 && getBoomerangColor() !== 'g') {
       const cf = getChargeFraction()
       const size = 0.375 + cf * 0.75

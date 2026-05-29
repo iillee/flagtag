@@ -1,6 +1,7 @@
 import { Color4 } from '@dcl/sdk/math'
 import { engine, UiCanvasInformation } from '@dcl/sdk/ecs'
 import { Flag } from '../shared/components'
+import { registerSystem } from '../systems/systemManager'
 
 // ═══════════════════════════════════════════════════════════
 // COLOR PALETTE
@@ -21,7 +22,6 @@ export const CORAL_RED = Color4.create(1, 0.5, 0.45, 1)
 
 export const PANEL_BG = Color4.create(0.1, 0.1, 0.1, 0.92)
 /** Nearly-invisible background that blocks click-through to 3D world */
-export const CLICK_BLOCKER = Color4.create(0, 0, 0, 0.001)
 export const PANEL_BG_SEMI = Color4.create(0.08, 0.08, 0.1, 0.87)
 
 // ═══════════════════════════════════════════════════════════
@@ -36,7 +36,7 @@ let uiAdjustIndex = 0
 let autoBaseScale = 1.0
 
 // System that reads screen size and computes auto base scale + cached scale
-engine.addSystem(() => {
+registerSystem(() => {
   const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
   if (canvas && canvas.width > 0) {
     const raw = canvas.width / 1920

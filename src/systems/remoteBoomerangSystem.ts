@@ -21,6 +21,7 @@ import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { room } from '../shared/messages'
 import { BoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
+import { registerSystem } from './systemManager'
 
 // ── Remote charge VFX (parented to hand boomerang, same as local) ──
 const REMOTE_ORBIT_PARTICLE_COUNT = 20
@@ -527,34 +528,35 @@ export function setupRemoteBoomerangs(): void {
   let reconTimer = 0
   const RECON_INTERVAL = 5.0 // seconds
   let reconCooldownUntil = 0 // timestamp — don't re-request until this time
-  engine.addSystem((dt: number) => {
+  // Consolidated: reconciliation (throttled) + charge anim + orbit anim in one system
+  registerSystem((dt: number) => {
+    // Reconciliation (every 5s)
     reconTimer += dt
-    if (reconTimer < RECON_INTERVAL) return
-    reconTimer = 0
-
-    const now = Date.now()
-    if (now < reconCooldownUntil) return
-
-    const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
-    let missing = false
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
-      const addr = identity.address.toLowerCase()
-      if (addr === localUserId) continue
-      if (!remoteBoomerangs.has(addr)) {
-        missing = true
-        break
+    if (reconTimer >= RECON_INTERVAL) {
+      reconTimer = 0
+      const now = Date.now()
+      if (now >= reconCooldownUntil) {
+        const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+        let missing = false
+        for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+          const addr = identity.address.toLowerCase()
+          if (addr === localUserId) continue
+          if (!remoteBoomerangs.has(addr)) {
+            missing = true
+            break
+          }
+        }
+        if (missing) {
+          reconCooldownUntil = now + 15000
+          console.log('[RemoteBoomerang] Reconciliation: requesting all colors from server')
+          room.send('requestAllColors', { t: 0 })
+        }
       }
     }
-    if (missing) {
-      reconCooldownUntil = now + 15000 // don't re-request for 15s
-      console.log('[RemoteBoomerang] Reconciliation: requesting all colors from server')
-      room.send('requestAllColors', { t: 0 })
-    }
+    // Per-frame animations
+    remoteChargeAnimSystem(dt)
+    remoteOrbitAnimSystem(dt)
   })
-
-  // Register animation systems
-  engine.addSystem(remoteChargeAnimSystem)
-  engine.addSystem(remoteOrbitAnimSystem)
 }
 
 /** Remove a remote player's hand boomerang when they leave the scene. */

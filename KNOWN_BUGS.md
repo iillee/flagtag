@@ -154,6 +154,50 @@ These three game-breaking bugs have been recurring over the past month during mu
 - **NEW:** Grace period shield persists on both players after steal — **FIXED**
 - **NEW:** Discord webhook spam from unnamed bot accounts — **FIXED**
 
+---
+
+## Bug 4: UI Buttons Unresponsive on Ultrawide (21:9) Monitors
+
+**Symptoms:**
+- ALL UI buttons require 1-4 clicks to register on a 21:9 ultrawide monitor
+- Same machine on a 16:9 TV — buttons work first click every time
+- Other Decentraland scenes (including LootDrop) work perfectly on the same ultrawide
+- Other players' scenes also work fine on the same ultrawide
+- Issue is specific to FlagTag — not an engine bug
+
+**Observations:**
+- FlagTag has 28 UI files, 245+ `S()` scaling calls, 35 absolute-positioned elements, 37 click handlers
+- LootDrop has 5 UI files, no dynamic scaling, hardcoded pixel values — and works perfectly on ultrawide
+- FlagTag's `S()` function scales all pixel values by `canvas.width / 1920` (clamped 0.6–1.6)
+- On 21:9 ultrawide (~3440×1440): width ratio = 1.79 (clamped to 1.6), but height ratio would be 1440/1080 = 1.33
+- The scaling is **width-only** — it ignores height entirely. On ultrawide, UI elements are scaled 20% larger than they should be vertically relative to the actual screen height
+
+**Suspected Root Causes (to investigate):**
+
+1. **Width-only scaling mismatch on ultrawide aspect ratios.** The `S()` function computes scale from `canvas.width / 1920`, which on ultrawide gives a much higher scale factor than the height warrants. This means all absolute-positioned elements are offset further than expected. The SDK's internal click hitbox detection may use a different coordinate system or the scaled positions may push elements partially offscreen/overlapping in ways that cause hitbox conflicts. On 16:9, width and height ratios are proportional so no mismatch occurs.
+
+2. **Stacked full-screen CLICK_BLOCKER overlays.** There are 13+ full-screen overlay wrappers with `CLICK_BLOCKER` (alpha=0.001) backgrounds and `onMouseDown={() => {}}`. Even when their content is conditionally hidden, the `PlayerListUi` function evaluates all overlay conditions every frame. If any invisible wrapper is still intercepting pointer events due to the SDK treating near-zero-alpha backgrounds as valid hit targets, clicks would be silently consumed. The larger the screen, the more chance of overlap with actual buttons.
+
+3. **Absolute positioning with scaled offsets.** FlagTag uses 35 absolute-positioned elements with `S()`-scaled positions. On ultrawide, the scale factor is at max clamp (1.6), so positions are pushed 60% further from their anchors. If two absolute-positioned elements overlap at this scale but not at 16:9 scale, the top element would intercept clicks meant for the one underneath.
+
+4. **UI complexity / React-ECS render overhead.** 28 files and 245+ scaled values means the UI tree is large. The SDK's UI event system processes hit-tests against the full tree every frame. Unlikely to cause missed clicks (more likely would cause lag), but worth ruling out.
+
+**Diagnosis Plan:**
+
+1. **Quick test — disable `S()` scaling:** Temporarily make `S(px)` return `px` unchanged. If clicks work on ultrawide, the scaling system is confirmed as the cause.
+2. **Quick test — use `Math.min(width, height)` scaling:** Change to `Math.min(canvas.width / 1920, canvas.height / 1080)` so ultrawide uses the height ratio (1.33) instead of the width ratio (1.6). This was in the stashed commit `stash@{0}` but was reverted.
+3. **Quick test — remove all CLICK_BLOCKER overlays:** Temporarily strip all `uiBackground={{ color: CLICK_BLOCKER }}` to see if invisible overlays are eating clicks.
+4. **Quick test — count UI entities:** Add a diagnostic counter showing total UI elements rendered per frame. Compare ultrawide vs 16:9.
+
+**Prior art:**
+- Commit `8e933be` fixed the original "2-4 clicks" issue by adding CLICK_BLOCKERs to prevent 3D entity click-through
+- Stash `stash@{0}` had height-aware scaling with device breakpoints but was reverted
+- REFACTOR_PLAN.md notes: "Noticeably improved but user reports 'not perfect.' Remaining click issues may be related to the SDK's own UI event processing or z-order conflicts between overlapping absolute-positioned elements"
+
+**Files to investigate:** `src/ui/uiConstants.ts` (S() and scaling), `src/ui.tsx` (overlay stack), `src/ui/layouts/DesktopLayout.tsx` (absolute positioning), all files using `CLICK_BLOCKER`
+
+---
+
 ## Playtest Checklist (Next Session)
 
 - [ ] Scoreboard counts up for ALL players (especially local) over full session
@@ -162,3 +206,5 @@ These three game-breaking bugs have been recurring over the past month during mu
 - [ ] Grace period shield correctly transfers on steal (only new carrier has shield)
 - [ ] Discord webhook only fires for named players (no bot spam)
 - [ ] Test with 3-5 concurrent players for 45+ minutes minimum
+- [ ] UI buttons register first-click on ultrawide (21:9) monitor
+- [ ] Test S() scaling bypass on ultrawide to confirm root cause

@@ -10,7 +10,7 @@ export type { GameItem } from './items'
 
 export const Inventory = () => {
   return (
-    <UiEntity uiTransform={{ width: '100%', height: '100%' }}>
+    <UiEntity uiTransform={{ width: '100%', height: '100%', pointerFilter: 'none' }}>
       {showInventory && <InventoryGrid />}
       <InventoryHotbar />
     </UiEntity>

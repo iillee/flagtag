@@ -1,6 +1,7 @@
 import { engine, Entity, Transform, AudioSource, GltfContainer, LightSource } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
+import { registerSystem } from './systemManager'
 
 const ORB_TRIGGER_RADIUS = 0.9
 const ORB_LAND_OFFSET = 3
@@ -89,7 +90,7 @@ export function setupTeleportOrbs(): void {
   ]
 
   let orbPulseTime = 0
-  engine.addSystem((dt: number) => {
+  registerSystem((dt: number) => {
     if (!Transform.has(engine.PlayerEntity)) return
     const playerPos = Transform.get(engine.PlayerEntity).position
 
