@@ -31,7 +31,7 @@ export const Messages = {
 
   // Updraft messages
   requestUpdraftLocation: Schemas.Map({ t: Schemas.Int }),
-  updraftLocation: Schemas.Map({ index: Schemas.Int }),
+  updraftLocation: Schemas.Map({ index: Schemas.Int, slot: Schemas.Int }),
 
   // Mushroom messages
   requestMushroomPositions: Schemas.Map({ t: Schemas.Int }),

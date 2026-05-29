@@ -183,6 +183,27 @@ These three game-breaking bugs have been recurring over the past month during mu
 - **NEW:** Grace period shield persists on both players after steal — **FIXED**
 - **NEW:** Discord webhook spam from unnamed bot accounts — **FIXED**
 
+## Bug 5: UI Click Detection Misaligned on Non-16:9 Aspect Ratios (Engine Bug)
+
+**Discovered:** May 27, 2026
+
+**Symptoms:**
+- On ultrawide monitors, UI buttons take 1-4 clicks to register
+- On a standard 16:9 TV/monitor, clicks register first try every time
+- Affects all clickable UI elements
+
+**Root Cause:**
+- Decentraland engine bug — the UI renderer and click hit-detection use slightly different coordinate mappings on non-16:9 aspect ratios. The visual position of buttons doesn't match where the engine detects clicks, causing an offset.
+- Not related to our `S()` scale function (which scales based on `canvas.width / 1920`). The issue is at the engine level.
+
+**Workaround:**
+- Windowing the game client and resizing to a 16:9 ratio fixes it completely.
+- Making click targets larger with extra padding helps mitigate the offset.
+
+**Status:** No scene-side fix planned. Engine-level issue. Documented for awareness.
+
+---
+
 ## Playtest Checklist (Next Session)
 
 - [ ] Scoreboard counts up for ALL players (especially local) over full session

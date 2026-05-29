@@ -15,7 +15,7 @@ import {
   flagEntity, countdownEntity,
   leaderboardEntity, allTimeLeaderboardEntity, monthlyLeaderboardEntity,
   holdTimeEntities, knownPlayers, playerNames,
-  lastStealTime,
+  lastStealTime, playerLifetimeHoldTimeCache,
   SPLASH_DURATION_MS,
 } from './serverState'
 import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard } from './persistence'
@@ -25,7 +25,7 @@ import { awardRoundCoins } from './economy'
 import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState } from './flagLogic'
 import { activeTraps, activeProjectiles, activeOrbits, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
-import { addPlayerLifetimeWin } from './economy'
+import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime } from './economy'
 import { capture } from './posthog'
 
 // ── Lightning state ──
@@ -53,21 +53,37 @@ function getCarrierHoldSeconds(): number {
   return (PlayerFlagHoldTime.getOrNull(entity)?.seconds ?? 0) + getHoldTimeAccumFor(key)
 }
 
-// ── Updraft state ──
+// ── Updraft state (two updrafts, staggered by 30s) ──
 const UPDRAFT_CHIMNEY_COUNT = 49
 const UPDRAFT_ROTATE_SEC = 60
-let updraftActiveIndex = Math.floor(Math.random() * UPDRAFT_CHIMNEY_COUNT)
-let updraftTimer = 0
+const UPDRAFT_STAGGER_SEC = 30
+
+function pickRandom(exclude: number): number {
+  let next = Math.floor(Math.random() * (UPDRAFT_CHIMNEY_COUNT - 1))
+  if (next >= exclude) next++
+  return next
+}
+
+let updraftActiveIndex1 = Math.floor(Math.random() * UPDRAFT_CHIMNEY_COUNT)
+let updraftActiveIndex2 = pickRandom(updraftActiveIndex1)
+let updraftTimer1 = 0
+let updraftTimer2 = UPDRAFT_STAGGER_SEC // start staggered
 
 export function updraftServerSystem(dt: number): void {
-  updraftTimer += dt
-  if (updraftTimer >= UPDRAFT_ROTATE_SEC) {
-    updraftTimer = 0
-    let next = Math.floor(Math.random() * (UPDRAFT_CHIMNEY_COUNT - 1))
-    if (next >= updraftActiveIndex) next++
-    updraftActiveIndex = next
-    room.send('updraftLocation', { index: updraftActiveIndex })
-    console.log('[Server] 💨 Updraft moved to chimney', updraftActiveIndex)
+  updraftTimer1 += dt
+  if (updraftTimer1 >= UPDRAFT_ROTATE_SEC) {
+    updraftTimer1 = 0
+    updraftActiveIndex1 = pickRandom(updraftActiveIndex2)
+    room.send('updraftLocation', { slot: 0, index: updraftActiveIndex1 })
+    console.log('[Server] 💨 Updraft 1 moved to chimney', updraftActiveIndex1)
+  }
+
+  updraftTimer2 += dt
+  if (updraftTimer2 >= UPDRAFT_ROTATE_SEC) {
+    updraftTimer2 = 0
+    updraftActiveIndex2 = pickRandom(updraftActiveIndex1)
+    room.send('updraftLocation', { slot: 1, index: updraftActiveIndex2 })
+    console.log('[Server] 💨 Updraft 2 moved to chimney', updraftActiveIndex2)
   }
 }
 
@@ -383,6 +399,14 @@ async function handleRoundEnd(): Promise<void> {
     }
   }
 
+  // ── 7c. Accumulate lifetime flag hold time ──
+  for (const p of players) {
+    if (p.seconds > 0) {
+      const newTotal = await addPlayerLifetimeHoldTime(p.userId, p.seconds)
+      console.log('[LifetimeHoldTime] Player', p.userId.slice(0, 8), '+', p.seconds.toFixed(1), 's -> total:', newTotal.toFixed(1), 's')
+    }
+  }
+
   // ── 8. Persist flag state ──
   await persistFlagState()
 
@@ -392,7 +416,16 @@ async function handleRoundEnd(): Promise<void> {
     max_hold_seconds: Math.floor(maxSeconds),
     winner_name: topPlayers[0]?.name ?? null,
     winner_id: topPlayers[0]?.userId ?? null,
-    top_players: topPlayers.map(p => ({ name: p.name, seconds: p.seconds }))
+    top_players: topPlayers.map(p => ({ name: p.name, seconds: p.seconds })),
+    lifetime_hold_times: players.filter(p => p.seconds > 0).map(p => {
+      const pKey = p.userId.toLowerCase()
+      return {
+        userId: pKey,
+        name: playerNames.get(pKey) || pKey.slice(0, 8),
+        round_seconds: p.seconds,
+        lifetime_seconds: playerLifetimeHoldTimeCache.get(pKey) ?? 0
+      }
+    })
   })
 }
 
@@ -402,7 +435,8 @@ const ADMIN_ADDRESSES = ['0x1e93e534c5e26b01ed242410b43ae23dd0faa52b']
 export function registerRoundHandlers(): void {
   room.onMessage('requestUpdraftLocation', (_data, _context) => {
     try {
-      room.send('updraftLocation', { index: updraftActiveIndex })
+      room.send('updraftLocation', { slot: 0, index: updraftActiveIndex1 })
+      room.send('updraftLocation', { slot: 1, index: updraftActiveIndex2 })
     } catch (err) { console.error('[Server] ❌ requestUpdraftLocation handler error:', err) }
   })
 

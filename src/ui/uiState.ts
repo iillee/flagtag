@@ -200,7 +200,7 @@ export const scroll = {
 
 export const tabs = {
   folder: 'status' as 'leaderboards' | 'metrics' | 'status',
-  leaderboard: 'daily' as 'daily' | 'monthly' | 'alltime' | 'metrics',
+  leaderboard: 'alltime' as 'daily' | 'monthly' | 'alltime' | 'metrics',
   metrics: 'daily' as 'daily' | 'monthly',
 }
 

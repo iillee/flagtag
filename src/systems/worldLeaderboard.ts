@@ -24,7 +24,7 @@ const TAB_ACTIVE_BG = Color4.create(0.25, 0.25, 0.3, 0.9)
 const TAB_INACTIVE_BG = Color4.create(0.12, 0.12, 0.15, 0.7)
 
 // ── State ──
-let activeTab: 'daily' | 'alltime' = 'daily'
+let activeTab: 'daily' | 'alltime' = 'alltime'
 let pageOffset = 0
 let lastRenderedText = ''
 

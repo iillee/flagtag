@@ -113,7 +113,7 @@ export function closeMetricsPanel() {
   if (metricsState.openedFromTerminal) {
     metricsState.openedFromTerminal = false
     setLeaderboardOverlayVisible(false)
-    tabs.folder = 'leaderboards'; tabs.leaderboard = 'daily'
+    tabs.folder = 'leaderboards'; tabs.leaderboard = 'alltime'
     notifyOverlayClosed()
   }
 }
@@ -324,8 +324,8 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
             uiBackground={{ color: PANEL_BG }}
           >
             <CloseButton hoverKey="closeWinCondition" onClose={() => { hideGravestonePopup(); notifyOverlayClosed() }} />
-            <Label value="Here lies" fontSize={mobile ? 28 : S(24)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 8 : S(8) } }} />
-            <Label value="_________" fontSize={mobile ? 32 : S(28)} color={WHITE} font="sans-serif" uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 8 : S(8) } }} />
+            <Label value="Here Lies the" fontSize={mobile ? 28 : S(24)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 8 : S(8) } }} />
+            <Label value="Decentraland Web Client" fontSize={mobile ? 32 : S(28)} color={WHITE} font="sans-serif" uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 8 : S(8) } }} />
           </UiEntity>
         </UiEntity>
       )}
