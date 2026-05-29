@@ -193,27 +193,22 @@ export function swapSlots(
   return true
 }
 
-/** Unified two-click handler: first click selects, second click swaps. */
+/** Single-click handler: grid items auto-swap with their associated hotbar slot. */
 export function handleSlotClick(type: 'hotbar' | 'grid', idx: number): void {
-  // Click on same slot = deselect
-  if (selSource === type && selIndex === idx) {
-    clearSelection()
+  if (type === 'hotbar') {
+    // Clicking hotbar does nothing (items are swapped via grid clicks)
     return
   }
-  // Second click = attempt swap
-  if (selSource !== null) {
-    const success = swapSlots(selSource, selIndex, type, idx)
-    clearSelection()
-    // If swap failed, select the new slot instead
-    if (!success) {
-      selSource = type
-      selIndex = idx
-    }
-    return
-  }
-  // First click = select
-  selSource = type
-  selIndex = idx
+
+  // Grid click: auto-swap with the matching hotbar slot
+  const item = grid[idx]
+  if (!item) return
+
+  // Find the hotbar slot that matches this item's category
+  const targetSlot = getHotbarSlotForCategory(item.category)
+  if (targetSlot === null) return
+
+  swapSlots('grid', idx, 'hotbar', targetSlot)
 }
 
 // ═══════════════════════════════════════════

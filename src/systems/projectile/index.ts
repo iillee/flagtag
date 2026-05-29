@@ -105,20 +105,49 @@ room.onMessage('shellReturned', (data) => {
   const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
   const playerId = (data.firedBy || '').toLowerCase()
   if (!playerId) return
-  for (let i = msgProjectileVisuals.length - 1; i >= 0; i--) {
-    if (msgProjectileVisuals[i].firedBy === playerId) {
-      if (msgProjectileVisuals[i].groundRayEntity !== null) engine.removeEntity(msgProjectileVisuals[i].groundRayEntity!)
-      releaseProjectileToPool(msgProjectileVisuals[i].entity)
-      msgProjectileVisuals.splice(i, 1)
+
+  // Remove only ONE projectile per shellReturned message (not all).
+  // Prefer the one that's already returning and closest to the player.
+  let bestIdx = -1
+  let bestScore = Infinity
+  for (let i = 0; i < msgProjectileVisuals.length; i++) {
+    if (msgProjectileVisuals[i].firedBy !== playerId) continue
+    const vis = msgProjectileVisuals[i]
+    // Returning projectiles get priority (lower score)
+    const returningBonus = vis.returning ? 0 : 10000
+    const pos = Transform.get(vis.entity).position
+    // If returning, score by distance to player (closer = more likely returned)
+    let dist = 0
+    if (vis.returning) {
+      const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
+      const dx = pos.x - playerPos.x, dy = pos.y - playerPos.y, dz = pos.z - playerPos.z
+      dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    } else {
+      dist = vis.distanceTraveled
     }
+    const score = returningBonus + dist
+    if (score < bestScore) { bestScore = score; bestIdx = i }
   }
+  if (bestIdx !== -1) {
+    const vis = msgProjectileVisuals[bestIdx]
+    if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity!)
+    releaseProjectileToPool(vis.entity)
+    msgProjectileVisuals.splice(bestIdx, 1)
+  }
+
+  // Only clear localThrow when NO visuals remain for this player
   if (playerId === localUserId && localThrow.active && !isOrbitActive()) {
-    console.log('[Projectile] ✅ shellReturned for local player — clearing localThrowActive')
-    localThrow.active = false
-    localThrow.sawVisual = false
-    localThrow.startMs = 0
-    cooldown.lastFireTime = Date.now()
-    updateHandBoomerangVisibility()
+    const hasRemaining = msgProjectileVisuals.some(v => v.firedBy === playerId)
+    if (!hasRemaining) {
+      console.log('[Projectile] ✅ shellReturned for local player — all projectiles returned, clearing localThrowActive')
+      localThrow.active = false
+      localThrow.sawVisual = false
+      localThrow.startMs = 0
+      cooldown.lastFireTime = Date.now()
+      updateHandBoomerangVisibility()
+    } else {
+      console.log('[Projectile] ✅ shellReturned for local player — one returned, but others still in flight')
+    }
   }
 })
 
