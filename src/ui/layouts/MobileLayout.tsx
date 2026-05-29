@@ -188,13 +188,16 @@ function MobileStatusPopup() {
   const boomerang = getBoomerangColor()
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
-  const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White()) => (
-    <UiEntity uiTransform={{ width: '100%', height: 44, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
-      <Label value={label} fontSize={20} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 44 }} textAlign="middle-left" />
-      <Label value={value} fontSize={20} color={valueColor} font="sans-serif" uiTransform={{ height: 44, margin: { right: 6 } }} textAlign="middle-right" />
-      <UiEntity uiTransform={{ width: 28, height: 28 }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
-    </UiEntity>
-  )
+  const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White(), iconScale: number = 1) => {
+    const icoSize = Math.round(28 * iconScale)
+    return (
+      <UiEntity uiTransform={{ width: '100%', height: 44, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
+        <Label value={label} fontSize={20} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 44 }} textAlign="middle-left" />
+        <Label value={value} fontSize={20} color={valueColor} font="sans-serif" uiTransform={{ height: 44, margin: { right: 6 } }} textAlign="middle-right" />
+        <UiEntity uiTransform={{ width: icoSize, height: icoSize }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
+      </UiEntity>
+    )
+  }
 
   return (
     <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
@@ -217,7 +220,7 @@ function MobileStatusPopup() {
         <Label value="DAILY" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
         {iconRow('Blessed Today', blessingState.alreadyUsed ? 'Yes' : 'No', 'assets/images/coin.png', blessingState.alreadyUsed ? GOLD : GREY)}
         <Label value="EQUIPMENT" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
-        {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
+        {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`, WHITE, Color4.White(), 1.5)}
         {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
       </UiEntity>
     </UiEntity>

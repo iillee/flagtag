@@ -18,6 +18,7 @@ import { isSpectatorMode } from '../spectatorSystem'
 import { isCinematicActive } from '../../gameState/cinematicState'
 import { isDrownRespawning } from '../waterSystem'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
+import { getInputActionForCategory } from '../../ui/inventory/state'
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from '../combatSystem'
 
 // Sub-modules
@@ -344,8 +345,9 @@ export function projectileClientSystem(dt: number): void {
     console.log('[Projectile] 🎯 Yellow 2nd throw fired')
   }
 
-  // E key — charge on press (blue only), instant fire for other colors
-  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
+  // Projectile key — charge on press (blue only), instant fire for other colors
+  const projAction = getInputActionForCategory('boomerang')
+  if (projAction !== null && inputSystem.isTriggered(projAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 
@@ -461,8 +463,8 @@ export function projectileClientSystem(dt: number): void {
     }
   }
 
-  // E key released — fire with charged size
-  if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_UP) && charge.isCharging) {
+  // Projectile key released — fire with charged size
+  if (projAction !== null && inputSystem.isTriggered(projAction, PointerEventType.PET_UP) && charge.isCharging) {
     charge.isCharging = false
     stopChargeSound()
     removeChargeSlow()

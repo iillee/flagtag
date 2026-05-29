@@ -56,16 +56,18 @@ export const InventoryHotbar = () => {
           let chargeBurnoutProp: boolean | undefined
           let dimmed = false
 
-          if (i === 0) {
-            // E slot — projectile
+          const item = hotbar[i]
+          const isBoomerangSlot = item?.category === 'boomerang'
+          const isTrapSlot = item?.category === 'trap'
+
+          if (isBoomerangSlot) {
             dimmed = projOnCd
             if (projOnCd && projCdRemaining > 0) cooldownText = `${projCdRemaining}`
             if (charging || burnout) {
               chargeFractionProp = chargeFrac
               chargeBurnoutProp = burnout
             }
-          } else {
-            // F slot — trap
+          } else if (isTrapSlot) {
             dimmed = trapOnCd
             if (trapOnCd && trapCdRemaining > 0) cooldownText = `${trapCdRemaining}`
           }
@@ -78,13 +80,13 @@ export const InventoryHotbar = () => {
                 w: hotbar[i],
                 size: SLOT_SIZE,
                 radius: SLOT_RADIUS,
-                isSelected: selSource === 'hotbar' && selIndex === i,
+                isSelected: showInventory && selSource === 'hotbar' && selIndex === i,
                 isHovered: hotbarHover[i],
                 bgNormal: SLOT_BG,
                 bgEmpty: SLOT_EMPTY_BG,
                 onEnter: () => { hotbarHover[i] = true; if (showInventory) setHoveredGridItem(hotbar[i] || null) },
                 onLeave: () => { hotbarHover[i] = false; if (showInventory && hoveredGridItem === hotbar[i]) setHoveredGridItem(null) },
-                onDown: () => { handleSlotClick('hotbar', i) },
+                onDown: () => { if (showInventory) handleSlotClick('hotbar', i) },
                 slotLabel: slotLabels[i],
                 cooldownText,
                 chargeFraction: chargeFractionProp,

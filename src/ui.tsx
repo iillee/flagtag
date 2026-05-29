@@ -103,9 +103,13 @@ export function setupUi() {
 
   // Wire inventory hotbar changes to the boomerang equip system
   setOnHotbarChanged(() => {
-    const eSlotItem = hotbar[0]
-    if (eSlotItem && eSlotItem.boomerangColor) {
-      requestEquipBoomerang(eSlotItem.boomerangColor)
+    // Find whichever hotbar slot has a boomerang and equip it
+    for (let i = 0; i < hotbar.length; i++) {
+      const item = hotbar[i]
+      if (item && item.boomerangColor) {
+        requestEquipBoomerang(item.boomerangColor)
+        return
+      }
     }
   })
 

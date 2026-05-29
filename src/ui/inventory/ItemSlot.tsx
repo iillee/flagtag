@@ -29,7 +29,8 @@ export function ItemSlot(props: ItemSlotProps) {
   const bg = w
     ? (isSelected ? SLOT_BG_SELECTED : isHovered ? SLOT_BG_HOVER : bgNormal)
     : bgEmpty
-  const iconSize = Math.round(size * 0.65)
+  const isBoomerang = w?.category === 'boomerang'
+  const iconSize = Math.round(size * (isBoomerang ? 0.95 : 0.65))
   const rarityColor = w ? (RARITY_COLORS[w.rarity] || RARITY_COLORS.common) : RARITY_COLORS.common
 
   return (
@@ -93,7 +94,7 @@ export function ItemSlot(props: ItemSlotProps) {
           fontSize={S(16)}
           color={Color4.create(0.72, 0.72, 0.75, 1)}
           font="sans-serif"
-          uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) }, width: S(16), height: S(16), pointerFilter: 'none' }}
+          uiTransform={{ positionType: 'absolute', position: { top: S(6), left: S(12) }, width: S(16), height: S(16), pointerFilter: 'none' }}
         />
       )}
     </UiEntity>

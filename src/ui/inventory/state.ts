@@ -2,6 +2,7 @@
  * Inventory state — self-contained, modeled after LootDrop's state.ts.
  * All mutable state lives here. Components read directly.
  */
+import { InputAction } from '@dcl/sdk/ecs'
 import type { GameItem, ItemSlotKey } from './items'
 import { BANANA_ITEM, BOOMERANG_ITEMS, getOwnedItems } from './items'
 import { HOTBAR_SLOTS, GRID_COLS, GRID_ROWS } from './constants'
@@ -109,13 +110,37 @@ export function ensureInventorySync(): void {
 
 /**
  * Validates whether an item can go into a hotbar slot.
- * Slot 0 (E) only accepts boomerangs. Slot 1 (F) only accepts traps.
+ * Any combat item (boomerang or trap) can go in either slot.
+ * Slots cannot be emptied — swaps only.
  */
-function canPlaceInHotbar(slotIdx: number, item: GameItem | null): boolean {
-  if (!item) return true // emptying is always ok
-  if (slotIdx === 0) return item.slot === 'E'
-  if (slotIdx === 1) return item.slot === 'F'
-  return false
+function canPlaceInHotbar(_slotIdx: number, item: GameItem | null): boolean {
+  if (!item) return false // cannot empty a hotbar slot
+  return item.slot === 'E' || item.slot === 'F'
+}
+
+/**
+ * Returns which hotbar slot holds the given category.
+ * Slot 0 = IA_PRIMARY (E), Slot 1 = IA_SECONDARY (F).
+ * Returns null if the item category is not in any hotbar slot.
+ */
+export function getHotbarSlotForCategory(category: 'boomerang' | 'trap'): number | null {
+  for (let i = 0; i < HOTBAR_SLOTS; i++) {
+    if (hotbar[i]?.category === category) return i
+  }
+  return null
+}
+
+/** Slot 0 → IA_PRIMARY (E), Slot 1 → IA_SECONDARY (F) */
+const SLOT_TO_ACTION: InputAction[] = [InputAction.IA_PRIMARY, InputAction.IA_SECONDARY]
+
+/**
+ * Returns the InputAction for a given item category based on its hotbar slot.
+ * Returns null if the category is not hotbarred.
+ */
+export function getInputActionForCategory(category: 'boomerang' | 'trap'): InputAction | null {
+  const slot = getHotbarSlotForCategory(category)
+  if (slot === null) return null
+  return SLOT_TO_ACTION[slot] ?? null
 }
 
 export function swapSlots(
