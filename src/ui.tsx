@@ -37,6 +37,7 @@ import {
   showChestPopup, hideChestPopup,
   showMailboxPopup, hideMailboxPopup,
   showGravestonePopup, hideGravestonePopup,
+  showBoomboxPopup, hideBoomboxPopup,
   getMailboxStatus, setMailboxStatus,
   metricsState,
   splashState,
@@ -69,6 +70,7 @@ import { DeathOverlay } from './ui/components/DeathOverlay'
 
 // Screens
 import { ChestPopup } from './ui/screens/ChestPopup'
+import { BoomboxPopup } from './ui/screens/BoomboxPopup'
 
 // Layouts
 import { DesktopLayout } from './ui/layouts/DesktopLayout'
@@ -87,6 +89,7 @@ export {
   showChestPopup, hideChestPopup,
   showMailboxPopup, hideMailboxPopup,
   showGravestonePopup, hideGravestonePopup,
+  showBoomboxPopup, hideBoomboxPopup,
 }
 
 // Re-export state objects for systems that need direct access
@@ -350,6 +353,9 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
 
       {/* Chest / Store popup */}
       {popupState.chest && <ChestPopup />}
+
+      {/* Boombox / Tape popup */}
+      {popupState.boombox && <BoomboxPopup />}
 
       {/* Progress bars */}
       {isDrownBarVisible() && <DrownBar />}

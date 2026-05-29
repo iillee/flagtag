@@ -112,6 +112,7 @@ export const popupState = {
   chest: false,
   mailbox: false,
   gravestone: false,
+  boombox: false,
   mailboxStatusMessage: '',
   mailboxStatusTime: 0,
 }
@@ -124,6 +125,9 @@ export function hideMailboxPopup() { popupState.mailbox = false; notifyOverlayCl
 
 export function showGravestonePopup() { popupState.gravestone = true }
 export function hideGravestonePopup() { popupState.gravestone = false; notifyOverlayClosed() }
+
+export function showBoomboxPopup() { popupState.boombox = true }
+export function hideBoomboxPopup() { popupState.boombox = false; notifyOverlayClosed() }
 
 export function getMailboxStatus(): string {
   if (Date.now() - popupState.mailboxStatusTime > 5000) return ''
@@ -188,6 +192,7 @@ export const hover = {
   closeMailbox: false,
   closeChest: false,
   closeServerDown: false,
+  closeBoombox: false,
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -279,6 +284,7 @@ export function isAnyOverlayOpen(): boolean {
     || popupState.mailbox
     || popupState.chest
     || popupState.gravestone
+    || popupState.boombox
     || blessingState.active
     || blessingState.completed
 }
