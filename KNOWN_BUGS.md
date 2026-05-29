@@ -162,7 +162,7 @@ These three game-breaking bugs have been recurring over the past month during mu
 **Likely root cause:**
 - Unknown. The hold time code is server-only (no new CRDT components, no new syncEntity calls). It only uses `Storage.get`/`Storage.set` and a `Map` cache. Possibly the multiple sequential `await Storage.set()` calls inside the `handleRoundEnd` loop are causing a server startup or runtime issue. Or the additional import/reference graph change is triggering a bundler or server initialization problem.
 
-**Status:** REVERTED. Lifetime hold time tracking is not deployed. Need to investigate a safe approach — possibly batching Storage writes, or deferring them outside the round-end flow.
+**Status:** ✅ FIXED. Root cause was an engine/server-side bug on the devs' side, not our code. Lifetime hold time tracking can be re-deployed.
 
 ---
 
@@ -200,7 +200,12 @@ These three game-breaking bugs have been recurring over the past month during mu
 - Windowing the game client and resizing to a 16:9 ratio fixes it completely.
 - Making click targets larger with extra padding helps mitigate the offset.
 
-**Status:** No scene-side fix planned. Engine-level issue. Documented for awareness.
+**Analysis for engine team:**
+- The UI renderer and click/pointer hit-testing likely use different coordinate spaces or assume different aspect ratios. The visual layout accounts for actual viewport dimensions, but the hit-test mapping may be hardcoded or normalized to 16:9, causing an offset that scales with how far the aspect ratio deviates from 16:9.
+- The screen-space cursor position → UI element bounds mapping in the `onMouseDown`/`onMouseUp` path should be compared against the layout engine's coordinate system. They probably diverge when viewport width/height ratio ≠ 16:9.
+- Scene-side, our `S()` scale function only affects visual sizing (width, height, fontSize, padding). It doesn't influence hit-testing — that's entirely engine-side.
+
+**Status:** No scene-side fix possible. Engine-level issue reported to devs.
 
 ---
 

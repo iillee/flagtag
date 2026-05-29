@@ -15,8 +15,6 @@ import {
   PhysicsCombinedForce,
   PhysicsCombinedImpulse,
   AudioSource,
-  inputSystem,
-  InputAction,
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
@@ -332,8 +330,6 @@ function computeOrbBounds(): void {
 function updateLift(): void {
   if (!Transform.has(engine.PlayerEntity)) { deactivateForce(); return }
   const p = Transform.get(engine.PlayerEntity).position
-  const jumping = inputSystem.isPressed(InputAction.IA_JUMP)
-
   // Check if player is inside ANY active updraft column
   for (const sl of slots) {
     if (sl.activeLocationIndex < 0 || sl.orbMaxY <= sl.orbMinY) continue
@@ -342,7 +338,7 @@ function updateLift(): void {
     const dz = p.z - loc.z
     const inRadius = dx * dx + dz * dz <= TRIGGER_RADIUS * TRIGGER_RADIUS
     const inHeight = p.y >= sl.orbMinY - 2 && p.y <= sl.orbMaxY + 2
-    if (inRadius && inHeight && jumping) {
+    if (inRadius && inHeight) {
       activateForce()
       return
     }
