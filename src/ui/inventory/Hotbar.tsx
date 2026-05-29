@@ -81,7 +81,7 @@ export const InventoryHotbar = () => {
                 size: SLOT_SIZE,
                 radius: SLOT_RADIUS,
                 isSelected: showInventory && selSource === 'hotbar' && selIndex === i,
-                isHovered: hotbarHover[i],
+                isHovered: showInventory && hotbarHover[i],
                 bgNormal: SLOT_BG,
                 bgEmpty: SLOT_EMPTY_BG,
                 onEnter: () => { hotbarHover[i] = true; if (showInventory) setHoveredGridItem(hotbar[i] || null) },

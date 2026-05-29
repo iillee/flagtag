@@ -37,6 +37,7 @@ export let grid: (GameItem | null)[] = new Array(GRID_COLS * GRID_ROWS).fill(nul
 
 let lastBoomerangCount = -1
 let lastBoomerangBits = 0
+let lastEquippedColor: string = ''
 let initialized = false
 
 /** Fast bitmask check — no allocations on the hot path */
@@ -60,11 +61,34 @@ export function ensureInventorySync(): void {
   const upgrades = getLocalUpgrades()
   const count = upgrades.boomerangs.length
   const bits = boomerangBits(upgrades.boomerangs)
+  const equipped = getBoomerangColor()
+
+  // If only the equipped color changed, just swap the hotbar boomerang
+  if (initialized && equipped !== lastEquippedColor && count === lastBoomerangCount && bits === lastBoomerangBits) {
+    lastEquippedColor = equipped
+    const newItem = BOOMERANG_ITEMS[equipped]
+    if (newItem) {
+      // Find current boomerang in hotbar and swap it
+      for (let i = 0; i < HOTBAR_SLOTS; i++) {
+        if (hotbar[i]?.category === 'boomerang') {
+          const oldItem = hotbar[i]!
+          hotbar[i] = newItem
+          // Put old boomerang back in grid, remove new from grid
+          const gridIdx = grid.indexOf(newItem)
+          if (gridIdx !== -1) grid[gridIdx] = oldItem
+          break
+        }
+      }
+    }
+    return
+  }
+
   if (count === lastBoomerangCount && bits === lastBoomerangBits && initialized) return
 
   const isFirstInit = !initialized
   lastBoomerangCount = count
   lastBoomerangBits = bits
+  lastEquippedColor = equipped
   initialized = true
 
   const owned = getOwnedItems(upgrades.boomerangs)

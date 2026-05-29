@@ -8,8 +8,8 @@ export const SLOT_RADIUS = 18
 
 // ── Slot colors ──
 export const SLOT_BG          = Color4.create(0.08, 0.08, 0.1, 0.87)
-export const SLOT_BG_HOVER    = Color4.create(0.16, 0.16, 0.22, 0.92)
-export const SLOT_BG_SELECTED = Color4.create(0.28, 0.22, 0.08, 0.95)
+export const SLOT_BG_HOVER    = Color4.create(0.35, 0.35, 0.4, 0.92)
+export const SLOT_BG_SELECTED = Color4.create(0.45, 0.36, 0.05, 0.95)
 export const SLOT_EMPTY_BG    = Color4.create(0.06, 0.06, 0.08, 0.5)
 
 // ── Rarity colors ──
