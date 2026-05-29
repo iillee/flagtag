@@ -1,4 +1,5 @@
 import { engine, Transform, MeshCollider, pointerEventsSystem, InputAction, Name, ColliderLayer, GltfContainer } from '@dcl/sdk/ecs'
+import { registerThrottled, removeSystem } from './systemManager'
 import { Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 
@@ -27,7 +28,7 @@ function climbTo(top: Vector3, cameraTarget: Vector3) {
 export function setupLadder() {
   let found = 0
 
-  engine.addSystem(function findLadders() {
+  const findLadders = (dt: number) => {
     for (const [entity] of engine.getEntitiesWith(Name)) {
       const name = Name.get(entity).value
       if (name.toLowerCase().includes('ladder')) {
@@ -95,10 +96,11 @@ export function setupLadder() {
 
         if (found >= LADDERS.length) {
           console.log('[Ladder] All ladders configured')
-          engine.removeSystem(findLadders)
+          removeSystem(findLadders)
           return
         }
       }
     }
-  })
+  }
+  registerThrottled(findLadders, 1.0)
 }

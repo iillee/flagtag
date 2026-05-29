@@ -42,6 +42,7 @@ export type PortalOptions = {
 }
 
 import { PortalData, PortalLayer } from '../shared/components'
+import { registerSystem, registerThrottled, removeSystem } from './systemManager'
 
 let _parallaxActive = false
 // Rotate vector (vx, vy, vz) by the inverse (conjugate) of unit quaternion (qx, qy, qz, qw).
@@ -69,7 +70,7 @@ function portalParallaxSystem(dt: number) {
     if (data.state !== PortalState.CLOSED) { anyActive = true; break }
   }
   if (!anyActive) {
-    engine.removeSystem(portalParallaxSystem)
+    removeSystem(portalParallaxSystem)
     _parallaxActive = false
     return
   }
@@ -118,7 +119,7 @@ function portalParallaxSystem(dt: number) {
 
 function activateParallax() {
   if (_parallaxActive) return
-  engine.addSystem(portalParallaxSystem)
+  registerSystem(portalParallaxSystem)
   _parallaxActive = true
 }
 
@@ -398,7 +399,7 @@ export class Portal {
         }
       }
     }
-    engine.addSystem(this._lodSystem)
+    registerThrottled(this._lodSystem, 0.5)
 
     // Apply position/rotation/scale to root and portalBody
     this.update(options)
@@ -536,7 +537,7 @@ export class Portal {
   }
 
   destroy(): void {
-    if (this._lodSystem) engine.removeSystem(this._lodSystem)
+    if (this._lodSystem) removeSystem(this._lodSystem)
     triggerAreaEventsSystem.removeOnTriggerEnter(this.ajarTrigger)
     triggerAreaEventsSystem.removeOnTriggerExit(this.ajarTrigger)
     triggerAreaEventsSystem.removeOnTriggerEnter(this.openTrigger)

@@ -4,7 +4,7 @@
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import {
-  S, WHITE, GREY, GOLD, MUTED, PANEL_BG, CLICK_BLOCKER,
+  S, WHITE, GREY, GOLD, MUTED, PANEL_BG,
   _ROW_HEIGHT, _ROW_FONT, _OVERLAY_PANEL_WIDTH, _OVERLAY_PANEL_HEIGHT, VISITORS_PER_PAGE,
   isLikelyBot, formatVisitorTime, formatUTCDate,
   type VisitorOrSeparator,
@@ -37,9 +37,8 @@ export function AnalyticsOverlay({ allVisitors, onlineCount, totalPlaytimeMin, s
         position: { left: S(0), top: S(0) },
         width: '100%', height: '100%',
         flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+        pointerFilter: 'none',
       }}
-      uiBackground={{ color: CLICK_BLOCKER }}
-      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{

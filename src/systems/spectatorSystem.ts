@@ -9,6 +9,7 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 const CASTLE_CENTER = Vector3.create(250.75, 11, 255.5)
 
 import { spectatorState } from '../shared/clientState'
+import { registerSystem } from './systemManager'
 
 // ── Spectator State ──
 let camPosX = 256  // center of 512m scene
@@ -146,7 +147,7 @@ export function setupSpectator() {
   })
 
   // ── Spectator movement system ──
-  engine.addSystem(spectatorMovementSystem)
+  registerSystem(spectatorMovementSystem)
 }
 
 function enterSpectatorMode() {

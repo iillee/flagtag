@@ -1,4 +1,5 @@
 import { engine } from '@dcl/sdk/ecs'
+import { registerThrottled, removeSystem } from './systemManager'
 import { getPlayer } from '@dcl/sdk/players'
 import { room } from '../shared/messages'
 import { addPlayer } from '../gameState/flagHoldTime'
@@ -13,8 +14,8 @@ export function setupNameRetry(initialName: string) {
   let retryTimer = 2.0
   let retryCount = 0
 
-  engine.addSystem((dt: number) => {
-    if (retryCount >= 10) return
+  const nameRetryTick = (dt: number) => {
+    if (retryCount >= 10) { removeSystem(nameRetryTick); return }
     retryTimer -= dt
     if (retryTimer <= 0) {
       retryCount++
@@ -28,7 +29,8 @@ export function setupNameRetry(initialName: string) {
         addPlayer(updated!.userId, newName)
       }
     }
-  })
+  }
+  registerThrottled(nameRetryTick, 2.0)
 
   return {
     /** Update the tracked name (e.g. from onEnterScene) */

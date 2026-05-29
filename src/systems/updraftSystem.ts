@@ -18,6 +18,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
+import { registerThrottled, removeSystem } from './systemManager'
 
 // ── Helpers ──────────────────────────────────────────────────
 function isServerConnected(): boolean {
@@ -397,12 +398,15 @@ export function setupUpdraftSystem(): void {
 
   // Wait for server connection before requesting initial locations
   let requested = false
-  engine.addSystem(() => {
-    if (!requested && isServerConnected()) {
+  const updraftInitCheck = (_dt: number) => {
+    if (requested) { removeSystem(updraftInitCheck); return }
+    if (isServerConnected()) {
       requested = true
       room.send('requestUpdraftLocation', { t: 0 })
+      removeSystem(updraftInitCheck)
     }
-  })
+  }
+  registerThrottled(updraftInitCheck, 1.0)
 }
 
 export function updraftSystem(dt: number): void {

@@ -13,24 +13,26 @@ interface IconButtonProps {
   isActive: boolean
   iconContent: ReactEcs.JSX.Element
   onClick: () => void
+  hoverWidth?: number
 }
 
-export function IconButton({ hoverKey, label, isActive, iconContent, onClick }: IconButtonProps) {
+export function IconButton({ hoverKey, label, isActive, iconContent, onClick, hoverWidth }: IconButtonProps) {
   const hovered = hover[hoverKey]
+  const expandedW = hoverWidth ?? 140
   return (
     <UiEntity uiTransform={{ positionType: 'relative', width: S(46), height: S(_ROW_HEIGHT + _PADDING - 2) }}>
       {hovered && (
         <UiEntity
-          uiTransform={{ positionType: 'absolute', position: { right: 0, top: 0 }, width: S(140), height: S(_ROW_HEIGHT + _PADDING - 2), borderRadius: S(_BORDER_RADIUS), flexDirection: 'row', alignItems: 'center' }}
+          uiTransform={{ positionType: 'absolute', position: { right: 0, top: 0 }, width: S(expandedW), height: S(_ROW_HEIGHT + _PADDING - 2), borderRadius: S(_BORDER_RADIUS), flexDirection: 'row', alignItems: 'center' }}
           uiBackground={{ color: PANEL_BG }}
           onMouseEnter={() => { hover[hoverKey] = true }}
           onMouseLeave={() => { hover[hoverKey] = false }}
         >
-          <Label value={label} fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(94), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
+          <Label value={label} fontSize={S(_TITLE_FONT)} color={GOLD} font="sans-serif" uiTransform={{ width: S(expandedW - 46), height: S(_ROW_HEIGHT + _PADDING - 2), margin: { top: S(-2), left: S(18) } }} textAlign="middle-left" />
         </UiEntity>
       )}
       <UiEntity
-        uiTransform={{ positionType: 'absolute', position: { top: 0, right: 0 }, width: hovered ? S(140) : S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', padding: { right: S(14) }, borderRadius: S(_BORDER_RADIUS) }}
+        uiTransform={{ positionType: 'absolute', position: { top: 0, right: 0 }, width: hovered ? S(expandedW) : S(46), height: S(_ROW_HEIGHT + _PADDING - 2), flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', padding: { right: S(14) }, borderRadius: S(_BORDER_RADIUS) }}
         uiBackground={{ color: hovered ? Color4.create(0, 0, 0, 0) : PANEL_BG }}
         onMouseEnter={() => { hover[hoverKey] = true;  }}
         onMouseLeave={() => { hover[hoverKey] = false }}

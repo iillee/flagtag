@@ -20,7 +20,7 @@ import { registerUiSystems } from './ui/uiSystems'
 import {
   S, WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY,
   GOLD, SILVER, BRONZE, CORAL_RED,
-  PANEL_BG, PANEL_BG_SEMI, CLICK_BLOCKER,
+  PANEL_BG, PANEL_BG_SEMI,
   getUIScaleLabel,
   formatCountdown,
   type VisitorOrSeparator,
@@ -32,7 +32,7 @@ import {
   blessingState, markBlessingCompleted,
   earnedState,
   notifyOverlayClosed, isAnyOverlayOpen,
-  registerOverlayChecks,
+  registerOverlayChecks, registerInventoryCheck,
   popupState,
   showChestPopup, hideChestPopup,
   showMailboxPopup, hideMailboxPopup,
@@ -74,6 +74,10 @@ import { ChestPopup } from './ui/screens/ChestPopup'
 import { DesktopLayout } from './ui/layouts/DesktopLayout'
 import { MobileLayout } from './ui/layouts/MobileLayout'
 
+// Inventory
+import { setOnHotbarChanged, hotbar, showInventory as inventoryVisible } from './ui/inventory/state'
+import { requestEquipBoomerang } from './gameState/playerUpgradeState'
+
 // ═══════════════════════════════════════════════════════════
 // RE-EXPORTS — stable public API for other files
 // ═══════════════════════════════════════════════════════════
@@ -94,7 +98,21 @@ export { cinematicState, creditsState, popupState, splashState }
 
 export function setupUi() {
   registerOverlayChecks(getWinConditionOverlayVisible, getLeaderboardOverlayVisible, getAnalyticsOverlayVisible)
+  registerInventoryCheck(() => inventoryVisible)
   registerUiSystems()
+
+  // Wire inventory hotbar changes to the boomerang equip system
+  setOnHotbarChanged(() => {
+    // Find whichever hotbar slot has a boomerang and equip it
+    for (let i = 0; i < hotbar.length; i++) {
+      const item = hotbar[i]
+      if (item && item.boomerangColor) {
+        requestEquipBoomerang(item.boomerangColor)
+        return
+      }
+    }
+  })
+
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
 }
 
@@ -175,7 +193,7 @@ function PlayerListUi() {
   const creditsCountdown = creditsState.countdown
 
   return (
-    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
+    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {mobile ? <MobileLayout /> : <DesktopLayout />}
 
       {/* Cinematic fade overlay */}
@@ -203,9 +221,9 @@ function PlayerListUi() {
         const goldFaded = Color4.create(GOLD.r, GOLD.g, GOLD.b, opacity)
         const greyFaded = Color4.create(LIGHT_GREY.r, LIGHT_GREY.g, LIGHT_GREY.b, opacity)
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center' }}
-            uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
-            <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '18%' }, flexDirection: 'column', alignItems: 'center' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}
+            >
+            <UiEntity uiTransform={{ positionType: 'absolute', width: '100%', position: { top: '18%' }, flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
               <UiEntity uiTransform={{ padding: { top: mobile ? 24 : S(18), bottom: mobile ? 24 : S(18), left: mobile ? 40 : S(32), right: mobile ? 40 : S(32) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 16 : S(12) }}
                 uiBackground={{ color: Color4.create(0, 0, 0, 0.6 * opacity) }}>
                 <Label value="Receiving the blessing of..." fontSize={mobile ? 52 : S(34)} color={goldFaded} font="sans-serif" />
@@ -223,8 +241,8 @@ function PlayerListUi() {
       {blessingState.completed && (() => {
         const coinProgress = blessingState.coinProgress
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
-            uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+            >
             <UiEntity uiTransform={{ width: mobile ? 420 : S(340), padding: { top: mobile ? 32 : S(24), bottom: mobile ? 32 : S(24), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(16) }}
               uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
             >
@@ -257,7 +275,7 @@ function PlayerListUi() {
                           uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.create(1, 1, 1, Math.max(0, Math.min(1, opacity))) }} />
                       )
                     }
-                    return <UiEntity uiTransform={{ positionType: 'relative', width: 1, height: 1 }}>{coins}</UiEntity>
+                    return <UiEntity uiTransform={{ positionType: 'relative', width: 1, height: 1, pointerFilter: 'none' }}>{coins}</UiEntity>
                   })()}
                 </UiEntity>
               )}
@@ -286,8 +304,8 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
 
       {/* Mailbox popup */}
       {popupState.mailbox && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
-          uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+          >
           <UiEntity uiTransform={{ width: mobile ? 440 : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 28, bottom: 28, left: 20, right: 20 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
             uiBackground={{ color: PANEL_BG }}
           >
@@ -318,8 +336,8 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
 
       {/* Gravestone popup */}
       {popupState.gravestone && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
-          uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+          >
           <UiEntity uiTransform={{ width: mobile ? 340 : S(340), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 28, bottom: 28, left: 20, right: 20 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
             uiBackground={{ color: PANEL_BG }}
           >
@@ -339,7 +357,7 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
 
       {/* UI Scale toast */}
       {getUIScaleFlash() && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(140), left: '50%' }, margin: { left: S(-80) }, width: S(160), height: S(32), flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: S(8) }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(140), left: '50%' }, margin: { left: S(-80) }, width: S(160), height: S(32), flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: S(8), pointerFilter: 'none' }}
           uiBackground={{ color: PANEL_BG }}
         >
           <Label value={`UI: ${getUIScaleLabel()}`} fontSize={S(16)} color={WHITE} font="sans-serif" />
@@ -353,7 +371,7 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
 
       {/* Spectator mode */}
       {spectatorState.active && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(20), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center' }}>
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(20), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
           <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 10, bottom: 10, left: 18, right: 18 } : { top: S(14), bottom: S(14), left: S(24), right: S(24) }, borderRadius: mobile ? 14 : S(18) }}
             uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 0.92) }}
           >
@@ -372,7 +390,7 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
       {/* Title Splash */}
       {cinematicState.titleSplashVisible && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
-          uiBackground={{ color: CLICK_BLOCKER }}
+          
           onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
         >
           <UiEntity uiTransform={{ width: S(420), padding: { top: S(32), bottom: S(32), left: S(24), right: S(24) }, borderRadius: S(16), flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
@@ -399,7 +417,7 @@ function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgr
   activeRoundEarnings: RoundEarnings | null; earnedUiPhase: EarnedUiPhase; earnedCoinsFlyProgress: number; creditsCountdown: number; mobile: boolean
 }) {
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', pointerFilter: 'none' }}>
       {/* No earnings fallback */}
       {!activeRoundEarnings && (
         <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>

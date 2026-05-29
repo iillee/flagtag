@@ -8,7 +8,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import {
-  S, WHITE, MUTED, GREY, GOLD, CLOSE_GREY, PANEL_BG, CLICK_BLOCKER,
+  S, WHITE, MUTED, GREY, GOLD, CLOSE_GREY, PANEL_BG,
   _ROW_HEIGHT, _ROW_FONT, _OVERLAY_PANEL_WIDTH, _OVERLAY_PANEL_HEIGHT,
   VISITORS_PER_PAGE,
   sortVisitorsWithBotSection, isLikelyBot, formatVisitorTime, formatUTCDate, formatUTCMonth,
@@ -47,13 +47,16 @@ export function StatusPopup() {
       <Label value={title} fontSize={S(SEC)} color={GOLD} font="sans-serif" />
     </UiEntity>
   )
-  const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White()) => (
-    <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(10), right: S(10) } }}>
-      <Label value={label} fontSize={S(SF)} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(SR) }} textAlign="middle-left" />
-      <Label value={value} fontSize={S(SF)} color={valueColor} font="sans-serif" uiTransform={{ height: S(SR), margin: { right: S(6) } }} textAlign="middle-right" />
-      <UiEntity uiTransform={{ width: S(SI), height: S(SI) }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
-    </UiEntity>
-  )
+  const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White(), iconScale: number = 1) => {
+    const icoSize = Math.round(SI * iconScale)
+    return (
+      <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(10), right: S(10) } }}>
+        <Label value={label} fontSize={S(SF)} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(SR) }} textAlign="middle-left" />
+        <Label value={value} fontSize={S(SF)} color={valueColor} font="sans-serif" uiTransform={{ height: S(SR), margin: { right: S(6) } }} textAlign="middle-right" />
+        <UiEntity uiTransform={{ width: S(icoSize), height: S(icoSize) }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
+      </UiEntity>
+    )
+  }
 
   return (
     <UiEntity
@@ -65,9 +68,8 @@ export function StatusPopup() {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        pointerFilter: 'none',
       }}
-      uiBackground={{ color: CLICK_BLOCKER }}
-      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{
@@ -104,7 +106,7 @@ export function StatusPopup() {
         {iconRow('Flags', isWinsLoaded() ? `${myFlags}` : '--', 'assets/images/flag-icon-white.png', GOLD, GOLD)}
         <UiEntity uiTransform={{ width: '100%', height: 1, margin: { top: S(6), bottom: S(2) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.35, 0.6) }} />
         {sectionHeader('EQUIPMENT')}
-        {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
+        {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`, WHITE, Color4.White(), 1.5)}
         {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
         <UiEntity uiTransform={{ width: '100%', height: 1, margin: { top: S(6), bottom: S(2) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.35, 0.6) }} />
         {sectionHeader('DAILY')}
@@ -145,9 +147,8 @@ export function MetricsOverlay({ allVisitors, localUserId, onlineCount, totalPla
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        pointerFilter: 'none',
       }}
-      uiBackground={{ color: CLICK_BLOCKER }}
-      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{

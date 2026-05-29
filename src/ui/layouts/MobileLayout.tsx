@@ -4,7 +4,7 @@ import { getPlayer } from '@dcl/sdk/players'
 
 import {
   WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY, GOLD,
-  PANEL_BG, CLICK_BLOCKER,
+  PANEL_BG,
   formatCountdown,
 } from '../uiConstants'
 import {
@@ -47,7 +47,7 @@ export function MobileLayout() {
   const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 0.8)
 
   return (
-    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative' }}>
+    <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {/* Top bar */}
       {(() => {
         const localPlayer = players.find(p => localUserId !== null && p.userId === localUserId)
@@ -56,7 +56,7 @@ export function MobileLayout() {
         const hasFlag = localPlayer && carrierUserId !== null && localPlayer.userId === carrierUserId
         const scoreColor = isLeader ? GOLD : WHITE
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 28 }, width: '100%', height: 68, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 28 }, width: '100%', height: 68, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28, right: 28 }, borderRadius: 34, margin: { right: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_timer.png' } }}
@@ -132,8 +132,8 @@ export function MobileLayout() {
 
       {/* Mobile Scoreboard Overlay */}
       {mobileState.scoreboardVisible && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
-          uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+          >
           <UiEntity uiTransform={{ positionType: 'relative', width: '42%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 28, overflow: 'hidden' }}
             uiBackground={{ color: PANEL_BG }}
           >
@@ -188,17 +188,20 @@ function MobileStatusPopup() {
   const boomerang = getBoomerangColor()
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
-  const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White()) => (
-    <UiEntity uiTransform={{ width: '100%', height: 44, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
-      <Label value={label} fontSize={20} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 44 }} textAlign="middle-left" />
-      <Label value={value} fontSize={20} color={valueColor} font="sans-serif" uiTransform={{ height: 44, margin: { right: 6 } }} textAlign="middle-right" />
-      <UiEntity uiTransform={{ width: 28, height: 28 }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
-    </UiEntity>
-  )
+  const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White(), iconScale: number = 1) => {
+    const icoSize = Math.round(28 * iconScale)
+    return (
+      <UiEntity uiTransform={{ width: '100%', height: 44, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
+        <Label value={label} fontSize={20} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 44 }} textAlign="middle-left" />
+        <Label value={value} fontSize={20} color={valueColor} font="sans-serif" uiTransform={{ height: 44, margin: { right: 6 } }} textAlign="middle-right" />
+        <UiEntity uiTransform={{ width: icoSize, height: icoSize }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
+      </UiEntity>
+    )
+  }
 
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
-      uiBackground={{ color: CLICK_BLOCKER }} onMouseDown={() => {}}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+      >
       <UiEntity uiTransform={{ width: '42%', flexDirection: 'column', alignItems: 'stretch', padding: 28, borderRadius: 16 }}
         uiBackground={{ color: PANEL_BG }}
       >
@@ -217,7 +220,7 @@ function MobileStatusPopup() {
         <Label value="DAILY" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
         {iconRow('Blessed Today', blessingState.alreadyUsed ? 'Yes' : 'No', 'assets/images/coin.png', blessingState.alreadyUsed ? GOLD : GREY)}
         <Label value="EQUIPMENT" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
-        {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`)}
+        {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`, WHITE, Color4.White(), 1.5)}
         {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
       </UiEntity>
     </UiEntity>

@@ -6,7 +6,7 @@ import { GAME_VERSION } from '../../version'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
-import { S, GOLD, MUTED, WHITE, CLOSE_GREY, CLICK_BLOCKER } from '../uiConstants'
+import { S, GOLD, MUTED, WHITE, CLOSE_GREY } from '../uiConstants'
 import { hover, musicState, notifyOverlayClosed } from '../uiState'
 import { setWinConditionOverlayVisible } from '../../gameState/overlayState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
@@ -36,9 +36,8 @@ export function HowToPlayOverlay() {
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
+        pointerFilter: 'none',
       }}
-      uiBackground={{ color: CLICK_BLOCKER }}
-      onMouseDown={() => {}}
     >
       <UiEntity
         uiTransform={{

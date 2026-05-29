@@ -1,4 +1,5 @@
 import { engine, Entity, Transform, MeshCollider, MeshRenderer, Material, MaterialTransparencyMode, VisibilityComponent, ColliderLayer } from '@dcl/sdk/ecs'
+import { registerThrottled } from './systemManager'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 
 /**
@@ -60,8 +61,8 @@ export function setupBoundaryWalls(): void {
     boundaryPlanes.push({ entity: plane, px, pz, lastAlpha: 0 })
   }
 
-  // Fade boundary planes based on player proximity
-  engine.addSystem(() => {
+  // Fade boundary planes based on player proximity (throttled — runs every 0.2s)
+  registerThrottled((_dt: number) => {
     const playerPos = Transform.getOrNull(engine.PlayerEntity)
     if (!playerPos) return
     const playerX = playerPos.position.x
@@ -92,5 +93,5 @@ export function setupBoundaryWalls(): void {
         })
       }
     }
-  })
+  }, 0.2)
 }
