@@ -154,6 +154,14 @@ export function ChestPopup() {
         {buyError ? (
           <Label value={buyError} fontSize={mobile ? 15 : S(13)} color={CORAL_RED} uiTransform={{ margin: { top: mobile ? 10 : S(10) } }} />
         ) : null}
+
+        {/* Inventory hint */}
+        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { top: mobile ? 16 : S(16) } }}>
+          <Label value="Check your Inventory " fontSize={mobile ? 14 : S(13)} color={LIGHT_GREY} />
+          <UiEntity uiTransform={{ width: mobile ? 32 : S(32), height: mobile ? 32 : S(32), margin: { right: mobile ? 4 : S(4) } }}
+            uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: LIGHT_GREY }} />
+          <Label value=" to equip" fontSize={mobile ? 14 : S(13)} color={LIGHT_GREY} />
+        </UiEntity>
       </UiEntity>
     </UiEntity>
   )
