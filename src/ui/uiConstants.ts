@@ -39,7 +39,7 @@ let autoBaseScale = 1.0
 registerSystem(() => {
   const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
   if (canvas && canvas.width > 0) {
-    const raw = canvas.width / 1920
+    const raw = Math.min(canvas.width / 1920, canvas.height / 1080)
     autoBaseScale = Math.max(0.6, Math.min(1.6, raw))
   }
   cachedScale = autoBaseScale * UI_ADJUST_PRESETS[uiAdjustIndex].mult
