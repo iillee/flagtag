@@ -330,8 +330,8 @@ function updateFollowOrbit(dt: number, targetPos: { x: number; y: number; z: num
   followLookZ += (targetPos.z - followLookZ) * lerpF
 
   // Orbit controls: A/D rotate, W/S zoom, E/F height
-  if (inputSystem.isPressed(InputAction.IA_LEFT))  followAngle -= 1.5 * dt
-  if (inputSystem.isPressed(InputAction.IA_RIGHT)) followAngle += 1.5 * dt
+  if (inputSystem.isPressed(InputAction.IA_LEFT))  followAngle += 0.75 * dt
+  if (inputSystem.isPressed(InputAction.IA_RIGHT)) followAngle -= 0.75 * dt
   if (inputSystem.isPressed(InputAction.IA_FORWARD))  followDist = Math.max(FOLLOW_MIN_DIST, followDist - CAM_MOVE_SPEED * dt)
   if (inputSystem.isPressed(InputAction.IA_BACKWARD)) followDist = Math.min(FOLLOW_MAX_DIST, followDist + CAM_MOVE_SPEED * dt)
   if (inputSystem.isPressed(InputAction.IA_PRIMARY))   followHeight += CAM_MOVE_SPEED * dt
