@@ -125,6 +125,31 @@ export function ensureInventorySync(): void {
         allPlaced.add(item.id)
       }
     }
+
+    // Ensure the equipped boomerang is in the hotbar (not just in the grid).
+    // This handles the case where first init used default 'r' but the server
+    // then sent the real equipped color along with the full owned set.
+    const equippedItem = BOOMERANG_ITEMS[equipped]
+    if (equippedItem) {
+      const hotbarHasEquipped = hotbar.some(h => h?.id === equippedItem.id)
+      if (!hotbarHasEquipped) {
+        for (let i = 0; i < HOTBAR_SLOTS; i++) {
+          if (hotbar[i]?.category === 'boomerang') {
+            const oldItem = hotbar[i]!
+            hotbar[i] = equippedItem
+            // Put old boomerang in grid where equipped was (or first empty slot)
+            const gridIdx = grid.indexOf(equippedItem)
+            if (gridIdx !== -1) {
+              grid[gridIdx] = oldItem
+            } else {
+              const emptyIdx = grid.indexOf(null)
+              if (emptyIdx !== -1) grid[emptyIdx] = oldItem
+            }
+            break
+          }
+        }
+      }
+    }
   }
 }
 
