@@ -154,6 +154,17 @@ function updateCarryClonePosition(dt: number): void {
   if (!cloneVisible || carryCloneVisual === null) return
   if (!Transform.has(carryCloneVisual)) return
 
+  // AvatarAttach health check: if the engine stripped the AvatarAttach component
+  // (race condition), re-attach it to prevent the clone from freezing in world space.
+  if (carryCloneAnchor && carryCloneCarrierId && !AvatarAttach.has(carryCloneAnchor)) {
+    console.log('[Flag] ⚠️ AvatarAttach lost on clone anchor — re-attaching to', carryCloneCarrierId.slice(0, 8))
+    Transform.createOrReplace(carryCloneAnchor, { position: Vector3.Zero() })
+    AvatarAttach.create(carryCloneAnchor, {
+      avatarId: carryCloneCarrierId,
+      anchorPointId: AvatarAnchorPointType.AAPT_POSITION
+    })
+  }
+
   // Animate bob and spin
   cloneBobPhase += BOB_SPEED * dt
   cloneSpinAngle = (cloneSpinAngle + SPIN_SPEED * dt) % 360
@@ -444,6 +455,12 @@ export function flagClientSystem(dt: number): void {
     // Also trust the server-confirmed grace period — if the server confirmed us as
     // carrier but CRDT hasn't caught up yet, we should still be able to drop
     if (!amCarrying && Date.now() < confirmedGraceUntil && confirmedGraceCarrier === userId) {
+      amCarrying = true
+    }
+    // Fallback: if clone is showing for us, trust the visual state and let the server validate.
+    // This catches edge cases where CRDT desyncs but the player visually has the flag.
+    if (!amCarrying && cloneVisible && carryCloneCarrierId === userId) {
+      console.log('[Flag] ⚠️ Drop fallback: CRDT says not carrying but clone is showing for us — sending drop anyway')
       amCarrying = true
     }
     if (amCarrying) {
