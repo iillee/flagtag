@@ -20,10 +20,12 @@ const SCENE_W = 512
 const SCENE_D = 512
 const FREE_CAM_SPEED = 50
 
-// Follow camera settings
-const FOLLOW_OFFSET_Y = 25  // height above target
-const FOLLOW_OFFSET_BACK = 30  // distance behind/away from target
-const FOLLOW_LERP = 2.5  // smoothing factor
+// Follow-orbit settings
+const FOLLOW_DEFAULT_DIST = 35  // default orbit distance from target
+const FOLLOW_DEFAULT_HEIGHT = 25  // default height above target
+const FOLLOW_MIN_DIST = 8
+const FOLLOW_MAX_DIST = 80
+const FOLLOW_LERP = 3.0  // smoothing for look-at target tracking
 
 // ── Orbit State ──
 let camPosX = 256
@@ -36,10 +38,15 @@ let freeCamY = 50
 let freeCamZ = 256
 let freeYaw = 0 // radians
 
-// ── Follow State ──
-let followCamX = 256
-let followCamY = 80
-let followCamZ = 200
+// ── Follow-orbit State ──
+// Camera orbits around the target at (followAngle, followDist, followHeight)
+let followAngle = Math.PI  // radians, 0 = +Z from target
+let followDist = FOLLOW_DEFAULT_DIST
+let followHeight = FOLLOW_DEFAULT_HEIGHT
+// Smoothed look-at target position
+let followLookX = 256
+let followLookY = 10
+let followLookZ = 256
 
 // ── Entities ──
 let spectatorCamEntity: ReturnType<typeof engine.addEntity>
@@ -123,8 +130,9 @@ function enterSpectatorMode() {
   camPosX = 256; camPosY = 120; camPosZ = 170
   // Reset free cam
   freeCamX = 256; freeCamY = 50; freeCamZ = 200; freeYaw = 0
-  // Reset follow cam
-  followCamX = 256; followCamY = 80; followCamZ = 200
+  // Reset follow-orbit
+  followAngle = Math.PI; followDist = FOLLOW_DEFAULT_DIST; followHeight = FOLLOW_DEFAULT_HEIGHT
+  followLookX = 256; followLookY = 10; followLookZ = 256
 
   // Point look target at castle
   const lt = Transform.getMutable(lookTargetEntity)
@@ -187,8 +195,15 @@ export function selectFollowPlayer(userId: string, name: string) {
 }
 
 // ── Get flag world position ──
+// When carried, the flag entity's Transform doesn't move (it's avatar-attached),
+// so we follow the carrier's avatar position instead.
 function getFlagPosition(): { x: number; y: number; z: number } | null {
   for (const [entity, flag] of engine.getEntitiesWith(Flag, Transform)) {
+    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+      // Follow the carrier's avatar
+      const carrierPos = getPlayerAvatarPosition(flag.carrierPlayerId)
+      if (carrierPos) return carrierPos
+    }
     const t = Transform.get(entity)
     return { x: t.position.x, y: t.position.y, z: t.position.z }
   }
@@ -230,12 +245,12 @@ function updateCamTransformForMode() {
       pos.z = CASTLE_CENTER.z + (dz / dist) * 5
       camPosX = pos.x; camPosZ = pos.z
     }
-  } else if (spectatorState.mode === 'flag') {
-    pos = clampCam(followCamX, followCamY, followCamZ)
-    followCamX = pos.x; followCamY = pos.y; followCamZ = pos.z
   } else {
-    pos = clampCam(followCamX, followCamY, followCamZ)
-    followCamX = pos.x; followCamY = pos.y; followCamZ = pos.z
+    // flag & player modes: compute camera pos from orbit params around look-at
+    const rawX = followLookX + Math.sin(followAngle) * followDist
+    const rawZ = followLookZ + Math.cos(followAngle) * followDist
+    const rawY = followLookY + followHeight
+    pos = clampCam(rawX, rawY, rawZ)
   }
   const t = Transform.getMutable(spectatorCamEntity)
   t.position = Vector3.create(pos.x, pos.y, pos.z)
@@ -301,86 +316,43 @@ function updateOrbitMode(dt: number) {
   updateCamTransformForMode()
 }
 
-// ── FOLLOW FLAG MODE ──
-function updateFollowFlagMode(dt: number) {
-  const flagPos = getFlagPosition()
-  if (!flagPos) {
-    // No flag — fall back to castle center
-    const lt = Transform.getMutable(lookTargetEntity)
-    lt.position = Vector3.create(CASTLE_CENTER.x, CASTLE_CENTER.y, CASTLE_CENTER.z)
-    followCamX = CASTLE_CENTER.x
-    followCamY = CASTLE_CENTER.y + FOLLOW_OFFSET_Y
-    followCamZ = CASTLE_CENTER.z - FOLLOW_OFFSET_BACK
-    updateCamTransformForMode()
-    return
+// ── Shared orbit-follow logic for flag & player modes ──
+function updateFollowOrbit(dt: number, targetPos: { x: number; y: number; z: number } | null) {
+  if (!targetPos) {
+    // No target — orbit castle center
+    targetPos = { x: CASTLE_CENTER.x, y: CASTLE_CENTER.y, z: CASTLE_CENTER.z }
   }
 
-  // Target camera position: behind and above the flag
-  const targetX = flagPos.x
-  const targetY = flagPos.y + FOLLOW_OFFSET_Y
-  const targetZ = flagPos.z - FOLLOW_OFFSET_BACK
-
-  // Smooth lerp
+  // Smooth the look-at target so camera doesn't jerk
   const lerpF = Math.min(1, FOLLOW_LERP * dt)
-  followCamX += (targetX - followCamX) * lerpF
-  followCamY += (targetY - followCamY) * lerpF
-  followCamZ += (targetZ - followCamZ) * lerpF
+  followLookX += (targetPos.x - followLookX) * lerpF
+  followLookY += (targetPos.y - followLookY) * lerpF
+  followLookZ += (targetPos.z - followLookZ) * lerpF
 
-  // Allow height adjustment with E/F
-  if (inputSystem.isPressed(InputAction.IA_PRIMARY)) followCamY += CAM_MOVE_SPEED * dt
-  if (inputSystem.isPressed(InputAction.IA_SECONDARY)) followCamY -= CAM_MOVE_SPEED * dt
+  // Orbit controls: A/D rotate, W/S zoom, E/F height
+  if (inputSystem.isPressed(InputAction.IA_LEFT))  followAngle -= 1.5 * dt
+  if (inputSystem.isPressed(InputAction.IA_RIGHT)) followAngle += 1.5 * dt
+  if (inputSystem.isPressed(InputAction.IA_FORWARD))  followDist = Math.max(FOLLOW_MIN_DIST, followDist - CAM_MOVE_SPEED * dt)
+  if (inputSystem.isPressed(InputAction.IA_BACKWARD)) followDist = Math.min(FOLLOW_MAX_DIST, followDist + CAM_MOVE_SPEED * dt)
+  if (inputSystem.isPressed(InputAction.IA_PRIMARY))   followHeight += CAM_MOVE_SPEED * dt
+  if (inputSystem.isPressed(InputAction.IA_SECONDARY)) followHeight = Math.max(2, followHeight - CAM_MOVE_SPEED * dt)
 
-  // Allow orbit offset with A/D
-  if (inputSystem.isPressed(InputAction.IA_LEFT)) {
-    followCamX -= CAM_MOVE_SPEED * 0.5 * dt
-  }
-  if (inputSystem.isPressed(InputAction.IA_RIGHT)) {
-    followCamX += CAM_MOVE_SPEED * 0.5 * dt
-  }
-
-  // Look-at = flag position
+  // Update look-at entity
   const lt = Transform.getMutable(lookTargetEntity)
-  lt.position = Vector3.create(flagPos.x, flagPos.y + 1, flagPos.z)
+  lt.position = Vector3.create(followLookX, followLookY + 1.5, followLookZ)
 
   updateCamTransformForMode()
 }
 
+// ── FOLLOW FLAG MODE ──
+function updateFollowFlagMode(dt: number) {
+  updateFollowOrbit(dt, getFlagPosition())
+}
+
 // ── FOLLOW PLAYER MODE ──
 function updateFollowPlayerMode(dt: number) {
-  if (!spectatorState.followPlayerId) {
-    // No player selected — just orbit castle
-    const lt = Transform.getMutable(lookTargetEntity)
-    lt.position = Vector3.create(CASTLE_CENTER.x, CASTLE_CENTER.y, CASTLE_CENTER.z)
-    updateCamTransformForMode()
-    return
-  }
-
-  const playerPos = getPlayerAvatarPosition(spectatorState.followPlayerId)
-  if (!playerPos) {
-    // Player not found (maybe left) — keep last position
-    updateCamTransformForMode()
-    return
-  }
-
-  // Target camera position: behind and above the player
-  const targetX = playerPos.x
-  const targetY = playerPos.y + FOLLOW_OFFSET_Y
-  const targetZ = playerPos.z - FOLLOW_OFFSET_BACK
-
-  const lerpF = Math.min(1, FOLLOW_LERP * dt)
-  followCamX += (targetX - followCamX) * lerpF
-  followCamY += (targetY - followCamY) * lerpF
-  followCamZ += (targetZ - followCamZ) * lerpF
-
-  // Allow height/strafe adjustment
-  if (inputSystem.isPressed(InputAction.IA_PRIMARY)) followCamY += CAM_MOVE_SPEED * dt
-  if (inputSystem.isPressed(InputAction.IA_SECONDARY)) followCamY -= CAM_MOVE_SPEED * dt
-  if (inputSystem.isPressed(InputAction.IA_LEFT)) followCamX -= CAM_MOVE_SPEED * 0.5 * dt
-  if (inputSystem.isPressed(InputAction.IA_RIGHT)) followCamX += CAM_MOVE_SPEED * 0.5 * dt
-
-  // Look-at = player
-  const lt = Transform.getMutable(lookTargetEntity)
-  lt.position = Vector3.create(playerPos.x, playerPos.y + 1.5, playerPos.z)
-
-  updateCamTransformForMode()
+  const targetPos = spectatorState.followPlayerId
+    ? getPlayerAvatarPosition(spectatorState.followPlayerId)
+    : null
+  updateFollowOrbit(dt, targetPos)
 }
