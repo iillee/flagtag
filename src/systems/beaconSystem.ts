@@ -11,8 +11,8 @@ const BEACON_HEIGHT = 110
 const BEACON_Y_OFFSET = 5.0   // raise base above the flag model top (high enough to clear carried flag)
 const INNER_WIDTH = 0.5
 const OUTER_WIDTH = 2.0
-const INNER_ALPHA = 0.35
-const OUTER_ALPHA = 0.1
+const INNER_ALPHA = 0.7
+const OUTER_ALPHA = 0.35
 const EMISSIVE_INNER = 3.0
 const EMISSIVE_OUTER = 2.0
 const PULSE_SPEED = 2.5
@@ -28,6 +28,12 @@ const FLAG_CARRY_OFFSET = { x: 0, y: 0.4, z: 0 }
 let innerBeacon: ReturnType<typeof engine.addEntity>
 let outerBeacon: ReturnType<typeof engine.addEntity>
 let pulseTime = 0
+
+// ── Water sinking blink ──
+const BLINK_DURATION = 3.0 // total blink period (matches server delay)
+const BLINK_COUNT = 6      // number of on/off cycles
+let blinkTimer = 0
+let blinkActive = false
 
 export function setupBeacon(): void {
   console.log('[Beacon] Setting up beacon light pillar system')
@@ -96,9 +102,23 @@ function getCarrierWorldPos(carrierPlayerId: string): Vector3 | null {
   return null
 }
 
+export function startBeaconBlink(): void {
+  blinkActive = true
+  blinkTimer = 0
+}
+
 export function beaconClientSystem(dt: number): void {
   pulseTime += dt
   const pulse = 1 + PULSE_RANGE * Math.sin(pulseTime * PULSE_SPEED)
+
+  // Advance blink timer
+  if (blinkActive) {
+    blinkTimer += dt
+    if (blinkTimer >= BLINK_DURATION) {
+      blinkActive = false
+      blinkTimer = 0
+    }
+  }
 
   let worldPos: Vector3 | null = null
 
@@ -123,14 +143,28 @@ export function beaconClientSystem(dt: number): void {
   if (worldPos) {
     const beaconY = worldPos.y + BEACON_Y_OFFSET + BEACON_HEIGHT / 2
 
-    // Position both beams above the flag with pulsing animation
-    const innerT = Transform.getMutable(innerBeacon)
-    innerT.position = Vector3.create(worldPos.x, beaconY, worldPos.z)
-    innerT.scale = Vector3.create(INNER_WIDTH * pulse, BEACON_HEIGHT, 1)
+    // During blink phase, blinks accelerate for urgency
+    let visible = true
+    if (blinkActive) {
+      const progress = blinkTimer / BLINK_DURATION // 0→1
+      // Frequency increases from ~2 Hz to ~6 Hz
+      const freq = 2 + progress * 4
+      visible = Math.sin(blinkTimer * freq * Math.PI * 2) > 0
+    }
 
-    const outerT = Transform.getMutable(outerBeacon)
-    outerT.position = Vector3.create(worldPos.x, beaconY, worldPos.z)
-    outerT.scale = Vector3.create(OUTER_WIDTH * (2 - pulse), BEACON_HEIGHT, 1)
+    if (visible) {
+      const innerT = Transform.getMutable(innerBeacon)
+      innerT.position = Vector3.create(worldPos.x, beaconY, worldPos.z)
+      innerT.scale = Vector3.create(INNER_WIDTH * pulse, BEACON_HEIGHT, 1)
+
+      const outerT = Transform.getMutable(outerBeacon)
+      outerT.position = Vector3.create(worldPos.x, beaconY, worldPos.z)
+      outerT.scale = Vector3.create(OUTER_WIDTH * (2 - pulse), BEACON_HEIGHT, 1)
+    } else {
+      const HIDDEN = Vector3.create(0, -200, 0)
+      Transform.getMutable(innerBeacon).position = HIDDEN
+      Transform.getMutable(outerBeacon).position = HIDDEN
+    }
 
   } else {
     // Hide beacons if no flag found

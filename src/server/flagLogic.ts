@@ -38,6 +38,11 @@ let lastCarrierPositionMs = 0
 let holdTimeAccum = 0
 let holdTimeCarrierKey = '' // Track WHO we're accumulating for
 
+// ── Water respawn delay ──
+const WATER_RESPAWN_DELAY = 3.0 // seconds before flag respawns after hitting water
+let waterRespawnTimer = 0
+let waterRespawnActive = false
+
 // ── Gravity helpers ──
 
 function resetCarrierTracking(): void {
@@ -52,7 +57,7 @@ function resetCarrierTracking(): void {
  * is our best estimate of the terrain they were walking on. If the flag is dropped
  * above that level (e.g. mid-jump), gravity pulls it down to the estimated ground.
  */
-function computeGravityTarget(dropY: number): void {
+export function computeGravityTarget(dropY: number): void {
   let minY = Infinity
   for (const s of carrierYSamples) {
     if (s.y < minY) minY = s.y
@@ -316,25 +321,47 @@ export function flagServerSystem(dt: number): void {
     flagMutable.dropAnchorY = newY
   }
 
-  // Water respawn
+  // Water respawn (with delay)
   const WATER_RESPAWN_Y = 1.58
-  if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y) {
-    const spawn = getRandomSpawnPoint()
-    console.log('[Server] 🌊 Flag fell in water (Y=' + currentAnchorY.toFixed(2) + ') — respawning at', spawn.x, spawn.y, spawn.z)
-    const flagMutable2 = Flag.getMutable(flagEntity)
-    flagMutable2.state = FlagState.AtBase
-    flagMutable2.carrierPlayerId = ''
-    flagMutable2.baseX = spawn.x
-    flagMutable2.baseY = spawn.y
-    flagMutable2.baseZ = spawn.z
-    flagMutable2.dropAnchorX = spawn.x
-    flagMutable2.dropAnchorY = spawn.y
-    flagMutable2.dropAnchorZ = spawn.z
-    const t2 = Transform.getMutable(flagEntity)
-    t2.position = Vector3.create(spawn.x, spawn.y, spawn.z)
-    flagFalling = false
-    flagFallVelocity = 0
-    persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+  if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y && !waterRespawnActive) {
+    waterRespawnActive = true
+    waterRespawnTimer = WATER_RESPAWN_DELAY
+    // Let the flag sink all the way to Y=0 during the delay
+    flagGravityTargetY = 0
+    flagFalling = true
+    console.log('[Server] 🌊 Flag hit water (Y=' + currentAnchorY.toFixed(2) + ') — sinking to Y=0, respawning in ' + WATER_RESPAWN_DELAY + 's')
+    room.send('flagSinking', { t: 0 })
+  }
+
+  if (waterRespawnActive) {
+    if (flag.state !== FlagState.Dropped) {
+      // Flag was picked up during delay — cancel
+      waterRespawnActive = false
+      waterRespawnTimer = 0
+      console.log('[Server] 🌊 Water respawn cancelled — flag picked up')
+    } else {
+      waterRespawnTimer -= clampedDt
+      if (waterRespawnTimer <= 0) {
+        waterRespawnActive = false
+        waterRespawnTimer = 0
+        const spawn = getRandomSpawnPoint()
+        console.log('[Server] 🌊 Flag respawning at', spawn.x, spawn.y, spawn.z)
+        const flagMutable2 = Flag.getMutable(flagEntity)
+        flagMutable2.state = FlagState.AtBase
+        flagMutable2.carrierPlayerId = ''
+        flagMutable2.baseX = spawn.x
+        flagMutable2.baseY = spawn.y
+        flagMutable2.baseZ = spawn.z
+        flagMutable2.dropAnchorX = spawn.x
+        flagMutable2.dropAnchorY = spawn.y
+        flagMutable2.dropAnchorZ = spawn.z
+        const t2 = Transform.getMutable(flagEntity)
+        t2.position = Vector3.create(spawn.x, spawn.y, spawn.z)
+        flagFalling = false
+        flagFallVelocity = 0
+        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
+      }
+    }
   }
 
   // Server only writes Transform when the flag is falling (gravity updates)

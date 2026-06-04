@@ -22,7 +22,7 @@ import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persis
 import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset, checkMonthlyLeaderboardReset } from './leaderboard'
 
 import { awardRoundCoins } from './economy'
-import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState } from './flagLogic'
+import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState, computeGravityTarget } from './flagLogic'
 import { activeTraps, activeProjectiles, activeOrbits, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime } from './economy'
@@ -119,10 +119,16 @@ export function lightningServerSystem(dt: number): void {
       room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId })
 
       if (carried) {
+        flushHoldTimeAccum()
         const mutable = Flag.getMutable(flagEntity)
         mutable.state = FlagState.Dropped
         mutable.carrierPlayerId = ''
-        flushHoldTimeAccum()
+        mutable.dropAnchorX = strikePos.x
+        mutable.dropAnchorY = strikePos.y
+        mutable.dropAnchorZ = strikePos.z
+        const t = Transform.getMutable(flagEntity)
+        t.position = Vector3.create(strikePos.x, strikePos.y, strikePos.z)
+        computeGravityTarget(strikePos.y)
         persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       }
 

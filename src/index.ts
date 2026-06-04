@@ -56,7 +56,7 @@ export async function main() {
   const { boostTrailSystem, setupBoostTrailMessages } = await import('./systems/boostTrailSystem')
   const { waterSplashSystem } = await import('./systems/waterSplashSystem')
   const { setupLightning, lightningSystem, setupLightningMessages } = await import('./systems/lightningSystem')
-  const { setupBeacon, beaconClientSystem } = await import('./systems/beaconSystem')
+  const { setupBeacon, beaconClientSystem, startBeaconBlink } = await import('./systems/beaconSystem')
   const { setupRemoteBoomerangs, cleanupRemoteBoomerang } = await import('./systems/remoteBoomerangSystem')
   const { getBoomerangColor } = await import('./gameState/boomerangColor')
   const { setupHandBoomerangs } = await import('./systems/handBoomerangSetup')
@@ -171,6 +171,12 @@ export async function main() {
   setupDeathPenaltyMessages()
   setupLightning()
   setupLightningMessages()
+
+  // Beacon blink when flag hits water
+  room.onMessage('flagSinking', () => {
+    console.log('[Beacon] Flag sinking — starting blink')
+    startBeaconBlink()
+  })
   setupWorldLeaderboard()
   setupProximityLights()
   setupUpdraftSystem()
