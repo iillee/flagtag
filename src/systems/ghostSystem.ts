@@ -270,12 +270,7 @@ export function ghostClientSystem(dt: number): void {
     const spawnEase = 1 - (1 - spawnProgress) * (1 - spawnProgress)
     const spawnYOffset = -SPAWN_DEPTH * (1 - spawnEase)
 
-    // Replay ghost sound on interval
-    ghostSoundTimer += dt
-    if (ghostSoundTimer >= GHOST_SOUND_INTERVAL) {
-      ghostSoundTimer = 0
-      AudioSource.createOrReplace(cz.modelEntity, { audioClipUrl: 'assets/sounds/ghost.mp3', playing: true, loop: false, volume: 0.5, global: false })
-    }
+
 
     // Dead reckoning: predict where the ghost should be, then lerp toward it
     // This smooths out the 5Hz server updates into fluid motion
@@ -356,8 +351,9 @@ function createGhostVisual(serverEntity: Entity, pos: Vector3): ClientGhost {
   AudioSource.create(modelEntity, {
     audioClipUrl: 'assets/sounds/ghost.mp3',
     playing: true,
-    loop: false,
-    volume: 1.0
+    loop: true,
+    volume: 0.3,
+    global: false
   })
 
   return {
