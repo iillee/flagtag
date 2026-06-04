@@ -9,6 +9,8 @@ import {
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { musicEntity } from '../systems/musicSetup'
 import { musicState } from '../ui/uiState'
+import { showBoomboxPopup, hideBoomboxPopup, popupState } from '../ui/uiState'
+import { getEquippedTape } from '../ui/screens/boomboxState'
 
 const BOOMBOX_SRC = 'assets/asset-packs/boombox/Boombox_01/Boombox_01.glb'
 
@@ -30,6 +32,7 @@ interface Ring {
   entity: Entity
   age: number
   active: boolean
+  lastAlphaStep: number
 }
 const ringPool: Ring[] = []
 let ringPoolReady = false
@@ -52,7 +55,7 @@ function initRingPool(): void {
       emissiveIntensity: 2,
       transparencyMode: 2
     })
-    ringPool.push({ entity: e, age: 0, active: false })
+    ringPool.push({ entity: e, age: 0, active: false, lastAlphaStep: -1 })
   }
 }
 
@@ -66,8 +69,9 @@ function spawnRing(): void {
   if (!ring) return // all in use
   ring.active = true
   ring.age = 0
+  ring.lastAlphaStep = -1
   const t = Transform.getMutable(ring.entity)
-  t.position = Vector3.create(boomboxPos.x, boomboxPos.y, boomboxPos.z)
+  t.position = Vector3.create(boomboxPos.x, boomboxPos.y + 0.05, boomboxPos.z)
   t.scale = Vector3.create(0.3, 0.02, 0.3)
 }
 
@@ -78,35 +82,22 @@ function setupBoombox(): void {
       boomboxEntity = entity
       boomboxPos = { ...Transform.get(entity).position }
 
-      // Add click handler
+      // Add click handler — opens boombox tape UI
       pointerEventsSystem.onPointerDown(
         {
           entity,
           opts: {
             button: InputAction.IA_POINTER,
-            hoverText: musicState.muted ? '♪ Unmute' : '♪ Mute',
+            hoverText: '♪ Boombox',
             maxDistance: 12
           }
         },
         () => {
-          
-          musicState.muted = !musicState.muted
-          try {
-            const audio = AudioSource.getMutable(musicEntity)
-            audio.volume = musicState.muted ? 0 : 0.0984375
-          } catch {}
-          // Update hover text
-          pointerEventsSystem.onPointerDown(
-            {
-              entity: entity,
-              opts: {
-                button: InputAction.IA_POINTER,
-                hoverText: musicState.muted ? '♪ Unmute' : '♪ Mute',
-                maxDistance: 12
-              }
-            },
-            arguments.callee as any
-          )
+          if (popupState.boombox) {
+            hideBoomboxPopup()
+          } else {
+            showBoomboxPopup()
+          }
         }
       )
 
@@ -132,10 +123,20 @@ export function boomboxSystem(dt: number): void {
     if (!initialized) return
   }
 
-  const muted = musicState.muted
+  // Close popup if player walks away
+  if (popupState.boombox && boomboxEntity && Transform.has(engine.PlayerEntity)) {
+    const playerPos = Transform.get(engine.PlayerEntity).position
+    if (Vector3.distance(playerPos, boomboxPos) > 14) {
+      hideBoomboxPopup()
+    }
+  }
 
-  // Spawn rings when not muted
-  if (!muted) {
+  const muted = musicState.muted
+  const noTape = getEquippedTape() === null
+  const silent = muted || noTape
+
+  // Spawn rings when not muted and tape is loaded
+  if (!silent) {
     ringSpawnTimer += dt
     let activeCount = 0
     for (const r of ringPool) { if (r.active) activeCount++ }
@@ -154,7 +155,7 @@ export function boomboxSystem(dt: number): void {
 
     const scale = 0.3 + ring.age * RING_SPEED
 
-    if (scale >= RING_MAX_SCALE || muted) {
+    if (scale >= RING_MAX_SCALE || silent) {
       ring.active = false
       const t = Transform.getMutable(ring.entity)
       t.position = RING_HIDDEN_POS
@@ -164,6 +165,19 @@ export function boomboxSystem(dt: number): void {
 
     const t = Transform.getMutable(ring.entity)
     t.scale = Vector3.create(scale, 0.02, scale)
-    t.position.y = boomboxPos.y + ring.age * 0.3
+
+    // Fade out as ring expands — only update material at stepped intervals
+    const progress = (scale - 0.3) / (RING_MAX_SCALE - 0.3)
+    const alphaStep = Math.floor(progress * 5) // 5 discrete steps
+    if (alphaStep !== ring.lastAlphaStep) {
+      ring.lastAlphaStep = alphaStep
+      const alpha = 0.25 * (1 - progress)
+      Material.setPbrMaterial(ring.entity, {
+        albedoColor: Color4.create(1, 0.84, 0, alpha),
+        emissiveColor: Color4.create(1, 0.84, 0, 1),
+        emissiveIntensity: 2 * (1 - progress),
+        transparencyMode: 2
+      })
+    }
   }
 }

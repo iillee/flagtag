@@ -16,6 +16,8 @@ import {
   earnedState,
   metricsState,
   hover, scroll, tabs,
+  hideChestPopup,
+  hideBoomboxPopup,
 } from '../uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
@@ -97,13 +99,13 @@ export function DesktopLayout() {
         {/* Icon buttons */}
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
           <IconButton hoverKey="squareIcon" label="Inventory" isActive={getShowInventory} hoverWidth={160}
-            iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17) }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: getShowInventory || hover.squareIcon ? GOLD : WHITE }} />}
-            onClick={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); metricsState.openedFromTerminal = false; toggleInventory() }}
+            iconContent={<UiEntity uiTransform={{ width: S(38), height: S(38), margin: { right: S(-10) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: getShowInventory || hover.squareIcon ? GOLD : WHITE }} />}
+            onClick={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); metricsState.openedFromTerminal = false; hideChestPopup(); hideBoomboxPopup(); toggleInventory() }}
           />
           <UiEntity uiTransform={{ height: S(4) }} />
           <IconButton hoverKey="questionIcon" label="Help" isActive={winConditionVisible}
             iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17), justifyContent: 'center', alignItems: 'center' }}><Label value="?" fontSize={S(24)} color={winConditionVisible || hover.questionIcon ? GOLD : WHITE} font="sans-serif" textAlign="middle-center" /></UiEntity>}
-            onClick={() => { const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsState.openedFromTerminal = false; setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+            onClick={() => { const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsState.openedFromTerminal = false; hideChestPopup(); hideBoomboxPopup(); if (getShowInventory) toggleInventory(); setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
         </UiEntity>
 

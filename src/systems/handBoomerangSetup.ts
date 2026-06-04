@@ -49,8 +49,13 @@ export function setupHandBoomerangs() {
     invisibleMeshesCollisionMask: 0
   })
 
-  // Show/hide left hand boomerang when color changes
+  // Update both hand boomerang models when color changes
   onBoomerangColorChange((color) => {
+    // Right hand — update model to match new color
+    if (GltfContainer.has(boomerangModel)) {
+      GltfContainer.getMutable(boomerangModel).src = `assets/models/boomerang.${color}.glb`
+    }
+    // Left hand — only visible for yellow
     if (Transform.has(leftBoomerangModel)) {
       Transform.getMutable(leftBoomerangModel).scale = color === 'y' ? Vector3.create(1, 1.5, 1) : Vector3.Zero()
     }

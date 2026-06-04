@@ -130,9 +130,24 @@ room.onMessage('shellReturned', (data) => {
   }
   if (bestIdx !== -1) {
     const vis = msgProjectileVisuals[bestIdx]
-    if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity!)
-    releaseProjectileToPool(vis.entity)
-    msgProjectileVisuals.splice(bestIdx, 1)
+    // If the visual is already close to the player, remove immediately.
+    // Otherwise, mark it as returning so it flies back naturally and gets
+    // cleaned up by the dist < 2.0 check in updateMsgProjectileVisuals.
+    const pos = Transform.get(vis.entity).position
+    const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
+    const dx = pos.x - playerPos.x, dy = pos.y - playerPos.y, dz = pos.z - playerPos.z
+    const distToPlayer = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    if (distToPlayer < 3.0 || vis.returning) {
+      // Close enough or already returning — remove now
+      if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity!)
+      releaseProjectileToPool(vis.entity)
+      msgProjectileVisuals.splice(bestIdx, 1)
+    } else {
+      // Still in flight — force it to start returning so it flies back naturally
+      vis.returning = true
+      vis.returnDistance = 0
+      console.log('[Projectile] shellReturned received but visual still in flight — forcing return')
+    }
   }
 
   // Only clear localThrow when NO visuals remain for this player
