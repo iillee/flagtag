@@ -12,6 +12,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Ghost } from '../shared/components'
 import { room } from '../shared/messages'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
+import { exitSpectatorMode } from './spectatorSystem'
 import { showHitEffect, initPools as initCombatPools } from './combatSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
@@ -156,6 +157,7 @@ export function ghostClientSystem(dt: number): void {
 
       // Death!
       if (scareRemaining >= SCARE_TIME) {
+        exitSpectatorMode()
         room.send('requestDrop', { t: 0 })
         void triggerEmote({ predefinedEmote: GHOST_DEATH_EMOTE })
         InputModifier.createOrReplace(engine.PlayerEntity, {

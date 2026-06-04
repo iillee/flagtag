@@ -3,7 +3,7 @@ import { Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
-import { isSpectatorMode } from './spectatorSystem'
+import { isSpectatorMode, exitSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 
 
@@ -223,6 +223,7 @@ export function waterSystem(dt: number) {
         AudioSource.createOrReplace(drownSoundEntity, { audioClipUrl: 'assets/sounds/death.mp3', playing: true, loop: false, volume: 1.0, global: true })
       }
 
+      exitSpectatorMode()
       room.send('requestDrop', { t: 0 })
       sendDeathPenalty('drown')
 

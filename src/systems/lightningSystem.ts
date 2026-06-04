@@ -7,6 +7,7 @@ import { triggerEmote, movePlayerTo } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { setLightningRespawning } from '../gameState/lightningState'
+import { exitSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 
 
@@ -458,6 +459,7 @@ function executeStrike(pos: { x: number; y: number; z: number }) {
 
 /** Called by carrier's client to handle death */
 function handleLocalDeath() {
+  exitSpectatorMode()
   room.send('requestDrop', { t: 0 })
   sendDeathPenalty('lightning')
 
