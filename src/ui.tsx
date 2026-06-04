@@ -416,9 +416,9 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
   const controlsHint = mode === 'orbit'
     ? 'WASD = Orbit  |  E/F = Up/Down'
     : mode === 'flag'
-    ? 'A/D = Strafe  |  E/F = Up/Down'
+    ? 'W/S = Zoom  |  A/D = Orbit  |  E/F = Up/Down'
     : spectatorState.followPlayerId
-    ? `Following: ${spectatorState.followPlayerName}  |  A/D = Strafe  |  E/F = Up/Down`
+    ? `Following: ${spectatorState.followPlayerName}  |  W/S = Zoom  |  A/D = Orbit  |  E/F = Up/Down`
     : 'Select a player to follow'
 
   const TAB_BG = Color4.create(0.2, 0.2, 0.25, 0.9)
