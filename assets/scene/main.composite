@@ -3303,27 +3303,6 @@
             "parent": 0
           }
         },
-        "673": {
-          "json": {
-            "position": {
-              "x": 265.56500244140625,
-              "y": 19.505868911743164,
-              "z": 219.64791870117188
-            },
-            "scale": {
-              "x": 0.10000000149011612,
-              "y": 0.10000000149011612,
-              "z": 0.10000000149011612
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
         "674": {
           "json": {
             "position": {
@@ -3362,69 +3341,6 @@
               "y": 0,
               "z": 0,
               "w": -1.347615352642606e-8
-            },
-            "parent": 0
-          }
-        },
-        "676": {
-          "json": {
-            "position": {
-              "x": 266.9739990234375,
-              "y": 18.847143173217773,
-              "z": 220.8729248046875
-            },
-            "scale": {
-              "x": 0.10000000149011612,
-              "y": 0.10000000149011612,
-              "z": 0.10000000149011612
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "677": {
-          "json": {
-            "position": {
-              "x": 264.24798583984375,
-              "y": 18.164958953857422,
-              "z": 218.56756591796875
-            },
-            "scale": {
-              "x": 0.10000000149011612,
-              "y": 0.10000000149011612,
-              "z": 0.10000000149011612
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        },
-        "678": {
-          "json": {
-            "position": {
-              "x": 258.7759704589844,
-              "y": 19.248859405517578,
-              "z": 227.81149291992188
-            },
-            "scale": {
-              "x": 0.10000000149011612,
-              "y": 0.10000000149011612,
-              "z": 0.10000000149011612
-            },
-            "rotation": {
-              "x": 0,
-              "y": -0.7615768313407898,
-              "z": 0,
-              "w": 0.6480746269226074
             },
             "parent": 0
           }
@@ -5040,13 +4956,6 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "673": {
-          "json": {
-            "src": "assets/models/solid_red.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
         "674": {
           "json": {
             "src": "assets/models/RockLarge_01/RockLarge_01.glb",
@@ -5057,27 +4966,6 @@
         "675": {
           "json": {
             "src": "assets/models/RockLarge_01/RockLarge_01.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "676": {
-          "json": {
-            "src": "assets/models/gold.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "677": {
-          "json": {
-            "src": "assets/models/solid_blue.glb",
-            "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
-          }
-        },
-        "678": {
-          "json": {
-            "src": "assets/models/solid_green.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -6053,11 +5941,6 @@
             "value": "Loot Trunk"
           }
         },
-        "673": {
-          "json": {
-            "value": "Solid Red"
-          }
-        },
         "674": {
           "json": {
             "value": "Big Rock_2"
@@ -6066,21 +5949,6 @@
         "675": {
           "json": {
             "value": "Big Rock_3"
-          }
-        },
-        "676": {
-          "json": {
-            "value": "Gold"
-          }
-        },
-        "677": {
-          "json": {
-            "value": "Solid Blue"
-          }
-        },
-        "678": {
-          "json": {
-            "value": "Solid Green"
           }
         },
         "679": {
@@ -7386,10 +7254,6 @@
                   660,
                   661,
                   671,
-                  673,
-                  676,
-                  677,
-                  678,
                   545,
                   645,
                   654,
@@ -8096,22 +7960,6 @@
                 "children": []
               },
               {
-                "entity": 673,
-                "children": []
-              },
-              {
-                "entity": 676,
-                "children": []
-              },
-              {
-                "entity": 677,
-                "children": []
-              },
-              {
-                "entity": 678,
-                "children": []
-              },
-              {
                 "entity": 545,
                 "children": []
               },
@@ -8588,22 +8436,10 @@
         "672": {
           "json": {}
         },
-        "673": {
-          "json": {}
-        },
         "674": {
           "json": {}
         },
         "675": {
-          "json": {}
-        },
-        "676": {
-          "json": {}
-        },
-        "677": {
-          "json": {}
-        },
-        "678": {
           "json": {}
         },
         "679": {

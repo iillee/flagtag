@@ -161,8 +161,7 @@ export async function main() {
   setupSpectator()
 
   // Hide podium cubes (placed in Creator Hub, used by cinematicSystem for positioning)
-  const { setupPodiumCubeHiding } = await import('./systems/podiumCubeSystem')
-  setupPodiumCubeHiding()
+
 
   // Message handlers (no systems, just wire up listeners)
   setupCoinMessages()
