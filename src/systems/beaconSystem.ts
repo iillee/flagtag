@@ -82,13 +82,13 @@ export function setupBeacon(): void {
 function getCarrierWorldPos(carrierPlayerId: string): Vector3 | null {
   // Check if the local player is the carrier
   const local = getPlayer()
-  if (local?.userId === carrierPlayerId && Transform.has(engine.PlayerEntity)) {
+  if (local?.userId?.toLowerCase() === carrierPlayerId && Transform.has(engine.PlayerEntity)) {
     return Transform.get(engine.PlayerEntity).position
   }
   
   // Check by wallet address (used in multiplayer)
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address === carrierPlayerId) {
+    if (identity.address.toLowerCase() === carrierPlayerId) {
       return Transform.get(entity).position
     }
   }
