@@ -2,9 +2,19 @@
 // State that both ui/ and systems/ need to read/write.
 // Lives here to avoid circular imports between the two layers.
 
+/** Spectator camera modes */
+export type SpectatorMode = 'orbit' | 'flag' | 'player'
+
 /** Spectator camera state */
 export const spectatorState = {
   active: false,
+  mode: 'orbit' as SpectatorMode,
+  /** userId of the player being followed in 'player' mode */
+  followPlayerId: null as string | null,
+  /** Display name of followed player */
+  followPlayerName: '' as string,
+  /** Whether the player-picker list is open */
+  playerPickerOpen: false,
 }
 
 /**

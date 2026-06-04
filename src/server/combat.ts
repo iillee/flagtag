@@ -42,8 +42,11 @@ function removeTrap(trap: ActiveTrap): void {
 
 const lastProjectileFireTime = new Map<string, number>()
 
+let nextShellId = 1
+
 export interface ActiveProjectile {
   entity: Entity
+  shellId: number
   firedBy: string
   firedAtMs: number
   startX: number
@@ -291,8 +294,10 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     maxDistance: chargeRange,
     active: true,
   })
+  const shellId = nextShellId++
   activeProjectiles.push({
     entity: projectileEntity,
+    shellId,
     firedBy: playerId,
     firedAtMs: now,
     startX: spawnPos.x,
@@ -317,7 +322,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   })
   lastProjectileFireTime.set(playerId, now)
 
-  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ, color, firedBy: playerId, chargeSpeed, chargeRange, chargeScale })
+  room.send('shellDropped', { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, dirX: nDirX, dirZ: nDirZ, color, firedBy: playerId, chargeSpeed, chargeRange, chargeScale, shellId })
   console.log('[Server] 🎯 Projectile fired by', playerId.slice(0, 8), 'dir:', nDirX.toFixed(2), nDirZ.toFixed(2))
 }
 
@@ -332,7 +337,7 @@ export function shellServerSystem(dt: number): void {
     // Safety expiry
     if (now - projectile.firedAtMs > PROJECTILE_LIFETIME_SEC * 1000) {
       console.log('[Server] 🎯 Projectile expired (timeout)')
-      room.send('shellReturned', { firedBy: projectile.firedBy })
+      room.send('shellReturned', { firedBy: projectile.firedBy, shellId: projectile.shellId })
       removeProjectile(projectile)
       activeProjectiles.splice(i, 1)
       continue
@@ -351,7 +356,7 @@ export function shellServerSystem(dt: number): void {
         projectile.returnY = projectile.startY
         projectile.returnZ = projectile.startZ + projectile.dirZ * projectile.distanceTraveled
         const projectilePos = Transform.get(projectile.entity).position
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', peak: !projectile.hitWall, firedBy: projectile.firedBy })
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', peak: !projectile.hitWall, firedBy: projectile.firedBy, shellId: projectile.shellId })
       } else {
         const newX = projectile.startX + projectile.dirX * projectile.distanceTraveled
         const newZ = projectile.startZ + projectile.dirZ * projectile.distanceTraveled
@@ -375,7 +380,7 @@ export function shellServerSystem(dt: number): void {
 
       if (dist < PROJECTILE_HIT_RADIUS) {
         console.log('[Server] 🎯 Projectile returned to shooter')
-        room.send('shellReturned', { firedBy: projectile.firedBy })
+        room.send('shellReturned', { firedBy: projectile.firedBy, shellId: projectile.shellId })
         removeProjectile(projectile)
         activeProjectiles.splice(i, 1)
         continue
@@ -410,10 +415,10 @@ export function shellServerSystem(dt: number): void {
           handleDrop(addr)
         }
 
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr, firedBy: projectile.firedBy })
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr, firedBy: projectile.firedBy, shellId: projectile.shellId })
 
         if (projectile.returning) {
-          room.send('shellReturned', { firedBy: projectile.firedBy })
+          room.send('shellReturned', { firedBy: projectile.firedBy, shellId: projectile.shellId })
           removeProjectile(projectile)
           activeProjectiles.splice(i, 1)
           shellConsumed = true
@@ -436,13 +441,13 @@ export function shellServerSystem(dt: number): void {
       const dist = Vector3.distance(projectilePos, trapPos)
       if (dist < PROJECTILE_HIT_RADIUS * projectile.chargeScale) {
         console.log('[Server] 🎯🪤 Projectile hit trap!', projectile.returning ? 'Both destroyed.' : 'Trap destroyed, projectile returning.')
-        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', firedBy: projectile.firedBy })
+        room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', firedBy: projectile.firedBy, shellId: projectile.shellId })
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
         removeTrap(trap)
         activeTraps.splice(j, 1)
 
         if (projectile.returning) {
-          room.send('shellReturned', { firedBy: projectile.firedBy })
+          room.send('shellReturned', { firedBy: projectile.firedBy, shellId: projectile.shellId })
           removeProjectile(projectile)
           activeProjectiles.splice(i, 1)
           shellConsumed = true

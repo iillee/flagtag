@@ -196,7 +196,7 @@ function getRemotePlayerPosition(userId: string): Vector3 | null {
   return null
 }
 
-export function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeSpeed?: number, chargeRange?: number, chargeScale?: number): void {
+export function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeSpeed?: number, chargeRange?: number, chargeScale?: number, shellId?: number): void {
   const validColors = ['r', 'y', 'b', 'g']
   const c = (color && validColors.includes(color)) ? color : 'r'
   const localEntity = acquireProjectileFromPool(c)
@@ -212,6 +212,7 @@ export function createMsgProjectileVisual(x: number, y: number, z: number, dirX:
 
   msgProjectileVisuals.push({
     entity: localEntity,
+    shellId: shellId || 0,
     firedBy: firedBy?.toLowerCase() || '',
     startX: x, startY: y, startZ: z,
     dirX, dirZ,
@@ -226,25 +227,38 @@ export function createMsgProjectileVisual(x: number, y: number, z: number, dirX:
   console.log('[Projectile] 🎯 Created message-driven projectile visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1), 'speed:', ((chargeSpeed && chargeSpeed > 0) ? chargeSpeed : PROJECTILE_SPEED))
 }
 
-export function removeMsgProjectileVisualByThrower(firedBy: string, x: number, y: number, z: number, isPeak: boolean = false): void {
+export function removeMsgProjectileVisualByThrower(firedBy: string, x: number, y: number, z: number, isPeak: boolean = false, shellId: number = 0): void {
   const throwerId = (firedBy || '').toLowerCase()
   let closestIdx = -1
-  let closestDist = Infinity
-  for (let i = 0; i < msgProjectileVisuals.length; i++) {
-    const vis = msgProjectileVisuals[i]
-    if (throwerId && vis.firedBy !== throwerId) continue
-    const pos = Transform.get(vis.entity).position
-    const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-    if (dist < closestDist) { closestDist = dist; closestIdx = i }
+
+  // Prefer exact shellId match
+  if (shellId > 0) {
+    for (let i = 0; i < msgProjectileVisuals.length; i++) {
+      if (msgProjectileVisuals[i].shellId === shellId) { closestIdx = i; break }
+    }
+    // If shellId provided but not found, visual was already removed — don't fall through
+    if (closestIdx === -1) return
   }
-  if (closestIdx === -1 && throwerId) {
+
+  // Legacy fallback: only for messages without shellId
+  if (closestIdx === -1 && shellId === 0) {
+    let closestDist = Infinity
     for (let i = 0; i < msgProjectileVisuals.length; i++) {
       const vis = msgProjectileVisuals[i]
+      if (throwerId && vis.firedBy !== throwerId) continue
       const pos = Transform.get(vis.entity).position
       const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (dist < closestDist) { closestDist = dist; closestIdx = i }
+    }
+    if (closestIdx === -1 && throwerId) {
+      for (let i = 0; i < msgProjectileVisuals.length; i++) {
+        const vis = msgProjectileVisuals[i]
+        const pos = Transform.get(vis.entity).position
+        const dx = pos.x - x, dy = pos.y - y, dz = pos.z - z
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+        if (dist < closestDist) { closestDist = dist; closestIdx = i }
+      }
     }
   }
   if (closestIdx === -1) return

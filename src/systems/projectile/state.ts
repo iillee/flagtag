@@ -119,6 +119,7 @@ export const localProjectiles: LocalProjectile[] = []
 // ── Message-driven visuals ──
 export interface MsgProjectileVisual {
   entity: Entity
+  shellId: number
   firedBy: string
   startX: number
   startY: number

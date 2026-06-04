@@ -193,6 +193,7 @@ export const hover = {
   closeChest: false,
   closeServerDown: false,
   closeBoombox: false,
+  closeSpectator: false,
 }
 
 // ═══════════════════════════════════════════════════════════

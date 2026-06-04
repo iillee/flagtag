@@ -57,8 +57,8 @@ import { getWinConditionOverlayVisible, setWinConditionOverlayVisible, getLeader
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from './gameState/flagHoldTime'
 import { isCinematicActive } from './gameState/cinematicState'
 import { refreshUpgradesFromServer } from './gameState/playerUpgradeState'
-import { exitSpectatorMode } from './systems/spectatorSystem'
-import { spectatorState } from './shared/clientState'
+import { exitSpectatorMode, setSpectatorMode, selectFollowPlayer } from './systems/spectatorSystem'
+import { spectatorState, type SpectatorMode } from './shared/clientState'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
 import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/ghostSystem'
@@ -376,22 +376,7 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
       <DeathOverlay visible={isGhostDeathRespawning()} message="You were scared to death!" fadeOpacity={getGhostDeathFadeOpacity()} showText={isGhostDeathTextVisible()} respawnCountdown={getGhostDeathRespawnCountdown()} />
 
       {/* Spectator mode */}
-      {spectatorState.active && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(20), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
-          <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 10, bottom: 10, left: 18, right: 18 } : { top: S(14), bottom: S(14), left: S(24), right: S(24) }, borderRadius: mobile ? 14 : S(18) }}
-            uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 0.92) }}
-          >
-            <Label value="SPECTATOR MODE" fontSize={mobile ? 24 : S(28)} color={Color4.White()} />
-            <Label value="WASD = Orbit  |  E/F = Up/Down" fontSize={mobile ? 12 : S(14)} color={Color4.create(1, 1, 1, 0.8)} />
-            <UiEntity uiTransform={{ width: mobile ? 120 : S(160), height: mobile ? 32 : S(40), margin: { top: mobile ? 6 : S(8) }, borderRadius: mobile ? 8 : S(10) }}
-              uiBackground={{ color: miscState.spectatorExitBlink ? Color4.create(0.5, 0.5, 0.5, 0.9) : Color4.create(1, 1, 1, 0.9) }}
-              onMouseDown={() => { miscState.spectatorExitBlink = true; executeTask(async () => { await new Promise<void>(r => setTimeout(r, 120)); miscState.spectatorExitBlink = false }); exitSpectatorMode() }}
-            >
-              <Label value="Exit" fontSize={mobile ? 16 : S(18)} color={Color4.Black()} uiTransform={{ width: '100%', height: '100%' }} />
-            </UiEntity>
-          </UiEntity>
-        </UiEntity>
-      )}
+      {spectatorState.active && <SpectatorHUD mobile={mobile} />}
 
       {/* Title Splash */}
       {cinematicState.titleSplashVisible && (
@@ -409,6 +394,98 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
           </UiEntity>
         </UiEntity>
       )}
+    </UiEntity>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// SPECTATOR HUD
+// ═══════════════════════════════════════════════════════════
+
+const SPEC_MODES: { key: SpectatorMode; label: string }[] = [
+  { key: 'orbit', label: 'Orbit' },
+  { key: 'flag', label: 'Follow Flag' },
+  { key: 'player', label: 'Follow Player' },
+]
+
+function SpectatorHUD({ mobile }: { mobile: boolean }) {
+  const mode = spectatorState.mode
+  const players = getPlayersWithHoldTimes()
+  const carrierUserId = getCurrentFlagCarrierUserId()
+
+  const controlsHint = mode === 'orbit'
+    ? 'WASD = Orbit  |  E/F = Up/Down'
+    : mode === 'flag'
+    ? 'A/D = Strafe  |  E/F = Up/Down'
+    : spectatorState.followPlayerId
+    ? `Following: ${spectatorState.followPlayerName}  |  A/D = Strafe  |  E/F = Up/Down`
+    : 'Select a player to follow'
+
+  const TAB_BG = Color4.create(0.2, 0.2, 0.25, 0.9)
+  const TAB_ACTIVE = Color4.create(0.9, 0.75, 0.2, 1)
+  const TAB_HOVER = Color4.create(0.35, 0.35, 0.4, 0.9)
+  const PANEL = Color4.create(0.08, 0.08, 0.1, 0.94)
+
+  return (
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? 10 : S(16), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
+      {/* Player picker dropdown (above the bar) */}
+      {mode === 'player' && spectatorState.playerPickerOpen && players.length > 0 && (
+        <UiEntity uiTransform={{ flexDirection: 'column', width: mobile ? 280 : S(260), maxHeight: mobile ? 260 : S(240), margin: { bottom: mobile ? 4 : S(4) }, borderRadius: mobile ? 10 : S(10), padding: { top: mobile ? 6 : S(4), bottom: mobile ? 6 : S(4) } }}
+          uiBackground={{ color: PANEL }}
+        >
+          {players.map((p, i) => {
+            const isCarrier = carrierUserId !== null && p.userId.toLowerCase() === carrierUserId.toLowerCase()
+            const isSelected = spectatorState.followPlayerId?.toLowerCase() === p.userId.toLowerCase()
+            return (
+              <UiEntity key={`sp-${i}`}
+                uiTransform={{ height: mobile ? 38 : S(32), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: mobile ? 12 : S(10), right: mobile ? 12 : S(10) }, borderRadius: mobile ? 6 : S(6), margin: { left: mobile ? 4 : S(4), right: mobile ? 4 : S(4), top: mobile ? 2 : S(1), bottom: mobile ? 2 : S(1) } }}
+                uiBackground={{ color: isSelected ? Color4.create(0.9, 0.75, 0.2, 0.25) : Color4.create(0, 0, 0, 0) }}
+                onMouseDown={() => { selectFollowPlayer(p.userId, p.name) }}
+              >
+                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+                  {isCarrier && <UiEntity uiTransform={{ width: mobile ? 16 : S(14), height: mobile ? 16 : S(14), margin: { right: mobile ? 4 : S(4) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
+                  <Label value={p.name} fontSize={mobile ? 18 : S(15)} color={isSelected ? TAB_ACTIVE : LIGHT_GREY} font="sans-serif" />
+                </UiEntity>
+              </UiEntity>
+            )
+          })}
+        </UiEntity>
+      )}
+
+      {/* Main bar */}
+      <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 14 : S(14), padding: mobile ? { top: 8, bottom: 10, left: 12, right: 12 } : { top: S(8), bottom: S(10), left: S(16), right: S(16) } }}
+        uiBackground={{ color: PANEL }}
+      >
+        {/* Title + Close */}
+        <CloseButton hoverKey="closeSpectator" onClose={() => { exitSpectatorMode() }} size={mobile ? 32 : S(28)} fontSize={mobile ? 28 : S(24)} />
+        <Label value="SPECTATOR MODE" fontSize={mobile ? 16 : S(14)} color={MUTED} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 4 : S(2) } }} />
+
+        {/* Mode tabs */}
+        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: mobile ? 6 : S(6) } }}>
+          {SPEC_MODES.map((m, i) => {
+            const isActive = mode === m.key
+            return (
+              <UiEntity key={`tab-${i}`}
+                uiTransform={{ height: mobile ? 34 : S(30), padding: { left: mobile ? 14 : S(12), right: mobile ? 14 : S(12) }, margin: { left: i > 0 ? (mobile ? 4 : S(3)) : 0 }, borderRadius: mobile ? 8 : S(8), justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: isActive ? TAB_ACTIVE : TAB_BG }}
+                onMouseDown={() => {
+                  if (m.key === 'player' && mode === 'player') {
+                    // Toggle picker
+                    spectatorState.playerPickerOpen = !spectatorState.playerPickerOpen
+                  } else {
+                    setSpectatorMode(m.key)
+                  }
+                }}
+              >
+                <Label value={m.label} fontSize={mobile ? 15 : S(14)} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" />
+              </UiEntity>
+            )
+          })}
+        </UiEntity>
+
+        {/* Controls hint */}
+        <Label value={controlsHint} fontSize={mobile ? 11 : S(12)} color={Color4.create(1, 1, 1, 0.6)} font="sans-serif" />
+      </UiEntity>
     </UiEntity>
   )
 }

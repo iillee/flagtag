@@ -72,7 +72,7 @@ export function getProjectileCooldownRemaining(): number {
 
 // ── Message listeners ──
 room.onMessage('shellDropped', (data) => {
-  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale)
+  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale, data.shellId)
   const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
   const throwerId = (data.firedBy || '').toLowerCase()
   if (throwerId && throwerId !== localUserId && data.color === 'b' && data.chargeSpeed >= 55) {
@@ -82,7 +82,7 @@ room.onMessage('shellDropped', (data) => {
 
 room.onMessage('shellTriggered', (data) => {
   const pos = Vector3.create(data.x, data.y, data.z)
-  removeMsgProjectileVisualByThrower(data.firedBy || '', data.x, data.y, data.z, !!data.peak)
+  removeMsgProjectileVisualByThrower(data.firedBy || '', data.x, data.y, data.z, !!data.peak, data.shellId || 0)
   if (data.victimId && data.victimId !== '') {
     showHitEffect(pos)
     playHitSound(pos)
@@ -105,48 +105,62 @@ room.onMessage('shellReturned', (data) => {
   const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
   const playerId = (data.firedBy || '').toLowerCase()
   if (!playerId) return
-
-  // Remove only ONE projectile per shellReturned message (not all).
-  // Prefer the one that's already returning and closest to the player.
+  const shellId = data.shellId || 0
+  // Find the matching visual by exact shellId
   let bestIdx = -1
-  let bestScore = Infinity
-  for (let i = 0; i < msgProjectileVisuals.length; i++) {
-    if (msgProjectileVisuals[i].firedBy !== playerId) continue
-    const vis = msgProjectileVisuals[i]
-    // Returning projectiles get priority (lower score)
-    const returningBonus = vis.returning ? 0 : 10000
-    const pos = Transform.get(vis.entity).position
-    // If returning, score by distance to player (closer = more likely returned)
-    let dist = 0
-    if (vis.returning) {
-      const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
-      const dx = pos.x - playerPos.x, dy = pos.y - playerPos.y, dz = pos.z - playerPos.z
-      dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-    } else {
-      dist = vis.distanceTraveled
+  if (shellId > 0) {
+    for (let i = 0; i < msgProjectileVisuals.length; i++) {
+      if (msgProjectileVisuals[i].shellId === shellId) { bestIdx = i; break }
     }
-    const score = returningBonus + dist
-    if (score < bestScore) { bestScore = score; bestIdx = i }
+    // If shellId was provided but not found, the visual was already cleaned up
+    // client-side (dist < 2.0 check). Do NOT fall through to legacy matching
+    // or we'll accidentally kill a different projectile (e.g. yellow's 2nd throw).
+    if (bestIdx === -1) {
+    }
   }
+
+  // Legacy fallback: only for messages without shellId (shouldn't happen anymore)
+  if (bestIdx === -1 && shellId === 0) {
+    let bestScore = Infinity
+    for (let i = 0; i < msgProjectileVisuals.length; i++) {
+      if (msgProjectileVisuals[i].firedBy !== playerId) continue
+      const vis = msgProjectileVisuals[i]
+      const returningBonus = vis.returning ? 0 : 10000
+      const pos = Transform.get(vis.entity).position
+      let dist = 0
+      if (vis.returning) {
+        const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
+        const dx = pos.x - playerPos.x, dy = pos.y - playerPos.y, dz = pos.z - playerPos.z
+        dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      } else {
+        dist = vis.distanceTraveled
+      }
+      const score = returningBonus + dist
+      if (score < bestScore) { bestScore = score; bestIdx = i }
+    }
+  }
+
   if (bestIdx !== -1) {
     const vis = msgProjectileVisuals[bestIdx]
-    // If the visual is already close to the player, remove immediately.
-    // Otherwise, mark it as returning so it flies back naturally and gets
-    // cleaned up by the dist < 2.0 check in updateMsgProjectileVisuals.
+    const age = Date.now() - vis.createdAtMs
     const pos = Transform.get(vis.entity).position
     const playerPos = Transform.has(engine.PlayerEntity) ? Transform.get(engine.PlayerEntity).position : Vector3.create(vis.startX, vis.startY, vis.startZ)
     const dx = pos.x - playerPos.x, dy = pos.y - playerPos.y, dz = pos.z - playerPos.z
     const distToPlayer = Math.sqrt(dx * dx + dy * dy + dz * dz)
-    if (distToPlayer < 3.0 || vis.returning) {
-      // Close enough or already returning — remove now
+
+    // If the visual is young and still far away, let it fly back naturally
+    // instead of popping it out of existence
+    if (distToPlayer > 3.0 && !vis.returning && age < 3000) {
+      vis.returning = true
+      vis.returnDistance = 0
+
+    } else if (distToPlayer < 3.0 || vis.returning) {
       if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity!)
       releaseProjectileToPool(vis.entity)
       msgProjectileVisuals.splice(bestIdx, 1)
     } else {
-      // Still in flight — force it to start returning so it flies back naturally
       vis.returning = true
       vis.returnDistance = 0
-      console.log('[Projectile] shellReturned received but visual still in flight — forcing return')
     }
   }
 
