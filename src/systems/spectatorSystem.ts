@@ -217,11 +217,7 @@ function spectatorMovementSystem(dt: number) {
   if (exitGracePeriod > 0) exitGracePeriod -= dt
   if (!spectatorState.active) return
 
-  // Exit with 1 key
-  if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN)) {
-    exitSpectatorMode()
-    return
-  }
+
 
   const mode = spectatorState.mode
 
