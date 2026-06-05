@@ -244,10 +244,11 @@ function spectatorMovementSystem(dt: number) {
   followLookZ += (targetPos.z - followLookZ) * lerpF
 
   // Orbit controls: A/D rotate, W/S zoom, E/F height
-  if (inputSystem.isPressed(InputAction.IA_LEFT))  followAngle += 0.75 * dt
-  if (inputSystem.isPressed(InputAction.IA_RIGHT)) followAngle -= 0.75 * dt
-  if (inputSystem.isPressed(InputAction.IA_FORWARD))  followDist = Math.max(FOLLOW_MIN_DIST, followDist - CAM_MOVE_SPEED * dt)
-  if (inputSystem.isPressed(InputAction.IA_BACKWARD)) followDist = Math.min(FOLLOW_MAX_DIST, followDist + CAM_MOVE_SPEED * dt)
+  const ORBIT_SPEED = 0.75
+  if (inputSystem.isPressed(InputAction.IA_LEFT))  followAngle += ORBIT_SPEED * dt
+  if (inputSystem.isPressed(InputAction.IA_RIGHT)) followAngle -= ORBIT_SPEED * dt
+  if (inputSystem.isPressed(InputAction.IA_FORWARD))  followDist = Math.max(FOLLOW_MIN_DIST, followDist - followDist * ORBIT_SPEED * dt)
+  if (inputSystem.isPressed(InputAction.IA_BACKWARD)) followDist = Math.min(FOLLOW_MAX_DIST, followDist + followDist * ORBIT_SPEED * dt)
   if (inputSystem.isPressed(InputAction.IA_PRIMARY))   followHeight += CAM_MOVE_SPEED * dt
   if (inputSystem.isPressed(InputAction.IA_SECONDARY)) followHeight = Math.max(2, followHeight - CAM_MOVE_SPEED * dt)
 
