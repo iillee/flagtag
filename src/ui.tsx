@@ -387,7 +387,6 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
 // ═══════════════════════════════════════════════════════════
 
 const SPEC_MODES: { key: SpectatorMode; label: string }[] = [
-  { key: 'orbit', label: 'Orbit' },
   { key: 'flag', label: 'Follow Flag' },
   { key: 'player', label: 'Follow Player' },
 ]
@@ -397,9 +396,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
   const players = getPlayersWithHoldTimes()
   const carrierUserId = getCurrentFlagCarrierUserId()
 
-  const controlsHint = mode === 'orbit'
-    ? 'WASD = Orbit  |  E/F = Up/Down'
-    : mode === 'flag'
+  const controlsHint = mode === 'flag'
     ? 'W/S = Zoom  |  A/D = Orbit  |  E/F = Up/Down'
     : spectatorState.followPlayerId
     ? `Following: ${spectatorState.followPlayerName}  |  W/S = Zoom  |  A/D = Orbit  |  E/F = Up/Down`
@@ -407,7 +404,6 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
 
   const TAB_BG = Color4.create(0.2, 0.2, 0.25, 0.9)
   const TAB_ACTIVE = Color4.create(0.9, 0.75, 0.2, 1)
-  const TAB_HOVER = Color4.create(0.35, 0.35, 0.4, 0.9)
   const PANEL = Color4.create(0.08, 0.08, 0.1, 0.94)
 
   return (
@@ -440,7 +436,6 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
       <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 14 : S(14), padding: mobile ? { top: 8, bottom: 10, left: 12, right: 12 } : { top: S(8), bottom: S(10), left: S(16), right: S(16) } }}
         uiBackground={{ color: PANEL }}
       >
-        {/* Title + Close */}
         <CloseButton hoverKey="closeSpectator" onClose={() => { exitSpectatorMode() }} size={mobile ? 32 : S(28)} fontSize={mobile ? 28 : S(24)} />
         <Label value="SPECTATOR MODE" fontSize={mobile ? 16 : S(14)} color={MUTED} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 4 : S(2) } }} />
 
@@ -454,7 +449,6 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
                 uiBackground={{ color: isActive ? TAB_ACTIVE : TAB_BG }}
                 onMouseDown={() => {
                   if (m.key === 'player' && mode === 'player') {
-                    // Toggle picker
                     spectatorState.playerPickerOpen = !spectatorState.playerPickerOpen
                   } else {
                     setSpectatorMode(m.key)
