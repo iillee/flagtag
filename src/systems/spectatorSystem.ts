@@ -249,8 +249,8 @@ function spectatorMovementSystem(dt: number) {
   if (inputSystem.isPressed(InputAction.IA_RIGHT)) followAngle -= ORBIT_SPEED * dt
   if (inputSystem.isPressed(InputAction.IA_FORWARD))  followDist = Math.max(FOLLOW_MIN_DIST, followDist - followDist * ORBIT_SPEED * dt)
   if (inputSystem.isPressed(InputAction.IA_BACKWARD)) followDist = Math.min(FOLLOW_MAX_DIST, followDist + followDist * ORBIT_SPEED * dt)
-  if (inputSystem.isPressed(InputAction.IA_PRIMARY))   followHeight += CAM_MOVE_SPEED * dt
-  if (inputSystem.isPressed(InputAction.IA_SECONDARY)) followHeight = Math.max(2, followHeight - CAM_MOVE_SPEED * dt)
+  if (inputSystem.isPressed(InputAction.IA_PRIMARY))   followHeight += followHeight * ORBIT_SPEED * dt
+  if (inputSystem.isPressed(InputAction.IA_SECONDARY)) followHeight = Math.max(2, followHeight - followHeight * ORBIT_SPEED * dt)
 
   // Update look-at entity
   const lt = Transform.getMutable(lookTargetEntity)
