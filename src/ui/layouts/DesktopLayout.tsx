@@ -132,7 +132,7 @@ export function DesktopLayout() {
         {/* Icon buttons */}
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
           <IconButton hoverKey="squareIcon" label="Status" isActive={leaderboardVisible}
-            iconContent={<UiEntity uiTransform={{ width: S(38), height: S(38), margin: { right: S(-8) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE }} />}
+            iconContent={<UiEntity uiTransform={{ width: S(38), height: S(38), margin: { right: S(-6) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE }} />}
             onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsState.openedFromTerminal = false; hideChestPopup(); hideBoomboxPopup(); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
           <UiEntity uiTransform={{ height: S(4) }} />
