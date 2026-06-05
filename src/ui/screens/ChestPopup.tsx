@@ -8,23 +8,22 @@ import { S, GOLD, GREY, LIGHT_GREY, WHITE, BRIGHT_WHITE, CORAL_RED, PANEL_BG } f
 import { hideChestPopup } from '../uiState'
 import { CloseButton } from '../components/CloseButton'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
-import { getLocalUpgrades, getLocalLifetimeWins, isWinsLoaded, requestBuyBoomerang, isBuyPending, getLastBuyError } from '../../gameState/playerUpgradeState'
+import { getLocalUpgrades, getLocalLifetimeWins, isWinsLoaded, requestBuyBoomerang, requestEquipBoomerang, isBuyPending, getLastBuyError } from '../../gameState/playerUpgradeState'
+import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { BOOMERANG_STORE } from '../../shared/upgrades'
-
-/** Store items excluding red (everyone has it by default) */
-const STORE_ITEMS = BOOMERANG_STORE.filter(item => item.id !== 'r')
 
 export function ChestPopup() {
   const mobile = isMobile()
   const upgrades = getLocalUpgrades()
   const lifetimeWins = getLocalLifetimeWins()
   const coins = getCoinBalance()
+  const equipped = getBoomerangColor()
   const pending = isBuyPending()
   const buyError = getLastBuyError()
   const LOCKED_BG = Color4.create(0.1, 0.1, 0.12, 1)
   const OWNED_BG = Color4.create(0.15, 0.15, 0.18, 1)
+  const SELECTED_BG = Color4.create(0.45, 0.38, 0.1, 1)
   const RED_DIM = Color4.create(0.7, 0.25, 0.25, 1)
-  const OWNED_GREY = Color4.create(0.5, 0.5, 0.5, 1)
 
   return (
     <UiEntity uiTransform={{
@@ -50,7 +49,7 @@ export function ChestPopup() {
       >
         <CloseButton hoverKey="closeChest" onClose={() => { hideChestPopup() }} />
 
-        <Label value="Store" fontSize={mobile ? 38 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 4 : S(4) } }} />
+        <Label value="Chest" fontSize={mobile ? 38 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 4 : S(4) } }} />
 
         {/* Wallet row */}
         <UiEntity uiTransform={{
@@ -70,15 +69,16 @@ export function ChestPopup() {
 
         {/* Boomerang grid — no red card, no equip */}
         <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
-          {STORE_ITEMS.map((item) => {
+          {BOOMERANG_STORE.map((item) => {
             const owned = upgrades.boomerangs.includes(item.id)
+            const selected = equipped === item.id
             const canAfford = coins >= item.coinCost
             const hasFlags = lifetimeWins >= item.flagsRequired
             const locked = !owned && (!canAfford || !hasFlags)
             const canBuy = !owned && canAfford && hasFlags && item.coinCost > 0
 
-            const bgColor = owned ? OWNED_BG : LOCKED_BG
-            const cardWidth = mobile ? 110 : S(130)
+            const bgColor = selected ? SELECTED_BG : owned ? OWNED_BG : LOCKED_BG
+            const cardWidth = mobile ? 100 : S(120)
             const cardHeight = mobile ? 200 : S(240)
 
             return (
@@ -98,22 +98,24 @@ export function ChestPopup() {
                 }}
                 uiBackground={{ color: bgColor }}
                 onMouseDown={() => {
-                  if (canBuy && !pending) {
+                  if (owned) {
+                    requestEquipBoomerang(item.id)
+                  } else if (canBuy && !pending) {
                     requestBuyBoomerang(item.id)
                   }
                 }}
               >
                 <UiEntity
                   uiTransform={{ width: mobile ? 76 : S(90), height: mobile ? 76 : S(90), margin: { top: mobile ? 6 : S(8) } }}
-                  uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${item.id}.png` }, color: owned ? Color4.create(0.4, 0.4, 0.4, 0.6) : locked ? Color4.create(0.4, 0.4, 0.4, 1) : Color4.White() }}
+                  uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${item.id}.png` }, color: owned ? Color4.White() : Color4.create(0.4, 0.4, 0.4, 1) }}
                 />
-                <Label value={item.label} fontSize={mobile ? 18 : S(16)} color={owned ? OWNED_GREY : GREY} uiTransform={{ margin: { top: mobile ? 4 : S(6) } }} />
+                <Label value={item.label} fontSize={mobile ? 18 : S(16)} color={selected ? GOLD : owned ? LIGHT_GREY : GREY} uiTransform={{ margin: { top: mobile ? 4 : S(6) } }} />
 
                 {owned ? (
                   <Label
-                    value="Owned"
+                    value={selected ? 'Equipped' : 'Equip'}
                     fontSize={mobile ? 14 : S(13)}
-                    color={OWNED_GREY}
+                    color={selected ? GOLD : LIGHT_GREY}
                     uiTransform={{ margin: { top: mobile ? 6 : S(6) } }}
                   />
                 ) : (
@@ -154,14 +156,6 @@ export function ChestPopup() {
         {buyError ? (
           <Label value={buyError} fontSize={mobile ? 15 : S(13)} color={CORAL_RED} uiTransform={{ margin: { top: mobile ? 10 : S(10) } }} />
         ) : null}
-
-        {/* Inventory hint */}
-        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { top: mobile ? 16 : S(16) } }}>
-          <Label value="Check your Inventory " fontSize={mobile ? 14 : S(13)} color={LIGHT_GREY} />
-          <UiEntity uiTransform={{ width: mobile ? 32 : S(32), height: mobile ? 32 : S(32), margin: { right: mobile ? 4 : S(4) } }}
-            uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: LIGHT_GREY }} />
-          <Label value=" to equip" fontSize={mobile ? 14 : S(13)} color={LIGHT_GREY} />
-        </UiEntity>
       </UiEntity>
     </UiEntity>
   )

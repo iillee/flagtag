@@ -30,7 +30,7 @@ import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect } from './combatSystem'
-import { getInputActionForCategory } from '../ui/inventory/state'
+
 
 const TRAP_MODEL_SRC = 'assets/models/banana_scaled.glb'
 const TRAP_SCALE = Vector3.create(1, 1, 1)
@@ -646,8 +646,8 @@ export function trapClientSystem(dt: number): void {
   }
 
   // Trap key — drop trap (disabled in spectator mode)
-  const trapAction = getInputActionForCategory('trap')
-  if (trapAction !== null && inputSystem.isTriggered(trapAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
+  const trapAction = InputAction.IA_SECONDARY
+  if (inputSystem.isTriggered(trapAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

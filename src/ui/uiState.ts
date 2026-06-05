@@ -256,7 +256,6 @@ export const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
 let _getWinConditionOverlayVisible: () => boolean = () => false
 let _getLeaderboardOverlayVisible: () => boolean = () => false
 let _getAnalyticsOverlayVisible: () => boolean = () => false
-let _getInventoryVisible: () => boolean = () => false
 
 export function registerOverlayChecks(
   winFn: () => boolean,
@@ -268,17 +267,12 @@ export function registerOverlayChecks(
   _getAnalyticsOverlayVisible = analyticsFn
 }
 
-export function registerInventoryCheck(fn: () => boolean) {
-  _getInventoryVisible = fn
-}
-
 /** Returns true if any UI overlay is currently visible */
 export function isAnyOverlayOpen(): boolean {
   return cinematicState.titleSplashVisible
     || _getWinConditionOverlayVisible()
     || _getLeaderboardOverlayVisible()
     || _getAnalyticsOverlayVisible()
-    || _getInventoryVisible()
     || splashState.visible
     || serverDownState.visible
     || mobileState.scoreboardVisible
