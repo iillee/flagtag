@@ -18,12 +18,12 @@ let _dailyCache: { json: string; result: LeaderboardEntry[] } = { json: '', resu
 let _monthlyCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
 let _allTimeCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
 
-function parseAndSort(json: string, cache: { json: string; result: LeaderboardEntry[] }): LeaderboardEntry[] {
+function parseAndSort(json: string, cache: { json: string; result: LeaderboardEntry[] }, applyHidden: boolean = true): LeaderboardEntry[] {
   if (json === cache.json) return cache.result
   if (!json) { cache.json = json; cache.result = []; return [] }
   try {
     const entries: LeaderboardEntry[] = JSON.parse(json)
-    const visible = entries.filter(e => !HIDDEN_ADDRESSES.has(e.userId.toLowerCase()))
+    const visible = applyHidden ? entries.filter(e => !HIDDEN_ADDRESSES.has(e.userId.toLowerCase())) : entries
     const originalIndex = new Map(visible.map((e, i) => [e.userId, i]))
     visible.sort((a, b) => {
       if (b.roundsWon !== a.roundsWon) return b.roundsWon - a.roundsWon
@@ -42,7 +42,7 @@ function parseAndSort(json: string, cache: { json: string; result: LeaderboardEn
 /** Read leaderboard from the synced LeaderboardState component (server writes it). */
 export function getLeaderboardEntries(): LeaderboardEntry[] {
   for (const [, lb] of engine.getEntitiesWith(LeaderboardState)) {
-    return parseAndSort(lb.json, _dailyCache)
+    return parseAndSort(lb.json, _dailyCache, false)
   }
   return []
 }
@@ -50,7 +50,7 @@ export function getLeaderboardEntries(): LeaderboardEntry[] {
 /** Read monthly leaderboard from the synced MonthlyLeaderboardState component. */
 export function getMonthlyLeaderboardEntries(): LeaderboardEntry[] {
   for (const [, lb] of engine.getEntitiesWith(MonthlyLeaderboardState)) {
-    return parseAndSort(lb.json, _monthlyCache)
+    return parseAndSort(lb.json, _monthlyCache, false)
   }
   return []
 }
