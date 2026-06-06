@@ -6,6 +6,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { S, GOLD, SILVER, BRONZE, LIGHT_GREY, CLOSE_GREY, PANEL_BG } from '../uiConstants'
+import { playClickSound } from '../uiSounds'
 import { splashState, cinematicState, notifyOverlayClosed } from '../uiState'
 
 export function RoundEndSplash() {
@@ -53,7 +54,7 @@ export function RoundEndSplash() {
               width: 88, height: 88,
               flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
             }}
-            onMouseDown={() => { splashState.visible = false; notifyOverlayClosed() }}
+            onMouseDown={() => { playClickSound(); splashState.visible = false; notifyOverlayClosed() }}
           >
             <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
           </UiEntity>
@@ -92,8 +93,7 @@ export function RoundEndSplash() {
               </UiEntity>
             )
           })}
-          <UiEntity uiTransform={{ height: mobile ? 20 : S(24) }} />
-          <Label value="Next round starting..." fontSize={mobile ? 22 : S(15)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: mobile ? 500 : S(440), flexShrink: 0 }} textAlign="middle-center" />
+
         </UiEntity>
       </UiEntity>
     </UiEntity>

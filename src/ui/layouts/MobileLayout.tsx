@@ -7,6 +7,7 @@ import {
   PANEL_BG,
   formatCountdown,
 } from '../uiConstants'
+import { playClickSound } from '../uiSounds'
 import {
   notifyOverlayClosed,
   scroll, tabs,
@@ -65,7 +66,7 @@ export function MobileLayout() {
               </UiEntity>
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18, right: 30 }, borderRadius: 34 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' } }}
-                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); mobileState.scoreboardVisible = !mobileState.scoreboardVisible }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); mobileState.scoreboardVisible = !mobileState.scoreboardVisible }}
               >
                 <UiEntity uiTransform={{ width: 34, height: 34, margin: { right: 8 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/expand.png' }, color: Color4.White() }} />
                 <Label value="Score:" fontSize={32} color={scoreColor} font="sans-serif" />
@@ -75,13 +76,13 @@ export function MobileLayout() {
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; toggleWinConditionOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; toggleWinConditionOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="?" fontSize={36} color={winConditionVisible ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 6 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; tabs.folder = 'status'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; tabs.folder = 'status'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardVisible ? GOLD : WHITE }} />
               </UiEntity>
@@ -98,7 +99,7 @@ export function MobileLayout() {
           <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 44, left: '50%' }, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: -(AB_SIZE + 10) } }}>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { right: 20 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { triggerTrapFromUI() }}
+              onMouseDown={() => { playClickSound(); triggerTrapFromUI() }}
             >
               <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
@@ -106,7 +107,7 @@ export function MobileLayout() {
             </UiEntity>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { triggerProjectileFromUI() }}
+              onMouseDown={() => { playClickSound(); triggerProjectileFromUI() }}
               onMouseUp={() => { triggerProjectileReleaseFromUI() }}
             >
               {/* Blue charge circle glow — over black bg, under boomerang icon */}
@@ -138,7 +139,7 @@ export function MobileLayout() {
             uiBackground={{ color: PANEL_BG }}
           >
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 4, right: 4 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-              onMouseDown={() => { mobileState.scoreboardVisible = false; notifyOverlayClosed() }}
+              onMouseDown={() => { playClickSound(); mobileState.scoreboardVisible = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
@@ -208,7 +209,7 @@ function MobileStatusPopup() {
         <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 48, alignItems: 'center', margin: { bottom: 8 } }}>
           <Label value="Status" fontSize={32} color={GOLD} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
           <UiEntity uiTransform={{ width: 48, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-            onMouseDown={() => { setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
+            onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
           >
             <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
           </UiEntity>

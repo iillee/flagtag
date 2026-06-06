@@ -5,6 +5,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { S, GOLD, GREY, LIGHT_GREY, WHITE, BRIGHT_WHITE, CORAL_RED, PANEL_BG } from '../uiConstants'
+import { playClickSound } from '../uiSounds'
 import { hideChestPopup } from '../uiState'
 import { CloseButton } from '../components/CloseButton'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
@@ -98,6 +99,7 @@ export function ChestPopup() {
                 }}
                 uiBackground={{ color: bgColor }}
                 onMouseDown={() => {
+                  playClickSound()
                   if (owned) {
                     requestEquipBoomerang(item.id)
                   } else if (canBuy && !pending) {

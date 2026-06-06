@@ -7,6 +7,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { S, GOLD, MUTED, WHITE, CLOSE_GREY } from '../uiConstants'
+import { playClickSound } from '../uiSounds'
 import { hover, notifyOverlayClosed } from '../uiState'
 import { getEquippedTape } from './boomboxState'
 import { setWinConditionOverlayVisible } from '../../gameState/overlayState'
@@ -124,7 +125,7 @@ export function HowToPlayOverlay() {
             <KeyBinding keyLabel="E" text="Throw Boomerang" s={s} />
             <KeyBinding keyLabel="F" text="Drop Banana" s={s} />
             <KeyBinding keyLabel="3" text="Drop Flag" s={s} />
-            <KeyBinding keyLabel="2" text={getEquippedTape() ? "Mute" : "Insert Tape"} s={s} />
+            <KeyBinding keyLabel="2" text="Mute" s={s} />
             {!mobile && <KeyBinding keyLabel="1" text="Toggle UI Size" s={s} last />}
           </UiEntity>
           {/* Close X */}
@@ -140,7 +141,7 @@ export function HowToPlayOverlay() {
             }}
             onMouseEnter={() => { hover.closeWinCondition = true }}
             onMouseLeave={() => { hover.closeWinCondition = false }}
-            onMouseDown={() => { setWinConditionOverlayVisible(false); hover.closeWinCondition = false; notifyOverlayClosed() }}
+            onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); hover.closeWinCondition = false; notifyOverlayClosed() }}
           >
             <Label value="×" fontSize={mobile ? 52 : S(44)} color={hover.closeWinCondition ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
           </UiEntity>

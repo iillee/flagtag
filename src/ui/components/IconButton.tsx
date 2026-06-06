@@ -4,6 +4,7 @@
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { S, GOLD, PANEL_BG, _ROW_HEIGHT, _PADDING, _TITLE_FONT, _BORDER_RADIUS } from '../uiConstants'
+import { playClickSound } from '../uiSounds'
 import { hover } from '../uiState'
 
 
@@ -36,7 +37,7 @@ export function IconButton({ hoverKey, label, isActive, iconContent, onClick, ho
         uiBackground={{ color: hovered ? Color4.create(0, 0, 0, 0) : PANEL_BG }}
         onMouseEnter={() => { hover[hoverKey] = true;  }}
         onMouseLeave={() => { hover[hoverKey] = false }}
-        onMouseDown={() => { onClick() }}
+        onMouseDown={() => { playClickSound(); onClick() }}
       >
         {iconContent}
       </UiEntity>

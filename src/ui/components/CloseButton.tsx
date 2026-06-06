@@ -6,6 +6,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { S, CLOSE_GREY } from '../uiConstants'
+import { playClickSound } from '../uiSounds'
 import { hover } from '../uiState'
 
 const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
@@ -34,7 +35,7 @@ export function CloseButton({ hoverKey, onClose, size, fontSize }: CloseButtonPr
       }}
       onMouseEnter={() => { hover[hoverKey] = true }}
       onMouseLeave={() => { hover[hoverKey] = false }}
-      onMouseDown={() => { onClose(); hover[hoverKey] = false }}
+      onMouseDown={() => { playClickSound(); onClose(); hover[hoverKey] = false }}
     >
       <Label value="×" fontSize={fs} color={hover[hoverKey] ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
     </UiEntity>

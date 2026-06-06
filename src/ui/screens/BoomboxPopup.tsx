@@ -6,6 +6,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { AudioSource } from '@dcl/sdk/ecs'
 import { S, GOLD, GREY, LIGHT_GREY, PANEL_BG, BRIGHT_WHITE } from '../uiConstants'
+import { playClickSound } from '../uiSounds'
 import { CloseButton } from '../components/CloseButton'
 import { hideBoomboxPopup } from '../uiState'
 import { musicEntity } from '../../systems/musicSetup'
@@ -91,7 +92,7 @@ export function BoomboxPopup() {
             borderColor: equippedTape ? GOLD : Color4.create(0.3, 0.3, 0.3, 0.5),
           }}
           uiBackground={{ color: equippedTape ? SLOT_BG_ACTIVE : Color4.create(0.06, 0.06, 0.08, 0.5) }}
-          onMouseDown={() => { if (equippedTape) ejectTape() }}
+          onMouseDown={() => { if (equippedTape) { playClickSound(); ejectTape() } }}
           >
             {equippedTape && (
               <UiEntity
@@ -158,7 +159,7 @@ export function BoomboxPopup() {
                 uiBackground={{ color: bg }}
                 onMouseEnter={() => { if (!isEquipped) hoveredTapeId = tape.id }}
                 onMouseLeave={() => { if (hoveredTapeId === tape.id) hoveredTapeId = null }}
-                onMouseDown={() => { if (!isEquipped) selectTape(tape) }}
+                onMouseDown={() => { if (!isEquipped) { playClickSound(); selectTape(tape) } }}
               >
                 {!isEquipped && (
                   <UiEntity

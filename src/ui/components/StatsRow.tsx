@@ -6,6 +6,7 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { AudioSource } from '@dcl/sdk/ecs'
 import { S, LIGHT_GREY, GOLD, _ROW_HEIGHT, formatUTCTime, formatPlaytime } from '../uiConstants'
 import { miscState, ADMIN_ADDRESS } from '../uiState'
+import { playClickSound } from '../uiSounds'
 import { getEquippedTape, setEquippedTape, getLastTapeId, TAPE_ITEMS } from '../screens/boomboxState'
 import { room } from '../../shared/messages'
 import { musicEntity } from '../../systems/musicSetup'
@@ -48,6 +49,7 @@ export function StatsRow({ visitorCount, botCount, onlineCount, serverConnected,
       <UiEntity
         uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
         onMouseDown={() => {
+          playClickSound()
           const equipped = getEquippedTape()
           if (equipped !== null) {
             setEquippedTape(null)

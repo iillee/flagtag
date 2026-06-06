@@ -19,6 +19,7 @@ import { setLeaderboardOverlayVisible } from '../../gameState/overlayState'
 import { SubTabBar } from '../components/SubTabBar'
 import { Scrollbar } from '../components/Scrollbar'
 import { StatsRow } from '../components/StatsRow'
+import { playClickSound } from '../uiSounds'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
@@ -88,7 +89,7 @@ export function StatusPopup() {
             uiTransform={{ width: S(40), height: S(40), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(6) }}
             onMouseEnter={() => { hover.closeLeaderboard = true }}
             onMouseLeave={() => { hover.closeLeaderboard = false }}
-            onMouseDown={() => { setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; notifyOverlayClosed() }}
+            onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; notifyOverlayClosed() }}
           >
             <Label value="×" fontSize={S(38)} color={hover.closeLeaderboard ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
           </UiEntity>
@@ -211,7 +212,7 @@ export function MetricsOverlay({ allVisitors, localUserId, onlineCount, totalPla
               uiTransform={{ width: S(80), height: S(80), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(6), margin: { top: S(-6) } }}
               onMouseEnter={() => { hover.closeLeaderboard = true }}
               onMouseLeave={() => { hover.closeLeaderboard = false }}
-              onMouseDown={() => { setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; metricsState.openedFromTerminal = false; notifyOverlayClosed() }}
+              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; metricsState.openedFromTerminal = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={S(38)} color={hover.closeLeaderboard ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>
