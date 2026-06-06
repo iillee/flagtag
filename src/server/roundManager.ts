@@ -29,15 +29,12 @@ import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime } from './economy'
 import { capture } from './posthog'
 import { EnvVar } from '@dcl/sdk/server'
 
-let ROUND_WINNER_WEBHOOK = ''
+const ROUND_WINNER_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1512612923548373135/kDMyVFdidPBhHuenVmrvYaNgPCZGfXI8xhMbXSPlbRLvo05SjgcdzlKDcVNxOjaKmH10'
+let ROUND_WINNER_WEBHOOK = ROUND_WINNER_WEBHOOK_FALLBACK
 
 export async function loadRoundWinnerWebhook(): Promise<void> {
-  ROUND_WINNER_WEBHOOK = (await EnvVar.get('DISCORD_ROUND_WINNER_WEBHOOK')) || ''
-  if (!ROUND_WINNER_WEBHOOK) {
-    console.log('[Server] ⚠️ DISCORD_ROUND_WINNER_WEBHOOK env var not set — round winner notifications disabled')
-  } else {
-    console.log('[Server] ✅ Round winner webhook URL loaded from EnvVar')
-  }
+  ROUND_WINNER_WEBHOOK = (await EnvVar.get('DISCORD_ROUND_WINNER_WEBHOOK')) || ROUND_WINNER_WEBHOOK_FALLBACK
+  console.log('[Server] ✅ Round winner webhook loaded')
 }
 
 // ── Lightning state ──
@@ -390,11 +387,15 @@ async function handleRoundEnd(): Promise<void> {
     LeaderboardState.getMutable(leaderboardEntity).json = dailyJson
     await persistLeaderboard(dailyJson)
 
-    const atEntries = parseLeaderboardJson(AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)?.json)
+    // All-time: read full data from Storage, update, persist full, sync compact
+    const atFullJson = (await (async () => { try { return await Storage.get<string>('allTimeLeaderboard') } catch { return null } })()) || '[]'
+    const atEntries = parseLeaderboardJson(atFullJson)
     incrementLeaderboardWins(atEntries, players, maxSeconds)
-    const atJson = JSON.stringify(atEntries)
-    AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = atJson
-    await persistAllTimeLeaderboard(atJson)
+    await persistAllTimeLeaderboard(JSON.stringify(atEntries))
+    // Compact format for CRDT sync
+    atEntries.sort((a, b) => b.roundsWon - a.roundsWon)
+    const atCompact = atEntries.slice(0, 500).map(e => ({ n: e.name, w: e.roundsWon }))
+    AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = JSON.stringify(atCompact)
 
     const currentMonth = getCurrentMonthString()
     const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)

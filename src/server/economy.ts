@@ -8,9 +8,8 @@ import {
   walletEntities, upgradeEntities, lifetimeWinsEntities, lifetimeHoldTimeEntities,
   playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache, playerLifetimeHoldTimeCache,
   playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
-  coinStateEntity, allTimeLeaderboardEntity
+  coinStateEntity
 } from './serverState'
-import { parseLeaderboardJson } from './leaderboard'
 import {
   CoinState, PlayerWallet, COIN_RESPAWN_INTERVAL_SEC,
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
@@ -22,7 +21,6 @@ import {
   parseUpgrades, serializeUpgrades, BOOMERANG_STORE,
   type UpgradeData
 } from '../shared/upgrades'
-import { AllTimeLeaderboardState } from '../shared/components'
 import { room } from '../shared/messages'
 import type { BoomerangColor } from '../gameState/boomerangColor'
 
@@ -140,14 +138,19 @@ export async function loadPlayerLifetimeWins(walletAddress: string): Promise<num
     const saved = await Storage.get<string>(`lifetimeWins:${key}`)
     let wins = saved ? parseInt(saved, 10) : 0
 
-    // Reconcile with all-time leaderboard — always take the higher value
-    const atEntries = parseLeaderboardJson(AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity)?.json)
-    const entry = atEntries.find(e => e.userId.toLowerCase() === key)
-    if (entry && entry.roundsWon > wins) {
-      console.log('[LifetimeWins] Reconciled', key.slice(0, 8), 'from', wins, 'to', entry.roundsWon, '(all-time leaderboard)')
-      wins = entry.roundsWon
-      await Storage.set(`lifetimeWins:${key}`, String(wins))
-    }
+    // Reconcile with all-time leaderboard (full format in Storage) — always take the higher value
+    try {
+      const atFull = await Storage.get<string>('allTimeLeaderboard')
+      if (atFull) {
+        const atEntries: { userId: string; roundsWon: number }[] = JSON.parse(atFull)
+        const entry = atEntries.find(e => e.userId.toLowerCase() === key)
+        if (entry && entry.roundsWon > wins) {
+          console.log('[LifetimeWins] Reconciled', key.slice(0, 8), 'from', wins, 'to', entry.roundsWon, '(all-time leaderboard)')
+          wins = entry.roundsWon
+          await Storage.set(`lifetimeWins:${key}`, String(wins))
+        }
+      }
+    } catch { /* reconciliation is best-effort */ }
 
     playerLifetimeWinsCache.set(key, wins)
     return wins

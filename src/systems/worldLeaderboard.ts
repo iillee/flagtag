@@ -145,7 +145,10 @@ export function setupWorldLeaderboard(): void {
   )
   pointerEventsSystem.onPointerDown(
     { entity: nextBtnEntity, opts: { button: InputAction.IA_POINTER, hoverText: 'Next Page', maxDistance: 20 } },
-    () => { pageOffset += MAX_ROWS; lastRenderedText = ''; updateBoard() }
+    () => {
+      const allEntries = activeTab === 'daily' ? getLeaderboardEntries() : getAllTimeLeaderboardEntries()
+      if (pageOffset + MAX_ROWS < allEntries.length) { pageOffset += MAX_ROWS; lastRenderedText = ''; updateBoard() }
+    }
   )
 
   // Auto-refresh system (every 2s)
@@ -225,7 +228,7 @@ function updateBoard(): void {
 
   const top = allEntries.slice(pageOffset, pageOffset + MAX_ROWS)
 
-  // Skip update if nothing changed (but always re-check when board is empty)
+  // Skip update if nothing changed
   const newText = activeTab + '|' + pageOffset + '|' + top.map(e => `${e.name}:${e.roundsWon}`).join(',')
   if (newText === lastRenderedText) return
   lastRenderedText = newText

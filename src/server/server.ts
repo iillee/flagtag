@@ -185,14 +185,23 @@ async function initLeaderboards() {
 
   // Daily
   const dailyJson = patchAllLeaderboardNames((await load('leaderboard')) || '[]', 'leaderboard')
+  console.log('[Server] Daily leaderboard JSON size:', dailyJson.length, 'bytes')
   setLeaderboardEntity(engine.addEntity())
   LeaderboardState.create(leaderboardEntity, { json: dailyJson, date: '' })
   syncEntity(leaderboardEntity, [LeaderboardState.componentId], SyncIds.LEADERBOARD)
 
-  // All-time
-  const atJson = patchAllLeaderboardNames((await load('allTimeLeaderboard')) || '[]', 'all-time leaderboard')
+  // All-time — compact format {n,w} for CRDT sync (full data stays in Storage)
+  const atJsonFull = patchAllLeaderboardNames((await load('allTimeLeaderboard')) || '[]', 'all-time leaderboard')
+  let atJsonSync = '[]'
+  try {
+    const atEntries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(atJsonFull)
+    atEntries.sort((a, b) => b.roundsWon - a.roundsWon)
+    const compact = atEntries.slice(0, 500).map(e => ({ n: e.name, w: e.roundsWon }))
+    atJsonSync = JSON.stringify(compact)
+    console.log('[Server] All-time leaderboard:', atEntries.length, 'entries,', atJsonFull.length, 'bytes full,', atJsonSync.length, 'bytes compact')
+  } catch { console.log('[Server] All-time leaderboard parse failed, using empty') }
   setAllTimeLeaderboardEntity(engine.addEntity())
-  AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: atJson })
+  AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: atJsonSync })
   syncEntity(allTimeLeaderboardEntity, [AllTimeLeaderboardState.componentId], SyncIds.ALLTIME_LEADERBOARD)
 
   // Monthly
@@ -248,15 +257,12 @@ function registerSystems() {
 
 
 /** Register the registerName handler (only handler still in server.ts). */
-let mailboxWebhook = ''
+const MAILBOX_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1504487871648632843/usPz24jkxogWcXoS7gYGZjOmHCW90plbLJCBZYLfQzNACEe6fyKQ-fNoYM5Da8Lf0YMD'
+let mailboxWebhook = MAILBOX_WEBHOOK_FALLBACK
 
 async function loadMailboxWebhook(): Promise<void> {
-  mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || ''
-  if (!mailboxWebhook) {
-    console.log('[Server] ⚠️ DISCORD_MAILBOX_WEBHOOK env var not set — feedback notifications disabled')
-  } else {
-    console.log('[Server] ✅ Mailbox webhook URL loaded from EnvVar')
-  }
+  mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || MAILBOX_WEBHOOK_FALLBACK
+  console.log('[Server] ✅ Mailbox webhook loaded')
 }
 const feedbackCooldowns = new Map<string, number>()
 

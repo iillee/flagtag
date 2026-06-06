@@ -177,17 +177,16 @@ export function updatePlayerName(userId: string, name: string): boolean {
     monthlyVisitor.name = name
   }
 
-  // Update all three leaderboards
-  const leaderboards: Array<{
+  // Update daily + monthly leaderboards (full format)
+  const standardLbs: Array<{
     getState: () => { json?: string } | null
     getMutable: () => { json: string }
     persist: (json: string) => Promise<void>
   }> = [
     { getState: () => LeaderboardState.getOrNull(leaderboardEntity), getMutable: () => LeaderboardState.getMutable(leaderboardEntity), persist: persistLeaderboard },
-    { getState: () => AllTimeLeaderboardState.getOrNull(allTimeLeaderboardEntity), getMutable: () => AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity), persist: persistAllTimeLeaderboard },
     { getState: () => MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity), getMutable: () => MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity), persist: persistMonthlyLeaderboard },
   ]
-  for (const lb of leaderboards) {
+  for (const lb of standardLbs) {
     const state = lb.getState()
     if (!state?.json) continue
     const entries = parseLeaderboardJson(state.json)
@@ -197,6 +196,19 @@ export function updatePlayerName(userId: string, name: string): boolean {
       lb.persist(json).catch(e => console.error('[Server] persist leaderboard error:', e))
     }
   }
+
+  // Update all-time leaderboard (compact {n,w} synced, full format in Storage)
+  Storage.get<string>('allTimeLeaderboard').then(full => {
+    if (!full) return
+    const entries = parseLeaderboardJson(full)
+    if (patchLeaderboardNames(entries, userId, name)) {
+      const fullJson = JSON.stringify(entries)
+      persistAllTimeLeaderboard(fullJson).catch(e => console.error('[Server] persist all-time error:', e))
+      entries.sort((a, b) => b.roundsWon - a.roundsWon)
+      const compact = entries.slice(0, 500).map(e => ({ n: e.name, w: e.roundsWon }))
+      AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = JSON.stringify(compact)
+    }
+  }).catch(e => console.error('[Server] all-time name patch error:', e))
 
   return true
 }
