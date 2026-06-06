@@ -26,7 +26,6 @@ import {
   type VisitorOrSeparator,
 } from './ui/uiConstants'
 import {
-  musicState,
   cinematicState, setCinematicFade,
   creditsState, CREDIT_LINES,
   blessingState, markBlessingCompleted,

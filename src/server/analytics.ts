@@ -45,6 +45,11 @@ export async function loadDiscordWebhookUrl(): Promise<void> {
 
 // ── Player join Discord notification ──
 
+/** Addresses to suppress from Discord join notifications (known bots) */
+const JOIN_NOTIFY_BLOCKED: Set<string> = new Set([
+  '0x5c61f3a6bee08f43f886bf20adac296495ee77a2', // Schneeflocke1
+])
+
 /** Pending join notifications — we delay sending to allow name resolution */
 const pendingJoinNotifications: Map<string, { address: string, onlineCount: number, scheduledAt: number }> = new Map()
 const JOIN_NOTIFY_DELAY_MS = 5000
@@ -52,6 +57,7 @@ const JOIN_NOTIFY_MAX_WAIT_MS = 15000 // Max time to wait for name resolution be
 
 export function schedulePlayerJoinDiscord(playerName: string, address: string, onlineCount: number): void {
   const userKey = address.toLowerCase()
+  if (JOIN_NOTIFY_BLOCKED.has(userKey)) return
   pendingJoinNotifications.set(userKey, { address, onlineCount, scheduledAt: Date.now() })
 }
 

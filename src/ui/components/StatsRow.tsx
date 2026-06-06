@@ -5,7 +5,8 @@
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { AudioSource } from '@dcl/sdk/ecs'
 import { S, LIGHT_GREY, GOLD, _ROW_HEIGHT, formatUTCTime, formatPlaytime } from '../uiConstants'
-import { musicState, miscState, ADMIN_ADDRESS } from '../uiState'
+import { miscState, ADMIN_ADDRESS } from '../uiState'
+import { getEquippedTape, setEquippedTape, getLastTapeId, TAPE_ITEMS } from '../screens/boomboxState'
 import { room } from '../../shared/messages'
 import { musicEntity } from '../../systems/musicSetup'
 
@@ -46,9 +47,22 @@ export function StatsRow({ visitorCount, botCount, onlineCount, serverConnected,
       </UiEntity>
       <UiEntity
         uiTransform={{ width: '12.5%', height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-        onMouseDown={() => { musicState.muted = !musicState.muted; try { AudioSource.getMutable(musicEntity).volume = musicState.muted ? 0 : 0.175 } catch {} }}
+        onMouseDown={() => {
+          const equipped = getEquippedTape()
+          if (equipped !== null) {
+            setEquippedTape(null)
+            try { const a = AudioSource.getMutable(musicEntity); a.playing = false; a.volume = 0 } catch {}
+          } else {
+            const lastId = getLastTapeId()
+            const tape = TAPE_ITEMS.find(t => t.id === lastId)
+            if (tape) {
+              setEquippedTape(tape.id)
+              try { const a = AudioSource.getMutable(musicEntity); a.audioClipUrl = tape.audioSrc; a.playing = true; a.loop = true; a.volume = 0.0984375 } catch {}
+            }
+          }
+        }}
       >
-        <Label value={`Mute: ${musicState.muted ? 'Y' : 'N'}`} fontSize={S(13)} color={musicState.muted ? GOLD : LIGHT_GREY} font="sans-serif" />
+        <Label value={`Music: ${getEquippedTape() ? 'On' : 'Off'}`} fontSize={S(13)} color={getEquippedTape() ? LIGHT_GREY : GOLD} font="sans-serif" />
       </UiEntity>
     </UiEntity>
   )

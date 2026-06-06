@@ -28,6 +28,8 @@ import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime } from './economy'
 import { capture } from './posthog'
 
+const ROUND_WINNER_WEBHOOK = 'https://discordapp.com/api/webhooks/1512612923548373135/kDMyVFdidPBhHuenVmrvYaNgPCZGfXI8xhMbXSPlbRLvo05SjgcdzlKDcVNxOjaKmH10'
+
 // ── Lightning state ──
 const LIGHTNING_ROLL_INTERVAL = 5
 const LIGHTNING_WARNING_DURATION = 3
@@ -415,6 +417,20 @@ async function handleRoundEnd(): Promise<void> {
 
   // ── 8. Persist flag state ──
   await persistFlagState()
+
+  // ── 8b. Discord webhook: announce round winner ──
+  if (topPlayers.length > 0 && maxSeconds > 0) {
+    const w = topPlayers[0]
+    let content = `🏆 **${w.name}** won the round with **${w.seconds}s** flag time`
+    if (topPlayers[1]) content += ` — 🥈 ${topPlayers[1].name} (${topPlayers[1].seconds}s)`
+    if (topPlayers[2]) content += ` — 🥉 ${topPlayers[2].name} (${topPlayers[2].seconds}s)`
+    content += ` — ${players.length} player${players.length !== 1 ? 's' : ''}`
+    fetch(ROUND_WINNER_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    }).then(() => {}, () => {})
+  }
 
   // ── 9. Track round completion in PostHog ──
   capture('flagtag-server', 'round_ended', {

@@ -216,11 +216,14 @@ export async function main() {
     terminalSystem()
   }, 0.25)
 
+  registerSystem((dt) => {
+    boomboxSystem(dt)
+    pedestalSystem(dt)
+  })
+
   registerThrottled((elapsed) => {
-    boomboxSystem(elapsed)
     upgradeStateSystem(elapsed)
     proximityLightSystem(elapsed)
-    pedestalSystem(elapsed)
   }, 0.25)
 
   // Rare checks (every 2s)

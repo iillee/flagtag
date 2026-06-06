@@ -7,7 +7,8 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
 import { S, GOLD, MUTED, WHITE, CLOSE_GREY } from '../uiConstants'
-import { hover, musicState, notifyOverlayClosed } from '../uiState'
+import { hover, notifyOverlayClosed } from '../uiState'
+import { getEquippedTape } from './boomboxState'
 import { setWinConditionOverlayVisible } from '../../gameState/overlayState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { KeyBinding } from '../components/KeyBinding'
@@ -123,7 +124,7 @@ export function HowToPlayOverlay() {
             <KeyBinding keyLabel="E" text="Throw Boomerang" s={s} />
             <KeyBinding keyLabel="F" text="Drop Trap" s={s} />
             <KeyBinding keyLabel="3" text="Drop Flag" s={s} />
-            <KeyBinding keyLabel="2" text={musicState.muted ? "Unmute Music" : "Mute Music"} s={s} />
+            <KeyBinding keyLabel="2" text={getEquippedTape() ? "Eject Tape" : "Insert Tape"} s={s} />
             {!mobile && <KeyBinding keyLabel="1" text="Toggle UI Size" s={s} last />}
           </UiEntity>
           {/* Close X */}

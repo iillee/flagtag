@@ -8,7 +8,6 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { musicEntity } from '../systems/musicSetup'
-import { musicState } from '../ui/uiState'
 import { showBoomboxPopup, hideBoomboxPopup, popupState } from '../ui/uiState'
 import { getEquippedTape } from '../ui/screens/boomboxState'
 
@@ -131,9 +130,8 @@ export function boomboxSystem(dt: number): void {
     }
   }
 
-  const muted = musicState.muted
   const noTape = getEquippedTape() === null
-  const silent = muted || noTape
+  const silent = noTape
 
   // Spawn rings when not muted and tape is loaded
   if (!silent) {

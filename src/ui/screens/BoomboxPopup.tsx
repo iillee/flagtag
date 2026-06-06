@@ -7,7 +7,7 @@ import { Color4 } from '@dcl/sdk/math'
 import { AudioSource } from '@dcl/sdk/ecs'
 import { S, GOLD, GREY, LIGHT_GREY, PANEL_BG, BRIGHT_WHITE } from '../uiConstants'
 import { CloseButton } from '../components/CloseButton'
-import { musicState, hideBoomboxPopup } from '../uiState'
+import { hideBoomboxPopup } from '../uiState'
 import { musicEntity } from '../../systems/musicSetup'
 import { TAPE_ITEMS, type TapeItem, getEquippedTape, setEquippedTape } from './boomboxState'
 
@@ -29,7 +29,7 @@ function selectTape(tape: TapeItem) {
     audio.audioClipUrl = tape.audioSrc
     audio.playing = true
     audio.loop = true
-    audio.volume = musicState.muted ? 0 : 0.0984375
+    audio.volume = 0.0984375
   } catch (e) {
     console.error('[Boombox] Failed to switch track:', e)
   }
@@ -104,20 +104,16 @@ export function BoomboxPopup() {
           <Label value={equippedTape ? equippedTape.name : 'Empty'} fontSize={S(14)}
             color={equippedTape ? BRIGHT_WHITE : GREY} font="sans-serif"
             uiTransform={{ margin: { top: S(6) } }} />
+          {equippedTape && (
+            <Label value={equippedTape.author} fontSize={S(11)}
+              color={GREY} font="sans-serif"
+              uiTransform={{ margin: { top: S(2) } }} />
+          )}
         </UiEntity>
 
         {/* Divider */}
         <UiEntity uiTransform={{ width: '90%', height: S(1), margin: { bottom: S(12) } }}
           uiBackground={{ color: Color4.create(0.3, 0.3, 0.3, 0.5) }} />
-
-        {/* Hovered tape name or "Tapes" label */}
-        <Label
-          value={hoveredTape ? hoveredTape.name : 'Tapes'}
-          fontSize={S(13)}
-          color={hoveredTape ? BRIGHT_WHITE : GREY}
-          font="sans-serif"
-          uiTransform={{ margin: { bottom: S(8) } }}
-        />
 
         {/* Tape grid — always 3 slots */}
         <UiEntity uiTransform={{

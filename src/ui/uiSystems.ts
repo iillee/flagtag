@@ -27,7 +27,6 @@ import {
   splashState, SPLASH_DURATION_MS,
   serverDownState, SERVER_DOWN_GRACE_SEC, SERVER_DOWN_CONFIRM_SEC, SERVER_DOWN_RESHOW_SEC,
   countdownState,
-  musicState,
   notifyOverlayClosed, isAnyOverlayOpen,
   flashUIScale,
 } from './uiState'
@@ -36,6 +35,7 @@ import {
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible,
   getAnalyticsOverlayVisible, setAnalyticsOverlayVisible,
 } from '../gameState/overlayState'
+import { getEquippedTape, setEquippedTape, getLastTapeId, TAPE_ITEMS } from './screens/boomboxState'
 
 let _registered = false
 
@@ -266,14 +266,31 @@ export function registerUiSystems() {
       }
     }
 
-    // ── Key inputs (1=UI scale, 2=music mute, 4=close overlay) ──
+    // ── Key inputs (1=UI scale, 2=eject/insert tape, 4=close overlay) ──
     if (inputSystem.isTriggered(InputAction.IA_ACTION_4, PointerEventType.PET_DOWN)) {
-      musicState.muted = !musicState.muted
-      try {
-        const audio = AudioSource.getMutable(musicEntity)
-        audio.volume = musicState.muted ? 0 : 0.175
-      } catch (e) {
-        console.error('[UI] Failed to toggle music mute:', e)
+      const equipped = getEquippedTape()
+      if (equipped !== null) {
+        // Eject tape
+        setEquippedTape(null)
+        try {
+          const audio = AudioSource.getMutable(musicEntity)
+          audio.playing = false
+          audio.volume = 0
+        } catch (e) { console.error('[UI] Failed to eject tape:', e) }
+      } else {
+        // Re-insert last tape
+        const lastId = getLastTapeId()
+        const tape = TAPE_ITEMS.find((t: any) => t.id === lastId)
+        if (tape) {
+          setEquippedTape(tape.id)
+          try {
+            const audio = AudioSource.getMutable(musicEntity)
+            audio.audioClipUrl = tape.audioSrc
+            audio.playing = true
+            audio.loop = true
+            audio.volume = 0.0984375
+          } catch (e) { console.error('[UI] Failed to insert tape:', e) }
+        }
       }
     }
 
