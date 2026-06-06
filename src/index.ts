@@ -182,31 +182,50 @@ export async function main() {
 
   // ── Register all systems through the system manager ──
 
-  // Per-frame visual/animation
+  // Per-frame visual/animation (only systems that need 60fps)
   registerSystem((dt) => {
-    waterBobSystem(dt)
-    coinBobSpinSystem(dt)
-    waterSplashSystem(dt)
-    boostTrailSystem(dt)
     shieldSystem(dt)
     speedBoostSystem(dt)
     updateHoldTimeInterpolation()
   })
 
-  // Per-frame gameplay
+  // Per-frame gameplay — critical systems (every frame)
   registerSystem((dt) => {
-    waterSystem(dt)
     flagClientSystem(dt)
     combatClientSystem(dt)
-    trapClientSystem(dt)
     projectileClientSystem(dt)
-    mushroomClientSystem(dt)
+    trapClientSystem(dt)
+    waterSystem(dt)
     ghostClientSystem(dt)
-    lightningSystem(dt)
-    updraftSystem(dt)
-    coinPickupSystem(dt)
-    beaconClientSystem(dt)
   })
+
+  // Per-frame gameplay — time-sliced systems (alternating frames, 30fps each)
+  let oddFrame = false
+  registerSystem((dt) => {
+    oddFrame = !oddFrame
+    if (oddFrame) {
+      mushroomClientSystem(dt * 2)
+      lightningSystem(dt * 2)
+    } else {
+      updraftSystem(dt * 2)
+      coinPickupSystem(dt * 2)
+      beaconClientSystem(dt * 2)
+    }
+  })
+
+  // Throttled cosmetic animations (20fps — visually identical)
+  registerThrottled((dt) => {
+    waterBobSystem(dt)
+    coinBobSpinSystem(dt)
+    waterSplashSystem(dt)
+    boostTrailSystem(dt)
+  }, 0.05)
+
+  // Throttled proximity + ambient visuals (10fps)
+  registerThrottled((dt) => {
+    boomboxSystem(dt)
+    pedestalSystem(dt)
+  }, 0.1)
 
   // Throttled checks (every 0.25s)
   registerThrottled((_elapsed) => {
@@ -215,11 +234,6 @@ export async function main() {
     gravestoneSystem()
     terminalSystem()
   }, 0.25)
-
-  registerSystem((dt) => {
-    boomboxSystem(dt)
-    pedestalSystem(dt)
-  })
 
   registerThrottled((elapsed) => {
     upgradeStateSystem(elapsed)

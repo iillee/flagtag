@@ -1,7 +1,7 @@
 import { Color4 } from '@dcl/sdk/math'
 import { engine, UiCanvasInformation } from '@dcl/sdk/ecs'
 import { Flag } from '../shared/components'
-import { registerSystem } from '../systems/systemManager'
+import { registerSystem, registerThrottled } from '../systems/systemManager'
 
 // ═══════════════════════════════════════════════════════════
 // COLOR PALETTE
@@ -36,14 +36,14 @@ let uiAdjustIndex = 0
 let autoBaseScale = 1.0
 
 // System that reads screen size and computes auto base scale + cached scale
-registerSystem(() => {
+registerThrottled(() => {
   const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
   if (canvas && canvas.width > 0) {
     const raw = Math.min(canvas.width / 1920, canvas.height / 1080)
     autoBaseScale = Math.max(0.6, Math.min(1.6, raw))
   }
   cachedScale = autoBaseScale * UI_ADJUST_PRESETS[uiAdjustIndex].mult
-})
+}, 0.5)
 
 let cachedScale = 1.0
 

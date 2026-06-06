@@ -119,7 +119,7 @@ function portalParallaxSystem(dt: number) {
 
 function activateParallax() {
   if (_parallaxActive) return
-  registerSystem(portalParallaxSystem)
+  registerThrottled(portalParallaxSystem, 0.05)
   _parallaxActive = true
 }
 
