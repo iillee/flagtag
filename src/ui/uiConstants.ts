@@ -32,7 +32,7 @@ const UI_ADJUST_PRESETS = [
   { label: 'Medium', mult: 1.0  },
   { label: 'Large',  mult: 1.2  },
 ]
-let uiAdjustIndex = 0
+let uiAdjustIndex = 2
 let autoBaseScale = 1.0
 
 // System that reads screen size and computes auto base scale + cached scale
