@@ -20,7 +20,7 @@ let _allTimeCache: { json: string; result: LeaderboardEntry[] } = { json: '', re
 
 function parseAndSort(json: string, cache: { json: string; result: LeaderboardEntry[] }, applyHidden: boolean = true): LeaderboardEntry[] {
   if (json === cache.json) return cache.result
-  if (!json) { cache.result = []; return [] }
+  if (!json) { cache.json = json; cache.result = []; return [] }
   try {
     const entries: LeaderboardEntry[] = JSON.parse(json)
     const visible = applyHidden ? entries.filter(e => !HIDDEN_ADDRESSES.has(e.userId.toLowerCase())) : entries

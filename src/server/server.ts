@@ -67,13 +67,6 @@ export async function setupServer(): Promise<void> {
   await loadMailboxWebhook()
   await initPostHog()
 
-  // Load mailbox webhook from env var (fallback to hardcoded)
-  const mailboxEnv = await EnvVar.get('MAILBOX_WEBHOOK_URL')
-  if (mailboxEnv) {
-    mailboxWebhook = mailboxEnv
-    console.log('[Server] ✅ Mailbox webhook loaded from EnvVar')
-  }
-
   // ── Restore flag ──
   const { state: flagStartState, position: flagStartPos, anchor: dropAnchor } = await loadFlagState()
 

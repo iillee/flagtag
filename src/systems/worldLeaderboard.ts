@@ -228,7 +228,7 @@ function updateBoard(): void {
   // Skip update if nothing changed (but always re-check when board is empty)
   const newText = activeTab + '|' + pageOffset + '|' + top.map(e => `${e.name}:${e.roundsWon}`).join(',')
   if (newText === lastRenderedText) return
-  if (top.length > 0) lastRenderedText = newText
+  lastRenderedText = newText
 
   // Title
   TextShape.getMutable(titleEntity).text = 'LEADERBOARD'
