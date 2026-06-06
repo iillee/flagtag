@@ -1,6 +1,6 @@
 # Flag Tag — Game Design Document
 
-> **Version:** 1.3 · **Last Updated:** May 5, 2026  
+> **Version:** 2.0 · **Last Updated:** June 6, 2026  
 > **Platform:** Decentraland SDK7 · **Deployment:** World (`flagtag.dcl.eth`)  
 > **Scene Size:** 32×32 parcels (512m × 512m, 1024 parcels)
 
@@ -10,7 +10,7 @@
 
 **Flag Tag** is a multiplayer "keep away" game set in a medieval castle environment surrounded by a moat. Players compete to hold a single flag for the longest cumulative time during 5-minute rounds that run continuously 24/7, aligned to UTC clock boundaries.
 
-**Core Loop:** Find the flag → Pick it up → Run and survive → Score points by holding it → Win the round.
+**Core Loop:** Find the flag → Pick it up → Run and survive → Score points by holding it → Win the round → Earn coins.
 
 ---
 
@@ -20,54 +20,110 @@
 
 The scene uses Decentraland's **authoritative server** architecture (`authoritativeMultiplayer: true` in scene.json). A single entry point (`src/index.ts`) branches via `isServer()`:
 
-- **Server** (`src/server/server.ts`): All game logic — flag state, combat hit detection, round timer, scoring, leaderboards, persistence, visitor tracking, Discord reporting. Uses `validateBeforeChange()` on all synced components so clients cannot cheat.
-- **Client** (`src/index.ts` + `src/systems/*`): Rendering, input, VFX, sound, UI. Sends requests to server (`requestPickup`, `requestShell`, `requestBanana`, etc.) and reacts to server broadcasts.
+- **Server** (`src/server/`): All game logic — flag state, combat hit detection, round timer, scoring, leaderboards, persistence, visitor tracking, Discord reporting, economy. Uses `validateBeforeChange()` on all synced components so clients cannot cheat.
+- **Client** (`src/index.ts` + `src/systems/*` + `src/ui/*`): Rendering, input, VFX, sound, UI. Sends requests to server (`requestPickup`, `requestShell`, `requestBanana`, etc.) and reacts to server broadcasts.
 
 ### 2.2 State Synchronization
 
-- **CRDT Components** (synced via `syncEntity`): `Flag`, `PlayerFlagHoldTime`, `CountdownTimer`, `LeaderboardState`, `AllTimeLeaderboardState`, `MonthlyLeaderboardState`, `VisitorAnalytics`, `MonthlyVisitorAnalytics`, `Trap`, `Projectile`, `Zombie`
-- **Message Bus** (`registerMessages`): Used for ephemeral events — sound triggers, VFX, lightning, mushroom spawns, boomerang color changes, charge sync, orbit mechanics, ghost touching, respawn commands
-- **Persistence** (`Storage` API): Flag state, leaderboards (daily + monthly + all-time), player names, visitor data (daily + monthly), Discord report tracking survive server restarts
+- **CRDT Components** (synced via `syncEntity`): `Flag`, `PlayerFlagHoldTime`, `CountdownTimer`, `LeaderboardState`, `AllTimeLeaderboardState`, `MonthlyLeaderboardState`, `VisitorAnalytics`, `MonthlyVisitorAnalytics`, `Trap`, `Projectile`, `Ghost`, `CoinState`, `PlayerWallet`, `PlayerUpgrades`, `PlayerLifetimeWins`, `PlayerLifetimeHoldTime`
+- **Message Bus** (`registerMessages`): Used for ephemeral events — sound triggers, VFX, lightning, mushroom spawns, boomerang color changes, charge sync, orbit mechanics, ghost touching, respawn commands, coin pickups, speed boosts, death penalties, blessings, feedback
+- **Persistence** (`Storage` API): Flag state, leaderboards (daily + monthly + all-time), player names, visitor data (daily + monthly), Discord report tracking, coin wallets, player upgrades, blessing timestamps survive server restarts
 
-### 2.3 Key Files
+### 2.3 Server Modules
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `src/index.ts` | ~390 | Entry point; client setup, music, avatar modifiers, player tracking, hand boomerangs, charge ring, reload detection |
-| `src/server/server.ts` | ~3040 | All server-side game logic |
-| `src/shared/components.ts` | ~326 | Shared ECS component definitions, constants, sync IDs |
-| `src/shared/messages.ts` | ~83 | Client↔Server message schema definitions |
-| `src/ui.tsx` | ~2950 | UI root, overlays, death screens, splash, server-down detection |
-| `src/ui/uiConstants.ts` | ~200 | Shared UI colors, scale helpers, formatters, sorting/caching logic |
-| `src/systems/boundaryWalls.ts` | ~96 | Cylindrical boundary wall (colliders + proximity-fade visuals) |
-| `src/systems/teleportOrbs.ts` | ~115 | Glowing teleport orb pairs with pulse animation |
-| `src/systems/cinematicSystem.ts` | ~222 | Round-end fade state machine, podium camera, grounded emotes, respawnPlayers handler |
-| `src/systems/flagSystem.ts` | ~651 | Client-side flag rendering (bob, spin, particles, carry visual) |
-| `src/systems/projectileSystem.ts` | ~1446 | Client-side boomerang input, charge mechanic, visuals, sound |
-| `src/systems/trapSystem.ts` | ~665 | Client-side banana input, visuals, sound |
-| `src/systems/combatSystem.ts` | ~385 | Hit/stagger VFX, movement freeze on stun |
-| `src/systems/lightningSystem.ts` | ~601 | Client-side lightning bolt rendering + stun |
-| `src/systems/waterSystem.ts` | ~281 | Drowning/respawn, movement slowdown in water |
-| `src/systems/zombieSystem.ts` | ~371 | Client-side ghost rendering, scare meter, death overlay |
-| `src/systems/beaconSystem.ts` | ~140 | Gold vertical beacon above the flag |
-| `src/systems/spectatorSystem.ts` | ~264 | Bird's-eye spectator camera (key 4) |
-| `src/systems/updraftSystem.ts` | ~413 | Smoke stack updraft physics |
-| `src/systems/mushroomSystem.ts` | ~423 | Mushroom collectible (grants shield) |
+The server code is split into focused domain modules:
+
+| Module | Purpose |
+|--------|---------|
+| `server/server.ts` | Entry point — entity creation, state loading, handler/system registration |
+| `server/serverState.ts` | Shared mutable state, entity references, constants |
+| `server/persistence.ts` | Storage get/set wrappers |
+| `server/leaderboard.ts` | Leaderboard types, helpers, daily/monthly resets |
+| `server/analytics.ts` | Visitor tracking, Discord webhooks, daily reports |
+| `server/economy.ts` | Coin wallets, round-end earnings, store/upgrades |
+| `server/flagLogic.ts` | Flag pickup/drop/steal, gravity, hold-time accumulation |
+| `server/combat.ts` | Traps, projectiles, orbits |
+| `server/ghostSystem.ts` | Ghost AI, spawning, collisions |
+| `server/mushroomSystem.ts` | Mushroom spawning and pickup |
+| `server/playerTracking.ts` | Join/leave detection, name resolution |
+| `server/roundManager.ts` | Countdown, round end, lightning, updraft rotation |
+| `server/posthog.ts` | PostHog analytics integration |
+
+### 2.4 Client File Structure
+
+| File/Directory | Lines | Purpose |
+|----------------|-------|---------|
+| `src/index.ts` | ~254 | Entry point; client setup, system registration via systemManager |
+| `src/ui.tsx` | ~543 | UI root, overlays, death screens, server-down detection |
+| `src/ui/layouts/DesktopLayout.tsx` | ~201 | Desktop UI layout |
+| `src/ui/layouts/MobileLayout.tsx` | ~228 | Mobile UI layout |
+| `src/ui/screens/HowToPlay.tsx` | ~151 | 3-column how-to-play overlay |
+| `src/ui/screens/LeaderboardOverlay.tsx` | ~299 | Leaderboard tabs overlay |
+| `src/ui/screens/AnalyticsOverlay.tsx` | ~109 | Visitor analytics overlay |
+| `src/ui/screens/ChestPopup.tsx` | ~162 | Boomerang color picker popup |
+| `src/ui/screens/BoomboxPopup.tsx` | ~180 | Boombox tape selection popup |
+| `src/ui/screens/RoundEndSplash.tsx` | ~101 | Round-end top 3 splash |
+| `src/ui/uiConstants.ts` | ~207 | Colors, scale helpers, formatters, caching |
+| `src/ui/components/` | Various | Reusable UI components (CloseButton, DeathOverlay, IconButton, KeyBinding, ProgressBar, Scrollbar, StatsRow, SubTabBar) |
+| `src/systems/flagSystem.ts` | ~694 | Client-side flag rendering (bob, spin, particles, carry visual) |
+| `src/systems/projectile/` | ~1571 | Client-side boomerang (modular: charge, flight, hand visual, orbit, pool, sound, state) |
+| `src/systems/trapSystem.ts` | ~675 | Client-side banana input, visuals, sound |
+| `src/systems/combatSystem.ts` | ~389 | Hit/stagger VFX, movement freeze on stun |
+| `src/systems/lightningSystem.ts` | ~647 | Client-side lightning bolt rendering + stun |
+| `src/systems/waterSystem.ts` | ~284 | Drowning/respawn, movement slowdown in water |
+| `src/systems/ghostSystem.ts` | ~387 | Client-side ghost rendering, scare meter |
+| `src/systems/beaconSystem.ts` | ~174 | Gold vertical beacon above the flag |
+| `src/systems/spectatorSystem.ts` | ~256 | Bird's-eye spectator camera (key 4) |
+| `src/systems/updraftSystem.ts` | ~429 | Smoke stack updraft physics |
+| `src/systems/mushroomSystem.ts` | ~392 | Mushroom collectible (grants shield + speed boost) |
 | `src/systems/shieldSystem.ts` | ~181 | Forcefield visual around shielded players |
+| `src/systems/coinPickupSystem.ts` | ~492 | Coin entity detection, pickup requests, visual state |
+| `src/systems/coinBobSpinSystem.ts` | ~108 | Coin bob/spin animation |
+| `src/systems/speedBoostSystem.ts` | ~92 | Mushroom speed boost via AvatarLocomotionSettings |
+| `src/systems/boostTrailSystem.ts` | ~228 | Gold orb trail VFX during speed boosts |
+| `src/systems/deathPenaltySystem.ts` | ~44 | Coin penalty on death |
+| `src/systems/pedestalSystem.ts` | ~308 | Ritual pedestal — daily blessing reward |
+| `src/systems/boomboxSystem.ts` | ~181 | Clickable boombox with music ring VFX |
+| `src/systems/worldLeaderboard.ts` | ~277 | In-world 3D leaderboard text display |
 | `src/systems/proximityLights.ts` | ~169 | ~60 point lights that activate near the player |
-| `src/systems/remoteBoomerangSystem.ts` | ~494 | Shows other players' hand boomerangs + charge VFX |
-| `src/systems/portals/portal.ts` | ~572 | Reusable portal component (Genesis Plaza link) |
-| `src/systems/ladderSystem.ts` | ~104 | Click-to-climb ladder interaction |
-| `src/systems/waterBobSystem.ts` | ~132 | Bobbing animation for water planes/lilypads |
-| `src/systems/waterSplashSystem.ts` | ~189 | Splash VFX when walking in water |
-| `src/systems/mailboxSystem.ts` | ~80 | Clickable mailbox for feedback |
-| `src/systems/chestSystem.ts` | ~64 | Clickable chest (boomerang color picker) |
-| `src/gameState/boomerangColor.ts` | — | Boomerang color state + change callbacks |
-| `src/gameState/flagHoldTime.ts` | ~249 | Client-side player tracking, name resolution, score interpolation |
-| `src/gameState/roundsWon.ts` | ~75 | Cached leaderboard parsing from CRDT |
-| `src/gameState/sceneTime.ts` | ~80 | Cached visitor analytics parsing from CRDT |
-| `src/cinematicState.ts` | ~5 | Cinematic active flag (shared between systems) |
-| `src/shared/dayNight.ts` | ~38 | Day/night cycle detection via getWorldTime() |
+| `src/systems/remoteBoomerangSystem.ts` | ~565 | Other players' hand boomerangs + charge VFX |
+| `src/systems/portalSystem.ts` | ~549 | Reusable portal component (Genesis Plaza link) |
+| `src/systems/boundaryWalls.ts` | ~97 | Cylindrical boundary wall (colliders + proximity-fade) |
+| `src/systems/teleportOrbs.ts` | ~137 | Glowing teleport orb pairs with pulse animation |
+| `src/systems/cinematicSystem.ts` | ~279 | Round-end fade state machine, podium camera, emotes |
+| `src/systems/ladderSystem.ts` | ~106 | Click-to-climb ladder interaction |
+| `src/systems/waterBobSystem.ts` | ~77 | Bobbing animation for water planes/lilypads |
+| `src/systems/waterSplashSystem.ts` | ~175 | Splash VFX when walking in water |
+| `src/systems/mailboxSystem.ts` | ~51 | Clickable mailbox for feedback |
+| `src/systems/chestSystem.ts` | ~62 | Clickable chest (boomerang color picker) |
+| `src/systems/gravestoneSystem.ts` | ~41 | Clickable gravestone |
+| `src/systems/terminalSystem.ts` | ~61 | Clickable terminal (metrics panel) |
+| `src/systems/systemManager.ts` | ~95 | Centralized system registration (per-frame + throttled) |
+| `src/systems/musicSetup.ts` | ~20 | Background music entity setup |
+| `src/systems/avatarModifierSetup.ts` | ~19 | Avatar modifier area setup |
+| `src/systems/handBoomerangSetup.ts` | ~132 | Hand boomerang model setup |
+| `src/systems/nameRetrySystem.ts` | ~39 | Player name resolution retry |
+| `src/systems/clientUtils.ts` | ~30 | Shared client utilities |
+| `src/gameState/flagHoldTime.ts` | ~291 | Client-side player tracking, score interpolation |
+| `src/gameState/boomerangColor.ts` | ~36 | Boomerang color state + callbacks |
+| `src/gameState/playerUpgradeState.ts` | ~183 | Client-side upgrade/store state |
+| `src/gameState/roundsWon.ts` | ~64 | Cached leaderboard parsing |
+| `src/gameState/visitorState.ts` | ~74 | Cached visitor analytics parsing |
+| `src/gameState/roundEarnings.ts` | ~27 | Round-end coin earnings display state |
+| `src/gameState/overlayState.ts` | ~22 | Overlay visibility state |
+| `src/gameState/cinematicState.ts` | ~5 | Cinematic active flag |
+| `src/gameState/lightningState.ts` | ~10 | Lightning warning state |
+| `src/shared/components.ts` | ~256 | ECS component definitions, sync IDs |
+| `src/shared/constants.ts` | ~68 | Game tuning constants |
+| `src/shared/dateUtils.ts` | ~35 | UTC date/time helpers |
+| `src/shared/messages.ts` | ~116 | Client↔Server message schemas |
+| `src/shared/coins.ts` | ~72 | Coin component definitions, economy constants |
+| `src/shared/upgrades.ts` | ~88 | Upgrade/store definitions, boomerang prices |
+| `src/shared/dayNight.ts` | ~38 | Day/night cycle detection |
+| `src/shared/syncIdPool.ts` | ~31 | Reusable sync ID pool factory |
+| `src/shared/clientState.ts` | ~30 | Shared client state (avoids circular imports) |
+| `src/preloadSounds.ts` | ~51 | Silent preload of all audio clips |
+| `src/version.ts` | ~1 | Build version string |
 
 ---
 
@@ -94,23 +150,48 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 - **Winner:** Player with the most cumulative hold time at round end
 - **Round End Sequence (Server):**
   1. Flush hold time accumulator (ensures final scores are accurate)
-  2. Reset flag to AtBase at random spawn point (synchronous, before any `await` — prevents `holdTimeServerSystem` from re-accumulating during async gaps)
-  3. Read final scores, then reset ALL `PlayerFlagHoldTime` entities to 0 (iterates full ECS, not just tracked map, to catch stale orphans)
-  4. Clear `holdTimeAccum` / `holdTimeCarrierKey` defensively
+  2. Reset flag to AtBase at random spawn point (synchronous, before any `await`)
+  3. Read final scores, then reset ALL `PlayerFlagHoldTime` entities to 0
+  4. Clear accumulators defensively
   5. Clean up traps, projectiles, orbits, cooldowns, lightning, mushrooms
-  6. Broadcast `respawnPlayers` with top 3 player data (winnersJson)
-  7. (async) Set splash timer + winner JSON, update all three leaderboards (daily/monthly/all-time via shared `incrementLeaderboardWins` helper), persist to Storage
+  6. Calculate and distribute coin earnings (participation + hold time + placement bonuses)
+  7. Broadcast `respawnPlayers` with top 3 player data
+  8. (async) Update all three leaderboards, persist to Storage, send Discord/PostHog reports
 - **Round End Sequence (Client):**
   1. Receive `respawnPlayers` → freeze movement, fade to black (1.5s)
   2. Top 3 players teleported to podium cubes (1st=red, 2nd=gold, 3rd=blue)
   3. Virtual camera activates (green cube position looking at red cube)
   4. Winner plays "handsair" emote, 2nd/3rd play "clap" (grounded-emote system waits for stable Y before triggering)
-  5. Splash UI shows top 3 with scores + "Next round starting..."
+  5. Splash UI shows top 3 with scores + coin earnings breakdown + "Next round starting..."
   6. After 15s, fade to black, show credits screen with countdown, release camera, return players to spawn
 - **Credits Screen:** After the cinematic (or immediately for no-scorer rounds), a black screen shows "Special Thanks to:" with rotating credit lines and "Next round in X..." countdown. Lasts 15 seconds before fading to gameplay.
-- **Timer Hiding:** The round countdown timer hides as soon as the round ends and stays hidden through the entire cinematic/credits sequence.
 
-### 3.3 Combat: Boomerang (E Key)
+### 3.3 Economy System
+
+- **Coins:** In-game currency earned by playing. Persisted per-player via server Storage.
+- **Earning Coins:**
+  - Collecting coin pickups scattered around the map (proximity trigger, server-authoritative)
+  - Round-end participation bonus (1 coin for everyone who played)
+  - Round-end hold time bonus (0.1 coins per second held, floored)
+  - Round-end placement bonus (1st: 5, 2nd: 3, 3rd: 1 coins)
+- **Coin Pickups:** Physical coins in the world. When picked up, disappear for all players and respawn after 30 seconds (one empty spot refills per tick). Synced via `CoinState` CRDT component. Bob/spin animation on client.
+- **Spending Coins:** Used to purchase boomerang variants from the store (via chest interaction)
+- **Death Penalty:** Dying (drown, lightning, ghost) deducts 10 coins
+- **Max Balance:** 10,000 coins
+- **Wallet Sync:** `PlayerWallet` CRDT component per player; balance sent on join and updated on transactions
+
+### 3.4 Upgrade / Store System
+
+- **Boomerang Store:** 4 boomerang variants with escalating costs and flag-win requirements:
+  - **Red (Base):** Free, 0 wins required
+  - **Yellow (Dubs):** 50 coins, 1 win required
+  - **Green (Orbit):** 150 coins, 5 wins required
+  - **Blue (Charge):** 300 coins, 10 wins required
+- **Purchase Flow:** Click chest → chest popup UI → select variant → `buyBoomerang` message → server validates balance + wins → `buyResult` response
+- **Equipment:** Players can equip any owned boomerang. Equipped choice synced to all players.
+- **Persistence:** `PlayerUpgrades` component (JSON: `{boomerangs: ["r","y"], equipped: "r"}`), `PlayerLifetimeWins`, `PlayerLifetimeHoldTime` — all server-persisted
+
+### 3.5 Combat: Boomerang (E Key)
 
 - **Input:** Press E (or click on mobile) to throw; hold E for charge (Blue variant)
 - **Server-Authoritative:** Client sends `requestShell` with camera direction + charge parameters; server spawns synced `Projectile` entity
@@ -123,17 +204,16 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 - **Ghost Interaction:** Boomerang damages ghosts; triggers return after hit
 - **Cooldown:** 0.45s base (post-catch), plus variant-specific extra cooldown
 - **Max Active:** 1 per player (2 for yellow)
-- **Customization:** 4 color variants selected via chest UI, synced to all players via `colorChanged`/`playerColorChanged` messages, visible on both hands:
+- **Customization:** 4 color variants (must be purchased from store, except Red which is free):
   - **Red ("Base"):** Instant fire, 40m range, no extra cooldown. The default all-rounder.
   - **Yellow ("Dubs"):** Instant fire, 20m range, fires a 2nd boomerang 250ms later from left hand. +1s extra cooldown. Dual-wield style.
   - **Blue ("Charge"):** Hold E to charge (1.5s max). Speed scales 30→60 m/s, range scales 20→50m. Movement slowed while charging. Overcharge at full charge = burnout self-stun + flag drop. Extra cooldown +1s (<1s charge) or +2s (≥1s charge). Visual: gold charging ring of beads orbits the hand, grows and spins faster with charge.
   - **Green ("Orbit"):** Press E to launch boomerang in a 3m radius orbit around the player for 3.5s. Hits anyone within orbit ring. Wall collision ends orbit early. +5s extra cooldown. No projectile flight — purely close-range area denial.
-- **Charge VFX (multiplayer):** Charge start/stop synced via `chargeStart`/`chargeStop` messages. Remote players see the charging ring within 16m proximity (gated to avoid unnecessary entity creation).
+- **Charge VFX (multiplayer):** Charge start/stop synced via messages. Remote players see the charging ring within 16m proximity.
 - **Hand Model:** Right hand always shows equipped boomerang color. Left hand shows only for Yellow variant. Both visible to other players via `remoteBoomerangSystem`.
-- **Visual:** Client-side local entity with spinning animation; remote players see synced position via `Projectile` component data
-- **Note:** Transform is NOT synced for projectiles (to avoid CRDT saturation); clients position visuals from component start/direction/distance data
+- **Client Module Structure:** Projectile system is split into submodules: `charge.ts`, `flight.ts`, `handVisual.ts`, `orbit.ts`, `pool.ts`, `sound.ts`, `state.ts`, `utils.ts`
 
-### 3.4 Combat: Banana Trap (F Key)
+### 3.6 Combat: Banana Trap (F Key)
 
 - **Input:** Press F to drop at player's feet
 - **Server-Authoritative:** Client sends `requestBanana`; server creates synced `Trap` entity
@@ -144,9 +224,9 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 - **Cooldown:** 5 seconds between drops
 - **Max Active:** 3 per player simultaneously
 - **Self-Hit:** Immune for 2s after dropping, then can trigger own banana
-- **Visual:** `models/banana.glb` — client attaches the model locally (server doesn't create visuals)
+- **Visual:** `models/banana.glb` — client attaches the model locally
 
-### 3.5 Lightning System
+### 3.7 Lightning System
 
 - **Trigger:** Server-side probability roll every 5 seconds while flag is carried
 - **Probability Curve:** Scales with carrier's score:
@@ -155,62 +235,61 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
   - 200-250s: 10-40%
   - 250-280s: 40-70%
   - 280+: 70-95%
-- **Warning:** 3-second delay between roll success and strike (server sends `lightningWarning`)
+- **Warning:** 3-second delay between roll success and strike
 - **Strike:** Server determines position (carrier or flag), sends `lightningStrike` with victim ID
-- **Effect:** Forces flag drop, visual bolt from sky, flash, thunder sound, victim respawn with fade overlay
+- **Effect:** Forces flag drop, visual bolt from sky, flash, thunder sound, victim respawn with fade overlay, coin penalty
 - **Purpose:** Rubber-banding mechanic — prevents any single player from dominating an entire round
 
-### 3.6 Water / Drowning
+### 3.8 Water / Drowning
 
 - **Water Level:** Y = 1.58 across the entire 512×512m scene (moat surrounding the castle)
 - **Movement Penalty:** Running and jumping disabled in water (walk only)
 - **Air Timer:** 5 seconds of air; recharges in 5 seconds on land
-- **Drowning:** When air depletes, player sees "You Drowned!" death overlay, then teleported to spawn point
+- **Drowning:** When air depletes, player sees "You Drowned!" death overlay, coin penalty applied, then teleported to spawn point
 - **Flag Interaction:** If carrier drowns, flag is dropped; if flag falls in water, it respawns at a random spawn point
 - **Visual:** Splash particles at player's feet, water bob animation on water planes/lilypads, air meter bar at bottom of screen
 
-### 3.7 Ghost System (Night Only)
+### 3.9 Ghost System (Night Only)
 
-- **Schedule:** Ghost spawns only during nighttime (detected via `getWorldTime()` from `~system/Runtime`, checking for hours between ~22:00-02:00 UTC)
-- **Spawning:** Single ghost at a time, spawns at (225, 1.25, 287). 30-second respawn cooldown after death.
+- **Schedule:** Ghosts spawn only during nighttime (detected via `getWorldTime()`, checking for hours between sunset 6 PM and sunrise 6 AM in DCL sky time)
+- **Spawning:** Up to 5 ghosts, spawn interval 20 seconds
 - **Behavior (Server):**
   - Idles in slow orbit around spawn point when no player within 20m
   - Chases nearest player within 20m detection radius
   - Speed: 3 m/s base, 5 m/s when within 8m
-  - Y-axis follows target player height (floats above ground)
-  - Ignores players more than 20m above/below
+  - Y-axis follows target player height
 - **Scare Meter (Client):** When ghost touches player (within 1.5m), `ghostTouching` message sent each frame. Client fills a scare meter (grey bar, turns red above 75%). Meter drains when not being touched. At 100% → death.
-- **Ghost Death:** "You were scared to death!" overlay → respawn at spawn. Forces flag drop.
+- **Ghost Death:** "You were scared to death!" overlay → coin penalty → respawn at spawn. Forces flag drop.
 - **Combat:** Ghost has 1 HP; killed by boomerang hit or banana trap. Death VFX + 30s respawn cooldown.
-- **Visual (Client):** `AvatarShape` NPC with ghost-like wearables, rising/sinking animation. Synced via CRDT `Zombie` component + `Transform`.
-- **Dawn Despawn:** All ghosts instantly removed when night ends.
+- **Visual (Client):** `AvatarShape` NPC with ghost-like wearables, rising/sinking animation. Synced via CRDT `Ghost` component + `Transform`.
+- **Dawn Despawn:** All ghosts removed when night ends.
 
-### 3.8 Mushroom / Shield
+### 3.10 Mushroom / Shield / Speed Boost
 
 - **Server Spawning:** 1 mushroom spawned at a time within a cylindrical region (center 250.75, 255.5; radius 128m)
-- **Candidate System:** Server generates 10 random candidate positions per mushroom, sends all to client. Client raycasts each candidate to find one that isn't in water, then places the visual there.
+- **Candidate System:** Server generates 10 random candidate positions per mushroom, sends all to client. Client raycasts each to find one not in water.
 - **Pickup:** Walk within 0.5m of mushroom
-- **Effect:** Grants a golden forcefield shield (8 rotating plane billboard rings)
-- **Shield Behavior:** Blocks one hit (boomerang or banana), then consumed. Also removed at round end.
-- **Respawn:** When picked up, server immediately spawns a replacement at a random location
+- **Effects:**
+  - **Shield:** Golden forcefield (8 rotating billboard rings). Blocks one hit (boomerang or banana), then consumed.
+  - **Speed Boost:** +50% movement speed, jump height, and double jump for 20 seconds via `AvatarLocomotionSettings`. Gold orb trail VFX at player's feet (visible to other players within 32m via messages).
+- **Respawn:** When picked up, server immediately spawns a replacement
 
-### 3.9 Updraft Smoke Stacks
+### 3.11 Updraft Smoke Stacks
 
 - **49 Chimney Locations** on castle rooftops
 - **Server Rotation:** Every 60 seconds, one chimney is randomly activated
-- **Visual:** Column of rising white orbs (particle-like billboard spheres)
+- **Visual:** Column of rising white orbs (billboard spheres)
 - **Mechanic:** Player inside the column and holding jump gets physics lift upward
 - **Sound:** Woosh audio when entering updraft
 
-### 3.10 Teleport Orbs
+### 3.12 Teleport Orbs
 
 - **2 Orb Pairs:** Orange pair and Blue pair
 - **Orange:** Ground level ↔ High rooftop (290.5, 2.6, 254.7 ↔ 276.56, 52.25, 301.5)
 - **Blue:** Two ground positions (224, 2.0, 288 ↔ 226.3, 2.8, 211.3)
-- **Trigger:** Walk within 1.5m radius → teleport to paired orb + 3m offset
+- **Trigger:** Walk within 1.5m → teleport to paired orb + 3m offset
 - **Cooldown:** 1 second
 - **Visual:** Glowing spheres with pulsing scale animation, point lights, emissive PBR material
-- **Implementation:** Self-contained in `systems/teleportOrbs.ts`
 
 ---
 
@@ -219,79 +298,98 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 ### 4.1 Layout
 - **Castle:** Large medieval structure centered around (250, y, 255) — placed as composite GLB models via Creator Hub
 - **Moat:** Water plane covering the entire scene at Y=1.58, with lilypads and flowers bobbing
-- **Boundary:** Cylindrical invisible wall (radius 128m from center, 48 segments, 200m tall) with faceted plane segments that fade in when the player approaches (gradient texture, red emissive glow). Stacked 10m collider segments for reliable physics. Self-contained in `systems/boundaryWalls.ts`.
+- **Boundary:** Cylindrical invisible wall (radius 128m from center, 48 segments, 200m tall) with faceted plane segments that fade in when the player approaches (gradient texture, red emissive glow). Stacked 10m collider segments for reliable physics.
 - **Spawn Point:** Elevated platform at approximately (263, 47.5, 298) — players arrive on the castle ramparts
 
 ### 4.2 Lighting
-- **Proximity Lights:** ~60+ point lights at predefined positions throughout the castle; each light only activates within 45m of the player to save performance (created/destroyed dynamically)
-- **Day/Night Cycle:** Uses Decentraland's default skybox. `getWorldTime()` polled each frame to detect night for ghost spawning.
+- **Proximity Lights:** ~60+ point lights at predefined positions; each activates within 45m of the player (created/destroyed dynamically to save performance)
+- **Day/Night Cycle:** Uses Decentraland's default skybox. `getWorldTime()` polled every 2 seconds. Night defined as sunset (64800s) to sunrise (7200s) in DCL day cycle.
 
 ### 4.3 Interactive Objects
-- **Ladders:** 2 climbable ladders (click to teleport to top/bottom)
-- **Portal:** Genesis Plaza portal at (225.95, 2.15, 224.9)
-- **Mailbox:** Clickable at (214.54, 12.54, 286.28) — opens community join popup (Decentraland social API)
-- **Chest:** Clickable — opens boomerang color picker UI (4 variants with icons and labels)
-- **Podium Cubes:** 4 invisible marker entities (red, gold, blue, green) used for round-end cinematic positioning. Hidden at runtime via `VisibilityComponent` + collision removal.
+- **Ladders:** Climbable ladders (click to teleport to top/bottom)
+- **Portal:** Genesis Plaza portal at (225.95, 2.15, 224.9) — parallax door effect with interactive open/close states
+- **Mailbox:** Clickable — opens feedback popup. Messages sent to Discord webhook via server. Rate-limited to 1 per 60s per player.
+- **Chest:** Clickable — opens boomerang store UI (4 variants with costs, win requirements, and owned/equipped state)
+- **Boombox:** Clickable — opens tape selection popup. Animated music rings when playing. Toggle mute with key 2.
+- **Gravestone:** Clickable — displays information popup
+- **Terminal:** Clickable — opens metrics/analytics panel
+- **Ritual Pedestal:** "Blessing of the Gods" — click to kneel, beam of light activates, rolling credits play. If player stays for full 32-second duration, earns 5 coins (once per day per player).
+- **Podium Cubes:** 4 invisible marker entities (red, gold, blue, green) used for round-end cinematic positioning. Hidden at runtime via `VisibilityComponent`.
+- **In-World Leaderboard:** 3D text display with clickable "Daily Wins" / "Top 10" tabs at the Artwork Info board location.
 
 ### 4.4 Avatar Modifiers
-- **Passport Disabled:** `AvatarModifierArea` covering the full scene (522m × 50m × 522m) disables clicking on avatars to view profiles (prevents accidental passport opens during gameplay)
+- **Passport Disabled:** `AvatarModifierArea` covering the full scene disables clicking on avatars to view profiles (prevents accidental passport opens during gameplay)
 
 ---
 
 ## 5. UI System
 
-### 5.1 Desktop Layout (scaled by viewport)
+### 5.1 Component Architecture
+UI is built with React-ECS (JSX) and split into reusable components:
+- **Layouts:** `DesktopLayout.tsx`, `MobileLayout.tsx` — platform-specific arrangement
+- **Screens:** `HowToPlay`, `LeaderboardOverlay`, `AnalyticsOverlay`, `ChestPopup`, `BoomboxPopup`, `RoundEndSplash`
+- **Components:** `CloseButton`, `DeathOverlay`, `IconButton`, `KeyBinding`, `ProgressBar`, `Scrollbar`, `StatsRow`, `SubTabBar`
+
+### 5.2 Desktop Layout (scaled by viewport)
 - **Top Center:** Round countdown timer (MM:SS format, pill-shaped dark background). Gold color in last 10 seconds with tick sound.
-- **Right Side:** Scoreboard panel — lists all players sorted by hold time, gold highlight for leader, flag icon for current carrier. Two icon buttons stacked vertically to the left of the scoreboard:
+- **Right Side:** Scoreboard panel — lists all players sorted by hold time, gold highlight for leader, flag icon for current carrier. Coin balance displayed. Two icon buttons stacked vertically:
   - Flag icon → Leaderboards overlay (folder-tab UI)
   - `?` → How to Play overlay (3-column cards: Flag, Combat, Win + Controls)
 - **Bottom Center:** Ability icons — Boomerang (E) and Banana (F) with cooldown overlays
 - **Keyboard Shortcuts:**
   - `1` — Cycle UI scale (Small / Medium / Large) with toast notification
-  - `2` — Toggle music mute
+  - `2` — Toggle music (Mute / Insert Tape)
   - `3` — Drop flag
   - `4` — Close any open overlay
-- **Leaderboards Overlay:** Folder-tab design with 3 top-level tabs:
-  - **Status** — Game status and info
-  - **Leaderboards** — Sub-tabs for Daily / Monthly / All Time. Shows rank, player name, address (monthly/all-time), and win count. Total wins in column header.
-  - **Metrics** — Sub-tabs for Daily / Monthly. Visitor list with online indicator, name, address, playtime. Summary stats row. Bot detection separates likely bots (unnamed + ≤1s playtime) into a labeled section.
 
-### 5.2 Mobile Layout
+### 5.3 How to Play Overlay
+Three-column card layout:
+- **Flag:** Beacon image, pickup/steal instructions
+- **Combat:** Boomerang (E) throw and banana (F) drop instructions with images
+- **Win + Controls:** Scoring explanation + key bindings (E: Throw Boomerang, F: Drop Banana, 3: Drop Flag, 2: Mute/Insert Tape, 1: Toggle UI Size)
+
+### 5.4 Leaderboards Overlay
+Folder-tab design with 3 top-level tabs:
+- **Status** — Game status and info
+- **Leaderboards** — Sub-tabs for Daily / Monthly / All Time. Shows rank, player name, address (monthly/all-time), and win count.
+- **Metrics** — Sub-tabs for Daily / Monthly. Visitor list with online indicator, name, address, playtime. Summary stats. Bot detection separates likely bots (unnamed + ≤1s playtime).
+
+### 5.5 Mobile Layout
 - Repositioned for touch-safe areas (avoids joystick, chat, action buttons)
 - Top bar: Menu icons (left) — Timer + Score (center) — Ability icons (right)
 - Overlays open as centered popups with larger touch targets and font sizes
 - Score button opens full scoreboard overlay
 
-### 5.3 Round-End Splash & Credits
-- Shows top 3 players with name, rank (#1/#2/#3), and score during cinematic podium view
-- Credits screen follows: "Special Thanks to:" with 4 rotating credit lines (3s each) and "Next round in X..." countdown
-- No-scorer rounds skip the podium cinematic — go straight to credits on black screen
-- Cinematic system self-contained in `systems/cinematicSystem.ts`
+### 5.6 Round-End Splash & Credits
+- Shows top 3 players with name, rank, score, and coin earnings during cinematic podium view
+- Credits screen follows: "Special Thanks to:" with rotating credit lines and "Next round in X..." countdown
+- No-scorer rounds skip podium cinematic — go straight to credits
 
-### 5.4 Death Overlays
-- **Drowning:** "You Drowned!" with fade-to-black and respawn countdown
-- **Lightning:** "You were struck by lightning!" with same pattern
-- **Ghost:** "You were scared to death!" with same pattern
+### 5.7 Death Overlays
+- **Drowning:** "You Drowned!" with coin penalty display
+- **Lightning:** "You were struck by lightning!" with coin penalty display
+- **Ghost:** "You were scared to death!" with coin penalty display
 - All share the same visual style (CORAL_RED title, LIGHT_GREY countdown, black fade background)
 
-### 5.5 UI Scaling & Constants
+### 5.8 UI Scaling & Constants
 - `S()` function scales all UI values by viewport width ratio (base 1920px, clamped 0.6–1.6)
 - Auto-detects from `UiCanvasInformation` canvas width each frame
 - Manual adjustment via key `1` cycles Small (0.85×) / Medium (1.0×) / Large (1.2×)
-- All colors, layout constants, formatters, and sorting logic centralized in `src/ui/uiConstants.ts`
 
-### 5.6 Server-Down Detection
+### 5.9 Server-Down Detection
 - After 20s grace period on scene load, monitors for Flag CRDT presence
 - If flag entity missing for 10 consecutive seconds → "Server Disconnected" overlay
 - Dismissable, re-shows every 60s if server remains down
 
-### 5.7 Other UI Features
-- **Mailbox Popup:** Community join via Decentraland social API (`signedFetch`)
-- **Chest Popup:** Boomerang color picker with 4 selectable variants (icon + label)
+### 5.10 Other UI Features
+- **Boombox Popup:** Tape selection UI with insert/eject
+- **Chest Popup:** Boomerang store with purchase/equip actions, coin balance, win requirements
 - **Spectator Mode:** Bottom overlay with controls hint + exit button
 - **UI Scale Toast:** Brief notification when UI scale changes
-- **Scare Bar:** Grey/red progress bar when ghost is nearby (above drown bar if both visible)
+- **Scare Bar:** Grey/red progress bar when ghost is nearby
 - **Drown Bar:** Blue/red air meter when in water
+- **Coin Balance:** Displayed on scoreboard panel
+- **Round Earnings:** Breakdown shown during round-end splash (participation + hold time + placement)
 
 ---
 
@@ -305,7 +403,7 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 | `allTimeLeaderboard` | All-time leaderboard JSON |
 | `monthlyLeaderboard` | Monthly leaderboard JSON |
 | `monthlyLeaderboardMonth` | Current month string for reset detection |
-| `playerNames` | Map of userId → display name (persisted across sessions) |
+| `playerNames` | Map of userId → display name |
 | `visitorData` | Today's visitor records (name, time spent) |
 | `monthlyVisitorData` | This month's visitor records |
 | `lastVisitorResetDay` | Date string for daily reset detection |
@@ -313,7 +411,12 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 | `monthlyVisitorResetMonth` | Month string for monthly visitor reset |
 | `concurrentData` | Hourly peak concurrent users + daily peak |
 | `dailyReportSentForDay` | Date string tracking pre-midnight Discord report |
-| `pendingReport` | Deferred Discord report snapshot (sent on next server startup if missed) |
+| `pendingReport` | Deferred Discord report snapshot |
+| `wallet:<userId>` | Per-player coin balance |
+| `upgrades:<userId>` | Per-player purchased boomerangs + equipped |
+| `blessing:<userId>` | Last blessing claim timestamp |
+| `lifetime_wins:<userId>` | Per-player lifetime round wins |
+| `lifetime_hold_time:<userId>` | Per-player lifetime flag hold time |
 
 ### 6.2 Daily Resets (Midnight UTC)
 - **Leaderboard:** Resets daily. Before clearing, snapshots data for Discord report.
@@ -324,24 +427,18 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 
 ### 6.3 Name Resolution
 - Both server and client periodically scan `AvatarBase.name` and `PlayerIdentityData` to resolve player display names (server every 3s, client every 2-5s with retry)
-- Names persist in the `playerNames` Storage key so leaderboard entries show real names even after players leave
-- Client sends `registerName` message when its name resolves; server calls `updatePlayerName()` which propagates to all three leaderboards, visitor sessions, and persists
-- Leaderboard names patched from persisted directory on server startup via `patchAllLeaderboardNames()`
+- Names persist in the `playerNames` Storage key
+- Client sends `registerName` message; server propagates to all three leaderboards, visitor sessions, and persists
+- Leaderboard names patched from persisted directory on server startup
 
 ### 6.4 Discord Daily Report
-- **Pre-midnight Report:** Sent automatically during UTC hour 23 (23:00-23:59)
-- **Deferred Report:** If pre-midnight report was missed (no server running), data is snapshotted to `pendingReport` Storage key before daily reset. Sent on next server startup.
-- **Report Content:** Scene name, date, unique users, total playtime, peak concurrent (count + time), hourly peak array, per-user breakdown (address, name, time_seconds, flags won)
-- **Delivery:** Multipart form-data POST to Discord webhook with summary text + JSON file attachment. Falls back to chunked text messages if multipart fails.
-- **Admin Trigger:** Admin addresses can manually trigger report via `testDiscord` message
+- **Pre-midnight Report:** Sent automatically during UTC hour 23
+- **Deferred Report:** If missed, data snapshotted to `pendingReport` before reset. Sent on next server startup.
+- **Report Content:** Scene name, date, unique users, total playtime, peak concurrent, per-user breakdown
+- **Delivery:** Multipart form-data POST to Discord webhook with summary text + JSON file attachment
 
-### 6.5 Leaderboard Deduplication
-- All three leaderboards (daily, monthly, all-time) share common helper functions:
-  - `parseLeaderboardJson()` — safe JSON parse with fallback
-  - `incrementLeaderboardWins()` — add round wins for winners
-  - `patchLeaderboardNames()` — update a single player's name across entries
-  - `patchAllLeaderboardNames()` — bulk name patching from persisted directory
-- Eliminates the previous 3× copy-paste pattern in `handleRoundEnd()` and `updatePlayerName()`
+### 6.5 PostHog Analytics
+- Integrated via `server/posthog.ts` for server-side event tracking
 
 ---
 
@@ -349,14 +446,11 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 
 | Sound | File | Trigger |
 |-------|------|---------|
-| Background Music | `assets/sounds/SpriteSprint_Loop.wav` | Loops globally, toggleable with key `2` |
+| Background Music | Configurable via boombox tapes (default: `SpriteSprint_Loop.wav`) | Loops globally, toggleable with key `2` or boombox click |
 | Flag Pickup | `assets/sounds/flag-pickup.mp3` | Server sends `pickupSound` |
 | Flag Drop | `assets/sounds/flag-drop.mp3` | Server sends `dropSound` |
-| Boomerang Throw | `assets/sounds/boomerang-throw.mp3` | Client on E press |
-| Boomerang Hit | (hit VFX sound) | `shellTriggered` with victimId |
-| Boomerang Miss/Return | (miss VFX sound) | `shellTriggered` without victimId |
+| Boomerang Throw | `assets/sounds/boomerang2.mp3` | Client on E press |
 | Banana Drop | `assets/sounds/banana-drop.mp3` | `bananaDropped` message |
-| Banana Trigger | (stun sound) | `bananaTriggered` message |
 | Lightning Thunder | (lightning sound) | `lightningStrike` message |
 | Lightning Warning | (warning sound) | `lightningWarning` message |
 | Teleport | `assets/sounds/teleport.mp3` | Orb teleport activation |
@@ -367,6 +461,8 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 | Countdown Tick | `assets/sounds/click.wav` | Last 10 seconds of round |
 | Trumpet | `assets/sounds/trumpets.mp3` | Round-end splash (when there are scorers) |
 
+All sounds are silently preloaded at volume 0 on scene load (`preloadSounds.ts`) to eliminate first-play latency.
+
 ---
 
 ## 8. Controls
@@ -376,180 +472,152 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 | WASD | Move |
 | Space | Jump / Glide / Updraft |
 | E | Throw boomerang (hold for Blue charge) |
-| F | Drop banana trap |
+| F | Drop banana |
 | 1 | Cycle UI scale (Small/Medium/Large) |
-| 2 | Toggle music mute |
+| 2 | Toggle music (Mute/Insert Tape) |
 | 3 | Voluntarily drop flag |
 | 4 | Close any open overlay |
 | Mouse Click | Throw boomerang (if no overlay open, no interactive object targeted) |
 
 ---
 
-## 9. Known Issues & Potential Faults
+## 9. System Manager & Performance
 
-### 9.1 CRDT Pressure
-- **Problem:** Too many synced entities or frequent writes can saturate the CRDT buffer, freezing ALL synced state (scoreboard, flag position, etc.)
-- **Mitigation:** Projectile Transform is NOT synced (clients read component data instead); hold time syncs at 0.5s intervals; projectile component syncs at 10Hz; visitor data capped at 100 entries per sync
-- **Risk:** High player counts with many simultaneous boomerangs + bananas could still cause pressure
+### 9.1 System Manager
+All client systems are registered through a centralized `systemManager.ts` that provides two registration methods:
+- `registerSystem(fn)` — Per-frame systems (60fps)
+- `registerThrottled(fn, interval)` — Throttled systems with configurable interval
 
-### 9.2 AvatarAttach + Transform Race Condition (Resolved)
-- **Problem:** Writing Transform every frame on a direct child of an AvatarAttach entity caused a race condition in Bevy's transform propagation.
-- **Resolution:** Inserted a static intermediate entity between the AvatarAttach anchor and the animated visual.
-- **Pattern:** `Anchor (AvatarAttach)` → `Offset (STATIC)` → `Visual (animated)`
+This reduces the number of actual `engine.addSystem()` calls to 2 (one per-frame, one throttled dispatcher), improving engine overhead.
 
-### 9.3 Player Position Accuracy
-- **Problem:** Server reads player positions from CRDT-synced `Transform` on `PlayerIdentityData` entities, which can be ~200ms stale
-- **Mitigation:** Generous hit radii (2m for boomerangs, 2m for proximity steal, 3m for flag pickup)
+**Frame Budget Tiers:**
+1. **Per-frame visual** (60fps): shield, speed boost, hold time interpolation
+2. **Per-frame gameplay** (60fps): flag, combat, projectile, trap, water, ghost
+3. **Per-frame time-sliced** (alternating frames, 30fps each): mushroom + lightning vs updraft + coins + beacon
+4. **Throttled cosmetic** (20fps / 0.05s): water bob, coin bob/spin, water splash, boost trails
+5. **Throttled proximity** (10fps / 0.1s): boombox, pedestal
+6. **Throttled checks** (4fps / 0.25s): mailbox, chest, gravestone, terminal, upgrades, proximity lights
+7. **Rare checks** (0.5fps / 2s): name resolver, world time update
 
-### 9.4 Gravity & Ground Detection
-- **Problem:** Server has no physics engine — ground level is estimated via client raycasts and carrier Y-position history
-- **Risk:** Flag or bananas can briefly float or sink before ground data arrives
+### 9.2 Client-Side Caching
+- **Leaderboard Parsing:** Cached keyed on raw JSON string. Only re-parses when server pushes new data (~every 5 minutes).
+- **Visitor Parsing:** Cached keyed on raw JSON string. Only re-parses when server syncs (~every 10 seconds).
+- **UI Sorting:** Two-slot LRU cache for sorted visitor/leaderboard entries.
 
-### 9.5 Carrier Disconnect
-- **Detection:** Server checks `PlayerIdentityData` presence each frame + 5s staleness timeout on position data
-- **Risk:** Flag can be "stuck" on a disconnected player for up to 5 seconds
+### 9.3 Server-Side Optimizations
+- Hold time sync at 0.5s (not every frame)
+- Projectile CRDT sync at 10Hz
+- Projectile Transform NOT synced — clients compute position from component data
+- Flag bob/spin is client-only
+- All server systems wrapped in try/catch
+- Visitor analytics capped at 100 entries per CRDT sync
+- Sync ID pool with recycling to avoid CRDT tombstone accumulation
 
-### 9.6 Name Resolution Delays
-- **Problem:** Player display names aren't always available immediately on connect
-- **Mitigation:** Client + server both have periodic name resolver systems; names persist in Storage; startup patches all leaderboards from persisted name directory
+### 9.4 Entity Pools
+- Projectile, trap, and combat VFX entities are pre-created in pools on scene load to avoid first-use invisible entities (GLB model loading delay)
 
-### 9.7 Round-End Async Race Condition (Resolved)
-- **Problem:** `handleRoundEnd()` was async. The flag stayed in `Carried` state through `await` gaps.
-- **Resolution:** All critical state mutations happen synchronously before any `await`. Also iterates ALL hold-time entities in the ECS to catch orphaned entities.
-
-### 9.8 Entity Limits
-- 1024 parcels = generous budgets, but each active banana/boomerang/player/ghost = 1+ synced entities
-- Proximity lights dynamically created/destroyed
-- Boundary walls = ~1,008 entities (48 visual + 960 collider segments)
-
-### 9.9 Mobile Experience
-- Dedicated mobile UI layout with larger touch targets
-- Gameplay challenging due to smaller screen, less precise aiming
-- Some UI features simplified (metrics pages removed on mobile)
-
-### 9.10 Single Server Instance
-- No load balancing or sharding — all players share one server process
-- Server crash = full state reset (flag, scores) though leaderboards persist via Storage
+### 9.5 Sound Preloading
+- All sound effects silently played at volume 0 on scene load to cache audio clips
 
 ---
 
-## 10. Performance Optimizations
+## 10. Known Issues & Edge Cases
 
-### 10.1 Client-Side Caching
-- **Leaderboard Parsing:** `roundsWon.ts` caches parsed + sorted entries keyed on raw JSON string. Only re-parses when server pushes new data (~every 5 minutes). Previously parsed 60×/second.
-- **Visitor Parsing:** `sceneTime.ts` caches parsed visitor arrays keyed on raw JSON string. Only re-parses when server syncs (~every 10 seconds).
-- **UI Sorting:** `sortVisitorsWithBotSection()` and `getSortedLeaderboardEntries()` check input array reference. Two-slot LRU cache handles daily + monthly visitors in same frame. Skips work on ~599/600 frames.
+### 10.1 CRDT Pressure
+- Too many synced entities or frequent writes can saturate the CRDT buffer
+- Mitigated by throttled syncs, non-synced transforms, and capped payloads
+- Risk at very high player counts
 
-### 10.2 Server-Side Optimizations
-- **Hold time sync at 0.5s** (not every frame) reduces CRDT write pressure
-- **Projectile CRDT sync at 10Hz** (not 60fps) — `PROJECTILE_SYNC_INTERVAL = 0.1s`
-- **Projectile Transform NOT synced** — clients compute position from component data
-- **Flag bob/spin is client-only** — server only writes Transform during gravity falls
-- **Safe system wrapper** — all server systems wrapped in try/catch so one error doesn't crash the frame
-- **Visitor analytics capped at 100 entries** per CRDT sync to avoid oversized payloads
+### 10.2 AvatarAttach + Transform Race Condition (Resolved)
+- Inserting a static intermediate entity between AvatarAttach anchor and animated visual prevents Bevy detach bug
 
-### 10.3 Memory Leak Prevention
-- `playerBoomerangColors` map cleaned on player disconnect
-- `roundWinAchievementTime` / `lastKnownWins` maps cleared on leaderboard daily reset
-- Disconnected players' hold-time entities cleaned up at round end
+### 10.3 Player Position Staleness
+- Server reads CRDT-synced positions (~200ms stale). Mitigated by generous hit radii.
 
----
+### 10.4 Ground Detection
+- No server physics engine. Ground level estimated via client raycasts.
 
-## 11. Asset Manifest
+### 10.5 Carrier Disconnect
+- 5s timeout on position staleness before flag is force-dropped
 
-### 3D Models (in `assets/models/`)
-- `boomerang.r.glb`, `boomerang.y.glb`, `boomerang.b.glb`, `boomerang.g.glb` — Colored boomerangs
-- `banana.glb` — Banana trap model
-- `mushroom_03.glb` — Collectible mushroom
-- `solid_red.glb`, `gold.glb`, `solid_blue.glb`, `solid_green.glb` — Podium marker cubes (hidden at runtime)
-- Castle/environment models — placed via Creator Hub composite
-
-### Images (in `assets/images/`)
-- `boomerang.r.png`, `boomerang.y.png`, `boomerang.b.png`, `boomerang.g.png`, `boomerang.bw.png` — Ability icons
-- `banana-color.png` — Banana ability icon
-- `flag-icon-white.png` — Flag icon for scoreboard/leaderboard
-- `beacon2.png` — Beacon image for How to Play overlay
-- `UI_circle.png` — Mobile button background
-- `expand.png` — Expand icon for mobile scoreboard
-- `boundary-rgba.png` — Boundary wall gradient texture
-- `flagtag_splash.png` — Navmap thumbnail
-
-### Audio (in `assets/sounds/`)
-- `SpriteSprint_Loop.wav` — Background music loop
-- `flag-pickup.mp3`, `flag-drop.mp3` — Flag interaction
-- `boomerang-throw.mp3` — Projectile fire
-- `banana-drop.mp3` — Trap placement
-- `teleport.mp3` — Teleport orb
-- `error.mp3` — Cooldown denial
-- `chest.mp3` — Chest interaction
-- `click.wav` — UI click / countdown tick
-- `hover.wav` — UI hover
-- `trumpets.mp3` — Round-end fanfare
+### 10.6 Single Server Instance
+- No sharding. Server crash = full state reset (leaderboards persist via Storage).
 
 ---
 
-## 12. Configuration Constants Quick Reference
+## 11. Configuration Constants
 
-| Constant | Value | Location |
-|----------|-------|----------|
-| Round Length | 5 minutes | `components.ts` |
-| Pickup Radius | 3m | `server.ts` |
-| Proximity Steal Radius | 2m | `server.ts` |
-| Steal Immunity | 3 seconds | `server.ts` |
-| Boomerang Speed (Red/Yellow) | 30 m/s | `projectileSystem.ts` |
-| Boomerang Speed (Green) | 18 m/s | `projectileSystem.ts` |
-| Boomerang Speed (Blue max) | 60 m/s | `projectileSystem.ts` |
-| Boomerang Range (Red) | 40m | `projectileSystem.ts` |
-| Boomerang Range (Yellow) | 20m | `projectileSystem.ts` |
-| Boomerang Range (Blue max) | 50m | `projectileSystem.ts` |
-| Boomerang Range (Green) | 30m | `projectileSystem.ts` |
-| Boomerang Hit Radius | 2m | `components.ts` |
-| Boomerang Cooldown | 0.45s base | `components.ts` |
-| Blue Charge Time | 1.5s | `projectileSystem.ts` |
-| Green Orbit Duration | 3.5s | `server.ts` |
-| Green Orbit Radius | 3m (client) / 4m hit zone (server) | `server.ts` |
-| Banana Lifetime | 15s | `components.ts` |
-| Banana Cooldown | 5s | `components.ts` |
-| Banana Max Active | 3 | `components.ts` |
-| Banana Trigger Radius | 2m | `components.ts` |
-| Lightning Roll Interval | 5s | `server.ts` |
-| Lightning Warning | 3s | `server.ts` |
-| Water Surface Y | 1.58 | `waterSystem.ts` |
-| Drown Time | 5s | `waterSystem.ts` |
-| Ghost Detect Radius | 20m | `components.ts` |
-| Ghost Speed | 3 m/s (5 m/s close) | `components.ts` |
-| Ghost HP | 1 | `server.ts` |
-| Ghost Respawn Cooldown | 30s | `server.ts` |
-| Updraft Rotation | 60s | `server.ts` |
-| Boundary Radius | 128m | `boundaryWalls.ts` |
-| Flag Gravity | 15 m/s² | `server.ts` |
-| Splash Duration | 3s | `server.ts` |
-| Cinematic Duration | 15s (podium + credits) | `cinematicSystem.ts` |
-| Mushroom Count | 1 | `server.ts` |
-| Hold Time Sync | 0.5s | `server.ts` |
-| Visitor Sync Interval | 10s | `server.ts` |
-| Visitor CRDT Cap | 100 entries | `server.ts` |
+| Constant | Value |
+|----------|-------|
+| Round Length | 5 minutes |
+| Pickup Radius | 3m |
+| Proximity Steal Radius | 2m |
+| Steal Immunity | 3 seconds |
+| Boomerang Speed (Red/Yellow) | 30 m/s |
+| Boomerang Speed (Blue max) | 60 m/s |
+| Boomerang Speed (Green) | 18 m/s |
+| Boomerang Range (Red) | 40m |
+| Boomerang Range (Yellow) | 20m |
+| Boomerang Range (Blue max) | 50m |
+| Boomerang Range (Green) | 30m |
+| Boomerang Hit Radius | 2m |
+| Boomerang Cooldown | 0.45s base |
+| Blue Charge Time | 1.5s |
+| Green Orbit Duration | 3.5s |
+| Green Orbit Radius | 3m (client) / 4m (server) |
+| Banana Lifetime | 15s |
+| Banana Cooldown | 5s |
+| Banana Max Active | 3 |
+| Banana Trigger Radius | 2m |
+| Lightning Roll Interval | 5s |
+| Lightning Warning | 3s |
+| Water Surface Y | 1.58 |
+| Drown Time | 5s |
+| Ghost Detect Radius | 20m |
+| Ghost Speed | 3 m/s (5 m/s close) |
+| Ghost HP | 1 |
+| Ghost Spawn Interval | 20s |
+| Ghost Max Active | 5 |
+| Updraft Rotation | 60s |
+| Boundary Radius | 128m |
+| Flag Gravity | 15 m/s² |
+| Cinematic Duration | 15s |
+| Mushroom Count | 1 |
+| Mushroom Speed Boost | +50% for 20s |
+| Coin Pickup Radius | 2.5m |
+| Coin Respawn Interval | 30s |
+| Coin Death Penalty | 10 |
+| Max Coins | 10,000 |
+| Coins Per Hold Second | 0.1 |
+| Participation Bonus | 1 coin |
+| Placement Bonus | 5/3/1 coins |
+| Blessing Reward | 5 coins (daily) |
+| Blessing Duration | 32s |
+| Yellow Boomerang Cost | 50 coins + 1 win |
+| Green Boomerang Cost | 150 coins + 5 wins |
+| Blue Boomerang Cost | 300 coins + 10 wins |
 
 ---
 
-## 13. Rebuilding Checklist
+## 12. Rebuilding Checklist
 
 If recreating this game from scratch, implement in this order:
 
-1. **Scene Setup:** 32×32 parcel scene, authoritative multiplayer enabled, world deployment to `flagtag.dcl.eth`
-2. **Shared Components:** Define `Flag`, `PlayerFlagHoldTime`, `CountdownTimer`, `LeaderboardState`, `AllTimeLeaderboardState`, `MonthlyLeaderboardState`, `VisitorAnalytics`, `MonthlyVisitorAnalytics`, `Trap`, `Projectile`, `Zombie` with `validateBeforeChange`
-3. **Message Bus:** Define all client↔server messages (see `src/shared/messages.ts`)
-4. **Server Core:** Flag state machine, pickup/drop/steal logic, hold time tracking, round timer aligned to UTC 5-min boundaries
+1. **Scene Setup:** 32×32 parcel scene, authoritative multiplayer, world deployment to `flagtag.dcl.eth`
+2. **Shared Definitions:** Components (`components.ts`), constants (`constants.ts`), date utils (`dateUtils.ts`), messages (`messages.ts`), coins (`coins.ts`), upgrades (`upgrades.ts`), sync ID pool
+3. **Server Core:** Flag state machine, pickup/drop/steal, hold time tracking, round timer (UTC 5-min boundaries)
+4. **Economy:** Coin wallets, coin pickups, round-end earnings, death penalties, store/purchases, blessing
 5. **Client Flag System:** Visual rendering (bob, spin, particles, beacon, carry attach with static intermediate entity)
-6. **Scoreboard UI:** Real-time sorted player list with interpolated scores, cached parsing
-7. **Boomerang System:** 4 variants (Red/Yellow/Blue/Green), server hit detection, client visual entity pooling, wall raycast, charge mechanic, orbit mechanic
-8. **Banana Trap System:** Server spawn/trigger + client visual pooling + ground raycast reporting
-9. **Lightning System:** Server probability rolls + client bolt rendering + death overlay
-10. **Water System:** Drowning timer with air bar, movement restriction, splash VFX
-11. **Ghost System:** Night-only ghost AI, scare meter, death overlay, boomerang/trap interaction
-12. **Round-End Cinematic:** Fade state machine, podium teleport, virtual camera, grounded emotes (in `cinematicSystem.ts`)
-13. **Leaderboards:** Daily + monthly + all-time with deduplicated helpers and persistence
-14. **Environment:** Boundary walls (`boundaryWalls.ts`), teleport orbs (`teleportOrbs.ts`), updraft stacks, ladders, portals
-15. **Polish:** Proximity lights, water bob, mushroom/shield, spectator cam, mobile UI, sound design
-16. **Analytics:** Visitor tracking (daily + monthly), concurrent user peaks, Discord daily reporting with deferred snapshots
-17. **Performance:** CRDT caching, projectile sync throttling, UI sort caching, memory leak prevention
+6. **Scoreboard UI:** Real-time sorted player list with interpolated scores, coin balance
+7. **Boomerang System:** 4 variants (Red/Yellow/Blue/Green), server hit detection, client modular architecture (charge, flight, orbit, pool, sound, state, hand visual)
+8. **Banana Trap System:** Server spawn/trigger + client visual pooling + ground raycast
+9. **Lightning System:** Server probability rolls + client bolt rendering + death overlay + coin penalty
+10. **Water System:** Drowning timer with air bar, movement restriction, splash VFX, coin penalty
+11. **Ghost System:** Night-only ghost AI, scare meter, death overlay, boomerang/trap interaction, coin penalty
+12. **Mushroom / Shield / Speed Boost:** Pickup → shield + speed boost + trail VFX
+13. **Round-End Cinematic:** Fade state machine, podium teleport, virtual camera, emotes, coin earnings splash
+14. **Leaderboards:** Daily + monthly + all-time with persistence + in-world 3D display
+15. **Environment:** Boundary walls, teleport orbs, updraft stacks, ladders, portal, boombox, pedestal, gravestone, terminal
+16. **Polish:** Proximity lights, water bob, spectator cam, mobile UI, sound preloading
+17. **Analytics:** Visitor tracking (daily + monthly), Discord daily reporting, PostHog integration
+18. **Performance:** System manager with throttled tiers, CRDT caching, entity pools, sync ID recycling

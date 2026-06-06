@@ -122,9 +122,9 @@ export function HowToPlayOverlay() {
           </UiEntity>
           <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'flex-start', padding: { left: s(32) }, margin: { bottom: s(12) } }}>
             <KeyBinding keyLabel="E" text="Throw Boomerang" s={s} />
-            <KeyBinding keyLabel="F" text="Drop Trap" s={s} />
+            <KeyBinding keyLabel="F" text="Drop Banana" s={s} />
             <KeyBinding keyLabel="3" text="Drop Flag" s={s} />
-            <KeyBinding keyLabel="2" text={getEquippedTape() ? "Eject Tape" : "Insert Tape"} s={s} />
+            <KeyBinding keyLabel="2" text={getEquippedTape() ? "Mute" : "Insert Tape"} s={s} />
             {!mobile && <KeyBinding keyLabel="1" text="Toggle UI Size" s={s} last />}
           </UiEntity>
           {/* Close X */}
