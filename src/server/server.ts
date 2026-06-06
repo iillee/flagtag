@@ -54,7 +54,7 @@ import { bananaServerSystem, shellServerSystem, orbitServerSystem, registerComba
 import { registerGhostHandlers, ghostServerSystem } from './ghostSystem'
 import { registerMushroomHandlers, spawnMushrooms } from './mushroomSystem'
 import { playerTrackingSystem, nameResolverServerSystem } from './playerTracking'
-import { countdownServerSystem, lightningServerSystem, updraftServerSystem, registerRoundHandlers } from './roundManager'
+import { countdownServerSystem, lightningServerSystem, updraftServerSystem, registerRoundHandlers, loadRoundWinnerWebhook } from './roundManager'
 import { initPostHog } from './posthog'
 
 // ── Setup ──
@@ -63,6 +63,8 @@ export async function setupServer(): Promise<void> {
   console.log('[Server] Starting Flag Tag server...')
 
   await loadDiscordWebhookUrl()
+  await loadRoundWinnerWebhook()
+  await loadMailboxWebhook()
   await initPostHog()
 
   // Load mailbox webhook from env var (fallback to hardcoded)
@@ -253,8 +255,16 @@ function registerSystems() {
 
 
 /** Register the registerName handler (only handler still in server.ts). */
-const MAILBOX_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1504487871648632843/usPz24jkxogWcXoS7gYGZjOmHCW90plbLJCBZYLfQzNACEe6fyKQ-fNoYM5Da8Lf0YMD'
-let mailboxWebhook = MAILBOX_WEBHOOK_FALLBACK
+let mailboxWebhook = ''
+
+async function loadMailboxWebhook(): Promise<void> {
+  mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || ''
+  if (!mailboxWebhook) {
+    console.log('[Server] ⚠️ DISCORD_MAILBOX_WEBHOOK env var not set — feedback notifications disabled')
+  } else {
+    console.log('[Server] ✅ Mailbox webhook URL loaded from EnvVar')
+  }
+}
 const feedbackCooldowns = new Map<string, number>()
 
 function registerFeedbackHandlers(): void {
@@ -274,6 +284,10 @@ function registerFeedbackHandlers(): void {
       return
     }
     feedbackCooldowns.set(from, now)
+    if (!mailboxWebhook) {
+      room.send('feedbackResult', { success: false, message: 'Feedback system not configured.' }, { to: [context.from] })
+      return
+    }
     try {
       const name = playerNames.get(from) || from.slice(0, 10)
       const res = await fetch(mailboxWebhook, {

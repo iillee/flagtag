@@ -27,8 +27,18 @@ import { activeTraps, activeProjectiles, activeOrbits, removeTrap, removeProject
 import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime } from './economy'
 import { capture } from './posthog'
+import { EnvVar } from '@dcl/sdk/server'
 
-const ROUND_WINNER_WEBHOOK = 'https://discordapp.com/api/webhooks/1512612923548373135/kDMyVFdidPBhHuenVmrvYaNgPCZGfXI8xhMbXSPlbRLvo05SjgcdzlKDcVNxOjaKmH10'
+let ROUND_WINNER_WEBHOOK = ''
+
+export async function loadRoundWinnerWebhook(): Promise<void> {
+  ROUND_WINNER_WEBHOOK = (await EnvVar.get('DISCORD_ROUND_WINNER_WEBHOOK')) || ''
+  if (!ROUND_WINNER_WEBHOOK) {
+    console.log('[Server] ⚠️ DISCORD_ROUND_WINNER_WEBHOOK env var not set — round winner notifications disabled')
+  } else {
+    console.log('[Server] ✅ Round winner webhook URL loaded from EnvVar')
+  }
+}
 
 // ── Lightning state ──
 const LIGHTNING_ROLL_INTERVAL = 5
@@ -425,7 +435,8 @@ async function handleRoundEnd(): Promise<void> {
     if (topPlayers[1]) content += ` — 🥈 ${topPlayers[1].name} (${topPlayers[1].seconds}s)`
     if (topPlayers[2]) content += ` — 🥉 ${topPlayers[2].name} (${topPlayers[2].seconds}s)`
     content += ` — ${players.length} player${players.length !== 1 ? 's' : ''}`
-    fetch(ROUND_WINNER_WEBHOOK, {
+    if (!ROUND_WINNER_WEBHOOK) { /* webhook not configured */ }
+    else fetch(ROUND_WINNER_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
