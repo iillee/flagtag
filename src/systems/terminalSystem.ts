@@ -2,24 +2,14 @@ import {
   engine, Transform, pointerEventsSystem, InputAction, AudioSource, GltfContainer, ColliderLayer
 } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { openMetricsPanel, isMetricsPanelOpen, closeMetricsPanel } from '../ui'
+import { openExternalUrl } from '~system/RestrictedActions'
 
 const TERMINAL_SRC = 'assets/asset-packs/terminal/Terminal_01/Terminal_01.glb'
-const TERMINAL_CLOSE_DISTANCE = 6
+const POSTHOG_DASHBOARD_URL = 'https://us.posthog.com/shared/wPXQXDz0K0G24z-o_w-9zlvGcK2Cyg'
 
 const setupEntities = new Set<number>()
-const terminalPositions: Vector3[] = []
 
 export function terminalSystem() {
-  // Close metrics panel if player walks away from all terminals
-  if (isMetricsPanelOpen() && Transform.has(engine.PlayerEntity) && terminalPositions.length > 0) {
-    const playerPos = Transform.get(engine.PlayerEntity).position
-    const nearAny = terminalPositions.some(pos => Vector3.distance(playerPos, pos) <= TERMINAL_CLOSE_DISTANCE)
-    if (!nearAny) {
-      closeMetricsPanel()
-    }
-  }
-
   // Find terminal entities by GltfContainer src
   for (const [entity] of engine.getEntitiesWith(GltfContainer, Transform)) {
     if (setupEntities.has(entity as number)) continue
@@ -27,7 +17,6 @@ export function terminalSystem() {
     if (gltf.src !== TERMINAL_SRC) continue
 
     const pos = Transform.get(entity).position
-    terminalPositions.push(Vector3.create(pos.x, pos.y, pos.z))
 
     // Fix collision mask so pointer events work
     GltfContainer.createOrReplace(entity, {
@@ -48,10 +37,10 @@ export function terminalSystem() {
     })
 
     pointerEventsSystem.onPointerDown(
-      { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'Boot Up Computer', maxDistance: 5 } },
+      { entity, opts: { button: InputAction.IA_POINTER, hoverText: 'View Scene Analytics', maxDistance: 5 } },
       () => {
         AudioSource.createOrReplace(sound, { audioClipUrl: 'assets/sounds/terminal.mp3', playing: true, loop: false, volume: 1, global: false })
-        openMetricsPanel()
+        openExternalUrl({ url: POSTHOG_DASHBOARD_URL })
       }
     )
 

@@ -13,7 +13,7 @@ import { Ghost } from '../shared/components'
 import { room } from '../shared/messages'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { exitSpectatorMode } from './spectatorSystem'
-import { showHitEffect, initPools as initCombatPools } from './combatSystem'
+import { initPools as initCombatPools } from './combatSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
 
@@ -40,6 +40,8 @@ interface ClientGhost {
 }
 
 const clientGhosts = new Map<Entity, ClientGhost>()
+// Track entities killed via message — ignore even after visual cleanup until CRDT catches up
+const killedGhostEntities = new Set<Entity>()
 
 // ── Ghost sound replay timer ──
 const GHOST_SOUND_INTERVAL = 5.0 // seconds between sound replays (clip length + gap)
@@ -129,6 +131,18 @@ const pendingDeathPositions: Vector3[] = []
 
 room.onMessage('ghostKilled', (data) => {
   pendingDeathPositions.push(Vector3.create(data.x, data.y, data.z))
+
+  // Immediately start sinking all active ghost visuals to prevent desync.
+  // On slow clients (especially mobile), the CRDT entity removal may arrive late,
+  // causing the old ghost to linger while a new one spawns (double ghost bug).
+  for (const [entity, cz] of clientGhosts) {
+    if (!cz.sinking) {
+      cz.sinking = true
+      cz.sinkTimer = 0
+      killedGhostEntities.add(entity)
+      console.log('[Ghost] Immediate sink triggered via ghostKilled message')
+    }
+  }
 })
 
 // ── Detect boomerang hits on ghosts (client reports to server) ──
@@ -216,10 +230,7 @@ export function ghostClientSystem(dt: number): void {
     }
   }
 
-  // Process death VFX
-  for (const pos of pendingDeathPositions) {
-    showHitEffect(pos)
-  }
+  // Death positions are used for sink triggering only — hitVfx already handles the VFX
   pendingDeathPositions.length = 0
 
   // Track which ghost entities currently exist (server-synced via CRDT)
@@ -232,6 +243,12 @@ export function ghostClientSystem(dt: number): void {
     if (!ghost.active) {
       // Ghost deactivated — remove visual if exists
       removeGhostVisual(entity)
+      killedGhostEntities.delete(entity)
+      continue
+    }
+
+    // Skip entities we know are dead via message but CRDT hasn't removed yet
+    if (killedGhostEntities.has(entity)) {
       continue
     }
 
@@ -244,6 +261,9 @@ export function ghostClientSystem(dt: number): void {
       // Create visual for new ghost
       cz = createGhostVisual(entity, serverPos)
       clientGhosts.set(entity, cz)
+    } else if (cz.sinking) {
+      // Ghost was marked for sinking — let the cleanup loop handle it
+      continue
     }
 
     // Update time for animations
@@ -338,7 +358,12 @@ export function ghostClientSystem(dt: number): void {
       if (sinkProgress >= 1) {
         destroyGhostVisual(cz)
         clientGhosts.delete(entity)
+        // Keep entity in killedGhostEntities until CRDT removes it —
+        // prevents re-creating the visual from stale CRDT data
       }
+    } else {
+      // Entity still in CRDT — clear from killed set so it can be created fresh
+      killedGhostEntities.delete(entity)
     }
   }
 }

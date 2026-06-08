@@ -1,6 +1,7 @@
 import { engine, Entity, Transform, AudioSource, GltfContainer, LightSource } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
+import { isMobile } from '@dcl/sdk/platform'
 import { registerSystem } from './systemManager'
 
 const ORB_TRIGGER_RADIUS = 0.9
@@ -74,18 +75,19 @@ function createOrbPair(
  * Creates teleport orb pairs and registers the teleportation + spin/bob system.
  */
 export function setupTeleportOrbs(): void {
+  const mobile = isMobile()
   const orbPairs: OrbPair[] = [
     createOrbPair(
       [{ x: 290.5, y: 2.3, z: 254.7 }, { x: 276.56, y: 52.25, z: 301.5 }],
       Color3.create(1.0, 0.45, 0.0),
-      'assets/models/d20-gold.glb',
-      'assets/models/d20-wire-gold.glb'
+      mobile ? 'assets/models/d20-gold-mobile.glb' : 'assets/models/d20-gold.glb',
+      mobile ? 'assets/models/d20-wire-gold-mobile.glb' : 'assets/models/d20-wire-gold.glb'
     ),
     createOrbPair(
       [{ x: 224, y: 1.5, z: 288 }, { x: 226.3, y: 2.3, z: 211.3 }],
       Color3.create(0.05, 0.3, 1.0),
-      'assets/models/d20-blue.glb',
-      'assets/models/d20-wire-blue.glb'
+      mobile ? 'assets/models/d20-blue-mobile.glb' : 'assets/models/d20-blue.glb',
+      mobile ? 'assets/models/d20-wire-blue-mobile.glb' : 'assets/models/d20-wire-blue.glb'
     ),
   ]
 

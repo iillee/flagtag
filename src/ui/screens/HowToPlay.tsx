@@ -6,7 +6,7 @@ import { GAME_VERSION } from '../../version'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
-import { S, GOLD, MUTED, WHITE, CLOSE_GREY } from '../uiConstants'
+import { S, GOLD, MUTED, WHITE, CLOSE_GREY, PANEL_BG } from '../uiConstants'
 import { playClickSound } from '../uiSounds'
 import { hover, notifyOverlayClosed } from '../uiState'
 import { getEquippedTape } from './boomboxState'
@@ -19,14 +19,14 @@ const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 export function HowToPlayOverlay() {
   const mobile = isMobile()
   const s = mobile ? (v: number) => v : S
-  const cardW = mobile ? '32%' : S(280)
-  const cardH = mobile ? 480 : S(480)
+  const cardW = mobile ? '32%' : S(320)
+  const cardH = mobile ? 520 : S(520)
   const cardPad = mobile
-    ? { top: 14, bottom: 14, left: 16, right: 16 }
-    : { top: S(14), bottom: S(14), left: S(16), right: S(16) }
-  const cardBg = Color4.create(0.15, 0.12, 0.12, 0.92)
-  const titleFs = mobile ? 28 : S(28)
-  const bodyFs = mobile ? 13 : S(13)
+    ? { top: 18, bottom: 18, left: 20, right: 20 }
+    : { top: S(18), bottom: S(18), left: S(20), right: S(20) }
+  const cardBg = PANEL_BG
+  const titleFs = mobile ? 32 : S(32)
+  const bodyFs = mobile ? 16 : S(16)
 
   return (
     <UiEntity
@@ -46,8 +46,8 @@ export function HowToPlayOverlay() {
           flexDirection: 'row',
           justifyContent: mobile ? 'center' : 'space-between',
           alignItems: 'stretch',
-          width: mobile ? '56%' : S(880),
-          margin: { bottom: mobile ? 14 : S(12) },
+          width: mobile ? '60%' : S(1000),
+          margin: { top: mobile ? 80 : S(40), bottom: mobile ? 14 : S(12) },
         }}
         onMouseDown={() => {}}
       >

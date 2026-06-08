@@ -5,7 +5,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import {
   S, WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GOLD,
   PANEL_BG, PANEL_BG_SEMI,
-  getServerConnectionStatus, formatCountdown, sortVisitorsWithBotSection,
+  formatCountdown,
   _PANEL_WIDTH, _ROW_HEIGHT, _ROW_FONT, _PADDING, _BORDER_RADIUS,
   _ABILITY_BTN_SIZE, _ABILITY_ICON_SIZE,
 } from '../uiConstants'
@@ -14,7 +14,6 @@ import {
   notifyOverlayClosed,
   splashState,
   earnedState,
-  metricsState,
   hover, scroll, tabs,
   hideChestPopup,
   hideBoomboxPopup,
@@ -22,10 +21,9 @@ import {
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible,
-  getAnalyticsOverlayVisible, setAnalyticsOverlayVisible,
+  setAnalyticsOverlayVisible,
 } from '../../gameState/overlayState'
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../../gameState/flagHoldTime'
-import { getAllVisitors, getCurrentOnlineCount } from '../../gameState/visitorState'
 
 import { getCountdownSeconds } from '../../shared/components'
 import { isCinematicActive } from '../../gameState/cinematicState'
@@ -41,9 +39,7 @@ import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { IconButton } from '../components/IconButton'
 import { HowToPlayOverlay } from '../screens/HowToPlay'
 import { RoundEndSplash } from '../screens/RoundEndSplash'
-import { StatusPopup, MetricsOverlay } from '../screens/LeaderboardOverlay'
-
-import { AnalyticsOverlay } from '../screens/AnalyticsOverlay'
+import { StatusPopup } from '../screens/LeaderboardOverlay'
 
 export function DesktopLayout() {
   const rawPlayers = getPlayersWithHoldTimes()
@@ -57,7 +53,6 @@ export function DesktopLayout() {
   const cinematicShowing = cinematicState.showing
   const winConditionVisible = getWinConditionOverlayVisible()
   const leaderboardVisible = getLeaderboardOverlayVisible()
-  const analyticsVisible = getAnalyticsOverlayVisible()
 
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
@@ -75,24 +70,7 @@ export function DesktopLayout() {
 
       <RoundEndSplash />
       {winConditionVisible && <HowToPlayOverlay />}
-      {leaderboardVisible && metricsState.openedFromTerminal && (() => {
-        const rawVisitors = getAllVisitors()
-        const allVisitors = sortVisitorsWithBotSection(rawVisitors)
-        const onlineCount = getCurrentOnlineCount()
-        const totalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
-        const serverConnected = getServerConnectionStatus()
-        return <MetricsOverlay allVisitors={allVisitors} localUserId={localUserId} onlineCount={onlineCount} totalPlaytimeMin={totalPlaytimeMin} serverConnected={serverConnected} />
-      })()}
-      {analyticsVisible && (() => {
-        const rawVisitors = getAllVisitors()
-        const allVisitors = sortVisitorsWithBotSection(rawVisitors)
-        const onlineCount = getCurrentOnlineCount()
-        const totalPlaytimeMin = Math.floor(allVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
-        const serverConnected = getServerConnectionStatus()
-        return <AnalyticsOverlay allVisitors={allVisitors} onlineCount={onlineCount} totalPlaytimeMin={totalPlaytimeMin} serverConnected={serverConnected} localUserId={localUserId} />
-      })()}
-
-      {leaderboardVisible && !metricsState.openedFromTerminal && <StatusPopup />}
+      {leaderboardVisible && <StatusPopup />}
 
       {/* Ability bar */}
       {!cinematicShowing && !spectatorState.active && !isSpectatorTransitioning() && (
@@ -133,12 +111,12 @@ export function DesktopLayout() {
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
           <IconButton hoverKey="squareIcon" label="Status" isActive={leaderboardVisible}
             iconContent={<UiEntity uiTransform={{ width: S(38), height: S(38), margin: { left: S(6), right: S(-9) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE }} />}
-            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsState.openedFromTerminal = false; hideChestPopup(); hideBoomboxPopup(); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); hideChestPopup(); hideBoomboxPopup(); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
           <UiEntity uiTransform={{ height: S(4) }} />
           <IconButton hoverKey="questionIcon" label="Help" isActive={winConditionVisible}
             iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17), justifyContent: 'center', alignItems: 'center' }}><Label value="?" fontSize={S(24)} color={winConditionVisible || hover.questionIcon ? GOLD : WHITE} font="sans-serif" textAlign="middle-center" /></UiEntity>}
-            onClick={() => { const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); metricsState.openedFromTerminal = false; hideChestPopup(); hideBoomboxPopup(); setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+            onClick={() => { const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); hideChestPopup(); hideBoomboxPopup(); setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
         </UiEntity>
 

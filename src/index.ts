@@ -48,7 +48,7 @@ export async function main() {
   const { boomboxSystem } = await import('./systems/boomboxSystem')
   const { upgradeStateSystem, initUpgradeListeners } = await import('./gameState/playerUpgradeState')
   const { updateWorldTime } = await import('./shared/dayNight')
-  const { setupUpdraftSystem, updraftSystem } = await import('./systems/updraftSystem')
+  const { setupUpdraftSystem, updraftSystem, setSmokeMobileFlag } = await import('./systems/updraftSystem')
   const { waterBobSystem } = await import('./systems/waterBobSystem')
   const { coinBobSpinSystem } = await import('./systems/coinBobSpinSystem')
   const { coinPickupSystem, setupCoinMessages } = await import('./systems/coinPickupSystem')
@@ -178,6 +178,7 @@ export async function main() {
   })
   setupWorldLeaderboard()
   setupProximityLights()
+  setSmokeMobileFlag(isMobile())
   setupUpdraftSystem()
 
   // ── Register all systems through the system manager ──

@@ -91,15 +91,27 @@ const SMOKE_BASE_OFFSET    = 0     // height above chimney to spawn
 const FADE_START           = 0.98  // fade out in final 2% of rise
 const HIDDEN_POS = Vector3.create(0, -200, 0)
 
-const SMOKE_MATERIAL = {
-  albedoColor: Color4.create(1.0, 1.0, 1.0, 1.0),
-  emissiveColor: Color4.create(0.9, 0.9, 0.9, 1),
-  emissiveIntensity: 1.0,
-  roughness: 1.0,
-  metallic: 0.0,
-  specularIntensity: 0.0,
-  transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
-  castShadows: false,
+// Smoke emissive is halved on mobile to reduce brightness
+let _smokeMaterial: Record<string, any> | null = null
+let _mobileFlag: boolean | null = null
+
+export function setSmokeMobileFlag(mobile: boolean) { _mobileFlag = mobile }
+
+function getSmokeMaterial() {
+  if (!_smokeMaterial) {
+    const mobile = _mobileFlag === true
+    _smokeMaterial = {
+      albedoColor: Color4.create(1.0, 1.0, 1.0, 1.0),
+      emissiveColor: mobile ? Color4.create(0.45, 0.45, 0.45, 1) : Color4.create(0.9, 0.9, 0.9, 1),
+      emissiveIntensity: mobile ? 0.5 : 1.0,
+      roughness: 1.0,
+      metallic: 0.0,
+      specularIntensity: 0.0,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+      castShadows: false,
+    }
+  }
+  return _smokeMaterial
 }
 
 // ── Physics lift configuration ──────────────────────────────
@@ -189,7 +201,7 @@ function initSmokePool(): void {
     const e = engine.addEntity()
     Transform.create(e, { position: HIDDEN_POS, scale: Vector3.Zero() })
     MeshRenderer.setSphere(e)
-    Material.setPbrMaterial(e, SMOKE_MATERIAL)
+    Material.setPbrMaterial(e, getSmokeMaterial())
     smokePool.push(e)
   }
 }
@@ -213,7 +225,7 @@ function spawnSmokePuff(basePos: Vector3, slot: number): void {
   const t = Transform.getMutable(puff)
   t.position = jitteredPos
   t.scale = Vector3.create(s, s, s)
-  Material.setPbrMaterial(puff, SMOKE_MATERIAL)
+  Material.setPbrMaterial(puff, getSmokeMaterial())
 
   activeSmokePuffs.push({ entity: puff, startPos: jitteredPos, endPos, startScale: s, spawnTime: Date.now(), slot })
 }
@@ -274,7 +286,7 @@ function animateSmokePuffs(): void {
     }
 
     if (alpha < 1.0) {
-      Material.setPbrMaterial(sp.entity, { ...SMOKE_MATERIAL, albedoColor: Color4.create(1, 1, 1, alpha) })
+      Material.setPbrMaterial(sp.entity, { ...getSmokeMaterial(), albedoColor: Color4.create(1, 1, 1, alpha) })
     }
   }
 }

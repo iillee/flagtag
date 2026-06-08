@@ -12,7 +12,7 @@ import {
   notifyOverlayClosed,
   scroll, tabs,
   mobileState,
-  metricsState,
+
   earnedState,
   blessingState,
 } from '../uiState'
@@ -135,7 +135,7 @@ export function MobileLayout() {
       {mobileState.scoreboardVisible && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
           >
-          <UiEntity uiTransform={{ positionType: 'relative', width: '42%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 28, overflow: 'hidden' }}
+          <UiEntity uiTransform={{ positionType: 'relative', width: '46%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 28, overflow: 'hidden', borderRadius: 20 }}
             uiBackground={{ color: PANEL_BG }}
           >
             <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 4, right: 4 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
@@ -143,7 +143,7 @@ export function MobileLayout() {
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value="Scoreboard" fontSize={36} color={MUTED} font="sans-serif" uiTransform={{ height: 44, flexShrink: 0 }} />
+            <Label value="Scoreboard" fontSize={38} color={MUTED} font="sans-serif" uiTransform={{ height: 48, flexShrink: 0 }} />
             <UiEntity uiTransform={{ height: 12, flexShrink: 0 }} />
             <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
               {players.length === 0 ? (
@@ -190,11 +190,11 @@ function MobileStatusPopup() {
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
   const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White(), iconScale: number = 1) => {
-    const icoSize = Math.round(28 * iconScale)
+    const icoSize = Math.round(30 * iconScale)
     return (
-      <UiEntity uiTransform={{ width: '100%', height: 44, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
-        <Label value={label} fontSize={20} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 44 }} textAlign="middle-left" />
-        <Label value={value} fontSize={20} color={valueColor} font="sans-serif" uiTransform={{ height: 44, margin: { right: 6 } }} textAlign="middle-right" />
+      <UiEntity uiTransform={{ width: '100%', height: 48, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
+        <Label value={label} fontSize={22} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 48 }} textAlign="middle-left" />
+        <Label value={value} fontSize={22} color={valueColor} font="sans-serif" uiTransform={{ height: 48, margin: { right: 6 } }} textAlign="middle-right" />
         <UiEntity uiTransform={{ width: icoSize, height: icoSize }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
       </UiEntity>
     )
@@ -203,26 +203,28 @@ function MobileStatusPopup() {
   return (
     <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
       >
-      <UiEntity uiTransform={{ width: '42%', flexDirection: 'column', alignItems: 'stretch', padding: 28, borderRadius: 16 }}
+      <UiEntity uiTransform={{ width: '30%', flexDirection: 'column', alignItems: 'stretch', padding: 22, borderRadius: 20, margin: { top: 80 } }}
         uiBackground={{ color: PANEL_BG }}
       >
-        <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 48, alignItems: 'center', margin: { bottom: 8 } }}>
-          <Label value="Status" fontSize={32} color={GOLD} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
-          <UiEntity uiTransform={{ width: 48, height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+        <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 52, alignItems: 'center', margin: { bottom: 10 } }}>
+          <Label value="Status" fontSize={38} color={GOLD} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
+          <UiEntity uiTransform={{ width: 52, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
             onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
           >
             <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
           </UiEntity>
         </UiEntity>
-        <Label value={localName} fontSize={24} color={WHITE} font="sans-serif" uiTransform={{ padding: { left: 12, bottom: 4 } }} />
-        <Label value="INVENTORY" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 8 } }} />
+        <Label value="INVENTORY" fontSize={20} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4, top: 4 } }} textAlign="middle-left" />
         {iconRow('Coins', isCoinBalanceLoaded() ? `${coins}` : '--', 'assets/images/coin.png', GOLD, GOLD)}
         {iconRow('Flags', isWinsLoaded() ? `${myFlags}` : '--', 'assets/images/flag-icon-white.png', GOLD, GOLD)}
-        <Label value="DAILY" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
-        {iconRow('Blessed Today', blessingState.alreadyUsed ? 'Yes' : 'No', 'assets/images/coin.png', blessingState.alreadyUsed ? GOLD : GREY)}
-        <Label value="EQUIPMENT" fontSize={18} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 12, top: 12 } }} />
+        <Label value="EQUIPMENT" fontSize={20} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4, top: 14 } }} textAlign="middle-left" />
         {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`, WHITE, Color4.White(), 1.5)}
         {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
+        <Label value="DAILY" fontSize={20} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4, top: 14 } }} textAlign="middle-left" />
+        <UiEntity uiTransform={{ width: '100%', height: 48, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
+          <Label value="Blessed Today" fontSize={22} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 48 }} textAlign="middle-left" />
+          <Label value={blessingState.alreadyUsed ? 'Yes' : 'No'} fontSize={22} color={blessingState.alreadyUsed ? GOLD : GREY} font="sans-serif" uiTransform={{ height: 48 }} textAlign="middle-right" />
+        </UiEntity>
       </UiEntity>
     </UiEntity>
   )

@@ -152,14 +152,14 @@ function DrownBar() {
   const mobile = isMobile()
   const fraction = getDrownFraction()
   const fillColor = fraction < 0.25 ? Color4.create(1, 0.3, 0.3, 0.95) : Color4.create(0.2, 0.5, 1.0, 0.95)
-  return <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={mobile ? 185 : S(110)} />
+  return <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={mobile ? 50 : S(110)} />
 }
 
 function ScareBar() {
   const mobile = isMobile()
   const fraction = getScareFraction()
   const fillColor = fraction > 0.75 ? Color4.create(1, 0.3, 0.3, 0.95) : Color4.create(0.55, 0.55, 0.55, 0.95)
-  const bottomOffset = isDrownBarVisible() ? (mobile ? 215 : S(128)) : (mobile ? 185 : S(110))
+  const bottomOffset = isDrownBarVisible() ? (mobile ? 80 : S(128)) : (mobile ? 50 : S(110))
   return <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={bottomOffset} />
 }
 
@@ -229,8 +229,8 @@ function PlayerListUi() {
         return (
           <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
             >
-            <UiEntity uiTransform={{ width: mobile ? 420 : S(340), padding: { top: mobile ? 32 : S(24), bottom: mobile ? 32 : S(24), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(16) }}
-              uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
+            <UiEntity uiTransform={{ width: mobile ? 420 : S(340), padding: { top: mobile ? 32 : S(24), bottom: mobile ? 32 : S(24), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(20) }}
+              uiBackground={{ color: PANEL_BG }}
             >
               {blessingState.alreadyUsed ? (
                 <Label value="You have already received the blessing today" fontSize={mobile ? 36 : S(24)} color={MUTED} font="sans-serif" />
@@ -276,13 +276,12 @@ function PlayerListUi() {
           uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}
           onMouseDown={() => {}}
         >
-          <UiEntity uiTransform={{ width: mobile ? 400 : S(460), flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: mobile ? 20 : S(16), padding: mobile ? { top: 36, bottom: 32, left: 20, right: 20 } : { top: S(36), bottom: S(32), left: S(40), right: S(40) } }}
+          <UiEntity uiTransform={{ width: mobile ? 560 : S(460), flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(20), padding: mobile ? { top: 44, bottom: 24, left: 24, right: 24 } : { top: S(36), bottom: S(28), left: S(40), right: S(40) } }}
             uiBackground={{ color: PANEL_BG }}
           >
             <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />
-            <Label value="Server Disconnected" fontSize={mobile ? 36 : S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 8 : S(8) } }} />
-            <Label value="all players please leave scene
-for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: mobile ? '90%' : S(380), height: mobile ? 52 : S(44) }} textAlign="middle-center" />
+            <Label value="Server Disconnected" fontSize={mobile ? 36 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 10 : S(8) } }} />
+            <Label value={`all players please leave scene\nfor 5 minutes while server resets`} fontSize={mobile ? 20 : S(18)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: mobile ? '90%' : S(380), height: mobile ? 56 : S(48) }} textAlign="middle-center" />
           </UiEntity>
         </UiEntity>
       )}
@@ -324,12 +323,12 @@ or just say hi!`} fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform=
       {popupState.gravestone && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
           >
-          <UiEntity uiTransform={{ width: mobile ? 340 : S(340), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 28, bottom: 28, left: 20, right: 20 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
+          <UiEntity uiTransform={{ width: mobile ? 480 : S(340), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 36, bottom: 36, left: 28, right: 28 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
             uiBackground={{ color: PANEL_BG }}
           >
             <CloseButton hoverKey="closeWinCondition" onClose={() => { hideGravestonePopup(); notifyOverlayClosed() }} />
-            <Label value="Here Lies" fontSize={mobile ? 28 : S(24)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 8 : S(8) } }} />
-            <Label value="Schneeflocke1" fontSize={mobile ? 32 : S(28)} color={WHITE} font="sans-serif" uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 8 : S(8) } }} />
+            <Label value="Here Lies" fontSize={mobile ? 38 : S(24)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 12 : S(8) } }} />
+            <Label value="Schneeflocke1" fontSize={mobile ? 42 : S(28)} color={WHITE} font="sans-serif" uiTransform={{ margin: { top: mobile ? 8 : S(4), bottom: mobile ? 12 : S(8) } }} />
           </UiEntity>
         </UiEntity>
       )}
@@ -368,7 +367,7 @@ or just say hi!`} fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform=
           onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
         >
           <UiEntity uiTransform={{ width: S(420), padding: { top: S(32), bottom: S(32), left: S(24), right: S(24) }, borderRadius: S(16), flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
-            uiBackground={{ color: Color4.create(0.12, 0.10, 0.10, 0.95) }}
+            uiBackground={{ color: PANEL_BG }}
             onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
           >
             <Label value="FLAG TAG!" fontSize={S(56)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(6) } }} />

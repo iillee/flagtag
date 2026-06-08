@@ -89,7 +89,6 @@ export function setupProximityLights() {
       range: LIGHT_RANGE,
       active: false
     })
-
     lights.push({ entity: e, pos, active: false })
   }
   console.log(`[Lights] Created ${lights.length} proximity lights`)
@@ -110,6 +109,9 @@ export function proximityLightSystem(dt: number) {
   if (checkTimer > 0) return
   checkTimer = CHECK_INTERVAL
 
+  if (!Transform.has(engine.PlayerEntity)) return
+  const playerPos = Transform.get(engine.PlayerEntity).position
+
   // If daytime, turn all lights off
   if (!isNight) {
     for (let i = 0; i < lights.length; i++) {
@@ -121,12 +123,7 @@ export function proximityLightSystem(dt: number) {
     return
   }
 
-  if (!Transform.has(engine.PlayerEntity)) return
-  const playerPos = Transform.get(engine.PlayerEntity).position
-
   // Find the MAX_ACTIVE closest lights in a single pass (no allocation, no sort).
-  // Maintain a small fixed array of the best candidates seen so far.
-  // Track the worst (largest) distance in the best-set so we can reject quickly.
   for (let k = 0; k < MAX_ACTIVE; k++) { topIdx[k] = -1; topDist[k] = Infinity }
   let worstBestDist = Infinity
 
@@ -137,9 +134,8 @@ export function proximityLightSystem(dt: number) {
     const dz = playerPos.z - p.z
     const d = dx * dx + dy * dy + dz * dz
 
-    if (d >= worstBestDist) continue // fast reject — farther than all current top 8
+    if (d >= worstBestDist) continue
 
-    // Find the slot with the largest distance and replace it
     let worstSlot = 0
     for (let k = 1; k < MAX_ACTIVE; k++) {
       if (topDist[k] > topDist[worstSlot]) worstSlot = k
@@ -147,7 +143,6 @@ export function proximityLightSystem(dt: number) {
     topIdx[worstSlot] = i
     topDist[worstSlot] = d
 
-    // Recompute worst-best threshold
     worstBestDist = 0
     for (let k = 0; k < MAX_ACTIVE; k++) {
       if (topDist[k] > worstBestDist) worstBestDist = topDist[k]

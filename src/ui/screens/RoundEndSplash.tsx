@@ -33,12 +33,12 @@ export function RoundEndSplash() {
       <UiEntity
         uiTransform={{
           positionType: 'relative',
-          width: mobile ? '40%' : S(440),
-          minHeight: mobile ? 300 : S(280),
+          width: mobile ? '44%' : S(480),
+          minHeight: mobile ? 340 : S(320),
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: mobile ? undefined : S(16),
+          borderRadius: mobile ? 20 : S(20),
           padding: mobile
             ? { top: 36, bottom: 28, left: 32, right: 32 }
             : { top: S(36), bottom: S(28), left: S(40), right: S(40) },
@@ -65,7 +65,7 @@ export function RoundEndSplash() {
             value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
               ? `${splashPlayers[0].name} Wins!`
               : 'Round Over!'}
-            fontSize={mobile ? 42 : S(34)}
+            fontSize={mobile ? 42 : S(36)}
             color={GOLD}
             font="sans-serif"
           />
@@ -85,11 +85,11 @@ export function RoundEndSplash() {
                 }}
               >
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Label value={`#${i + 1}`} fontSize={mobile ? 26 : S(18)} color={rankColor} font="sans-serif" />
+                  <Label value={`#${i + 1}`} fontSize={mobile ? 26 : S(20)} color={rankColor} font="sans-serif" />
                   <UiEntity uiTransform={{ width: mobile ? 10 : S(10) }} />
-                  <Label value={p.name} fontSize={mobile ? 26 : S(18)} color={rankColor} font="sans-serif" />
+                  <Label value={p.name} fontSize={mobile ? 26 : S(20)} color={rankColor} font="sans-serif" />
                 </UiEntity>
-                <Label value={`${p.seconds}`} fontSize={mobile ? 26 : S(18)} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`${p.seconds}`} fontSize={mobile ? 26 : S(20)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
             )
           })}

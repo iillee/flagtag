@@ -14,7 +14,7 @@ import {
   sortVisitorsWithBotSection, isLikelyBot, formatVisitorTime, formatUTCDate, formatUTCMonth,
   type VisitorOrSeparator,
 } from '../uiConstants'
-import { hover, scroll, tabs, metricsState, notifyOverlayClosed, earnedState } from '../uiState'
+import { hover, scroll, tabs, notifyOverlayClosed, earnedState } from '../uiState'
 import { setLeaderboardOverlayVisible } from '../../gameState/overlayState'
 import { SubTabBar } from '../components/SubTabBar'
 import { Scrollbar } from '../components/Scrollbar'
@@ -33,25 +33,23 @@ const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 // ═══════════════════════════════════════════════════════════
 
 export function StatusPopup() {
-  const localPlayer = getPlayer()
-  const localName = localPlayer?.name ?? 'Unknown'
   const coins = getCoinBalance()
   const liveWins = getLocalLifetimeWins()
   const myFlags = earnedState.winsFrozen ? (earnedState.displayedWins ?? liveWins) : liveWins
   const boomerang = getBoomerangColor()
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
-  const SR = 34; const SI = 24; const SF = 16; const SEC = 16
+  const SR = 40; const SI = 28; const SF = 18; const SEC = 18
 
   const sectionHeader = (title: string, first = false) => (
-    <UiEntity uiTransform={{ width: '100%', height: S(first ? 28 : 36), flexDirection: 'row', alignItems: 'flex-end', padding: { left: S(10) } }}>
-      <Label value={title} fontSize={S(SEC)} color={GOLD} font="sans-serif" />
+    <UiEntity uiTransform={{ width: '100%', height: S(first ? 32 : 42), flexDirection: 'row', alignItems: 'flex-end', padding: { left: S(4) } }}>
+      <Label value={title} fontSize={S(SEC)} color={GOLD} font="sans-serif" textAlign="middle-left" />
     </UiEntity>
   )
   const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White(), iconScale: number = 1) => {
     const icoSize = Math.round(SI * iconScale)
     return (
-      <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(10), right: S(10) } }}>
+      <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(12), right: S(12) } }}>
         <Label value={label} fontSize={S(SF)} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(SR) }} textAlign="middle-left" />
         <Label value={value} fontSize={S(SF)} color={valueColor} font="sans-serif" uiTransform={{ height: S(SR), margin: { right: S(6) } }} textAlign="middle-right" />
         <UiEntity uiTransform={{ width: S(icoSize), height: S(icoSize) }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
@@ -74,19 +72,20 @@ export function StatusPopup() {
     >
       <UiEntity
         uiTransform={{
-          width: S(380),
+          width: S(480),
           flexDirection: 'column',
           alignItems: 'stretch',
-          padding: S(24),
-          borderRadius: S(16),
+          padding: S(28),
+          borderRadius: S(20),
+          margin: { top: S(40) },
         }}
-        uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 1) }}
+        uiBackground={{ color: PANEL_BG }}
       >
         {/* Header with title and close button */}
-        <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: S(40), alignItems: 'center', margin: { bottom: S(8) } }}>
-          <Label value="Status" fontSize={S(28)} color={GOLD} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
+        <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: S(44), alignItems: 'center', margin: { bottom: S(10) } }}>
+          <Label value="Status" fontSize={S(32)} color={GOLD} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
           <UiEntity
-            uiTransform={{ width: S(40), height: S(40), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(6) }}
+            uiTransform={{ width: S(44), height: S(44), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(6) }}
             onMouseEnter={() => { hover.closeLeaderboard = true }}
             onMouseLeave={() => { hover.closeLeaderboard = false }}
             onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; notifyOverlayClosed() }}
@@ -94,12 +93,6 @@ export function StatusPopup() {
             <Label value="×" fontSize={S(38)} color={hover.closeLeaderboard ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
           </UiEntity>
         </UiEntity>
-
-        {/* Player name */}
-        <UiEntity uiTransform={{ width: '100%', padding: { left: S(10), right: S(10), bottom: S(2) } }}>
-          <Label value={localName} fontSize={S(20)} color={WHITE} font="sans-serif" />
-        </UiEntity>
-        <UiEntity uiTransform={{ width: '100%', height: 1, margin: { top: S(6), bottom: S(2) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.35, 0.6) }} />
 
         {/* Content */}
         {sectionHeader('INVENTORY', true)}
@@ -111,7 +104,7 @@ export function StatusPopup() {
         {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
         <UiEntity uiTransform={{ width: '100%', height: 1, margin: { top: S(6), bottom: S(2) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.35, 0.6) }} />
         {sectionHeader('DAILY')}
-        <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(10), right: S(10) } }}>
+        <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(12), right: S(12) } }}>
           <Label value="Blessed Today" fontSize={S(SF)} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(SR) }} textAlign="middle-left" />
           <Label value={blessingState.alreadyUsed ? 'Yes' : 'No'} fontSize={S(SF)} color={blessingState.alreadyUsed ? GOLD : GREY} font="sans-serif" uiTransform={{ height: S(SR) }} textAlign="middle-right" />
         </UiEntity>
@@ -212,7 +205,7 @@ export function MetricsOverlay({ allVisitors, localUserId, onlineCount, totalPla
               uiTransform={{ width: S(80), height: S(80), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(6), margin: { top: S(-6) } }}
               onMouseEnter={() => { hover.closeLeaderboard = true }}
               onMouseLeave={() => { hover.closeLeaderboard = false }}
-              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; metricsState.openedFromTerminal = false; notifyOverlayClosed() }}
+              onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); hover.closeLeaderboard = false; notifyOverlayClosed() }}
             >
               <Label value="×" fontSize={S(38)} color={hover.closeLeaderboard ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
             </UiEntity>

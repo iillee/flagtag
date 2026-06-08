@@ -12,9 +12,9 @@ import { hideBoomboxPopup } from '../uiState'
 import { musicEntity } from '../../systems/musicSetup'
 import { TAPE_ITEMS, type TapeItem, getEquippedTape, setEquippedTape } from './boomboxState'
 
-const SLOT_SIZE = 80
-const SLOT_GAP = 8
-const SLOT_RADIUS = 14
+const SLOT_SIZE = 104
+const SLOT_GAP = 12
+const SLOT_RADIUS = 18
 
 const SLOT_BG = Color4.create(0.08, 0.08, 0.1, 0.87)
 const SLOT_BG_ACTIVE = Color4.create(0.45, 0.36, 0.05, 0.95)
@@ -61,7 +61,7 @@ export function BoomboxPopup() {
       pointerFilter: 'none',
     }}>
       <UiEntity uiTransform={{
-        width: S(320),
+        width: S(480),
         flexDirection: 'column',
         alignItems: 'center',
         padding: { top: S(28), bottom: S(28), left: S(28), right: S(28) },
@@ -72,16 +72,16 @@ export function BoomboxPopup() {
         <CloseButton hoverKey="closeBoombox" onClose={() => { hideBoomboxPopup(); hoveredTapeId = null }} />
 
         {/* Title */}
-        <Label value="Boombox" fontSize={S(28)} color={GOLD} font="sans-serif"
-          uiTransform={{ margin: { bottom: S(4) } }} />
+        <Label value="Boombox" fontSize={S(32)} color={GOLD} font="sans-serif"
+          uiTransform={{ margin: { bottom: S(6) } }} />
 
         {/* Now Playing */}
         <UiEntity uiTransform={{
           flexDirection: 'column', alignItems: 'center',
           margin: { top: S(8), bottom: S(16) },
         }}>
-          <Label value="Now Playing" fontSize={S(12)} color={GREY} font="sans-serif"
-            uiTransform={{ margin: { bottom: S(6) } }} />
+          <Label value="Now Playing" fontSize={S(16)} color={GREY} font="sans-serif"
+            uiTransform={{ margin: { bottom: S(8) } }} />
 
           {/* Current tape slot */}
           <UiEntity uiTransform={{
@@ -102,13 +102,13 @@ export function BoomboxPopup() {
             )}
           </UiEntity>
 
-          <Label value={equippedTape ? equippedTape.name : 'Empty'} fontSize={S(14)}
+          <Label value={equippedTape ? equippedTape.name : 'Empty'} fontSize={S(18)}
             color={equippedTape ? BRIGHT_WHITE : GREY} font="sans-serif"
-            uiTransform={{ margin: { top: S(6) } }} />
+            uiTransform={{ margin: { top: S(8) } }} />
           {equippedTape && (
-            <Label value={equippedTape.author} fontSize={S(11)}
+            <Label value={equippedTape.author} fontSize={S(16)}
               color={GREY} font="sans-serif"
-              uiTransform={{ margin: { top: S(2) } }} />
+              uiTransform={{ margin: { top: S(3) } }} />
           )}
         </UiEntity>
 
@@ -137,7 +137,7 @@ export function BoomboxPopup() {
                   }}
                   uiBackground={{ color: EMPTY_BG }}
                 >
-                  <Label value="?" fontSize={S(28)} color={GREY} font="sans-serif"
+                  <Label value="?" fontSize={S(36)} color={GREY} font="sans-serif"
                     uiTransform={{ pointerFilter: 'none' }} />
                 </UiEntity>
               )
