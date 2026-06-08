@@ -280,10 +280,9 @@ function PlayerListUi() {
             uiBackground={{ color: PANEL_BG }}
           >
             <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />
-            <Label value="Server Disconnected" fontSize={mobile ? 36 : S(28)} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: mobile ? 12 : S(12) }} />
+            <Label value="Server Disconnected" fontSize={mobile ? 36 : S(28)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 8 : S(8) } }} />
             <Label value="all players please leave scene
-for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_GREY} font="sans-serif" />
+for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: mobile ? '90%' : S(380), height: mobile ? 52 : S(44) }} textAlign="middle-center" />
           </UiEntity>
         </UiEntity>
       )}
@@ -292,28 +291,29 @@ for 5 minutes while server resets" fontSize={mobile ? 20 : S(18)} color={LIGHT_G
       {popupState.mailbox && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
           >
-          <UiEntity uiTransform={{ width: mobile ? 440 : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 28, bottom: 28, left: 20, right: 20 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
+          <UiEntity uiTransform={{ width: mobile ? 540 : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 36, bottom: 36, left: 28, right: 28 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
             uiBackground={{ color: PANEL_BG }}
           >
             <CloseButton hoverKey="closeMailbox" onClose={() => { hideMailboxPopup(); notifyOverlayClosed() }} />
-            <Label value="Leave a Message" fontSize={mobile ? 36 : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 8 : S(8) } }} />
-            <Label value={`Leave feedback, report a bug, or just say hi!`} fontSize={mobile ? 20 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 4 : S(4), bottom: mobile ? 12 : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? 35 : S(28) }} textAlign="middle-center" />
+            <Label value="Leave a Message" fontSize={mobile ? 42 : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 8 : S(8) } }} />
+            <Label value={`Leave feedback, report a bug,
+or just say hi!`} fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 6 : S(4), bottom: mobile ? 16 : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? 65 : S(28) }} textAlign="middle-center" />
             <Input
               placeholder="Type your message..."
-              fontSize={mobile ? 18 : S(15)}
+              fontSize={mobile ? 22 : S(15)}
               color={Color4.White()}
               placeholderColor={Color4.create(0.6, 0.6, 0.6, 1)}
-              uiTransform={{ width: mobile ? '95%' : S(420), height: mobile ? 44 : S(40), margin: { bottom: mobile ? 12 : S(12) }, borderRadius: mobile ? 8 : S(8), padding: { left: mobile ? 8 : S(8), right: mobile ? 8 : S(8) } }}
+              uiTransform={{ width: mobile ? '95%' : S(420), height: mobile ? 54 : S(40), margin: { bottom: mobile ? 16 : S(12) }, borderRadius: mobile ? 10 : S(8), padding: { left: mobile ? 12 : S(8), right: mobile ? 12 : S(8) } }}
               uiBackground={{ color: Color4.create(0.15, 0.15, 0.2, 1) }}
               onChange={(val) => { feedbackText = val }}
               onSubmit={(val) => { feedbackText = val; sendFeedback() }}
               value={feedbackText}
             />
-            <UiEntity uiTransform={{ width: mobile ? 200 : S(200), height: mobile ? 44 : S(44), borderRadius: mobile ? 8 : S(8), justifyContent: 'center', alignItems: 'center' }}
+            <UiEntity uiTransform={{ width: mobile ? 240 : S(200), height: mobile ? 54 : S(44), borderRadius: mobile ? 10 : S(8), justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
               onMouseDown={() => { sendFeedback() }}
             >
-              <Label value="Send" fontSize={mobile ? 20 : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
+              <Label value="Send" fontSize={mobile ? 24 : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
             </UiEntity>
             {getMailboxStatus() ? <Label value={getMailboxStatus()} fontSize={mobile ? 16 : S(13)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 12 : S(12) }, width: mobile ? '95%' : S(360) }} textAlign="middle-center" /> : null}
           </UiEntity>
@@ -406,7 +406,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
   const PANEL = Color4.create(0.08, 0.08, 0.1, 0.94)
 
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? 10 : S(16), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? 60 : S(16), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
       {/* Player picker dropdown (above the bar) */}
       {mode === 'player' && spectatorState.playerPickerOpen && players.length > 0 && (
         <UiEntity uiTransform={{ flexDirection: 'column', width: mobile ? 280 : S(260), maxHeight: mobile ? 260 : S(240), margin: { bottom: mobile ? 4 : S(4) }, borderRadius: mobile ? 10 : S(10), padding: { top: mobile ? 6 : S(4), bottom: mobile ? 6 : S(4) } }}
@@ -432,37 +432,64 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
       )}
 
       {/* Main bar */}
-      <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 14 : S(14), padding: mobile ? { top: 8, bottom: 10, left: 12, right: 12 } : { top: S(8), bottom: S(10), left: S(16), right: S(16) } }}
-        uiBackground={{ color: PANEL }}
-      >
-        <CloseButton hoverKey="closeSpectator" onClose={() => { exitSpectatorMode() }} size={mobile ? 32 : S(28)} fontSize={mobile ? 28 : S(24)} />
-        <Label value="SPECTATOR MODE" fontSize={mobile ? 16 : S(14)} color={MUTED} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 4 : S(2) } }} />
-
-        {/* Mode tabs */}
-        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: mobile ? 6 : S(6) } }}>
-          {SPEC_MODES.map((m, i) => {
-            const isActive = mode === m.key
+      {mobile ? (
+        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: { top: 12, bottom: 12, left: 12, right: 12 } }}
+          uiBackground={{ color: PANEL }}
+        >
+          {[...SPEC_MODES, { key: 'exit' as any, label: 'x' }].map((m, i) => {
+            const isExit = m.key === 'exit'
+            const isActive = !isExit && mode === m.key
             return (
               <UiEntity key={`tab-${i}`}
-                uiTransform={{ height: mobile ? 34 : S(30), padding: { left: mobile ? 14 : S(12), right: mobile ? 14 : S(12) }, margin: { left: i > 0 ? (mobile ? 4 : S(3)) : 0 }, borderRadius: mobile ? 8 : S(8), justifyContent: 'center', alignItems: 'center' }}
+                uiTransform={{ height: 60, width: isExit ? 60 : undefined, padding: isExit ? undefined : { left: 24, right: 24 }, margin: { left: i > 0 ? 6 : 0 }, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}
                 uiBackground={{ color: isActive ? TAB_ACTIVE : TAB_BG }}
                 onMouseDown={() => {
-                  if (m.key === 'player' && mode === 'player') {
+                  if (isExit) {
+                    exitSpectatorMode()
+                  } else if (m.key === 'player' && mode === 'player') {
                     spectatorState.playerPickerOpen = !spectatorState.playerPickerOpen
                   } else {
                     setSpectatorMode(m.key)
                   }
                 }}
               >
-                <Label value={m.label} fontSize={mobile ? 15 : S(14)} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" />
+                <Label value={m.label} fontSize={isExit ? 48 : 26} color={isActive ? Color4.Black() : Color4.White()} font={isExit ? 'serif' : 'sans-serif'} uiTransform={isExit ? { margin: { top: -4 } } : undefined} />
               </UiEntity>
             )
           })}
         </UiEntity>
+      ) : (
+        <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', borderRadius: S(14), padding: { top: S(8), bottom: S(10), left: S(16), right: S(16) } }}
+          uiBackground={{ color: PANEL }}
+        >
+          <CloseButton hoverKey="closeSpectator" onClose={() => { exitSpectatorMode() }} size={S(28)} fontSize={S(24)} />
 
-        {/* Controls hint */}
-        <Label value={controlsHint} fontSize={mobile ? 11 : S(12)} color={Color4.create(1, 1, 1, 0.6)} font="sans-serif" />
-      </UiEntity>
+          {/* Mode tabs */}
+          <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(6) } }}>
+            {SPEC_MODES.map((m, i) => {
+              const isActive = mode === m.key
+              return (
+                <UiEntity key={`tab-${i}`}
+                  uiTransform={{ height: S(30), padding: { left: S(12), right: S(12) }, margin: { left: i > 0 ? S(3) : 0 }, borderRadius: S(8), justifyContent: 'center', alignItems: 'center' }}
+                  uiBackground={{ color: isActive ? TAB_ACTIVE : TAB_BG }}
+                  onMouseDown={() => {
+                    if (m.key === 'player' && mode === 'player') {
+                      spectatorState.playerPickerOpen = !spectatorState.playerPickerOpen
+                    } else {
+                      setSpectatorMode(m.key)
+                    }
+                  }}
+                >
+                  <Label value={m.label} fontSize={S(14)} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" />
+                </UiEntity>
+              )
+            })}
+          </UiEntity>
+
+          {/* Controls hint */}
+          <Label value={controlsHint} fontSize={S(12)} color={Color4.create(1, 1, 1, 0.6)} font="sans-serif" />
+        </UiEntity>
+      )}
     </UiEntity>
   )
 }

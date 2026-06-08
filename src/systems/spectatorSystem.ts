@@ -165,10 +165,14 @@ export function exitSpectatorMode() {
   spectatorState.playerPickerOpen = false
   exitGracePeriod = 1.0
 
-  MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
-  if (InputModifier.has(engine.PlayerEntity)) {
-    InputModifier.deleteFrom(engine.PlayerEntity)
-  }
+  try {
+    MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
+  } catch (_e) { /* camera entity may not have MainCamera on mobile */ }
+  try {
+    if (InputModifier.has(engine.PlayerEntity)) {
+      InputModifier.deleteFrom(engine.PlayerEntity)
+    }
+  } catch (_e) { /* guard against missing component */ }
 }
 
 // ── Get flag world position ──

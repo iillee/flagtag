@@ -84,7 +84,7 @@ export function MobileLayout() {
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
                 onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; tabs.folder = 'status'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
-                <UiEntity uiTransform={{ width: 26, height: 26 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: leaderboardVisible ? GOLD : WHITE }} />
+                <UiEntity uiTransform={{ width: 52, height: 52 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: leaderboardVisible ? GOLD : WHITE }} />
               </UiEntity>
             </UiEntity>
           </UiEntity>
@@ -93,19 +93,11 @@ export function MobileLayout() {
 
       {/* Mobile Ability Bar */}
       {!spectatorState.active && (() => {
-        const AB_SIZE = Math.round(M_CIRCLE_SIZE * 1.65)
-        const AB_ICON = Math.round(50 * 1.65)
+        const AB_SIZE = Math.round(M_CIRCLE_SIZE * 1.815)
+        const AB_ICON = Math.round(50 * 1.815)
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 44, left: '50%' }, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: -(AB_SIZE + 10) } }}>
-            <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { right: 20 } }}
-              uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { playClickSound(); triggerTrapFromUI() }}
-            >
-              <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
-              {isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
-            </UiEntity>
-            <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 300, right: 65 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 16 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               onMouseDown={() => { playClickSound(); triggerProjectileFromUI() }}
               onMouseUp={() => { triggerProjectileReleaseFromUI() }}
@@ -126,6 +118,14 @@ export function MobileLayout() {
               <UiEntity uiTransform={{ width: (AB_ICON - 8) * 1.4175, height: (AB_ICON - 8) * 1.4175, margin: { top: -8 }, pointerFilter: 'none' }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
               {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', pointerFilter: 'none' }} />}
+            </UiEntity>
+            <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 0 } }}
+              uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+              onMouseDown={() => { playClickSound(); triggerTrapFromUI() }}
+            >
+              <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
+              {isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
           </UiEntity>
         )
