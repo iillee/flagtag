@@ -11,7 +11,6 @@ import {
   Tween, TweenSequence, TweenLoop, EasingFunction, AvatarAttach, AvatarAnchorPointType
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
-import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer } from '@dcl/sdk/players'
 import { CoinState, COIN_PICKUP_RADIUS } from '../shared/coins'
 import { room } from '../shared/messages'
@@ -81,13 +80,13 @@ function spawnHeadBounceCoin(playerId: string): void {
   const headAnchor = engine.addEntity()
   AvatarAttach.create(headAnchor, {
     avatarId: playerId,
-    anchorPointId: isMobile() ? AvatarAnchorPointType.AAPT_POSITION : AvatarAnchorPointType.AAPT_HEAD,
+    anchorPointId: AvatarAnchorPointType.AAPT_HEAD,
   })
 
   const coinClone = engine.addEntity()
   Transform.create(coinClone, {
     parent: headAnchor,
-    position: isMobile() ? Vector3.create(0, 3.0, 0) : Vector3.create(0, 0.5, 0),
+    position: Vector3.create(0, 0.5, 0),
     scale: Vector3.create(10, 10, 10),
     rotation: Quaternion.fromEulerDegrees(90, 0, 0),
   })
@@ -98,11 +97,10 @@ function spawnHeadBounceCoin(playerId: string): void {
   })
 
   // Pop up fast then fall + shrink away
-  const mobileYOff = isMobile() ? 2.0 : 0
   Tween.create(coinClone, {
     mode: Tween.Mode.Move({
-      start: Vector3.create(0, 0.5 + mobileYOff, 0),
-      end: Vector3.create(0, 2.0 + mobileYOff, 0),
+      start: Vector3.create(0, 0.5, 0),
+      end: Vector3.create(0, 2.0, 0),
     }),
     duration: 200,
     easingFunction: EasingFunction.EF_EASEOUTQUAD,
@@ -111,8 +109,8 @@ function spawnHeadBounceCoin(playerId: string): void {
     sequence: [
       {
         mode: Tween.Mode.Move({
-          start: Vector3.create(0, 2.0 + mobileYOff, 0),
-          end: Vector3.create(0, 0.8 + mobileYOff, 0),
+          start: Vector3.create(0, 2.0, 0),
+          end: Vector3.create(0, 0.8, 0),
         }),
         duration: 350,
         easingFunction: EasingFunction.EF_EASEINQUAD,
