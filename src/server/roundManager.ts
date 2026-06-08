@@ -28,6 +28,7 @@ import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime } from './economy'
 import { capture } from './posthog'
 import { EnvVar } from '@dcl/sdk/server'
+import { isPreview } from './analytics'
 
 const ROUND_WINNER_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1512612923548373135/kDMyVFdidPBhHuenVmrvYaNgPCZGfXI8xhMbXSPlbRLvo05SjgcdzlKDcVNxOjaKmH10'
 let ROUND_WINNER_WEBHOOK = ROUND_WINNER_WEBHOOK_FALLBACK
@@ -436,7 +437,7 @@ async function handleRoundEnd(): Promise<void> {
     if (topPlayers[1]) content += ` — 🥈 ${topPlayers[1].name} (${topPlayers[1].seconds}s)`
     if (topPlayers[2]) content += ` — 🥉 ${topPlayers[2].name} (${topPlayers[2].seconds}s)`
     content += ` — ${players.length} player${players.length !== 1 ? 's' : ''}`
-    if (!ROUND_WINNER_WEBHOOK) { /* webhook not configured */ }
+    if (!ROUND_WINNER_WEBHOOK || isPreview) { /* webhook not configured or preview */ }
     else fetch(ROUND_WINNER_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

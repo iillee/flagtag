@@ -19,7 +19,7 @@ import {
 // ── Module-local state ──
 
 let DISCORD_WEBHOOK_URL = ''
-let isPreview = false
+export let isPreview = false
 
 // ── Discord webhook loading ──
 
