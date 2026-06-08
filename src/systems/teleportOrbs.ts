@@ -53,10 +53,12 @@ function createOrbPair(
     })
     GltfContainer.create(wire, { src: wireModel })
 
-    // ── Point light ──
-    const light = engine.addEntity()
-    Transform.create(light, { parent: orb, position: Vector3.Zero() })
-    LightSource.create(light, { type: LightSource.Type.Point({}), color, intensity: 150, range: 12 })
+    // ── Point light (skip on mobile to reduce glow) ──
+    if (!isMobile()) {
+      const light = engine.addEntity()
+      Transform.create(light, { parent: orb, position: Vector3.Zero() })
+      LightSource.create(light, { type: LightSource.Type.Point({}), color, intensity: 150, range: 12 })
+    }
 
     orbEntities.push(orb)
     wireEntities.push(wire)
