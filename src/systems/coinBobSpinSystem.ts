@@ -5,7 +5,7 @@
  * plus a continuous spin (Y-axis rotation).
  */
 import {
-  engine, Transform, Tween, TweenSequence, EasingFunction, TweenLoop, GltfContainer
+  engine, Transform, Tween, TweenSequence, EasingFunction, TweenLoop, GltfContainer, type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 
