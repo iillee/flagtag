@@ -62,11 +62,33 @@ export function coinBobSpinSystem(dt: number) {
       parent: t.parent
     })
 
-    // Re-parent the coin under the bob parent, reset position to origin
+    // Hide the original composite entity (don't write its transform — CRDT fights back)
+    // Instead, create a visual child chain: bobParent → spinEntity (with the model)
+    // and hide the original by removing its GltfContainer.
+    const originalRotation = t.rotation ?? Quaternion.Identity()
+    const originalScale = t.scale ?? Vector3.One()
+
+    // Re-parent original under bob parent so it moves with the bob,
+    // but strip its visual — the spin entity will hold the model instead.
     const mutable = Transform.getMutable(entity)
     mutable.parent = bobParent
-    mutable.position = Vector3.create(0, 0, 0)
-    // Keep original rotation and scale on the coin
+    mutable.position = Vector3.Zero()
+    mutable.rotation = Quaternion.Identity()
+    mutable.scale = Vector3.Zero() // hide original
+
+    // Create spin entity as child of bob parent — holds the actual model
+    const spinEntity = engine.addEntity()
+    Transform.create(spinEntity, {
+      parent: bobParent,
+      position: Vector3.Zero(),
+      rotation: originalRotation,
+      scale: originalScale
+    })
+    GltfContainer.create(spinEntity, {
+      src: gltf.src,
+      visibleMeshesCollisionMask: gltf.visibleMeshesCollisionMask,
+      invisibleMeshesCollisionMask: gltf.invisibleMeshesCollisionMask
+    })
 
     // Bob the parent up and down
     const upPos = Vector3.create(t.position.x, baseY + BOB_AMOUNT, t.position.z)
@@ -86,10 +108,10 @@ export function coinBobSpinSystem(dt: number) {
       loop: TweenLoop.TL_YOYO
     })
 
-    // Register coin for per-frame spin (no tweens — avoids SLERP shortest-path reversal on mobile)
+    // Register spin entity for per-frame rotation (no CRDT conflict — it's a local entity)
     spinCoins.push({
-      entity,
-      baseRotation: t.rotation ?? Quaternion.Identity(),
+      entity: spinEntity,
+      baseRotation: originalRotation,
       angle: 0
     })
 
