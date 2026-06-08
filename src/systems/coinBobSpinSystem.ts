@@ -62,33 +62,15 @@ export function coinBobSpinSystem(dt: number) {
       parent: t.parent
     })
 
-    // Hide the original composite entity (don't write its transform — CRDT fights back)
-    // Instead, create a visual child chain: bobParent → spinEntity (with the model)
-    // and hide the original by removing its GltfContainer.
-    const originalRotation = t.rotation ?? Quaternion.Identity()
-    const originalScale = t.scale ?? Vector3.One()
-
-    // Re-parent original under bob parent so it moves with the bob,
-    // but strip its visual — the spin entity will hold the model instead.
+    // Re-parent the coin under the bob parent, reset position to origin
     const mutable = Transform.getMutable(entity)
     mutable.parent = bobParent
     mutable.position = Vector3.Zero()
-    mutable.rotation = Quaternion.Identity()
-    mutable.scale = Vector3.Zero() // hide original
+    // Keep original rotation and scale on the coin
 
-    // Create spin entity as child of bob parent — holds the actual model
-    const spinEntity = engine.addEntity()
-    Transform.create(spinEntity, {
-      parent: bobParent,
-      position: Vector3.Zero(),
-      rotation: originalRotation,
-      scale: originalScale
-    })
-    GltfContainer.create(spinEntity, {
-      src: gltf.src,
-      visibleMeshesCollisionMask: gltf.visibleMeshesCollisionMask,
-      invisibleMeshesCollisionMask: gltf.invisibleMeshesCollisionMask
-    })
+    // Remove any existing Tween/TweenSequence to prevent conflicts with per-frame spin
+    if (Tween.has(entity)) Tween.deleteFrom(entity)
+    if (TweenSequence.has(entity)) TweenSequence.deleteFrom(entity)
 
     // Bob the parent up and down
     const upPos = Vector3.create(t.position.x, baseY + BOB_AMOUNT, t.position.z)
@@ -108,10 +90,10 @@ export function coinBobSpinSystem(dt: number) {
       loop: TweenLoop.TL_YOYO
     })
 
-    // Register spin entity for per-frame rotation (no CRDT conflict — it's a local entity)
+    // Register coin for per-frame spin (avoids SLERP shortest-path reversal on mobile)
     spinCoins.push({
-      entity: spinEntity,
-      baseRotation: originalRotation,
+      entity,
+      baseRotation: t.rotation ?? Quaternion.Identity(),
       angle: 0
     })
 
