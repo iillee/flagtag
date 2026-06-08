@@ -200,6 +200,13 @@ export async function main() {
     ghostClientSystem(dt)
   })
 
+  // Per-frame smooth animations (coins, beacon, smoke need 60fps to look right)
+  registerSystem((dt) => {
+    coinBobSpinSystem(dt)
+    beaconClientSystem(dt)
+    updraftSystem(dt)
+  })
+
   // Per-frame gameplay — time-sliced systems (alternating frames, 30fps each)
   let oddFrame = false
   registerSystem((dt) => {
@@ -208,16 +215,13 @@ export async function main() {
       mushroomClientSystem(dt * 2)
       lightningSystem(dt * 2)
     } else {
-      updraftSystem(dt * 2)
       coinPickupSystem(dt * 2)
-      beaconClientSystem(dt * 2)
     }
   })
 
-  // Throttled cosmetic animations (20fps — visually identical)
+  // Throttled cosmetic animations (20fps)
   registerThrottled((dt) => {
     waterBobSystem(dt)
-    coinBobSpinSystem(dt)
     waterSplashSystem(dt)
     boostTrailSystem(dt)
   }, 0.05)
