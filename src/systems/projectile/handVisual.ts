@@ -7,7 +7,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { MaterialTransparencyMode } from '@dcl/sdk/ecs'
-import { isMobile } from '@dcl/sdk/platform'
+
 import {
   hand, localThrow, charge, yellow, HAND_BOOMERANG_SCALE, LEFT_HAND_SCALE,
   ORBIT_PARTICLE_COUNT, ORBIT_RADIUS, EMOTE_MOVE_THRESHOLD
@@ -96,11 +96,10 @@ export function updateHandBoomerangVisibility(): void {
       console.log(`[HandBoomerang] ${shouldShow ? 'SHOW' : 'HIDE'} | localThrowActive=${localThrow.active} localProj=${localProjectiles.length} msgVis=${msgProjectileVisuals.length} emote=${hand.emoteActive} cinematic=${isCinematicActive()}`)
     }
     const isGreen = getBoomerangColor() === 'g'
-    const mobile = isMobile()
     if (shouldShow) {
       t.scale = HAND_BOOMERANG_SCALE
-      t.position = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
-      t.rotation = Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
+      t.position = Vector3.create(0.04, 0.15, 0.1)
+      t.rotation = Quaternion.fromEulerDegrees(0, 0, 90)
     } else {
       t.scale = Vector3.Zero()
     }

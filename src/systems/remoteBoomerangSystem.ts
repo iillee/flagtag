@@ -17,7 +17,6 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
-import { isMobile } from '@dcl/sdk/platform'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { room } from '../shared/messages'
 import { BoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
@@ -67,9 +66,9 @@ function ensureLeftHand(playerId: string, rb: RemoteBoomerang): void {
     rb.leftModel = engine.addEntity()
     Transform.create(rb.leftModel, {
       parent: rb.leftAnchor,
-      position: isMobile() ? Vector3.create(0.12, 0.01, -0.13) : Vector3.create(0.05, 0.03, 0.1),
+      position: Vector3.create(0.05, 0.03, 0.1),
       scale: Vector3.Zero(),
-      rotation: Quaternion.fromEulerDegrees(isMobile() ? 15 : 0, isMobile() ? 180 : 0, -90)
+      rotation: Quaternion.fromEulerDegrees(0, 0, -90)
     })
     GltfContainer.create(rb.leftModel, {
       src: `assets/models/boomerang.${rb.color}.glb`,
@@ -102,10 +101,9 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
       // Reset scale and transform
       if (Transform.has(rb.model)) {
         const t = Transform.getMutable(rb.model)
-        const mobile = isMobile()
         t.scale = Vector3.create(1, 1.5, 1)
-        t.position = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
-        t.rotation = Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
+        t.position = Vector3.create(0.04, 0.15, 0.1)
+        t.rotation = Quaternion.fromEulerDegrees(0, 0, 90)
       }
     }
     ensureLeftHand(playerId, rb)
@@ -120,12 +118,11 @@ function createRemoteBoomerang(playerId: string, color: BoomerangColor): void {
   Transform.create(anchor, { position: Vector3.Zero(), scale: Vector3.One() })
 
   const model = engine.addEntity()
-  const mobile = isMobile()
   Transform.create(model, {
     parent: anchor,
-    position: mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1),
+    position: Vector3.create(0.04, 0.15, 0.1),
     scale: Vector3.create(1, 1.5, 1),
-    rotation: Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
+    rotation: Quaternion.fromEulerDegrees(0, 0, 90)
   })
   GltfContainer.create(model, {
     src: `assets/models/boomerang.${color}.glb`,
@@ -472,11 +469,10 @@ export function setupRemoteBoomerangs(): void {
     if (!rb) return
     // Restore right hand
     if (Transform.has(rb.model)) {
-      const mobile = isMobile()
       const t = Transform.getMutable(rb.model)
       t.scale = Vector3.create(1, 1.5, 1)
-      t.position = mobile ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1)
-      t.rotation = Quaternion.fromEulerDegrees(mobile ? 15 : 0, mobile ? 180 : 0, 90)
+      t.position = Vector3.create(0.04, 0.15, 0.1)
+      t.rotation = Quaternion.fromEulerDegrees(0, 0, 90)
     }
     // Restore left hand for yellow
     if (rb.leftModel && Transform.has(rb.leftModel)) {

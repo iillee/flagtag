@@ -5,7 +5,6 @@
 import { Vector3, Color4, Color3, Quaternion } from '@dcl/sdk/math'
 import { engine, Entity, Transform, MeshRenderer, Material, MaterialTransparencyMode, GltfContainer, AvatarAttach, AvatarAnchorPointType } from '@dcl/sdk/ecs'
 import { registerSystem } from './systemManager'
-import { isMobile } from '@dcl/sdk/platform'
 import { setHandBoomerangEntity, setLeftHandBoomerangEntity, getChargeFraction, getChargePhase } from './projectile'
 import { getBoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
 
@@ -19,9 +18,9 @@ export function setupHandBoomerangs() {
   const boomerangModel = engine.addEntity()
   Transform.create(boomerangModel, {
     parent: boomerangHand,
-    position: isMobile() ? Vector3.create(-0.02, 0.13, -0.13) : Vector3.create(0.04, 0.15, 0.1),
+    position: Vector3.create(0.04, 0.15, 0.1),
     scale: Vector3.create(1, 1.5, 1),
-    rotation: Quaternion.fromEulerDegrees(isMobile() ? 15 : 0, isMobile() ? 180 : 0, 90)
+    rotation: Quaternion.fromEulerDegrees(0, 0, 90)
   })
   GltfContainer.create(boomerangModel, {
     src: 'assets/models/boomerang.r.glb',
@@ -39,9 +38,9 @@ export function setupHandBoomerangs() {
   const leftBoomerangModel = engine.addEntity()
   Transform.create(leftBoomerangModel, {
     parent: leftHandAnchor,
-    position: isMobile() ? Vector3.create(-0.01, 0.01, -0.08) : Vector3.create(0.05, 0.03, 0.1),
+    position: Vector3.create(0.05, 0.03, 0.1),
     scale: getBoomerangColor() === 'y' ? Vector3.create(1, 1.5, 1) : Vector3.Zero(),
-    rotation: Quaternion.fromEulerDegrees(isMobile() ? 0 : 0, isMobile() ? 180 : 0, -90)
+    rotation: Quaternion.fromEulerDegrees(0, 0, -90)
   })
   GltfContainer.create(leftBoomerangModel, {
     src: `assets/models/boomerang.${getBoomerangColor()}.glb`,
