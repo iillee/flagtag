@@ -65,12 +65,8 @@ export function coinBobSpinSystem(dt: number) {
     // Re-parent the coin under the bob parent, reset position to origin
     const mutable = Transform.getMutable(entity)
     mutable.parent = bobParent
-    mutable.position = Vector3.Zero()
+    mutable.position = Vector3.create(0, 0, 0)
     // Keep original rotation and scale on the coin
-
-    // Remove any existing Tween/TweenSequence to prevent conflicts with per-frame spin
-    if (Tween.has(entity)) Tween.deleteFrom(entity)
-    if (TweenSequence.has(entity)) TweenSequence.deleteFrom(entity)
 
     // Bob the parent up and down
     const upPos = Vector3.create(t.position.x, baseY + BOB_AMOUNT, t.position.z)
@@ -90,7 +86,7 @@ export function coinBobSpinSystem(dt: number) {
       loop: TweenLoop.TL_YOYO
     })
 
-    // Register coin for per-frame spin (avoids SLERP shortest-path reversal on mobile)
+    // Register coin for per-frame spin (no tweens — avoids SLERP shortest-path reversal on mobile)
     spinCoins.push({
       entity,
       baseRotation: t.rotation ?? Quaternion.Identity(),
