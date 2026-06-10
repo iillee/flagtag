@@ -5,36 +5,18 @@
  * plus a continuous spin (Y-axis rotation).
  */
 import {
-  engine, Transform, Tween, TweenSequence, EasingFunction, TweenLoop, GltfContainer, type Entity
+  engine, Transform, Tween, TweenSequence, EasingFunction, TweenLoop, GltfContainer
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 
 const BOB_AMOUNT = 0.15    // meters up and down
 const BOB_DURATION = 1500  // ms for one direction
-const SPIN_SPEED_DEG = 180 // degrees per second
+const SPIN_DURATION = 2000 // ms for full 360° rotation
 
 let setup = false
 let waitTimer = 0
 
-interface SpinCoin {
-  entity: Entity
-  baseRotation: Quaternion
-  angle: number // accumulated degrees
-}
-const spinCoins: SpinCoin[] = []
-
 export function coinBobSpinSystem(dt: number) {
-  // Spin all registered coins per-frame (avoids quaternion SLERP shortest-path issues on mobile)
-  for (const coin of spinCoins) {
-    coin.angle = (coin.angle + SPIN_SPEED_DEG * dt) % 360
-    if (Transform.has(coin.entity)) {
-      Transform.getMutable(coin.entity).rotation = Quaternion.multiply(
-        coin.baseRotation,
-        Quaternion.fromEulerDegrees(0, 0, coin.angle)
-      )
-    }
-  }
-
   if (setup) return
   waitTimer += dt
   if (waitTimer < 3) return // wait for composite entities to load
@@ -49,6 +31,7 @@ export function coinBobSpinSystem(dt: number) {
 
     const t = Transform.get(entity)
     const baseY = t.position.y
+    const baseRot = t.rotation ?? Quaternion.Identity()
 
     // We need a parent for bobbing and the coin itself for spinning,
     // because an entity can only have one Tween at a time.
@@ -86,11 +69,26 @@ export function coinBobSpinSystem(dt: number) {
       loop: TweenLoop.TL_YOYO
     })
 
-    // Register coin for per-frame spin (no tweens — avoids SLERP shortest-path reversal on mobile)
-    spinCoins.push({
-      entity,
-      baseRotation: t.rotation ?? Quaternion.Identity(),
-      angle: 0
+    // Spin the coin using Tween in 4 quarter-turns to avoid SLERP shortest-path reversal.
+    // Each segment is only 90°, so SLERP always takes the correct direction.
+    const quarterDuration = SPIN_DURATION / 4
+    const rot0   = baseRot
+    const rot90  = Quaternion.multiply(baseRot, Quaternion.fromEulerDegrees(0, 0, 90))
+    const rot180 = Quaternion.multiply(baseRot, Quaternion.fromEulerDegrees(0, 0, 180))
+    const rot270 = Quaternion.multiply(baseRot, Quaternion.fromEulerDegrees(0, 0, 270))
+
+    Tween.create(entity, {
+      mode: Tween.Mode.Rotate({ start: rot0, end: rot90 }),
+      duration: quarterDuration,
+      easingFunction: EasingFunction.EF_LINEAR
+    })
+    TweenSequence.create(entity, {
+      sequence: [
+        { mode: Tween.Mode.Rotate({ start: rot90, end: rot180 }), duration: quarterDuration, easingFunction: EasingFunction.EF_LINEAR },
+        { mode: Tween.Mode.Rotate({ start: rot180, end: rot270 }), duration: quarterDuration, easingFunction: EasingFunction.EF_LINEAR },
+        { mode: Tween.Mode.Rotate({ start: rot270, end: rot0 }), duration: quarterDuration, easingFunction: EasingFunction.EF_LINEAR },
+      ],
+      loop: TweenLoop.TL_RESTART
     })
 
     count++
