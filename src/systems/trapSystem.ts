@@ -261,7 +261,7 @@ room.onMessage('bananaTriggered', (data) => {
     // Only apply if not already staggered (client-side prediction may have already triggered it)
     const now = Date.now()
     if (trapStaggerUntil <= now) {
-      triggerHitFlash()
+      triggerHitFlash(TRAP_STAGGER_MS)
       triggerEmote({ predefinedEmote: 'getHit' })
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
@@ -567,7 +567,7 @@ function updateMsgTrapVisuals(dt: number): void {
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (dist < TRAP_TRIGGER_RADIUS && trapStaggerUntil <= now) {
         // Predict the stagger locally — server will confirm and remove the trap
-        triggerHitFlash()
+        triggerHitFlash(TRAP_STAGGER_MS)
         triggerEmote({ predefinedEmote: 'getHit' })
         const trapPos = Vector3.create(vis.x, vis.currentY, vis.z)
         playTrapSplatSound(trapPos)

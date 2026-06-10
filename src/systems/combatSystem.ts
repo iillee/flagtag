@@ -303,7 +303,7 @@ room.onMessage('stagger', (data) => {
   const me = getPlayerData()?.userId?.toLowerCase()
   if (me && data.victimId === me) {
     pendingStagger = true
-    triggerHitFlash()
+    triggerHitFlash(STAGGER_FREEZE_MS)
   }
 })
 

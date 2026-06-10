@@ -89,7 +89,7 @@ room.onMessage('shellTriggered', (data) => {
     playHitSound(pos)
     const me = getPlayerData()?.userId?.toLowerCase()
     if (me && data.victimId === me && !isCinematicActive()) {
-      triggerHitFlash()
+      triggerHitFlash(PROJECTILE_STAGGER_MS)
       triggerEmote({ predefinedEmote: 'getHit' })
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
@@ -196,7 +196,7 @@ room.onMessage('orbitHit', (data) => {
   playHitSound(pos)
   const me = getPlayerData()?.userId?.toLowerCase()
   if (me && data.victimId === me && !isCinematicActive()) {
-    triggerHitFlash()
+    triggerHitFlash(PROJECTILE_STAGGER_MS)
     triggerEmote({ predefinedEmote: 'getHit' })
     InputModifier.createOrReplace(engine.PlayerEntity, {
       mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
