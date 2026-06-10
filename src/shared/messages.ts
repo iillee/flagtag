@@ -86,7 +86,7 @@ export const Messages = {
 
   // Store / upgrade messages
   requestUpgrades: Schemas.Map({ t: Schemas.Int }),                    // Client → Server: request my upgrades + lifetime wins on join
-  upgradesResponse: Schemas.Map({ upgradesJson: Schemas.String, wins: Schemas.Int }),  // Server → Client: direct response with upgrade data
+  upgradesResponse: Schemas.Map({ upgradesJson: Schemas.String, wins: Schemas.Int, lifetimeHoldTime: Schemas.Float }),  // Server → Client: direct response with upgrade data
   buyBoomerang: Schemas.Map({ color: Schemas.String }),                // Client → Server: purchase a boomerang
   buyResult: Schemas.Map({ success: Schemas.Boolean, color: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),  // Server → Client
   equipBoomerang: Schemas.Map({ color: Schemas.String }),              // Client → Server: equip an owned boomerang

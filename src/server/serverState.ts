@@ -37,9 +37,7 @@ export function setCoinStateEntity(e: Entity) { coinStateEntity = e }
 export const holdTimeEntities = new Map<string, Entity>()
 export const knownPlayers = new Set<string>()
 export const playerNames = new Map<string, string>()
-export const upgradeEntities = new Map<string, Entity>()
-export const lifetimeWinsEntities = new Map<string, Entity>()
-export const lifetimeHoldTimeEntities = new Map<string, Entity>()
+
 export const playerLifetimeHoldTimeCache = new Map<string, number>()
 
 export const playerBoomerangColors = new Map<string, string>() // playerId -> color ('r','y','b','g')

@@ -1,13 +1,12 @@
 /**
  * Client-side upgrade state reader.
  * 
- * Reads PlayerUpgrades and PlayerLifetimeWins from CRDT-synced entities
- * for the local player. Also handles buy requests and results.
+ * Reads upgrades, lifetime wins, and lifetime hold time from WebSocket messages.
+ * Also handles buy requests and results.
  */
 import { engine, AudioSource, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { getPlayer } from '@dcl/sdk/players'
-import { PlayerUpgrades, PlayerLifetimeWins, PlayerLifetimeHoldTime, parseUpgrades, type UpgradeData } from '../shared/upgrades'
+import { parseUpgrades, type UpgradeData } from '../shared/upgrades'
 import { room } from '../shared/messages'
 import { setBoomerangColor, type BoomerangColor } from './boomerangColor'
 
@@ -95,12 +94,13 @@ export function initUpgradeListeners(): void {
     const parsed = parseUpgrades(data.upgradesJson)
     localUpgrades = parsed
     localLifetimeWins = data.wins ?? 0
+    localLifetimeHoldTime = data.lifetimeHoldTime ?? 0
     winsReceived = true
     if (!initialEquipApplied && parsed.equipped) {
       initialEquipApplied = true
       setBoomerangColor(parsed.equipped)
     }
-    console.log('[Store] Got direct upgrade data - owned:', parsed.boomerangs.join(','), 'wins:', localLifetimeWins)
+    console.log('[Store] Got upgrade data - owned:', parsed.boomerangs.join(','), 'wins:', localLifetimeWins, 'holdTime:', localLifetimeHoldTime.toFixed(1))
   })
 
   room.onMessage('buyResult', (data) => {
@@ -143,41 +143,6 @@ export function upgradeStateSystem(dt: number): void {
     lastBuyErrorTimer -= dt
     if (lastBuyErrorTimer <= 0) {
       lastBuyError = ''
-    }
-  }
-
-  const player = getPlayer()
-  if (!player) return
-  const localId = player.userId.toLowerCase()
-
-  // Read upgrades from synced component
-  for (const [, data] of engine.getEntitiesWith(PlayerUpgrades)) {
-    if (data.playerId === localId) {
-      const parsed = parseUpgrades(data.upgradesJson)
-      localUpgrades = parsed
-      // Auto-equip saved boomerang on first load
-      if (!initialEquipApplied && parsed.equipped) {
-        initialEquipApplied = true
-        setBoomerangColor(parsed.equipped)
-      }
-      break
-    }
-  }
-
-  // Read lifetime wins from synced component
-  for (const [, data] of engine.getEntitiesWith(PlayerLifetimeWins)) {
-    if (data.playerId === localId) {
-      localLifetimeWins = data.wins
-      winsReceived = true
-      break
-    }
-  }
-
-  // Read lifetime hold time from synced component
-  for (const [, data] of engine.getEntitiesWith(PlayerLifetimeHoldTime)) {
-    if (data.playerId === localId) {
-      localLifetimeHoldTime = data.totalSeconds
-      break
     }
   }
 }

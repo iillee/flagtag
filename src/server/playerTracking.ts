@@ -17,7 +17,7 @@ import {
 import { persistPlayerNames } from './persistence'
 import { updatePlayerName } from './leaderboard'
 import { getOrCreateHoldTimeEntity } from './flagLogic'
-import { loadPlayerCoinBalance, loadPlayerLifetimeHoldTime, getOrCreateLifetimeHoldTimeEntity } from './economy'
+import { loadPlayerCoinBalance, loadPlayerLifetimeHoldTime } from './economy'
 import { clearCombatCooldowns } from './combat'
 import { syncVisitorAnalytics, syncMonthlyVisitorAnalytics, schedulePlayerJoinDiscord } from './analytics'
 import { capture, identify } from './posthog'
@@ -48,7 +48,6 @@ export function playerTrackingSystem(): void {
 
       // Load lifetime hold time and create synced entity
       loadPlayerLifetimeHoldTime(userKey).then(() => {
-        getOrCreateLifetimeHoldTimeEntity(userKey)
       }).catch(err => console.error('[LifetimeHoldTime] Error loading for', userKey.slice(0, 8), err))
 
       // Start/restart visitor session — use persisted name if available

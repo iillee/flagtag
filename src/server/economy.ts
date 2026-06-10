@@ -2,10 +2,8 @@
  * economy.ts — Coins, wallets, upgrades, store purchases, and coin respawn system.
  */
 import { engine, type Entity } from '@dcl/sdk/ecs'
-import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
-  upgradeEntities, lifetimeWinsEntities, lifetimeHoldTimeEntities,
   playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache, playerLifetimeHoldTimeCache,
   playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
   coinStateEntity
@@ -15,8 +13,6 @@ import {
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
 } from '../shared/coins'
 import {
-  PlayerUpgrades, PlayerLifetimeWins, PlayerLifetimeHoldTime,
-  getUpgradesSyncId, getLifetimeWinsSyncId, getLifetimeHoldTimeSyncId,
   parseUpgrades, serializeUpgrades, BOOMERANG_STORE,
   type UpgradeData
 } from '../shared/upgrades'
@@ -88,9 +84,6 @@ export async function savePlayerUpgrades(walletAddress: string, data: UpgradeDat
   const key = walletAddress.toLowerCase()
   playerUpgradeData.set(key, data)
 
-  const entity = getOrCreateUpgradeEntity(key)
-  PlayerUpgrades.getMutable(entity).upgradesJson = serializeUpgrades(data)
-
   try {
     await Storage.set(`upgrades:${key}`, serializeUpgrades(data))
   } catch (err) {
@@ -98,19 +91,6 @@ export async function savePlayerUpgrades(walletAddress: string, data: UpgradeDat
   }
 }
 
-export function getOrCreateUpgradeEntity(walletAddress: string): Entity {
-  const key = walletAddress.toLowerCase()
-  let entity = upgradeEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  const data = playerUpgradeData.get(key) ?? { boomerangs: ['r'], equipped: 'r' }
-  PlayerUpgrades.create(entity, { playerId: key, upgradesJson: serializeUpgrades(data) })
-  syncEntity(entity, [PlayerUpgrades.componentId], getUpgradesSyncId(key))
-  upgradeEntities.set(key, entity)
-  console.log('[Upgrades] Created entity for', key.slice(0, 8))
-  return entity
-}
 
 export async function loadPlayerLifetimeWins(walletAddress: string): Promise<number> {
   const key = walletAddress.toLowerCase()
@@ -149,9 +129,6 @@ export async function addPlayerLifetimeWin(walletAddress: string): Promise<numbe
   const newWins = current + 1
   playerLifetimeWinsCache.set(key, newWins)
 
-  const entity = getOrCreateLifetimeWinsEntity(key)
-  PlayerLifetimeWins.getMutable(entity).wins = newWins
-
   try {
     await Storage.set(`lifetimeWins:${key}`, String(newWins))
   } catch (err) {
@@ -161,19 +138,6 @@ export async function addPlayerLifetimeWin(walletAddress: string): Promise<numbe
   return newWins
 }
 
-export function getOrCreateLifetimeWinsEntity(walletAddress: string): Entity {
-  const key = walletAddress.toLowerCase()
-  let entity = lifetimeWinsEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  const wins = playerLifetimeWinsCache.get(key) ?? 0
-  PlayerLifetimeWins.create(entity, { playerId: key, wins })
-  syncEntity(entity, [PlayerLifetimeWins.componentId], getLifetimeWinsSyncId(key))
-  lifetimeWinsEntities.set(key, entity)
-  console.log('[LifetimeWins] Created entity for', key.slice(0, 8), 'wins:', wins)
-  return entity
-}
 
 // ── Lifetime flag hold time ──
 
@@ -199,9 +163,6 @@ export async function addPlayerLifetimeHoldTime(walletAddress: string, additiona
   const newTotal = current + additionalSeconds
   playerLifetimeHoldTimeCache.set(key, newTotal)
 
-  const entity = getOrCreateLifetimeHoldTimeEntity(key)
-  PlayerLifetimeHoldTime.getMutable(entity).totalSeconds = newTotal
-
   try {
     await Storage.set(`lifetimeHoldTime:${key}`, String(newTotal))
   } catch (err) {
@@ -211,19 +172,6 @@ export async function addPlayerLifetimeHoldTime(walletAddress: string, additiona
   return newTotal
 }
 
-export function getOrCreateLifetimeHoldTimeEntity(walletAddress: string): Entity {
-  const key = walletAddress.toLowerCase()
-  let entity = lifetimeHoldTimeEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  const totalSeconds = playerLifetimeHoldTimeCache.get(key) ?? 0
-  PlayerLifetimeHoldTime.create(entity, { playerId: key, totalSeconds })
-  syncEntity(entity, [PlayerLifetimeHoldTime.componentId], getLifetimeHoldTimeSyncId(key))
-  lifetimeHoldTimeEntities.set(key, entity)
-  console.log('[LifetimeHoldTime] Created entity for', key.slice(0, 8), 'totalSeconds:', totalSeconds.toFixed(1))
-  return entity
-}
 
 // ── Store purchase ──
 
@@ -378,11 +326,10 @@ export function registerEconomyHandlers(): void {
     if (!context) return
     const from = context.from.toLowerCase()
     const upgrades = await loadPlayerUpgrades(from)
-    getOrCreateUpgradeEntity(from)
     const wins = await loadPlayerLifetimeWins(from)
-    getOrCreateLifetimeWinsEntity(from)
-    room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins }, { to: [from] })
-    console.log('[Store] Sent upgrades to', from.slice(0, 8), '- owned:', upgrades.boomerangs.join(','), 'wins:', wins)
+    const holdTime = await loadPlayerLifetimeHoldTime(from)
+    room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins, lifetimeHoldTime: holdTime }, { to: [from] })
+    console.log('[Store] Sent upgrades to', from.slice(0, 8), '- owned:', upgrades.boomerangs.join(','), 'wins:', wins, 'holdTime:', holdTime.toFixed(1))
 
     if (upgrades.equipped && upgrades.equipped !== 'r') {
       playerBoomerangColors.set(from, upgrades.equipped)

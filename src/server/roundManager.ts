@@ -25,7 +25,8 @@ import { awardRoundCoins } from './economy'
 import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState, computeGravityTarget } from './flagLogic'
 import { activeTraps, activeProjectiles, activeOrbits, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
-import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime } from './economy'
+import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime, loadPlayerUpgrades, loadPlayerLifetimeWins, loadPlayerLifetimeHoldTime } from './economy'
+import { serializeUpgrades } from '../shared/upgrades'
 import { capture } from './posthog'
 import { EnvVar } from '@dcl/sdk/server'
 import { isPreview } from './analytics'
@@ -425,6 +426,14 @@ async function handleRoundEnd(): Promise<void> {
       const newTotal = await addPlayerLifetimeHoldTime(p.userId, p.seconds)
       console.log('[LifetimeHoldTime] Player', p.userId.slice(0, 8), '+', p.seconds.toFixed(1), 's -> total:', newTotal.toFixed(1), 's')
     }
+  }
+
+  // ── 7d. Send updated lifetime stats to each player via WebSocket ──
+  for (const p of players) {
+    const upgrades = await loadPlayerUpgrades(p.userId)
+    const wins = await loadPlayerLifetimeWins(p.userId)
+    const holdTime = await loadPlayerLifetimeHoldTime(p.userId)
+    room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins, lifetimeHoldTime: holdTime }, { to: [p.userId] })
   }
 
   // ── 8. Persist flag state ──
