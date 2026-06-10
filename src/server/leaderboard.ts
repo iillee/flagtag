@@ -4,16 +4,15 @@
  */
 
 import {
-  leaderboardEntity, allTimeLeaderboardEntity, monthlyLeaderboardEntity,
+  leaderboardEntity, allTimeLeaderboardEntity,
   playerNames, visitorSessions, monthlyVisitorSessions,
   isRealName,
   lastLeaderboardResetDay, setLastLeaderboardResetDay
 } from './serverState'
-import { persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard } from './persistence'
+import { persistLeaderboard, persistAllTimeLeaderboard } from './persistence'
 import { Storage } from '@dcl/sdk/server'
 import {
-  LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState,
-  getCurrentMonthString
+  LeaderboardState, AllTimeLeaderboardState
 } from '../shared/components'
 
 // ── Types ──
@@ -135,20 +134,7 @@ export async function checkLeaderboardDailyReset(
   return false
 }
 
-/** Check and perform monthly leaderboard reset at the start of each month (UTC). */
-export async function checkMonthlyLeaderboardReset(): Promise<void> {
-  const currentMonth = getCurrentMonthString()
-  const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)
-  if (mlLb && mlLb.month && mlLb.month !== currentMonth) {
-    console.log('[Server] Monthly leaderboard reset for new month:', currentMonth, '(was:', mlLb.month, ')')
-    const mlMutable = MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity)
-    mlMutable.json = '[]'
-    mlMutable.month = currentMonth
-    await persistMonthlyLeaderboard('[]')
-    await Storage.set('monthlyLeaderboardMonth', currentMonth)
-    console.log('[Server] Monthly leaderboard reset completed')
-  }
-}
+
 
 // ── Name update (cross-cutting: leaderboards + visitor sessions) ──
 
@@ -184,7 +170,6 @@ export function updatePlayerName(userId: string, name: string): boolean {
     persist: (json: string) => Promise<void>
   }> = [
     { getState: () => LeaderboardState.getOrNull(leaderboardEntity), getMutable: () => LeaderboardState.getMutable(leaderboardEntity), persist: persistLeaderboard },
-    { getState: () => MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity), getMutable: () => MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity), persist: persistMonthlyLeaderboard },
   ]
   for (const lb of standardLbs) {
     const state = lb.getState()

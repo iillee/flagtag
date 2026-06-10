@@ -20,14 +20,7 @@ export function setLeaderboardEntity(e: Entity) { leaderboardEntity = e }
 export let allTimeLeaderboardEntity: Entity
 export function setAllTimeLeaderboardEntity(e: Entity) { allTimeLeaderboardEntity = e }
 
-export let monthlyLeaderboardEntity: Entity
-export function setMonthlyLeaderboardEntity(e: Entity) { monthlyLeaderboardEntity = e }
 
-export let visitorAnalyticsEntity: Entity
-export function setVisitorAnalyticsEntity(e: Entity) { visitorAnalyticsEntity = e }
-
-export let monthlyVisitorAnalyticsEntity: Entity
-export function setMonthlyVisitorAnalyticsEntity(e: Entity) { monthlyVisitorAnalyticsEntity = e }
 
 export let coinStateEntity: Entity
 export function setCoinStateEntity(e: Entity) { coinStateEntity = e }

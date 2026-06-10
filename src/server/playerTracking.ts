@@ -19,7 +19,7 @@ import { updatePlayerName } from './leaderboard'
 import { getOrCreateHoldTimeEntity } from './flagLogic'
 import { loadPlayerCoinBalance, loadPlayerLifetimeHoldTime } from './economy'
 import { clearCombatCooldowns } from './combat'
-import { syncVisitorAnalytics, syncMonthlyVisitorAnalytics, schedulePlayerJoinDiscord } from './analytics'
+import { schedulePlayerJoinDiscord } from './analytics'
 import { capture, identify } from './posthog'
 
 // ── Player join/leave detection ──
@@ -147,11 +147,7 @@ export function playerTrackingSystem(): void {
     }
   }
 
-  // Immediate sync when players join or leave
-  if (changed) {
-    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
-    syncMonthlyVisitorAnalytics().catch(e => console.error('[Server] syncMonthlyVisitorAnalytics error:', e))
-  }
+
 }
 
 // ── Name resolution ──
@@ -192,6 +188,5 @@ export function nameResolverServerSystem(dt: number): void {
 
   if (anyUpdated) {
     persistPlayerNames().catch(e => console.error('[Server] persistPlayerNames error:', e))
-    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
   }
 }

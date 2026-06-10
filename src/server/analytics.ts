@@ -6,13 +6,11 @@ import { Storage, EnvVar } from '@dcl/sdk/server'
 import { getRealm } from '~system/Runtime'
 import {
   visitorSessions, monthlyVisitorSessions, playerNames, isRealName,
-  visitorAnalyticsEntity, monthlyVisitorAnalyticsEntity,
   lastVisitorResetDay, setLastVisitorResetDay,
   lastMonthlyVisitorResetMonth, setLastMonthlyVisitorResetMonth,
 } from './serverState'
 import { persistVisitorData } from './persistence'
 import {
-  VisitorAnalytics, MonthlyVisitorAnalytics,
   getTodayDateString, getCurrentMonthString
 } from '../shared/components'
 
@@ -97,7 +95,7 @@ export async function checkVisitorDailyReset(): Promise<boolean> {
     console.log('[Server] Daily visitor reset at midnight UTC for new day:', currentDay)
     setLastVisitorResetDay(currentDay)
     visitorSessions.clear()
-    await syncVisitorAnalytics()
+    await persistVisitorDataToStorage()
     console.log('[Server] Visitor data reset completed')
     return true
   }
@@ -105,32 +103,21 @@ export async function checkVisitorDailyReset(): Promise<boolean> {
   return false
 }
 
-// ── Sync visitor analytics to CRDT + Storage ──
+// ── Persist visitor data to Storage (no CRDT sync) ──
 
-export async function syncVisitorAnalytics(): Promise<void> {
-  const currentDay = getTodayDateString()
+async function persistVisitorDataToStorage(): Promise<void> {
   const now = Date.now()
-  const onlineCount = Array.from(visitorSessions.values()).filter(v => v.sessionStartMs > 0).length
-
   const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
     const isOnline = data.sessionStartMs > 0
     let totalSeconds = data.totalSecondsToday
-
     if (isOnline) {
       const sessionMs = now - data.sessionStartMs
       totalSeconds += Math.floor(sessionMs / 1000)
     }
-
     const bestName = (playerNames.has(userId) && isRealName(playerNames.get(userId)!))
       ? playerNames.get(userId)!
       : data.name
-
-    return {
-      userId,
-      name: bestName,
-      isOnline,
-      totalSeconds
-    }
+    return { userId, name: bestName, isOnline, totalSeconds }
   })
   .sort((a, b) => {
     if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1
@@ -138,24 +125,14 @@ export async function syncVisitorAnalytics(): Promise<void> {
   })
   .slice(0, 100)
 
-  const visitorDataJson = JSON.stringify(visitorData)
-
-  const mutable = VisitorAnalytics.getMutable(visitorAnalyticsEntity)
-  mutable.date = currentDay
-  mutable.visitorDataJson = visitorDataJson
-  mutable.onlineCount = onlineCount
-  mutable.totalUniqueVisitors = visitorSessions.size
-
-  await persistVisitorData(visitorDataJson)
+  await persistVisitorData(JSON.stringify(visitorData))
 }
 
-// ── Monthly visitor analytics ──
+// ── Persist monthly visitor data to Storage (no CRDT sync) ──
 
-export async function syncMonthlyVisitorAnalytics(): Promise<void> {
+async function persistMonthlyVisitorDataToStorage(): Promise<void> {
   const currentMonth = getCurrentMonthString()
   const now = Date.now()
-  const onlineCount = Array.from(monthlyVisitorSessions.values()).filter(v => v.sessionStartMs > 0).length
-
   const visitorData = Array.from(monthlyVisitorSessions.entries()).map(([userId, data]) => {
     const isOnline = data.sessionStartMs > 0
     let totalSeconds = data.totalSecondsMonth
@@ -174,14 +151,7 @@ export async function syncMonthlyVisitorAnalytics(): Promise<void> {
   })
   .slice(0, 100)
 
-  const visitorDataJson = JSON.stringify(visitorData)
-  const mutable = MonthlyVisitorAnalytics.getMutable(monthlyVisitorAnalyticsEntity)
-  mutable.month = currentMonth
-  mutable.visitorDataJson = visitorDataJson
-  mutable.onlineCount = onlineCount
-  mutable.totalUniqueVisitors = monthlyVisitorSessions.size
-
-  await Storage.set('monthlyVisitorData', visitorDataJson)
+  await Storage.set('monthlyVisitorData', JSON.stringify(visitorData))
   await Storage.set('monthlyVisitorResetMonth', currentMonth)
 }
 
@@ -193,7 +163,7 @@ export async function checkMonthlyVisitorReset(): Promise<void> {
     console.log('[Server] Monthly visitor reset for new month:', currentMonth)
     monthlyVisitorSessions.clear()
     setLastMonthlyVisitorResetMonth(currentMonth)
-    await syncMonthlyVisitorAnalytics()
+    await persistMonthlyVisitorDataToStorage()
     console.log('[Server] Monthly visitor data reset completed')
   }
 }
@@ -211,8 +181,8 @@ export function visitorTrackingServerSystem(dt: number): void {
     flushPendingJoinNotifications()
     checkVisitorDailyReset().catch(e => console.error('[Server] checkVisitorDailyReset error:', e))
     checkMonthlyVisitorReset().catch(e => console.error('[Server] checkMonthlyVisitorReset error:', e))
-    syncVisitorAnalytics().catch(e => console.error('[Server] syncVisitorAnalytics error:', e))
-    syncMonthlyVisitorAnalytics().catch(e => console.error('[Server] syncMonthlyVisitorAnalytics error:', e))
+    persistVisitorDataToStorage().catch(e => console.error('[Server] persistVisitorData error:', e))
+    persistMonthlyVisitorDataToStorage().catch(e => console.error('[Server] persistMonthlyVisitorData error:', e))
   }
 }
 

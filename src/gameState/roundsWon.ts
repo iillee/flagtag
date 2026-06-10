@@ -1,5 +1,5 @@
 import { engine } from '@dcl/sdk/ecs'
-import { LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState } from '../shared/components'
+import { LeaderboardState, AllTimeLeaderboardState } from '../shared/components'
 
 export interface LeaderboardEntry {
   userId: string
@@ -15,7 +15,6 @@ const HIDDEN_ADDRESSES: Set<string> = new Set([
 
 // ── Cache: parse + sort only when the raw JSON changes ──
 let _dailyCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
-let _monthlyCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
 let _allTimeCache: { json: string; result: LeaderboardEntry[] } = { json: '', result: [] }
 
 function parseAndSort(json: string, cache: { json: string; result: LeaderboardEntry[] }): LeaderboardEntry[] {
@@ -47,13 +46,6 @@ export function getLeaderboardEntries(): LeaderboardEntry[] {
   return []
 }
 
-/** Read monthly leaderboard from the synced MonthlyLeaderboardState component. */
-export function getMonthlyLeaderboardEntries(): LeaderboardEntry[] {
-  for (const [, lb] of engine.getEntitiesWith(MonthlyLeaderboardState)) {
-    return parseAndSort(lb.json, _monthlyCache)
-  }
-  return []
-}
 
 /** Names hidden from all-time leaderboard display. */
 const HIDDEN_NAMES: Set<string> = new Set(['ile', 'Tester'])

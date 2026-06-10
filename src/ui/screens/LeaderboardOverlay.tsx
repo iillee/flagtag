@@ -24,7 +24,7 @@ import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSys
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { blessingState } from '../uiState'
-import { getMonthlyVisitors, getMonthlyOnlineCount } from '../../gameState/visitorState'
+
 
 const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 
@@ -214,7 +214,7 @@ export function MetricsOverlay({ allVisitors, localUserId, onlineCount, totalPla
 
           {/* Column headers */}
           {(() => {
-            const mv = tabs.metrics === 'monthly' ? sortVisitorsWithBotSection(getMonthlyVisitors()) : allVisitors
+            const mv = allVisitors
             return <MetricsColumnHeader hasScroll={mv.length > VISITORS_PER_PAGE} />
           })()}
 
@@ -242,14 +242,12 @@ function MetricsColumnHeader({ hasScroll }: { hasScroll: boolean }) {
 // ── Metrics Tab ──
 
 function MetricsTabContent({ allVisitors, onlineCount, totalPlaytimeMin, serverConnected, localUserId }: { allVisitors: VisitorOrSeparator[]; onlineCount: number; totalPlaytimeMin: number; serverConnected: string; localUserId: string | null }) {
-  const metricsVisitors = tabs.metrics === 'monthly'
-    ? sortVisitorsWithBotSection(getMonthlyVisitors())
-    : allVisitors
+  const metricsVisitors = allVisitors
   const mBotCount = metricsVisitors.filter(v => !('_isSeparator' in v && v._isSeparator) && isLikelyBot(v)).length
   const mVisitorCount = metricsVisitors.filter(v => !('_isSeparator' in v && v._isSeparator)).length - mBotCount
-  const mOnlineCount = tabs.metrics === 'monthly' ? getMonthlyOnlineCount() : onlineCount
+  const mOnlineCount = onlineCount
   const mTotalPlaytimeMin = Math.floor(metricsVisitors.reduce((sum, v) => sum + v.totalSeconds, 0) / 60)
-  const emptyMessage = tabs.metrics === 'monthly' ? 'No visitors this month' : 'No visitors today'
+  const emptyMessage = 'No visitors today'
   const totalVisitors = metricsVisitors.length
   const metricsMaxOffset = Math.max(0, totalVisitors - VISITORS_PER_PAGE)
   if (scroll.visitorOffset > metricsMaxOffset) scroll.visitorOffset = metricsMaxOffset
@@ -287,7 +285,7 @@ function MetricsTabContent({ allVisitors, onlineCount, totalPlaytimeMin, serverC
         </UiEntity>
         <Scrollbar offset={scroll.visitorOffset} maxOffset={metricsMaxOffset} perPage={VISITORS_PER_PAGE} totalItems={totalVisitors} onScroll={(v) => { scroll.visitorOffset = v }} keyPrefix="metrics" />
       </UiEntity>
-      <StatsRow visitorCount={mVisitorCount} botCount={mBotCount} onlineCount={mOnlineCount} serverConnected={serverConnected} dateLabel={tabs.metrics === 'monthly' ? formatUTCMonth() : formatUTCDate()} totalPlaytimeMin={mTotalPlaytimeMin} localUserId={localUserId} />
+      <StatsRow visitorCount={mVisitorCount} botCount={mBotCount} onlineCount={mOnlineCount} serverConnected={serverConnected} dateLabel={formatUTCDate()} totalPlaytimeMin={mTotalPlaytimeMin} localUserId={localUserId} />
     </UiEntity>
   )
 }

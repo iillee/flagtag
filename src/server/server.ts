@@ -22,29 +22,27 @@ import { engine, Transform } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import {
   setFlagEntity, setCountdownEntity,
-  setLeaderboardEntity, setAllTimeLeaderboardEntity, setMonthlyLeaderboardEntity,
-  setVisitorAnalyticsEntity, setMonthlyVisitorAnalyticsEntity,
+  setLeaderboardEntity, setAllTimeLeaderboardEntity,
   setCoinStateEntity,
   flagEntity, countdownEntity,
-  leaderboardEntity, allTimeLeaderboardEntity, monthlyLeaderboardEntity,
-  visitorAnalyticsEntity, monthlyVisitorAnalyticsEntity, coinStateEntity,
+  leaderboardEntity, allTimeLeaderboardEntity,
+  coinStateEntity,
   holdTimeEntities, knownPlayers, playerBoomerangColors,
 } from './serverState'
 import { persistPlayerNames, loadPlayerNames, loadVisitorData } from './persistence'
 import {
   loadDiscordWebhookUrl,
-  syncVisitorAnalytics, syncMonthlyVisitorAnalytics, restoreMonthlyVisitorData,
+  restoreMonthlyVisitorData,
   visitorTrackingServerSystem,
 } from './analytics'
-import { patchAllLeaderboardNames, checkLeaderboardDailyReset, checkMonthlyLeaderboardReset, updatePlayerName } from './leaderboard'
+import { patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName } from './leaderboard'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage, EnvVar } from '@dcl/sdk/server'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer,
-  LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState,
-  VisitorAnalytics, MonthlyVisitorAnalytics,
-  FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, SyncIds, getTodayDateString, getCurrentMonthString,
+  LeaderboardState, AllTimeLeaderboardState,
+  FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, SyncIds,
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { CoinState, COIN_STATE_SYNC_ID } from '../shared/coins'
@@ -107,25 +105,10 @@ export async function setupServer(): Promise<void> {
 
   // ── Reports & resets ──
   await checkLeaderboardDailyReset()
-  await checkMonthlyLeaderboardReset()
 
-  // ── Visitor analytics ──
+  // ── Visitor tracking (server-side only, no CRDT sync) ──
   await loadVisitorData()
-  setVisitorAnalyticsEntity(engine.addEntity())
-  VisitorAnalytics.create(visitorAnalyticsEntity, {
-    date: getTodayDateString(), visitorDataJson: '[]', onlineCount: 0, totalUniqueVisitors: 0,
-  })
-  syncEntity(visitorAnalyticsEntity, [VisitorAnalytics.componentId], SyncIds.VISITOR_ANALYTICS)
-  await syncVisitorAnalytics()
-
-  // ── Monthly visitor analytics ──
   await restoreMonthlyVisitorData()
-  setMonthlyVisitorAnalyticsEntity(engine.addEntity())
-  MonthlyVisitorAnalytics.create(monthlyVisitorAnalyticsEntity, {
-    month: getCurrentMonthString(), visitorDataJson: '[]', onlineCount: 0, totalUniqueVisitors: 0,
-  })
-  syncEntity(monthlyVisitorAnalyticsEntity, [MonthlyVisitorAnalytics.componentId], SyncIds.MONTHLY_VISITOR_ANALYTICS)
-  await syncMonthlyVisitorAnalytics()
 
   // ── Reconcile stale CRDT hold-time entities ──
   reconcileHoldTimeEntities()
@@ -204,16 +187,6 @@ async function initLeaderboards() {
   AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: atJsonSync })
   syncEntity(allTimeLeaderboardEntity, [AllTimeLeaderboardState.componentId], SyncIds.ALLTIME_LEADERBOARD)
 
-  // Monthly
-  const savedMonthly = await load('monthlyLeaderboard')
-  const savedMonth = await load('monthlyLeaderboardMonth')
-  const currentMonth = getCurrentMonthString()
-  const monthlyJson = patchAllLeaderboardNames(
-    (savedMonth === currentMonth && savedMonthly) ? savedMonthly : '[]', 'monthly leaderboard',
-  )
-  setMonthlyLeaderboardEntity(engine.addEntity())
-  MonthlyLeaderboardState.create(monthlyLeaderboardEntity, { json: monthlyJson, month: currentMonth })
-  syncEntity(monthlyLeaderboardEntity, [MonthlyLeaderboardState.componentId], SyncIds.MONTHLY_LEADERBOARD)
 }
 
 /** Reclaim hold-time entities left over from a previous server lifetime. */

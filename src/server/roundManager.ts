@@ -7,19 +7,19 @@ import { engine, Transform, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { Storage } from '@dcl/sdk/server'
 import {
-  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState, MonthlyLeaderboardState,
+  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState,
   getRandomSpawnPoint, SyncIds, getCurrentMonthString
 } from '../shared/components'
 import { room } from '../shared/messages'
 import {
   flagEntity, countdownEntity,
-  leaderboardEntity, allTimeLeaderboardEntity, monthlyLeaderboardEntity,
+  leaderboardEntity, allTimeLeaderboardEntity,
   holdTimeEntities, knownPlayers, playerNames,
   lastStealTime, playerLifetimeHoldTimeCache,
   SPLASH_DURATION_MS,
 } from './serverState'
-import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard, persistMonthlyLeaderboard } from './persistence'
-import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset, checkMonthlyLeaderboardReset } from './leaderboard'
+import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard } from './persistence'
+import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset } from './leaderboard'
 
 import { awardRoundCoins } from './economy'
 import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState, computeGravityTarget } from './flagLogic'
@@ -379,7 +379,6 @@ async function handleRoundEnd(): Promise<void> {
 
   // ── 6. Check for daily/monthly leaderboard reset ──
   await checkLeaderboardDailyReset()
-  await checkMonthlyLeaderboardReset()
 
   // ── 7. Update all three leaderboards ──
   if (maxSeconds > 0) {
@@ -400,15 +399,6 @@ async function handleRoundEnd(): Promise<void> {
     AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = JSON.stringify(atCompact)
 
     const currentMonth = getCurrentMonthString()
-    const mlLb = MonthlyLeaderboardState.getOrNull(monthlyLeaderboardEntity)
-    const mlEntries = (mlLb?.month === currentMonth) ? parseLeaderboardJson(mlLb?.json) : []
-    incrementLeaderboardWins(mlEntries, players, maxSeconds)
-    const mlJson = JSON.stringify(mlEntries)
-    const mlMutable = MonthlyLeaderboardState.getMutable(monthlyLeaderboardEntity)
-    mlMutable.json = mlJson
-    mlMutable.month = currentMonth
-    await persistMonthlyLeaderboard(mlJson)
-    await Storage.set('monthlyLeaderboardMonth', currentMonth)
   }
 
   // ── 7b. Award lifetime wins ──
