@@ -101,8 +101,8 @@ export function ghostServerSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   const now = Date.now()
 
-  // Keep world time cache fresh for night detection
-  updateWorldTime()
+  // Keep world time cache fresh for night detection (no skybox on server)
+  updateWorldTime(false)
 
   // ── Ghost only spawns at night ──
   if (!isNightTime()) {

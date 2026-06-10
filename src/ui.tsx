@@ -60,7 +60,7 @@ import { refreshUpgradesFromServer } from './gameState/playerUpgradeState'
 import { exitSpectatorMode, setSpectatorMode, selectFollowPlayer } from './systems/spectatorSystem'
 import { spectatorState, type SpectatorMode } from './shared/clientState'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
-import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from './systems/lightningSystem'
+import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible, isLightningWarningActive } from './systems/lightningSystem'
 import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/ghostSystem'
 
 // Reusable components
@@ -360,6 +360,22 @@ or just say hi!`} fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform=
           <Label value={`UI: ${getUIScaleLabel()}`} fontSize={S(16)} color={WHITE} font="sans-serif" />
         </UiEntity>
       )}
+
+      {/* Lightning warning tooltip — visible to flag carrier when sparks start */}
+      {isLightningWarningActive() && (() => {
+        const localPlayer = getPlayer()
+        const carrierId = getCurrentFlagCarrierUserId()
+        const isCarrier = localPlayer && carrierId && localPlayer.userId?.toLowerCase() === carrierId.toLowerCase()
+        return isCarrier ? (
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? 140 : S(180) }, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
+            <UiEntity uiTransform={{ padding: { top: mobile ? 12 : S(10), bottom: mobile ? 12 : S(10), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, borderRadius: mobile ? 12 : S(10) }}
+              uiBackground={{ color: Color4.create(0.1, 0.1, 0.15, 0.9) }}
+            >
+              <Label value="⚡ Press 3 to Drop!" fontSize={mobile ? 36 : S(24)} color={Color4.create(1, 0.9, 0.3, 1)} font="sans-serif" />
+            </UiEntity>
+          </UiEntity>
+        ) : null
+      })()}
 
       {/* Death overlays */}
       <DeathOverlay visible={getRespawnCountdown() > 0} message="You Drowned!" fadeOpacity={getDrownFadeOpacity()} showText={isDrownTextVisible()} respawnCountdown={getRespawnCountdown()} />

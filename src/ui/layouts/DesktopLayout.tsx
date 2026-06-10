@@ -1,6 +1,7 @@
 import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
+import { isNightTime } from '../../shared/dayNight'
 
 import {
   S, WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GOLD,
@@ -62,7 +63,10 @@ export function DesktopLayout() {
           <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: S(2 * _ROW_HEIGHT + 2 * _PADDING), padding: { left: S(20), right: S(20) }, borderRadius: S(_BORDER_RADIUS) }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <Label value="Round ends in:" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { bottom: S(-6) } }} />
+            <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(-6) } }}>
+              <Label value={isNightTime() ? '🌙' : '☀️'} fontSize={S(16)} font="sans-serif" uiTransform={{ margin: { right: S(4) } }} />
+              <Label value="Round ends in:" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" />
+            </UiEntity>
             <Label value={formatCountdown(countdownSeconds)} fontSize={S(40)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: S(-6) } }} />
           </UiEntity>
         </UiEntity>

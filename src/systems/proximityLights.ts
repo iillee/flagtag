@@ -1,6 +1,6 @@
 import { engine, Transform, LightSource } from '@dcl/sdk/ecs'
 import { Vector3, Color3 } from '@dcl/sdk/math'
-import { getWorldTime } from '~system/Runtime'
+import { isNightTime, updateWorldTime } from '../shared/dayNight'
 
 // ── Raw light positions (Blender world coords: x=right, y=forward, z=up) ──
 // Transform: DCL_x = bx*5 + 74.75,  DCL_y = bz*5 - 2,  DCL_z = -by*5 + 119.5
@@ -58,11 +58,6 @@ const LIGHT_COLOR = Color3.create(1.0, 0.85, 0.6) // Warm torch
 const LIGHT_INTENSITY = 1200
 const LIGHT_RANGE = 35
 const CHECK_INTERVAL = 0.25 // seconds between proximity checks
-const TIME_CHECK_INTERVAL = 10 // seconds between world time checks
-
-// Night = roughly 6pm (64800s) to 6am (7200s) in DCL time (0-86400 cycle)
-const SUNSET_TIME = 64800
-const SUNRISE_TIME = 7200
 
 interface LightEntry {
   entity: ReturnType<typeof engine.addEntity>
@@ -75,8 +70,6 @@ const lights: LightEntry[] = []
 const topIdx: number[] = new Array(MAX_ACTIVE).fill(-1)
 const topDist: number[] = new Array(MAX_ACTIVE).fill(Infinity)
 let checkTimer = 0
-let timeCheckTimer = 0
-let isNight = false
 
 export function setupProximityLights() {
   for (const pos of LIGHT_POSITIONS) {
@@ -95,15 +88,8 @@ export function setupProximityLights() {
 }
 
 export function proximityLightSystem(dt: number) {
-  // Periodically check world time to determine day/night
-  timeCheckTimer -= dt
-  if (timeCheckTimer <= 0) {
-    timeCheckTimer = TIME_CHECK_INTERVAL
-    getWorldTime({}).then((result) => {
-      const seconds = result.seconds % 86400
-      isNight = seconds >= SUNSET_TIME || seconds < SUNRISE_TIME
-    }).catch(() => {})
-  }
+  // Keep shared world time fresh
+  updateWorldTime()
 
   checkTimer -= dt
   if (checkTimer > 0) return
@@ -113,7 +99,7 @@ export function proximityLightSystem(dt: number) {
   const playerPos = Transform.get(engine.PlayerEntity).position
 
   // If daytime, turn all lights off
-  if (!isNight) {
+  if (!isNightTime()) {
     for (let i = 0; i < lights.length; i++) {
       if (lights[i].active) {
         lights[i].active = false

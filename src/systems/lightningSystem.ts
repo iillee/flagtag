@@ -117,6 +117,11 @@ export function cancelLightningRespawn(): void {
   console.log('[Lightning] Respawn cancelled (round end)')
 }
 
+/** Returns true if the spark warning is active (strike incoming) */
+export function isLightningWarningActive(): boolean {
+  return sparksActive
+}
+
 /** Returns true if death text should show (not during fade-out) */
 export function isLightningTextVisible(): boolean {
   if (lightningRespawnDelay <= 0) return false
