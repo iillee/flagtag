@@ -846,25 +846,25 @@
             "parent": 0
           }
         },
-        "549": {
+        "550": {
           "json": {
             "position": {
-              "x": 231.5,
-              "y": 1.1053493022918701,
-              "z": 261
+              "x": 0,
+              "y": 0,
+              "z": 0
             },
             "rotation": {
-              "x": 0,
-              "y": 0.5881268382072449,
-              "z": 0,
-              "w": 0.8087686896324158
+              "x": -0.1288597583770752,
+              "y": 0.4941600561141968,
+              "z": -0.21207785606384277,
+              "w": 0.8332010507583618
             },
             "scale": {
-              "x": 4,
-              "y": 4,
-              "z": 4
+              "x": 1,
+              "y": 1,
+              "z": 1
             },
-            "parent": 0
+            "parent": 673
           }
         },
         "551": {
@@ -3324,6 +3324,27 @@
             "parent": 0
           }
         },
+        "673": {
+          "json": {
+            "position": {
+              "x": 265.68743896484375,
+              "y": 18.919912338256836,
+              "z": 219.67369079589844
+            },
+            "rotation": {
+              "x": -0.16500906646251678,
+              "y": -0.025842318311333656,
+              "z": -0.06971903145313263,
+              "w": 0.9834853410720825
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
         "674": {
           "json": {
             "position": {
@@ -3362,6 +3383,48 @@
               "y": 0,
               "z": 0,
               "w": -1.347615352642606e-8
+            },
+            "parent": 0
+          }
+        },
+        "677": {
+          "json": {
+            "position": {
+              "x": 231.0546112060547,
+              "y": 2.0686874389648438,
+              "z": 260.1499938964844
+            },
+            "rotation": {
+              "x": 0.25999894738197327,
+              "y": 0,
+              "z": -0.9656088948249817,
+              "w": 0
+            },
+            "scale": {
+              "x": 5,
+              "y": 5,
+              "z": 5
+            },
+            "parent": 0
+          }
+        },
+        "678": {
+          "json": {
+            "position": {
+              "x": 233.9650115966797,
+              "y": -0.7242647409439087,
+              "z": 264.8675231933594
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.16045524179935455,
+              "z": 0,
+              "w": 0.9870431423187256
+            },
+            "scale": {
+              "x": 1.818191647529602,
+              "y": 3,
+              "z": 2.7202141284942627
             },
             "parent": 0
           }
@@ -3912,6 +3975,27 @@
             "parent": 0
           }
         },
+        "705": {
+          "json": {
+            "position": {
+              "x": 235.3493194580078,
+              "y": -0.7242647409439087,
+              "z": 260.42230224609375
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.21558575332164764,
+              "z": 0,
+              "w": 0.9764848947525024
+            },
+            "scale": {
+              "x": 1.8181915283203125,
+              "y": 3,
+              "z": 3
+            },
+            "parent": 0
+          }
+        },
         "706": {
           "json": {
             "position": {
@@ -3950,6 +4034,48 @@
               "y": 0,
               "z": 0,
               "w": 0.7071067690849304
+            },
+            "parent": 0
+          }
+        },
+        "708": {
+          "json": {
+            "position": {
+              "x": 230.55853271484375,
+              "y": 2.2632923126220703,
+              "z": 259.48626708984375
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.5213075280189514,
+              "z": 0,
+              "w": 0.853368878364563
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "710": {
+          "json": {
+            "position": {
+              "x": 230.68621826171875,
+              "y": 0.3932923972606659,
+              "z": 256.2816467285156
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.5252547860145569,
+              "z": 0,
+              "w": 0.850944995880127
+            },
+            "scale": {
+              "x": 2,
+              "y": 2.2267963886260986,
+              "z": 2
             },
             "parent": 0
           }
@@ -4031,6 +4157,12 @@
           "json": {
             "networkId": 0,
             "entityId": 8010
+          }
+        },
+        "550": {
+          "json": {
+            "networkId": 0,
+            "entityId": 8078
           }
         },
         "551": {
@@ -4360,6 +4492,36 @@
       }
     },
     {
+      "name": "core::Animator",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {},
+        "serializationType": "protocol-buffer",
+        "protocolBuffer": "PBAnimator"
+      },
+      "data": {
+        "550": {
+          "json": {
+            "states": [
+              {
+                "clip": "Animation",
+                "playing": false,
+                "weight": 1,
+                "speed": 1,
+                "loop": true,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "673": {
+          "json": {
+            "states": []
+          }
+        }
+      }
+    },
+    {
       "name": "core::GltfContainer",
       "jsonSchema": {
         "type": "object",
@@ -4550,11 +4712,11 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
-        "549": {
+        "550": {
           "json": {
-            "src": "assets/asset-packs/pallet/ConstructionPallet_01/ConstructionPallet_01.glb",
+            "src": "assets/asset-packs/confetti/confetti.glb",
             "visibleMeshesCollisionMask": 0,
-            "invisibleMeshesCollisionMask": 3
+            "invisibleMeshesCollisionMask": 0
           }
         },
         "553": {
@@ -4984,6 +5146,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "673": {
+          "json": {
+            "src": "assets/asset-packs/confetti/confettiarrow.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 0
+          }
+        },
         "674": {
           "json": {
             "src": "assets/models/RockLarge_01/RockLarge_01.glb",
@@ -4994,6 +5163,20 @@
         "675": {
           "json": {
             "src": "assets/models/RockLarge_01/RockLarge_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "677": {
+          "json": {
+            "src": "assets/models/RockLarge_01/RockLarge_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "678": {
+          "json": {
+            "src": "assets/asset-packs/small_straight_dock_module/DocksModuleSmall_01/DocksModuleSmall_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -5180,6 +5363,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "705": {
+          "json": {
+            "src": "assets/asset-packs/small_straight_dock_module/DocksModuleSmall_01/DocksModuleSmall_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "706": {
           "json": {
             "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
@@ -5190,6 +5380,20 @@
         "707": {
           "json": {
             "src": "assets/asset-packs/doubloon/Coin_01/Coin_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "708": {
+          "json": {
+            "src": "assets/asset-packs/wooden_door/Door_Wood_01/Door_Wood_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "710": {
+          "json": {
+            "src": "assets/asset-packs/stone_brick_wall/Module_Stone_Straight_01/Module_Stone_Straight_01.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -5389,9 +5593,9 @@
             "value": "Classic Bench_5"
           }
         },
-        "549": {
+        "550": {
           "json": {
-            "value": "Pallet"
+            "value": "confetti"
           }
         },
         "551": {
@@ -5974,6 +6178,11 @@
             "value": "Loot Trunk"
           }
         },
+        "673": {
+          "json": {
+            "value": "confetti_2"
+          }
+        },
         "674": {
           "json": {
             "value": "Big Rock_2"
@@ -5982,6 +6191,16 @@
         "675": {
           "json": {
             "value": "Big Rock_3"
+          }
+        },
+        "677": {
+          "json": {
+            "value": "Big Rock_7"
+          }
+        },
+        "678": {
+          "json": {
+            "value": "Small Straight Dock Module"
           }
         },
         "679": {
@@ -6114,6 +6333,11 @@
             "value": "Doubloon_24"
           }
         },
+        "705": {
+          "json": {
+            "value": "Small Straight Dock Module_2"
+          }
+        },
         "706": {
           "json": {
             "value": "Doubloon_26"
@@ -6122,6 +6346,16 @@
         "707": {
           "json": {
             "value": "Doubloon_27"
+          }
+        },
+        "708": {
+          "json": {
+            "value": "Wooden Door"
+          }
+        },
+        "710": {
+          "json": {
+            "value": "Stone Brick Wall"
           }
         }
       }
@@ -6736,6 +6970,15 @@
             ]
           }
         },
+        "550": {
+          "json": {
+            "componentIds": [
+              1042,
+              1081,
+              1020
+            ]
+          }
+        },
         "551": {
           "json": {
             "componentIds": [
@@ -7117,6 +7360,27 @@
       }
     },
     {
+      "name": "core::VisibilityComponent",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {},
+        "serializationType": "protocol-buffer",
+        "protocolBuffer": "PBVisibilityComponent"
+      },
+      "data": {
+        "550": {
+          "json": {
+            "visible": false
+          }
+        },
+        "673": {
+          "json": {
+            "visible": false
+          }
+        }
+      }
+    },
+    {
       "name": "core-schema::Tags",
       "jsonSchema": {
         "type": "object",
@@ -7160,7 +7424,7 @@
       "data": {
         "660": {
           "json": {
-            "gizmo": 1
+            "gizmo": 2
           }
         }
       }
@@ -7272,6 +7536,7 @@
                   669,
                   674,
                   675,
+                  677,
                   640,
                   643,
                   647,
@@ -7330,7 +7595,11 @@
                   662,
                   696,
                   703,
-                  549
+                  673,
+                  678,
+                  705,
+                  708,
+                  710
                 ]
               },
               {
@@ -8170,7 +8439,34 @@
                 "children": []
               },
               {
-                "entity": 549,
+                "entity": 550,
+                "children": []
+              },
+              {
+                "entity": 673,
+                "open": true,
+                "children": [
+                  550
+                ]
+              },
+              {
+                "entity": 677,
+                "children": []
+              },
+              {
+                "entity": 678,
+                "children": []
+              },
+              {
+                "entity": 705,
+                "children": []
+              },
+              {
+                "entity": 708,
+                "children": []
+              },
+              {
+                "entity": 710,
                 "children": []
               }
             ]
@@ -8276,7 +8572,7 @@
         "548": {
           "json": {}
         },
-        "549": {
+        "550": {
           "json": {}
         },
         "553": {
@@ -8480,10 +8776,19 @@
         "672": {
           "json": {}
         },
+        "673": {
+          "json": {}
+        },
         "674": {
           "json": {}
         },
         "675": {
+          "json": {}
+        },
+        "677": {
+          "json": {}
+        },
+        "678": {
           "json": {}
         },
         "679": {
@@ -8564,10 +8869,19 @@
         "704": {
           "json": {}
         },
+        "705": {
+          "json": {}
+        },
         "706": {
           "json": {}
         },
         "707": {
+          "json": {}
+        },
+        "708": {
+          "json": {}
+        },
+        "710": {
           "json": {}
         }
       }
@@ -9277,6 +9591,18 @@
             "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
             "helpTooltip": {
               "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "550": {
+          "json": {
+            "isBasicViewEnabled": true,
+            "componentName": "Confetti",
+            "fields": [],
+            "assetId": "39a19351-c101-4401-8a82-bbd809bc1299",
+            "helpTooltip": {
+              "text": "A confetti explosion that can be used to celebrate. The item is invisible until it explodes. Trigger it from another smart item."
             },
             "version": 1
           }
@@ -10844,6 +11170,18 @@
             "assetId": "94f8aa27-7e44-4660-a133-5f12bbe17fa2",
             "helpTooltip": {
               "text": "A classic bench that players can sit on. Click to sit down at this location."
+            },
+            "version": 1
+          }
+        },
+        "673": {
+          "json": {
+            "isBasicViewEnabled": true,
+            "componentName": "Confetti",
+            "fields": [],
+            "assetId": "39a19351-c101-4401-8a82-bbd809bc1299",
+            "helpTooltip": {
+              "text": "A confetti explosion that can be used to celebrate. The item is invisible until it explodes. Trigger it from another smart item."
             },
             "version": 1
           }
@@ -16273,6 +16611,50 @@
             ]
           }
         },
+        "550": {
+          "json": {
+            "id": 160,
+            "value": [
+              {
+                "name": "Play animation",
+                "type": "play_animation",
+                "jsonPayload": "{\"animation\":\"Animation\"}"
+              },
+              {
+                "name": "Reset",
+                "type": "stop_animation",
+                "jsonPayload": "{}"
+              },
+              {
+                "name": "Play sound",
+                "type": "play_sound",
+                "jsonPayload": "{\"src\":\"assets/asset-packs/confetti/fireworkexplode.mp3\"}"
+              },
+              {
+                "name": "Show",
+                "type": "set_visibility",
+                "jsonPayload": "{\"visible\":true,\"collider\":0}"
+              },
+              {
+                "name": "Hide",
+                "type": "set_visibility",
+                "jsonPayload": "{\"visible\":false,\"collider\":0}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Explode",
+                "type": "batch",
+                "jsonPayload": "{\"actions\":[\"Play animation\",\"Play sound\",\"Show\",\"Delay Hide\"]}",
+                "allowedInBasicView": true
+              },
+              {
+                "name": "Delay Hide",
+                "type": "start_delay",
+                "jsonPayload": "{\"actions\":[\"Hide\"],\"timeout\":10}"
+              }
+            ]
+          }
+        },
         "551": {
           "json": {
             "id": 61,
@@ -19507,7 +19889,7 @@
         "0": {
           "json": {
             "id": 0,
-            "value": 159
+            "value": 161
           }
         }
       }

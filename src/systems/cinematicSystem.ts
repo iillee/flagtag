@@ -1,4 +1,4 @@
-import { engine, Transform, VirtualCamera, MainCamera, InputModifier, inputSystem, InputAction } from '@dcl/sdk/ecs'
+import { engine, Transform, VirtualCamera, MainCamera, InputModifier, inputSystem, InputAction, Animator, VisibilityComponent, AudioSource, Name } from '@dcl/sdk/ecs'
 import { registerSystem } from './systemManager'
 import { Vector3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
@@ -39,6 +39,87 @@ let orbitLookX = PODIUM_CENTER.x
 let orbitLookY = PODIUM_CENTER.y
 let orbitLookZ = PODIUM_CENTER.z
 let orbitActive = false
+
+// ── Celebration effects (fireworks + confetti) ──
+let fireworkEntity: ReturnType<typeof engine.addEntity> | null = null
+let confettiEntity1: ReturnType<typeof engine.addEntity> | null = null
+let confettiEntity2: ReturnType<typeof engine.addEntity> | null = null
+let celebrationActive = false
+let fireworkTimer = 0
+const FIREWORK_INTERVAL = 3.5 // seconds between firework shots
+const CONFETTI_INTERVAL = 10  // re-trigger confetti loop
+let confettiTimer = 0
+
+function findCelebrationEntities() {
+  if (fireworkEntity && confettiEntity1 && confettiEntity2) return
+  for (const [entity] of engine.getEntitiesWith(Name)) {
+    const name = Name.get(entity).value
+    if (name === 'Fireworks') fireworkEntity = entity
+    else if (name === 'confetti' && !confettiEntity1) confettiEntity1 = entity
+    else if (name === 'confetti_2') confettiEntity2 = entity
+  }
+}
+
+function triggerFirework() {
+  if (!fireworkEntity) return
+  // Show, play animation, play launch sound
+  VisibilityComponent.createOrReplace(fireworkEntity, { visible: true })
+  Animator.createOrReplace(fireworkEntity, {
+    states: [{ clip: 'Play', playing: true, loop: false, shouldReset: true, speed: 1, weight: 1 }]
+  })
+  AudioSource.createOrReplace(fireworkEntity, {
+    audioClipUrl: 'assets/asset-packs/fireworks/fireworklaunch.mp3',
+    playing: true, loop: false, volume: 0.7
+  })
+  // Delayed explode sound
+  setTimeout(() => {
+    if (!fireworkEntity || !celebrationActive) return
+    AudioSource.createOrReplace(fireworkEntity, {
+      audioClipUrl: 'assets/asset-packs/fireworks/fireworkexplode.mp3',
+      playing: true, loop: false, volume: 0.7
+    })
+  }, 1300)
+  // Auto-hide after animation
+  setTimeout(() => {
+    if (!fireworkEntity || !celebrationActive) return
+    VisibilityComponent.createOrReplace(fireworkEntity, { visible: false })
+  }, 5000)
+}
+
+function triggerConfetti(entity: ReturnType<typeof engine.addEntity> | null) {
+  if (!entity) return
+  VisibilityComponent.createOrReplace(entity, { visible: true })
+  Animator.createOrReplace(entity, {
+    states: [{ clip: 'Animation', playing: true, loop: true, shouldReset: true, speed: 1, weight: 1 }]
+  })
+  AudioSource.createOrReplace(entity, {
+    audioClipUrl: 'assets/asset-packs/confetti/fireworkexplode.mp3',
+    playing: true, loop: false, volume: 0.5
+  })
+}
+
+function startCelebration() {
+  findCelebrationEntities()
+  celebrationActive = true
+  fireworkTimer = 0.5 // first firework after short delay
+  confettiTimer = 0   // confetti immediately
+  triggerConfetti(confettiEntity1)
+  triggerConfetti(confettiEntity2)
+}
+
+function stopCelebration() {
+  celebrationActive = false
+  // Hide all effects
+  if (fireworkEntity) VisibilityComponent.createOrReplace(fireworkEntity, { visible: false })
+  if (confettiEntity1) {
+    VisibilityComponent.createOrReplace(confettiEntity1, { visible: false })
+    Animator.createOrReplace(confettiEntity1, { states: [{ clip: 'Animation', playing: false, loop: false, shouldReset: true, speed: 1, weight: 1 }] })
+  }
+  if (confettiEntity2) {
+    VisibilityComponent.createOrReplace(confettiEntity2, { visible: false })
+    Animator.createOrReplace(confettiEntity2, { states: [{ clip: 'Animation', playing: false, loop: false, shouldReset: true, speed: 1, weight: 1 }] })
+  }
+}
 
 // ── State ──
 let cinematicTimer = 0
@@ -193,6 +274,7 @@ export function setupCinematicSystem(): void {
           cinematicState.showing = false
           MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
           orbitActive = false
+          stopCelebration()
           if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
           if (isPodiumPlayer) {
             isWinnerLocalPlayer = false
@@ -211,6 +293,21 @@ export function setupCinematicSystem(): void {
         const progress = Math.max(0, fadeTimer / END_FADE_OUT_DUR)
         setCinematicFade(progress)
         if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 0; setCinematicActive(false) }
+      }
+    }
+
+    // ── Celebration effects loop ──
+    if (celebrationActive && fadePhase >= 3 && fadePhase <= 4) {
+      fireworkTimer -= dt
+      if (fireworkTimer <= 0) {
+        triggerFirework()
+        fireworkTimer = FIREWORK_INTERVAL
+      }
+      confettiTimer -= dt
+      if (confettiTimer <= 0) {
+        triggerConfetti(confettiEntity1)
+        triggerConfetti(confettiEntity2)
+        confettiTimer = CONFETTI_INTERVAL
       }
     }
 
@@ -311,6 +408,7 @@ export function setupCinematicSystem(): void {
     orbitLookY = PODIUM_CENTER.y
     orbitLookZ = PODIUM_CENTER.z
     orbitActive = !noScorersRound
+    if (!noScorersRound) startCelebration()
 
     setWinConditionOverlayVisible(false)
     setLeaderboardOverlayVisible(false)
