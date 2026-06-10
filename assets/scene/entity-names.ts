@@ -95,6 +95,7 @@ export enum EntityNames {
   Loot_Trunk = "Loot Trunk",
   Loot_Trunk_2 = "Loot Trunk_2",
   Loot_Trunk_3 = "Loot Trunk_3",
+  Pallet = "Pallet",
   Ritual_Pedestal = "Ritual Pedestal",
   Rug = "Rug",
   Sit_Spot_1 = "Sit Spot 1",

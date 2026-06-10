@@ -1,4 +1,4 @@
-import { engine, Transform, VirtualCamera, MainCamera, InputModifier } from '@dcl/sdk/ecs'
+import { engine, Transform, VirtualCamera, MainCamera, InputModifier, inputSystem, InputAction } from '@dcl/sdk/ecs'
 import { registerSystem } from './systemManager'
 import { Vector3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
@@ -13,11 +13,32 @@ import { room } from '../shared/messages'
 import { clearSpeedBoost } from './speedBoostSystem'
 
 // ── Camera entities ──
-const GREEN_CUBE_POS = Vector3.create(258.78, 19.25, 227.81)
-const RED_CUBE_POS = Vector3.create(265.57, 19.51, 219.65)
+const PODIUM_CENTER = Vector3.create(265.57, 19.51, 219.65) // winner position as orbit center
 
 let cinematicCam = 0 as ReturnType<typeof engine.addEntity>
 let lookTarget = 0 as ReturnType<typeof engine.addEntity>
+
+// ── Orbit camera state ──
+const ORBIT_AUTO_SPEED = 0.15 // rad/s auto-rotation
+const ORBIT_INPUT_SPEED = 0.75
+const ORBIT_DEFAULT_DIST = 10
+const ORBIT_MIN_DIST = 6
+const ORBIT_MAX_DIST = 50
+const ORBIT_DEFAULT_HEIGHT = 6
+const ORBIT_MIN_HEIGHT = 2
+const ORBIT_LERP = 3.0
+const SCENE_W = 512
+const SCENE_D = 512
+const CAM_MIN_Y = 10
+const CAM_MAX_Y = 100
+
+let orbitAngle = -Math.PI * 100 / 180
+let orbitDist = ORBIT_DEFAULT_DIST
+let orbitHeight = ORBIT_DEFAULT_HEIGHT
+let orbitLookX = PODIUM_CENTER.x
+let orbitLookY = PODIUM_CENTER.y
+let orbitLookZ = PODIUM_CENTER.z
+let orbitActive = false
 
 // ── State ──
 let cinematicTimer = 0
@@ -65,9 +86,9 @@ function waitForGroundedEmote(emote: string, targetPos: { x: number; y: number; 
  */
 export function setupCinematicSystem(): void {
   cinematicCam = engine.addEntity()
-  Transform.create(cinematicCam, { position: GREEN_CUBE_POS })
+  Transform.create(cinematicCam, { position: Vector3.create(PODIUM_CENTER.x, PODIUM_CENTER.y + ORBIT_DEFAULT_HEIGHT, PODIUM_CENTER.z + ORBIT_DEFAULT_DIST) })
   lookTarget = engine.addEntity()
-  Transform.create(lookTarget, { position: RED_CUBE_POS })
+  Transform.create(lookTarget, { position: PODIUM_CENTER })
   VirtualCamera.create(cinematicCam, {
     lookAtEntity: lookTarget,
     defaultTransition: { transitionMode: VirtualCamera.Transition.Time(0.01) }
@@ -171,6 +192,7 @@ export function setupCinematicSystem(): void {
           setCinematicFade(1)
           cinematicState.showing = false
           MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = undefined as any
+          orbitActive = false
           if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
           if (isPodiumPlayer) {
             isWinnerLocalPlayer = false
@@ -190,6 +212,42 @@ export function setupCinematicSystem(): void {
         setCinematicFade(progress)
         if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 0; setCinematicActive(false) }
       }
+    }
+
+    // ── Orbit camera ──
+    if (orbitActive && fadePhase >= 3 && fadePhase <= 4) {
+      // Player input overrides auto-orbit
+      let playerInput = false
+      if (inputSystem.isPressed(InputAction.IA_LEFT))  { orbitAngle += ORBIT_INPUT_SPEED * dt; playerInput = true }
+      if (inputSystem.isPressed(InputAction.IA_RIGHT)) { orbitAngle -= ORBIT_INPUT_SPEED * dt; playerInput = true }
+      if (inputSystem.isPressed(InputAction.IA_FORWARD))  { orbitDist = Math.max(ORBIT_MIN_DIST, orbitDist - orbitDist * ORBIT_INPUT_SPEED * dt); playerInput = true }
+      if (inputSystem.isPressed(InputAction.IA_BACKWARD)) { orbitDist = Math.min(ORBIT_MAX_DIST, orbitDist + orbitDist * ORBIT_INPUT_SPEED * dt); playerInput = true }
+      if (inputSystem.isPressed(InputAction.IA_PRIMARY))   { orbitHeight += orbitHeight * ORBIT_INPUT_SPEED * dt; playerInput = true }
+      if (inputSystem.isPressed(InputAction.IA_SECONDARY)) { orbitHeight = Math.max(ORBIT_MIN_HEIGHT, orbitHeight - orbitHeight * ORBIT_INPUT_SPEED * dt); playerInput = true }
+
+      // Auto-rotate when no player input
+      if (!playerInput) orbitAngle += ORBIT_AUTO_SPEED * dt
+
+      // Smooth lerp look-at toward podium center
+      const lerpF = Math.min(1, ORBIT_LERP * dt)
+      orbitLookX += (PODIUM_CENTER.x - orbitLookX) * lerpF
+      orbitLookY += (PODIUM_CENTER.y - orbitLookY) * lerpF
+      orbitLookZ += (PODIUM_CENTER.z - orbitLookZ) * lerpF
+
+      // Update look-at entity
+      const lt = Transform.getMutable(lookTarget)
+      lt.position = Vector3.create(orbitLookX, orbitLookY + 1.5, orbitLookZ)
+
+      // Update camera position
+      const rawX = orbitLookX + Math.sin(orbitAngle) * orbitDist
+      const rawZ = orbitLookZ + Math.cos(orbitAngle) * orbitDist
+      const rawY = orbitLookY + orbitHeight
+      const ct = Transform.getMutable(cinematicCam)
+      ct.position = Vector3.create(
+        Math.max(5, Math.min(SCENE_W - 5, rawX)),
+        Math.max(CAM_MIN_Y, Math.min(CAM_MAX_Y, rawY)),
+        Math.max(5, Math.min(SCENE_D - 5, rawZ))
+      )
     }
 
     if (cinematicTimer <= 0) return
@@ -245,6 +303,15 @@ export function setupCinematicSystem(): void {
     setCinematicActive(true)
     cinematicTimer = 10
 
+    // Reset orbit camera state
+    orbitAngle = -Math.PI * 100 / 180
+    orbitDist = ORBIT_DEFAULT_DIST
+    orbitHeight = ORBIT_DEFAULT_HEIGHT
+    orbitLookX = PODIUM_CENTER.x
+    orbitLookY = PODIUM_CENTER.y
+    orbitLookZ = PODIUM_CENTER.z
+    orbitActive = !noScorersRound
+
     setWinConditionOverlayVisible(false)
     setLeaderboardOverlayVisible(false)
     setAnalyticsOverlayVisible(false)
@@ -272,6 +339,14 @@ export function setupCinematicSystem(): void {
       }
 
       if (!noScorersRound) {
+        // Snap camera to initial orbit position before activating
+        const initX = orbitLookX + Math.sin(orbitAngle) * orbitDist
+        const initZ = orbitLookZ + Math.cos(orbitAngle) * orbitDist
+        const initY = orbitLookY + orbitHeight
+        const ct = Transform.getMutable(cinematicCam)
+        ct.position = Vector3.create(initX, initY, initZ)
+        const lt = Transform.getMutable(lookTarget)
+        lt.position = Vector3.create(orbitLookX, orbitLookY + 1.5, orbitLookZ)
         MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
       }
     }, FADE_IN_DUR * 1000 + 50)

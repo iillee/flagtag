@@ -33,18 +33,18 @@ export function RoundEndSplash() {
       <UiEntity
         uiTransform={{
           positionType: 'relative',
-          width: mobile ? '44%' : S(480),
-          minHeight: mobile ? 340 : S(320),
+          width: mobile ? '40%' : S(360),
+          minHeight: mobile ? 260 : S(220),
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: mobile ? 20 : S(20),
+          borderRadius: mobile ? 16 : S(16),
           padding: mobile
-            ? { top: 36, bottom: 28, left: 32, right: 32 }
-            : { top: S(36), bottom: S(28), left: S(40), right: S(40) },
+            ? { top: 24, bottom: 20, left: 24, right: 24 }
+            : { top: S(24), bottom: S(20), left: S(28), right: S(28) },
           overflow: 'hidden',
         }}
-        uiBackground={{ color: PANEL_BG }}
+        uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 0.6) }}
       >
         {mobile && (
           <UiEntity
