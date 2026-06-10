@@ -1,6 +1,6 @@
 # Known Bugs — Playtest Tracking
 
-Last updated: May 22, 2026
+Last updated: June 9, 2026
 
 These three game-breaking bugs have been recurring over the past month during multiplayer sessions. Recent refactoring may have resolved them. This document tracks root causes, fixes applied, and remaining risks for the May 19 playtest.
 
@@ -49,13 +49,17 @@ These three game-breaking bugs have been recurring over the past month during mu
 
 ### Bug 2a: Flag stuck above player's head (can't drop, can't steal)
 
-**Symptoms:**
-- Flag visual freezes in world space above a player's head
+**Symptoms (updated June 9, 2026):**
+- Usually occurs after 3+ rounds with 3+ players (possibly entity accumulation related)
+- Flag clone appears above a player's head, but NO points accumulate
 - Carrier unable to drop with key 3
-- Other players unable to proximity-steal
-- Persists until round ends or carrier disconnects
+- Other players unable to knock it loose (boomerang, banana, proximity steal — none work)
+- Persists across round resets — clone stays attached even when new round starts
+- Persists if the player leaves and re-enters the scene
+- **Only fix:** ALL players leave the scene for several minutes, or redeploy
+- This suggests the server-side Flag component is stuck in `Carried` state with a `carrierPlayerId` that the server believes is still valid, and round-end reset is not clearing it properly
 
-**Root Cause & Fix:**
+**Previous Fix Attempt (did not fully resolve):**
 - **AvatarAttach race condition:** Writing `Transform` on a direct child of an `AvatarAttach` entity races with Bevy's internal propagation, causing the entity to "detach" and freeze in world space.
 - **Fix (flagSystem.ts):** Implemented 3-layer architecture:
   - Layer 1: **Anchor** — has `AvatarAttach`, position controlled by engine
@@ -65,19 +69,29 @@ These three game-breaking bugs have been recurring over the past month during mu
   - Stale carrier detection (`CARRIER_NO_POSITION_TIMEOUT_MS`) — force-drops flag if carrier position unavailable for 5s
   - Carrier disconnect detection — checks `PlayerIdentityData` every frame, force-drops if carrier entity gone
 
-**Remaining Risks:**
-- If `AvatarAttach.create()` or `AvatarAttach.deleteFrom()` on the anchor entity has timing issues during rapid steal chains, the retargeting in `showClone()` could glitch. The pool reuses a single anchor entity, so retargeting means delete + recreate AvatarAttach.
-- The server stale-carrier timeout (5s) is a safety net but is a long time for the flag to appear stuck before auto-recovery.
+**Remaining Risks / Investigation Areas:**
+- The 3-layer fix addressed a visual-only issue (AvatarAttach race). The current bug appears to be a **server-side state corruption** — the server thinks someone is carrying but the game logic doesn't function (no points, can't drop, can't steal, survives round reset).
+- Round-end reset may not be properly clearing `Flag.carrierPlayerId` or the flag state may be getting re-written by a stale system after reset.
+- `holdTimeServerSystem` may stop accumulating if it can't find the carrier in `PlayerIdentityData` but the flag state still says Carried.
+- The `persistFlagState` / state restoration on server restart could be restoring a stale Carried state.
+- Possible entity or CRDT accumulation over multiple rounds degrades server system processing.
 
-### Bug 2b: Flag stuck on ground (can't pick up, or teleports back to spawn)
+### Bug 2b: Flag stuck on ground / pickup-then-snap-back
 
-**Symptoms:**
-- Flag on ground, players walk over it but can't pick up
-- Or: player picks up flag but it visually teleports back to its spawn/drop position repeatedly
+**Symptoms (updated June 9, 2026):**
+- Player walks to flag at spawn, picks it up — clone appears above head, pickup sound plays
+- **If player stays at spawn:** pickup sound plays repeatedly (suggests pickup → reject → re-pickup loop)
+- **When player moves away:** clone follows for 3-5 seconds, then flag snaps back to spawn point
+- No points are accumulated during the carry
+- This is the precursor to Bug 2a — after the snap-back, the flag often becomes permanently stuck
 
-**Root Cause & Fix:**
-- Multiple clients sending `requestPickup` simultaneously for a dropped flag. Server accepts one, others get no explicit rejection — they show optimistic clone locally, then roll back after 1.5s timeout.
-- **Fix:** Client-side cooldowns prevent spam:
+**Analysis:**
+- The repeated pickup sound at spawn suggests the server IS confirming the pickup (`pickupConfirmed` fires, which plays the sound), but then something immediately drops/resets the flag, triggering another auto-pickup cycle.
+- The 3-5 second carry before snap-back matches the `confirmedGraceUntil` (3s) + `PENDING_PICKUP_TIMEOUT_MS` (1.5s) window — the client trusts the clone during grace, then safety net kicks in when CRDT doesn't show Carried.
+- This points to the server setting `FlagState.Carried` and sending `pickupConfirmed`, but the CRDT update never propagating to clients. Possibly CRDT buffer saturation again.
+
+**Previous Fix Attempt (did not fully resolve):**
+- Client-side cooldowns prevent spam:
   - `AUTO_PICKUP_COOLDOWN_MS` (500ms) — minimum time between pickup requests
   - `DROP_PICKUP_COOLDOWN_MS` (2000ms) — can't auto-pickup for 2s after dropping
   - `WITNESSED_DROP_COOLDOWN_MS` (750ms) — brief cooldown after seeing any drop
@@ -87,6 +101,25 @@ These three game-breaking bugs have been recurring over the past month during mu
 **Remaining Risks:**
 - Server pickup validation requires `dist <= PICKUP_RADIUS` but if the server's position cache (`getPlayerPosition`) is stale, valid pickups could be rejected silently. The fallback log says "trusting client proximity" when position is missing, but the distance check is skipped entirely — could allow remote pickups.
 - No explicit `pickupDenied` message from server. Client relies on timeout, which means 1.5s of visual confusion on rejection.
+- If CRDT buffer is saturated, the `Flag` component mutation on the server never reaches clients, causing the client to see the flag as still at spawn while the server thinks it's carried.
+
+**Deep Analysis (June 9, 2026):**
+
+After code review, the most likely root cause is a **CRDT propagation failure + client state machine blind spot**:
+
+1. **CRDT stops propagating Flag state changes.** The server sets `Flag.state = Carried` and sends `pickupConfirmed` via WebSocket. The WebSocket message arrives (sound plays, clone shows), but the CRDT component update for `Flag` never reaches the client. This explains the repeated pickup sound: the client shows the clone via WebSocket confirmation, but after the 3s grace period, the CRDT still shows `AtBase` → safety net hides clone → player still at spawn → auto-pickup fires again → loop.
+
+2. **Client `prevFlagState` never transitions to Carried.** Because CRDT never showed `Carried`, `prevFlagState` stays as `AtBase`. When the round resets (server writes `AtBase` again), `stateChanged = false` → `needsCloneRemove` never fires → **clone stays permanently attached**. The safety net SHOULD catch this (`flag.state !== FlagState.Carried && !inGracePeriod → hideClone`), but if `confirmedGraceUntil` was recently renewed by a late `pickupConfirmed` message, the clone is protected.
+
+3. **Why CRDT stops propagating after a few rounds with 3+ players:** Likely causes:
+   - Leaderboard JSON updates (3 leaderboard components written every round end)
+   - Hold time entity accumulation (syncEntity called per player, tombstones from removed entities)
+   - `persistFlagState()` calls `Storage.set` which might interact with CRDT timing
+   - Total synced component writes per round could exceed CRDT buffer capacity
+
+4. **Why it persists across round resets and scene re-entry:** The server-side `Flag` component is in a valid state (it correctly resets to `AtBase`). But if CRDT propagation is broken for this session, no amount of server state changes will reach clients. The clone on the client side was created from a WebSocket message, not CRDT — so it persists independently of CRDT state. Only a full server restart (all players leave) clears the CRDT buffer.
+
+**Fix approach:** Add diagnostic logging to detect CRDT propagation failures (compare server Flag state vs client Flag state via WebSocket heartbeat). Consider a WebSocket-based fallback for flag state if CRDT is unreliable. Reduce CRDT write volume (fewer synced components, smaller leaderboard payloads, batch hold time updates).
 
 **How to verify in playtest:**
 - Have carrier disconnect/teleport away — does flag drop properly?
