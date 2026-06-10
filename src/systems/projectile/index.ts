@@ -16,6 +16,7 @@ import { room } from '../../shared/messages'
 import { playErrorSound, isServerConnected } from '../clientUtils'
 import { isSpectatorMode } from '../spectatorSystem'
 import { isCinematicActive } from '../../gameState/cinematicState'
+import { triggerHitFlash } from '../../gameState/hitFlashState'
 import { isDrownRespawning } from '../waterSystem'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 
@@ -88,6 +89,7 @@ room.onMessage('shellTriggered', (data) => {
     playHitSound(pos)
     const me = getPlayerData()?.userId?.toLowerCase()
     if (me && data.victimId === me && !isCinematicActive()) {
+      triggerHitFlash()
       triggerEmote({ predefinedEmote: 'getHit' })
       InputModifier.createOrReplace(engine.PlayerEntity, {
         mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
@@ -194,6 +196,7 @@ room.onMessage('orbitHit', (data) => {
   playHitSound(pos)
   const me = getPlayerData()?.userId?.toLowerCase()
   if (me && data.victimId === me && !isCinematicActive()) {
+    triggerHitFlash()
     triggerEmote({ predefinedEmote: 'getHit' })
     InputModifier.createOrReplace(engine.PlayerEntity, {
       mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
