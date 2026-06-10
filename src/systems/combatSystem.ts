@@ -19,6 +19,7 @@ import { PlayerIdentityData } from '@dcl/sdk/ecs'
 import { room } from '../shared/messages'
 import { triggerEmote } from '~system/RestrictedActions'
 import { isCinematicActive } from '../gameState/cinematicState'
+import { triggerHitFlash } from '../gameState/hitFlashState'
 
 // ── VFX Constants ──
 const VFX_DURATION_MS = 250
@@ -300,7 +301,10 @@ room.onMessage('missVfx', (data) => {
 })
 room.onMessage('stagger', (data) => {
   const me = getPlayerData()?.userId?.toLowerCase()
-  if (me && data.victimId === me) pendingStagger = true
+  if (me && data.victimId === me) {
+    pendingStagger = true
+    triggerHitFlash()
+  }
 })
 
 // zombieStagger removed — replaced by ghostTouching + scare meter

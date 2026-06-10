@@ -9,6 +9,7 @@
  */
 import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label, Input } from '@dcl/sdk/react-ecs'
+import { getHitFlashAlpha } from './gameState/hitFlashState'
 import { getPlayer } from '@dcl/sdk/players'
 import { executeTask } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
@@ -181,6 +182,14 @@ function PlayerListUi() {
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {mobile ? <MobileLayout /> : <DesktopLayout />}
+
+      {/* Hit flash overlay */}
+      {getHitFlashAlpha() > 0 && (
+        <UiEntity
+          uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', pointerFilter: 'none' }}
+          uiBackground={{ color: Color4.create(0.8, 0, 0, getHitFlashAlpha()) }}
+        />
+      )}
 
       {/* Cinematic fade overlay */}
       {cinematicFadeOpacity > 0 && (

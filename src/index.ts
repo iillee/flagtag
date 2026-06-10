@@ -33,6 +33,7 @@ export async function main() {
   const { setupUi } = await import('./ui')
   const { flagClientSystem } = await import('./systems/flagSystem')
   const { combatClientSystem, initPools: initCombatPools } = await import('./systems/combatSystem')
+  const { updateHitFlash } = await import('./gameState/hitFlashState')
   const { trapClientSystem, initTrapPool } = await import('./systems/trapSystem')
   const { projectileClientSystem, initProjectilePool } = await import('./systems/projectile')
   const { mushroomClientSystem } = await import('./systems/mushroomSystem')
@@ -194,6 +195,7 @@ export async function main() {
   registerSystem((dt) => {
     flagClientSystem(dt)
     combatClientSystem(dt)
+    updateHitFlash(dt)
     projectileClientSystem(dt)
     trapClientSystem(dt)
     waterSystem(dt)
