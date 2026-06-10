@@ -17,7 +17,7 @@ import {
 import { persistPlayerNames } from './persistence'
 import { updatePlayerName } from './leaderboard'
 import { getOrCreateHoldTimeEntity } from './flagLogic'
-import { loadPlayerCoinBalance, getOrCreateWalletEntity, loadPlayerLifetimeHoldTime, getOrCreateLifetimeHoldTimeEntity } from './economy'
+import { loadPlayerCoinBalance, loadPlayerLifetimeHoldTime, getOrCreateLifetimeHoldTimeEntity } from './economy'
 import { clearCombatCooldowns } from './combat'
 import { syncVisitorAnalytics, syncMonthlyVisitorAnalytics, schedulePlayerJoinDiscord } from './analytics'
 import { capture, identify } from './posthog'
@@ -44,7 +44,6 @@ export function playerTrackingSystem(): void {
       
       // Load coin balance and create wallet entity
       loadPlayerCoinBalance(userKey).then(() => {
-        getOrCreateWalletEntity(userKey)
       }).catch(err => console.error('[Coins] Error loading wallet for', userKey.slice(0, 8), err))
 
       // Load lifetime hold time and create synced entity

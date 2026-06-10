@@ -5,15 +5,14 @@ import { engine, type Entity } from '@dcl/sdk/ecs'
 import { syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
 import {
-  walletEntities, upgradeEntities, lifetimeWinsEntities, lifetimeHoldTimeEntities,
+  upgradeEntities, lifetimeWinsEntities, lifetimeHoldTimeEntities,
   playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache, playerLifetimeHoldTimeCache,
   playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
   coinStateEntity
 } from './serverState'
 import {
-  CoinState, PlayerWallet, COIN_RESPAWN_INTERVAL_SEC,
+  CoinState, COIN_RESPAWN_INTERVAL_SEC,
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
-  getWalletSyncId
 } from '../shared/coins'
 import {
   PlayerUpgrades, PlayerLifetimeWins, PlayerLifetimeHoldTime,
@@ -52,9 +51,6 @@ export async function setPlayerCoinBalance(walletAddress: string, amount: number
   const key = walletAddress.toLowerCase()
   playerCoinBalances.set(key, amount)
 
-  const walletEntity = getOrCreateWalletEntity(key)
-  PlayerWallet.getMutable(walletEntity).coins = amount
-
   try {
     await Storage.set(`coins:${key}`, String(amount))
   } catch (err) {
@@ -69,19 +65,6 @@ export async function addPlayerCoins(walletAddress: string, amount: number): Pro
   return newBalance
 }
 
-export function getOrCreateWalletEntity(walletAddress: string): Entity {
-  const key = walletAddress.toLowerCase()
-  let entity = walletEntities.get(key)
-  if (entity) return entity
-
-  entity = engine.addEntity()
-  const balance = playerCoinBalances.get(key) ?? 0
-  PlayerWallet.create(entity, { playerId: key, coins: balance })
-  syncEntity(entity, [PlayerWallet.componentId], getWalletSyncId(key))
-  walletEntities.set(key, entity)
-  console.log('[Coins] Created wallet entity for', key.slice(0, 8), 'balance:', balance)
-  return entity
-}
 
 // ── Upgrade / progression helpers ──
 
@@ -387,7 +370,6 @@ export function registerEconomyHandlers(): void {
     if (!context) return
     const from = context.from.toLowerCase()
     const balance = await loadPlayerCoinBalance(from)
-    getOrCreateWalletEntity(from)
     room.send('walletBalance', { playerId: from, coins: balance }, { to: [from] })
     console.log('[Coins] Sent wallet balance to', from.slice(0, 8), ':', balance)
   })
