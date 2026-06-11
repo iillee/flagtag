@@ -23,6 +23,7 @@ export const cinematicState = {
   fadeOpacity: 0,
   titleSplashVisible: true,
   showing: false,
+  roundOverVisible: false,
 }
 
 /** Clamp fade opacity to [0, 1] */

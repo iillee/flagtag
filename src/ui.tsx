@@ -198,6 +198,9 @@ function PlayerListUi() {
           uiBackground={{ color: Color4.create(0, 0, 0, cinematicFadeOpacity) }}
           onMouseDown={() => {}}
         >
+          {cinematicState.roundOverVisible && (
+            <Label value="Round Over!" fontSize={mobile ? 64 : S(52)} color={Color4.create(1, 0.84, 0, 1)} font="sans-serif" />
+          )}
           {(noScorersCreditsVisible || (nextRoundStartingVisible && !cinematicShowing)) && (
             <CreditsScreen
               activeRoundEarnings={activeRoundEarnings}
@@ -371,7 +374,7 @@ or just say hi!`} fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform=
             <UiEntity uiTransform={{ padding: { top: mobile ? 12 : S(10), bottom: mobile ? 12 : S(10), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, borderRadius: mobile ? 12 : S(10) }}
               uiBackground={{ color: Color4.create(0.1, 0.1, 0.15, 0.9) }}
             >
-              <Label value="⚡ Press 3 to Drop!" fontSize={mobile ? 36 : S(24)} color={Color4.create(1, 0.9, 0.3, 1)} font="sans-serif" />
+              <Label value="Press 3 to Drop!" fontSize={mobile ? 36 : S(24)} color={Color4.create(1, 0.9, 0.3, 1)} font="sans-serif" />
             </UiEntity>
           </UiEntity>
         ) : null

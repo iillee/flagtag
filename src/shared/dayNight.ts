@@ -1,64 +1,49 @@
 /**
  * Shared day/night cycle utilities.
  *
- * Accelerated cycle synced across all players via Date.now():
- *   30 minutes real time = 1 full day/night cycle
- *   15 minutes day (sunrise → sunset)
- *   15 minutes night (sunset → sunrise)
+ * Uses Decentraland's default 24-minute day/night cycle (auto skybox).
+ * We just read getWorldTime() periodically to know if it's night
+ * (for ghost spawning, proximity lights, UI icons, etc.)
  *
- * Skybox time range: 0–72000
- *   0     = midnight
- *   18000 = sunrise  (6 AM)
- *   36000 = noon
- *   54000 = sunset   (6 PM)
- *   72000 = midnight again
+ * Default cycle: 1 minute per second, full cycle = 24 real minutes.
+ * getWorldTime() returns 0–86400 (seconds in a 24h day).
+ *   0     = midnight (00:00)
+ *   21600 = sunrise  (06:00)
+ *   43200 = noon     (12:00)
+ *   64800 = sunset   (18:00)
+ *   86400 = midnight again
  */
 
-import { engine, SkyboxTime } from '@dcl/sdk/ecs'
-import { isCinematicActive } from '../gameState/cinematicState'
+import { getWorldTime } from '~system/Runtime'
 
-// Cycle config
-const CYCLE_DURATION_SECONDS = 30 * 60  // 30 real-world minutes = 1 full cycle (15 day, 15 night)
-const SKYBOX_MAX = 72000
+const SUNSET_TIME = 64800   // 6 PM
+const SUNRISE_TIME = 21600  // 6 AM
 
-// Night window in skybox time: sunset (54000) → sunrise (18000)
-const SUNSET_SKY = 54000   // 6 PM skybox time
-const SUNRISE_SKY = 18000  // 6 AM skybox time
-
-let currentSkyTime = 36000  // cached value
-
-let lastAppliedSkyTime = -1
+let cachedWorldSeconds = 43200 // default to noon
+let lastFetchTime = 0
+const FETCH_INTERVAL_MS = 5000 // refresh every 5 seconds
 
 /**
- * Call periodically (e.g. from a system) to update the skybox.
- * Uses Date.now() so all players compute the same time regardless of join time.
- * Set applyToSkybox=false on the server side (no rendering needed).
- *
- * During cinematics (black screen), we still compute the time but skip
- * applying to the skybox. When the cinematic ends, the skybox jumps
- * to the correct time — hidden behind the black fade.
+ * Call periodically to keep the cached time fresh.
+ * No longer writes SkyboxTime — the platform handles the skybox.
  */
-export function updateWorldTime(applyToSkybox: boolean = true): void {
-  const nowSeconds = Date.now() / 1000
-  const cycleProgress = (nowSeconds % CYCLE_DURATION_SECONDS) / CYCLE_DURATION_SECONDS
-  currentSkyTime = Math.floor(cycleProgress * SKYBOX_MAX) % SKYBOX_MAX
-
-  // Apply to skybox — skip during cinematic so the jump is hidden
-  if (applyToSkybox && !isCinematicActive()) {
-    lastAppliedSkyTime = currentSkyTime
-    SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: currentSkyTime })
-  }
+export function updateWorldTime(_dt?: number, _applyToSkybox?: boolean): void {
+  const now = Date.now()
+  if (now - lastFetchTime < FETCH_INTERVAL_MS) return
+  lastFetchTime = now
+  getWorldTime({}).then((result) => {
+    cachedWorldSeconds = result.seconds % 86400
+  }).catch(() => {})
 }
 
-/** Get the current sky time (0–72000). */
+/** Get the current world time (0–86400). */
 export function getCurrentSkyTime(): number {
-  return currentSkyTime
+  return cachedWorldSeconds
 }
 
 /**
- * Returns true when it's night: sunset (54000) → midnight → sunrise (18000).
- * Night = skyTime >= 54000 OR skyTime < 18000
+ * Returns true when it's night: 6 PM – 6 AM.
  */
 export function isNightTime(): boolean {
-  return currentSkyTime >= SUNSET_SKY || currentSkyTime < SUNRISE_SKY
+  return cachedWorldSeconds >= SUNSET_TIME || cachedWorldSeconds < SUNRISE_TIME
 }

@@ -846,6 +846,27 @@
             "parent": 0
           }
         },
+        "549": {
+          "json": {
+            "position": {
+              "x": 230.95936584472656,
+              "y": 5.504400730133057,
+              "z": 259.24737548828125
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.5056152939796448,
+              "z": 0,
+              "w": 0.8627590537071228
+            },
+            "parent": 0
+          }
+        },
         "550": {
           "json": {
             "position": {
@@ -3369,9 +3390,9 @@
         "675": {
           "json": {
             "position": {
-              "x": 235.75,
+              "x": 233.7006378173828,
               "y": 1.75,
-              "z": 270.5
+              "z": 273.46234130859375
             },
             "scale": {
               "x": 2.4000000953674316,
@@ -3383,6 +3404,27 @@
               "y": 0,
               "z": 0,
               "w": -1.347615352642606e-8
+            },
+            "parent": 0
+          }
+        },
+        "676": {
+          "json": {
+            "position": {
+              "x": 231.97804260253906,
+              "y": 2.3238861560821533,
+              "z": 258.7900085449219
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.32025089859962463,
+              "z": 0,
+              "w": 0.9473327398300171
             },
             "parent": 0
           }
@@ -3810,9 +3852,9 @@
         "697": {
           "json": {
             "position": {
-              "x": 235.75,
+              "x": 233.76223754882812,
               "y": 2.75,
-              "z": 270.75
+              "z": 273.2655944824219
             },
             "scale": {
               "x": 10,
@@ -4712,6 +4754,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "549": {
+          "json": {
+            "src": "assets/asset-packs/window_2x2_closed/Window 2x2 Closed.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "550": {
           "json": {
             "src": "assets/asset-packs/confetti/confetti.glb",
@@ -5167,6 +5216,13 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "676": {
+          "json": {
+            "src": "assets/asset-packs/closed_wooden_crate/Crate_01/Crate_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "677": {
           "json": {
             "src": "assets/models/RockLarge_01/RockLarge_01.glb",
@@ -5591,6 +5647,11 @@
         "548": {
           "json": {
             "value": "Classic Bench_5"
+          }
+        },
+        "549": {
+          "json": {
+            "value": "Window 2x2 Closed"
           }
         },
         "550": {
@@ -6191,6 +6252,11 @@
         "675": {
           "json": {
             "value": "Big Rock_3"
+          }
+        },
+        "676": {
+          "json": {
+            "value": "Closed Wooden Crate"
           }
         },
         "677": {
@@ -7599,7 +7665,9 @@
                   678,
                   705,
                   708,
-                  710
+                  710,
+                  549,
+                  676
                 ]
               },
               {
@@ -8468,6 +8536,14 @@
               {
                 "entity": 710,
                 "children": []
+              },
+              {
+                "entity": 549,
+                "children": []
+              },
+              {
+                "entity": 676,
+                "children": []
               }
             ]
           }
@@ -8570,6 +8646,9 @@
           "json": {}
         },
         "548": {
+          "json": {}
+        },
+        "549": {
           "json": {}
         },
         "550": {
@@ -8783,6 +8862,9 @@
           "json": {}
         },
         "675": {
+          "json": {}
+        },
+        "676": {
           "json": {}
         },
         "677": {

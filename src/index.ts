@@ -207,6 +207,7 @@ export async function main() {
     coinBobSpinSystem(dt)
     beaconClientSystem(dt)
     updraftSystem(dt)
+    updateWorldTime(dt)
   })
 
   // Per-frame gameplay — time-sliced systems (alternating frames, 30fps each)
@@ -250,7 +251,6 @@ export async function main() {
   // Rare checks (every 2s)
   registerThrottled((elapsed) => {
     nameResolverSystem(elapsed)
-    updateWorldTime()
   }, 2.0)
 
   // Cinematic system (round-end camera, fade state machine, respawnPlayers handler)

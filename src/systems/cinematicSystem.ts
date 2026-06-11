@@ -4,7 +4,8 @@ import { Vector3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { setCinematicFade, cinematicState, creditsState, hideMailboxPopup, hideChestPopup } from '../ui'
-import { setCinematicActive } from '../gameState/cinematicState'
+import { setCinematicActive, isCinematicActive } from '../gameState/cinematicState'
+import { getCountdownSeconds } from '../shared/components'
 import { setWinConditionOverlayVisible, setLeaderboardOverlayVisible, setAnalyticsOverlayVisible } from '../gameState/overlayState'
 import { cancelDrownRespawn } from './waterSystem'
 import { cancelLightningRespawn } from './lightningSystem'
@@ -130,8 +131,10 @@ let noScorersRound = false
 // Fade state machine: 0=idle, 1=fading in, 2=holding black, 3=fading out (reveal), 4=showing, 5=end fade in, 6=end hold black, 7=end fade out
 let fadePhase = 0
 let fadeTimer = 0
-const FADE_IN_DUR = 1.5
-const FADE_HOLD_DUR = 0.3
+let preFadeStarted = false  // tracks whether we already started the pre-fade for this round
+let preFadeElapsed = 0      // safety timeout for pre-fade
+const FADE_IN_DUR = 1.0
+const FADE_HOLD_DUR = 0
 const FADE_OUT_DUR = 1.0
 const END_FADE_IN_DUR = 0.8
 const END_FADE_HOLD_DUR = 0.3
@@ -246,6 +249,52 @@ export function setupCinematicSystem(): void {
     }
     } // end pendingEmote
 
+    // ── Pre-fade: client-side trigger at countdown zero ──
+    if (!preFadeStarted && fadePhase === 0 && !isCinematicActive()) {
+      const secsLeft = getCountdownSeconds()
+      if (secsLeft === 0) {
+        preFadeStarted = true
+        preFadeElapsed = 0
+        fadePhase = 1
+        fadeTimer = FADE_IN_DUR
+        cinematicState.roundOverVisible = true
+
+        // Pre-setup: lock movement + teleport to audience area immediately
+        InputModifier.createOrReplace(engine.PlayerEntity, {
+          mode: InputModifier.Mode.Standard({
+            disableWalk: true, disableRun: true, disableJump: true,
+            disableJog: true, disableGliding: true, disableDoubleJump: true,
+          })
+        })
+        cancelDrownRespawn()
+        cancelLightningRespawn()
+        clearSpeedBoost()
+        setCinematicActive(true)
+        setWinConditionOverlayVisible(false)
+        setLeaderboardOverlayVisible(false)
+        setAnalyticsOverlayVisible(false)
+        hideMailboxPopup()
+        hideChestPopup()
+        exitSpectatorMode()
+
+        // Teleport to audience spot + set up orbit camera while still fading
+        void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
+        orbitAngle = -Math.PI * 100 / 180
+        orbitDist = ORBIT_DEFAULT_DIST
+        orbitHeight = ORBIT_DEFAULT_HEIGHT
+        orbitLookX = PODIUM_CENTER.x
+        orbitLookY = PODIUM_CENTER.y
+        orbitLookZ = PODIUM_CENTER.z
+        const initX = orbitLookX + Math.sin(orbitAngle) * orbitDist
+        const initZ = orbitLookZ + Math.cos(orbitAngle) * orbitDist
+        const initY = orbitLookY + orbitHeight
+        const ct = Transform.getMutable(cinematicCam)
+        ct.position = Vector3.create(initX, initY, initZ)
+        const lt = Transform.getMutable(lookTarget)
+        lt.position = Vector3.create(orbitLookX, orbitLookY + 1.5, orbitLookZ)
+      }
+    }
+
     // ── Fade overlay + cinematic timer ──
     if (fadePhase > 0) {
       fadeTimer -= dt
@@ -255,15 +304,23 @@ export function setupCinematicSystem(): void {
         if (fadeTimer <= 0) { setCinematicFade(1); fadePhase = 2; fadeTimer = FADE_HOLD_DUR }
       } else if (fadePhase === 2) {
         setCinematicFade(1)
-        if (fadeTimer <= 0) {
-          cinematicState.showing = true
-          if (noScorersRound) { creditsState.noScorersVisible = true; fadePhase = 4 }
+        preFadeElapsed += dt
+        // Safety: if respawnPlayers never arrives within 8s, abort
+        if (preFadeElapsed > 8 && cinematicTimer <= 0) {
+          setCinematicFade(0); fadePhase = 0; preFadeStarted = false
+          cinematicState.roundOverVisible = false; setCinematicActive(false)
+          if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
+          return
+        }
+        // Wait for respawnPlayers (cinematicTimer > 0) before advancing
+        if (fadeTimer <= 0 && cinematicTimer > 0) {
+          if (noScorersRound) { cinematicState.showing = true; creditsState.noScorersVisible = true; fadePhase = 4 }
           else { fadePhase = 3; fadeTimer = FADE_OUT_DUR }
         }
       } else if (fadePhase === 3) {
         const progress = Math.max(0, fadeTimer / FADE_OUT_DUR)
         setCinematicFade(progress)
-        if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 4 }
+        if (fadeTimer <= 0) { setCinematicFade(0); cinematicState.showing = true; fadePhase = 4 }
       } else if (fadePhase === 4) {
         if (noScorersRound) creditsState.countdown = Math.max(0, cinematicTimer)
       } else if (fadePhase === 5) {
@@ -282,7 +339,7 @@ export function setupCinematicSystem(): void {
             void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
           }
           fadePhase = 6
-          fadeTimer = 10.0
+          fadeTimer = 5.4
           creditsState.nextRoundVisible = true
         }
       } else if (fadePhase === 6) {
@@ -292,7 +349,7 @@ export function setupCinematicSystem(): void {
       } else if (fadePhase === 7) {
         const progress = Math.max(0, fadeTimer / END_FADE_OUT_DUR)
         setCinematicFade(progress)
-        if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 0; setCinematicActive(false) }
+        if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 0; preFadeStarted = false; cinematicState.roundOverVisible = false; setCinematicActive(false) }
       }
     }
 
@@ -383,70 +440,67 @@ export function setupCinematicSystem(): void {
     noScorersRound = topPlayers.length === 0
 
     const GREEN_CUBE = { x: 258.78, y: 19.25, z: 227.81 }
+    const alreadyPreFaded = preFadeStarted
 
-    InputModifier.createOrReplace(engine.PlayerEntity, {
-      mode: InputModifier.Mode.Standard({
-        disableWalk: true, disableRun: true, disableJump: true,
-        disableJog: true, disableGliding: true, disableDoubleJump: true,
+    if (!alreadyPreFaded) {
+      // No pre-fade happened — do full setup now
+      InputModifier.createOrReplace(engine.PlayerEntity, {
+        mode: InputModifier.Mode.Standard({
+          disableWalk: true, disableRun: true, disableJump: true,
+          disableJog: true, disableGliding: true, disableDoubleJump: true,
+        })
       })
-    })
+      cancelDrownRespawn()
+      cancelLightningRespawn()
+      clearSpeedBoost()
+      setCinematicActive(true)
+      setWinConditionOverlayVisible(false)
+      setLeaderboardOverlayVisible(false)
+      setAnalyticsOverlayVisible(false)
+      hideMailboxPopup()
+      hideChestPopup()
+      exitSpectatorMode()
+      fadePhase = 1
+      fadeTimer = FADE_IN_DUR
+    } else {
+      // Pre-fade already set up everything — snap to black
+      setCinematicFade(1)
+      fadePhase = 2
+      fadeTimer = 0
+    }
+    preFadeStarted = false
+    cinematicState.roundOverVisible = false
+    cinematicTimer = 11.1
 
-    cancelDrownRespawn()
-    cancelLightningRespawn()
-    clearSpeedBoost()
-
-    fadePhase = 1
-    fadeTimer = FADE_IN_DUR
-    setCinematicActive(true)
-    cinematicTimer = 10
-
-    // Reset orbit camera state
-    orbitAngle = -Math.PI * 100 / 180
-    orbitDist = ORBIT_DEFAULT_DIST
-    orbitHeight = ORBIT_DEFAULT_HEIGHT
-    orbitLookX = PODIUM_CENTER.x
-    orbitLookY = PODIUM_CENTER.y
-    orbitLookZ = PODIUM_CENTER.z
     orbitActive = !noScorersRound
     if (!noScorersRound) startCelebration()
 
-    setWinConditionOverlayVisible(false)
-    setLeaderboardOverlayVisible(false)
-    setAnalyticsOverlayVisible(false)
-    hideMailboxPopup()
-    hideChestPopup()
-    exitSpectatorMode()
-
+    // Teleport podium players + activate camera
+    const setupDelay = alreadyPreFaded ? 50 : FADE_IN_DUR * 1000 + 50
     setTimeout(() => {
-      if (noScorersRound) {
-        void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
-      } else if (isWinnerLocalPlayer) {
-        const pos = { x: 265.57, y: 19.51, z: 219.65 }
-        void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
-        waitForGroundedEmote('handsair', pos)
-      } else if (isSecondPlace) {
-        const pos = { x: 266.97, y: 18.85, z: 220.87 }
-        void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
-        waitForGroundedEmote('clap', pos)
-      } else if (isThirdPlace) {
-        const pos = { x: 264.25, y: 18.16, z: 218.57 }
-        void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
-        waitForGroundedEmote('clap', pos)
-      } else {
+      if (isPodiumPlayer) {
+        if (isWinnerLocalPlayer) {
+          const pos = { x: 265.57, y: 19.51, z: 219.65 }
+          void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
+          waitForGroundedEmote('handsair', pos)
+        } else if (isSecondPlace) {
+          const pos = { x: 266.97, y: 18.85, z: 220.87 }
+          void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
+          waitForGroundedEmote('clap', pos)
+        } else if (isThirdPlace) {
+          const pos = { x: 264.25, y: 18.16, z: 218.57 }
+          void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
+          waitForGroundedEmote('clap', pos)
+        }
+      }
+      // Audience already teleported by pre-fade; skip if not podium + pre-faded
+      if (!alreadyPreFaded && !isPodiumPlayer) {
         void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
       }
 
       if (!noScorersRound) {
-        // Snap camera to initial orbit position before activating
-        const initX = orbitLookX + Math.sin(orbitAngle) * orbitDist
-        const initZ = orbitLookZ + Math.cos(orbitAngle) * orbitDist
-        const initY = orbitLookY + orbitHeight
-        const ct = Transform.getMutable(cinematicCam)
-        ct.position = Vector3.create(initX, initY, initZ)
-        const lt = Transform.getMutable(lookTarget)
-        lt.position = Vector3.create(orbitLookX, orbitLookY + 1.5, orbitLookZ)
         MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
       }
-    }, FADE_IN_DUR * 1000 + 50)
+    }, setupDelay)
   })
 }

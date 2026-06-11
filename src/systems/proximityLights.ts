@@ -1,6 +1,6 @@
 import { engine, Transform, LightSource } from '@dcl/sdk/ecs'
 import { Vector3, Color3 } from '@dcl/sdk/math'
-import { isNightTime, updateWorldTime } from '../shared/dayNight'
+import { isNightTime } from '../shared/dayNight'
 
 // ── Raw light positions (Blender world coords: x=right, y=forward, z=up) ──
 // Transform: DCL_x = bx*5 + 74.75,  DCL_y = bz*5 - 2,  DCL_z = -by*5 + 119.5
@@ -88,9 +88,6 @@ export function setupProximityLights() {
 }
 
 export function proximityLightSystem(dt: number) {
-  // Keep shared world time fresh
-  updateWorldTime()
-
   checkTimer -= dt
   if (checkTimer > 0) return
   checkTimer = CHECK_INTERVAL

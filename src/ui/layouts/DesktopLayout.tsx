@@ -64,7 +64,7 @@ export function DesktopLayout() {
             uiBackground={{ color: PANEL_BG }}
           >
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(-6) } }}>
-              <Label value={isNightTime() ? '🌙' : '☀️'} fontSize={S(16)} font="sans-serif" uiTransform={{ margin: { right: S(4) } }} />
+              <Label value={isNightTime() ? '☾' : '☀️'} fontSize={S(16)} font="sans-serif" uiTransform={{ margin: { right: S(4) } }} />
               <Label value="Round ends in:" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" />
             </UiEntity>
             <Label value={formatCountdown(countdownSeconds)} fontSize={S(40)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: S(-6) } }} />

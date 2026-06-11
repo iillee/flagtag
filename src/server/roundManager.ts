@@ -246,13 +246,50 @@ async function handleRoundEnd(): Promise<void> {
   // keeps accumulating time and can write it back AFTER we reset scores.
   // ══════════════════════════════════════════════════════════════════════
 
-  // ── 0a. Flush any in-progress hold time so final scores are accurate ──
+  // ══════════════════════════════════════════════════════════════════════
+  // FAST PATH: Read scores + send respawnPlayers ASAP, cleanup after.
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── 0. Flush hold time so final scores are accurate ──
   flushHoldTimeAccum()
 
-  // ── 0b. Reset flag to random spawn point IMMEDIATELY (before any await) ──
+  // ── 1. Read scores BEFORE resetting ──
+  let maxSeconds = 0
+  const players: { userId: string; seconds: number }[] = []
+
+  for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+    if (data.seconds > 0) {
+      players.push({ userId: data.playerId, seconds: data.seconds })
+      if (data.seconds > maxSeconds) maxSeconds = data.seconds
+    }
+  }
+
+  // ── 2. Compute top 3 and send respawnPlayers IMMEDIATELY ──
+  const topPlayers = [...players]
+    .sort((a, b) => b.seconds - a.seconds)
+    .slice(0, 3)
+    .map(p => {
+      const pKey = p.userId.toLowerCase()
+      const storedName = playerNames.get(pKey)
+      const displayName = storedName || pKey.slice(0, 8)
+      return {
+        userId: pKey,
+        name: displayName,
+        seconds: Math.floor(p.seconds)
+      }
+    })
+  const winnersJson = JSON.stringify(topPlayers)
+  room.send('respawnPlayers', { t: 0, winnersJson })
+  console.log('[Server] 📍 Respawning all players (sent first)')
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLEANUP: Everything below runs during the cinematic (players frozen)
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── 3a. Reset flag to random spawn point ──
   resetGravityState()
   const spawnPoint = getRandomSpawnPoint()
-  console.log('[Server] Round ended, flag respawning at random location to prevent spawn camping')
+  console.log('[Server] Round ended, flag respawning at random location')
   
   const flagMutable = Flag.getMutable(flagEntity)
   flagMutable.state = FlagState.AtBase
@@ -264,18 +301,7 @@ async function handleRoundEnd(): Promise<void> {
   const flagT = Transform.getMutable(flagEntity)
   flagT.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
 
-  // ── 1. Determine winner(s) — read scores BEFORE resetting them ──
-  let maxSeconds = 0
-  const players: { userId: string; seconds: number }[] = []
-
-  for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
-    if (data.seconds > 0) {
-      players.push({ userId: data.playerId, seconds: data.seconds })
-      if (data.seconds > maxSeconds) maxSeconds = data.seconds
-    }
-  }
-
-  // ── 2. Reset ALL hold times to 0 synchronously ──
+  // ── 3b. Reset ALL hold times to 0 ──
   const connectedNow = new Set<string>()
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
     connectedNow.add(identity.address.toLowerCase())
@@ -337,30 +363,9 @@ async function handleRoundEnd(): Promise<void> {
   spawnMushrooms()
   console.log('[Server] 🍄 Mushrooms respawned for new round')
 
-  // ── 3f. Compute top 3 BEFORE sending respawnPlayers ──
-  const topPlayers = [...players]
-    .sort((a, b) => b.seconds - a.seconds)
-    .slice(0, 3)
-    .map(p => {
-      const pKey = p.userId.toLowerCase()
-      const storedName = playerNames.get(pKey)
-      const displayName = storedName || pKey.slice(0, 8)
-      return {
-        userId: pKey,
-        name: displayName,
-        seconds: Math.floor(p.seconds)
-      }
-    })
-  
   for (const p of topPlayers) {
     console.log('[Server] Top player:', p.name, '-', p.seconds, 'seconds')
   }
-
-  const winnersJson = JSON.stringify(topPlayers)
-
-  // ── 3g. Respawn all players ──
-  room.send('respawnPlayers', { t: 0, winnersJson })
-  console.log('[Server] 📍 Respawning all players at spawn point')
 
   // ══════════════════════════════════════════════════════════════════════
   // All synchronous state mutations done. Safe to await now.

@@ -15,7 +15,7 @@ import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { exitSpectatorMode } from './spectatorSystem'
 import { initPools as initCombatPools } from './combatSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
-import { isNightTime, updateWorldTime } from '../shared/dayNight'
+import { isNightTime } from '../shared/dayNight'
 
 // ── Visual constants ──
 const GHOST_MODEL_SRC = 'assets/models/ghost.glb'
@@ -154,8 +154,6 @@ export function ghostClientSystem(dt: number): void {
   initCombatPools()
   ensureGhostDeathSound()
 
-  // Keep world time cache fresh (used by other systems, not for ghost gating)
-  updateWorldTime()
 
   // Ghost visibility is determined by the server — if the server sends active
   // Ghost entities via CRDT, we render them. No client-side night check needed.
