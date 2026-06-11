@@ -6,7 +6,25 @@ import { createSyncIdPool } from './syncIdPool'
 // Consumers that imported constants/utils from this file will still work.
 // New code should import from './constants' and './dateUtils' directly.
 export { FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, getRandomSpawnPoint, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS, PROJECTILE_LIFETIME_SEC, GHOST_DETECT_RADIUS, GHOST_SPEED, GHOST_FAST_SPEED, GHOST_FAST_DIST, GHOST_HIT_RADIUS, GHOST_SPAWN_INTERVAL, GHOST_MAX_ACTIVE } from './constants'
-export { getTodayDateString, getCurrentMonthString, getNextRoundEndTimeMs, getCountdownSeconds } from './dateUtils'
+export { getTodayDateString, getCurrentMonthString, getNextRoundEndTimeMs } from './dateUtils'
+import { getCountdownSeconds as getCountdownSecondsFallback } from './dateUtils'
+
+/**
+ * Returns seconds remaining until round end, derived from the synced
+ * CountdownTimer component so the display is consistent with the server's
+ * roundEndTriggered flag.  Falls back to wall-clock calculation when the
+ * component hasn't been received yet.
+ */
+export function getCountdownSeconds(): number {
+  for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
+    // While the round-end splash is active, always show 0:00
+    if (timer.roundEndTriggered) return 0
+    if (timer.roundEndTimeMs > 0) {
+      return Math.max(0, Math.floor((timer.roundEndTimeMs - Date.now()) / 1000))
+    }
+  }
+  return getCountdownSecondsFallback()
+}
 
 // ══════════════════════════════════════════════
 // ECS Component Definitions

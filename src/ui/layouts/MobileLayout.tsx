@@ -63,7 +63,7 @@ export function MobileLayout() {
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28, right: 28 }, borderRadius: 34, margin: { right: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_timer.png' } }}
               >
-                <Label value={`${isNightTime() ? '\ud83c\udf19' : '\u2600\ufe0f'} ${formatCountdown(countdownSeconds)}`} fontSize={32} color={WHITE} font="sans-serif" />
+                <Label value={`${isNightTime() ? '\u263e' : '\u2600\ufe0f'} ${formatCountdown(countdownSeconds)}`} fontSize={32} color={WHITE} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18, right: 30 }, borderRadius: 34 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' } }}
