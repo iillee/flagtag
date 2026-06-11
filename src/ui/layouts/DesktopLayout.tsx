@@ -58,7 +58,7 @@ export function DesktopLayout() {
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {/* Timer */}
-      {!isCinematicActive() && !splashVisible && cinematicFadeOpacity === 0 && (
+      {!splashVisible && (cinematicFadeOpacity === 0 ? (!isCinematicActive() && countdownSeconds > 0) : cinematicState.roundOverVisible) && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: S(14), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center', pointerFilter: 'none' }}>
           <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: S(2 * _ROW_HEIGHT + 2 * _PADDING), padding: { left: S(20), right: S(20) }, borderRadius: S(_BORDER_RADIUS) }}
             uiBackground={{ color: PANEL_BG }}
@@ -67,7 +67,7 @@ export function DesktopLayout() {
               <Label value={isNightTime() ? '☾' : '☀️'} fontSize={S(16)} font="sans-serif" uiTransform={{ margin: { right: S(4) } }} />
               <Label value="Round ends in:" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value={formatCountdown(countdownSeconds)} fontSize={S(40)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: S(-6) } }} />
+            <Label value={isCinematicActive() ? formatCountdown(0) : formatCountdown(countdownSeconds)} fontSize={S(40)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: S(-6) } }} />
           </UiEntity>
         </UiEntity>
       )}
