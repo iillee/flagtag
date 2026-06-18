@@ -12,7 +12,7 @@
     "server-logs": "sdk-commands sdk-server-logs"
   },
   "devDependencies": {
-    "@dcl/sdk": "^7.23.2-25521226778.commit-1828100"
+    "@dcl/sdk": "^7.24.2-27769863035.commit-2ed854e"
   },
   "engines": {
     "node": ">=16.0.0",
