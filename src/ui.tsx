@@ -65,6 +65,7 @@ import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnC
 
 // Reusable components
 import { CloseButton } from './ui/components/CloseButton'
+import { playClickSound } from './ui/uiSounds'
 import { ProgressBar } from './ui/components/ProgressBar'
 import { DeathOverlay } from './ui/components/DeathOverlay'
 
@@ -422,11 +423,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
   const players = getPlayersWithHoldTimes()
   const carrierUserId = getCurrentFlagCarrierUserId()
 
-  const controlsHint = mode === 'flag'
-    ? 'W/S = Zoom  |  A/D = Orbit  |  E/F = Up/Down'
-    : spectatorState.followPlayerId
-    ? `Following: ${spectatorState.followPlayerName}  |  W/S = Zoom  |  A/D = Orbit  |  E/F = Up/Down`
-    : 'Select a player to follow'
+  const controlsHint = 'W/S = Zoom  |  A/D = Orbit  |  E/F = Up/Down'
 
   const TAB_BG = Color4.create(0.2, 0.2, 0.25, 0.9)
   const TAB_ACTIVE = Color4.create(0.9, 0.75, 0.2, 1)
@@ -434,9 +431,9 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
 
   return (
     <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? 60 : S(16), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
-      {/* Player picker dropdown (above the bar) */}
-      {mode === 'player' && spectatorState.playerPickerOpen && players.length > 0 && (
-        <UiEntity uiTransform={{ flexDirection: 'column', width: mobile ? 280 : S(260), maxHeight: mobile ? 260 : S(240), margin: { bottom: mobile ? 4 : S(4) }, borderRadius: mobile ? 10 : S(10), padding: { top: mobile ? 6 : S(4), bottom: mobile ? 6 : S(4) } }}
+      {/* Mobile player picker (above bar) */}
+      {mobile && mode === 'player' && spectatorState.playerPickerOpen && players.length > 0 && (
+        <UiEntity uiTransform={{ flexDirection: 'column', width: 280, maxHeight: 260, margin: { bottom: 4 }, borderRadius: 10, padding: { top: 6, bottom: 6 } }}
           uiBackground={{ color: PANEL }}
         >
           {players.map((p, i) => {
@@ -444,13 +441,13 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
             const isSelected = spectatorState.followPlayerId?.toLowerCase() === p.userId.toLowerCase()
             return (
               <UiEntity key={`sp-${i}`}
-                uiTransform={{ height: mobile ? 38 : S(32), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: mobile ? 12 : S(10), right: mobile ? 12 : S(10) }, borderRadius: mobile ? 6 : S(6), margin: { left: mobile ? 4 : S(4), right: mobile ? 4 : S(4), top: mobile ? 2 : S(1), bottom: mobile ? 2 : S(1) } }}
+                uiTransform={{ height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: 12, right: 12 }, borderRadius: 6, margin: { left: 4, right: 4, top: 2, bottom: 2 } }}
                 uiBackground={{ color: isSelected ? Color4.create(0.9, 0.75, 0.2, 0.25) : Color4.create(0, 0, 0, 0) }}
                 onMouseDown={() => { selectFollowPlayer(p.userId, p.name) }}
               >
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-                  {isCarrier && <UiEntity uiTransform={{ width: mobile ? 16 : S(14), height: mobile ? 16 : S(14), margin: { right: mobile ? 4 : S(4) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
-                  <Label value={p.name} fontSize={mobile ? 18 : S(15)} color={isSelected ? TAB_ACTIVE : LIGHT_GREY} font="sans-serif" />
+                  {isCarrier && <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
+                  <Label value={p.name} fontSize={18} color={isSelected ? TAB_ACTIVE : LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
               </UiEntity>
             )
@@ -486,35 +483,74 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
           })}
         </UiEntity>
       ) : (
-        <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', borderRadius: S(14), padding: { top: S(8), bottom: S(10), left: S(16), right: S(16) } }}
-          uiBackground={{ color: PANEL }}
-        >
-          <CloseButton hoverKey="closeSpectator" onClose={() => { exitSpectatorMode() }} size={S(28)} fontSize={S(24)} />
+        <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'stretch' }}>
+          {/* Desktop player picker (above bar, same width) */}
+          {mode === 'player' && spectatorState.playerPickerOpen && players.length > 0 && (
+            <UiEntity uiTransform={{ flexDirection: 'column', maxHeight: S(240), borderRadius: S(10), padding: { top: S(4), bottom: S(4) }, margin: { bottom: S(4) } }}
+              uiBackground={{ color: PANEL }}
+            >
+              {players.map((p, i) => {
+                const isCarrier = carrierUserId !== null && p.userId.toLowerCase() === carrierUserId.toLowerCase()
+                const isSelected = spectatorState.followPlayerId?.toLowerCase() === p.userId.toLowerCase()
+                return (
+                  <UiEntity key={`sp-${i}`}
+                    uiTransform={{ height: S(32), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: S(10), right: S(10) }, borderRadius: S(6), margin: { left: S(4), right: S(4), top: S(1), bottom: S(1) } }}
+                    uiBackground={{ color: isSelected ? Color4.create(0.9, 0.75, 0.2, 0.25) : Color4.create(0, 0, 0, 0) }}
+                    onMouseDown={() => { selectFollowPlayer(p.userId, p.name) }}
+                  >
+                    <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+                      {isCarrier && <UiEntity uiTransform={{ width: S(14), height: S(14), margin: { right: S(4) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
+                      <Label value={p.name} fontSize={S(15)} color={isSelected ? TAB_ACTIVE : LIGHT_GREY} font="sans-serif" />
+                    </UiEntity>
+                  </UiEntity>
+                )
+              })}
+            </UiEntity>
+          )}
 
-          {/* Mode tabs */}
-          <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(6) } }}>
-            {SPEC_MODES.map((m, i) => {
-              const isActive = mode === m.key
-              return (
-                <UiEntity key={`tab-${i}`}
-                  uiTransform={{ height: S(30), padding: { left: S(12), right: S(12) }, margin: { left: i > 0 ? S(3) : 0 }, borderRadius: S(8), justifyContent: 'center', alignItems: 'center' }}
-                  uiBackground={{ color: isActive ? TAB_ACTIVE : TAB_BG }}
-                  onMouseDown={() => {
-                    if (m.key === 'player' && mode === 'player') {
-                      spectatorState.playerPickerOpen = !spectatorState.playerPickerOpen
-                    } else {
-                      setSpectatorMode(m.key)
-                    }
-                  }}
-                >
-                  <Label value={m.label} fontSize={S(14)} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" />
-                </UiEntity>
-              )
-            })}
+          {/* Main bar */}
+          <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', borderRadius: S(14), padding: { top: S(10), bottom: S(10), left: S(10), right: S(10) } }}
+            uiBackground={{ color: PANEL }}
+          >
+            {/* Mode tabs + close button in one row */}
+            <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(6) } }}>
+              {SPEC_MODES.map((m, i) => {
+                const isActive = mode === m.key
+                return (
+                  <UiEntity key={`tab-${i}`}
+                    uiTransform={{ height: S(34), padding: { left: S(16), right: S(16) }, margin: { left: i > 0 ? S(4) : 0 }, borderRadius: S(10), justifyContent: 'center', alignItems: 'center' }}
+                    uiBackground={{ color: isActive ? TAB_ACTIVE : TAB_BG }}
+                    onMouseDown={() => {
+                      if (m.key === 'player') {
+                        if (mode !== 'player') {
+                          setSpectatorMode(m.key)
+                        } else {
+                          spectatorState.playerPickerOpen = !spectatorState.playerPickerOpen
+                        }
+                      } else {
+                        setSpectatorMode(m.key)
+                      }
+                    }}
+                  >
+                    <Label value={m.label} fontSize={S(14)} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" />
+                  </UiEntity>
+                )
+              })}
+              {/* Close button */}
+              <UiEntity
+                uiTransform={{ height: S(34), width: S(34), margin: { left: S(4) }, borderRadius: S(10), justifyContent: 'center', alignItems: 'center' }}
+                uiBackground={{ color: hover.closeSpectator ? Color4.create(0.35, 0.3, 0.3, 0.95) : TAB_BG }}
+                onMouseEnter={() => { hover.closeSpectator = true }}
+                onMouseLeave={() => { hover.closeSpectator = false }}
+                onMouseDown={() => { playClickSound(); exitSpectatorMode(); hover.closeSpectator = false }}
+              >
+                <Label value="×" fontSize={S(28)} color={hover.closeSpectator ? Color4.create(0.85, 0.85, 0.9, 1) : CLOSE_GREY} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: '100%', margin: { top: S(-4), left: S(2) } }} />
+              </UiEntity>
+            </UiEntity>
+
+            {/* Controls hint */}
+            <Label value={controlsHint} fontSize={S(12)} color={Color4.create(1, 1, 1, 0.6)} font="sans-serif" />
           </UiEntity>
-
-          {/* Controls hint */}
-          <Label value={controlsHint} fontSize={S(12)} color={Color4.create(1, 1, 1, 0.6)} font="sans-serif" />
         </UiEntity>
       )}
     </UiEntity>
