@@ -2,6 +2,7 @@ import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { isNightTime } from '../../shared/dayNight'
+import { isCinematicActive } from '../../gameState/cinematicState'
 
 import {
   WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY, GOLD,
@@ -63,7 +64,7 @@ export function MobileLayout() {
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28, right: 28 }, borderRadius: 34, margin: { right: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_timer.png' } }}
               >
-                <Label value={`${isNightTime() ? '\u263e' : '\u2600\ufe0f'} ${formatCountdown(countdownSeconds)}`} fontSize={32} color={WHITE} font="sans-serif" />
+                <Label value={isCinematicActive() ? 'Round Over!' : `${isNightTime() ? '\u263e' : '\u2600\ufe0f'} ${formatCountdown(countdownSeconds)}`} fontSize={32} color={isCinematicActive() ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18, right: 30 }, borderRadius: 34 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' } }}

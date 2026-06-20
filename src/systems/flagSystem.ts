@@ -288,7 +288,10 @@ room.onMessage('pickupConfirmed', (data) => {
   // Also tell the interpolation system who the carrier is so scoreboard doesn't reset
   setConfirmedCarrier(data.playerId)
   // Play pickup sound now that server confirmed (prevents repeated sounds on rejected pickups)
-  playPickupSound()
+  // But skip if Phase 1 (auto-pickup) already played it
+  if (!skipNextPickupSound) {
+    playPickupSound()
+  }
   skipNextPickupSound = true  // skip the CRDT-triggered sound since we already played it
 
 

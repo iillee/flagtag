@@ -264,7 +264,7 @@ async function handleRoundEnd(): Promise<void> {
     }
   }
 
-  // ── 2. Compute top 3 and send respawnPlayers IMMEDIATELY ──
+  // ── 2. Compute top 3 ──
   const topPlayers = [...players]
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 3)
@@ -279,14 +279,10 @@ async function handleRoundEnd(): Promise<void> {
       }
     })
   const winnersJson = JSON.stringify(topPlayers)
-  room.send('respawnPlayers', { t: 0, winnersJson })
-  console.log('[Server] 📍 Respawning all players (sent first)')
 
-  // ══════════════════════════════════════════════════════════════════════
-  // CLEANUP: Everything below runs during the cinematic (players frozen)
-  // ══════════════════════════════════════════════════════════════════════
-
-  // ── 3a. Reset flag to random spawn point ──
+  // ── 2a. Reset flag BEFORE sending respawnPlayers ──
+  // Flag must be at base before clients receive the message, so the CRDT
+  // update is queued in the same tick and clients never see the old state.
   resetGravityState()
   const spawnPoint = getRandomSpawnPoint()
   console.log('[Server] Round ended, flag respawning at random location')
@@ -300,6 +296,14 @@ async function handleRoundEnd(): Promise<void> {
   
   const flagT = Transform.getMutable(flagEntity)
   flagT.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
+
+  // ── 2b. Send respawnPlayers AFTER flag reset ──
+  room.send('respawnPlayers', { t: 0, winnersJson })
+  console.log('[Server] 📍 Respawning all players (flag already reset)')
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CLEANUP: Everything below runs during the cinematic (players frozen)
+  // ══════════════════════════════════════════════════════════════════════
 
   // ── 3b. Reset ALL hold times to 0 ──
   const connectedNow = new Set<string>()

@@ -133,9 +133,12 @@ let fadePhase = 0
 let fadeTimer = 0
 let preFadeStarted = false  // tracks whether we already started the pre-fade for this round
 let preFadeElapsed = 0      // safety timeout for pre-fade
+let postRespawnHoldTimer = 0 // countdown: hold black after respawnPlayers arrives
+let pendingPreFadeTeleport = false // defer audience teleport until screen is fully black
 const FADE_IN_DUR = 1.0
 const FADE_HOLD_DUR = 0
 const FADE_OUT_DUR = 1.0
+const POST_RESPAWN_HOLD_DUR = 2.5 // hold black after respawnPlayers while podium sets up
 const END_FADE_IN_DUR = 0.8
 const END_FADE_HOLD_DUR = 0.3
 const END_FADE_OUT_DUR = 0.8
@@ -277,8 +280,8 @@ export function setupCinematicSystem(): void {
         hideChestPopup()
         exitSpectatorMode()
 
-        // Teleport to audience spot + set up orbit camera while still fading
-        void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
+        // Defer audience teleport until screen is fully black (phase 2)
+        pendingPreFadeTeleport = true
         orbitAngle = -Math.PI * 100 / 180
         orbitDist = ORBIT_DEFAULT_DIST
         orbitHeight = ORBIT_DEFAULT_HEIGHT
@@ -301,7 +304,14 @@ export function setupCinematicSystem(): void {
       if (fadePhase === 1) {
         const progress = 1 - Math.max(0, fadeTimer / FADE_IN_DUR)
         setCinematicFade(progress)
-        if (fadeTimer <= 0) { setCinematicFade(1); fadePhase = 2; fadeTimer = FADE_HOLD_DUR }
+        if (fadeTimer <= 0) {
+          setCinematicFade(1); fadePhase = 2; fadeTimer = FADE_HOLD_DUR
+          // Now screen is fully black — safe to teleport
+          if (pendingPreFadeTeleport) {
+            pendingPreFadeTeleport = false
+            void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
+          }
+        }
       } else if (fadePhase === 2) {
         setCinematicFade(1)
         preFadeElapsed += dt
@@ -312,10 +322,16 @@ export function setupCinematicSystem(): void {
           if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
           return
         }
-        // Wait for respawnPlayers (cinematicTimer > 0) before advancing
+        // Wait for respawnPlayers (cinematicTimer > 0), then hold black for POST_RESPAWN_HOLD_DUR
         if (fadeTimer <= 0 && cinematicTimer > 0) {
-          if (noScorersRound) { cinematicState.showing = true; creditsState.noScorersVisible = true; fadePhase = 4 }
-          else { fadePhase = 3; fadeTimer = FADE_OUT_DUR }
+          if (postRespawnHoldTimer > 0) {
+            postRespawnHoldTimer -= dt
+            if (postRespawnHoldTimer <= 0) {
+              cinematicState.roundOverVisible = false
+              if (noScorersRound) { cinematicState.showing = true; creditsState.noScorersVisible = true; fadePhase = 4 }
+              else { fadePhase = 3; fadeTimer = FADE_OUT_DUR }
+            }
+          }
         }
       } else if (fadePhase === 3) {
         const progress = Math.max(0, fadeTimer / FADE_OUT_DUR)
@@ -469,13 +485,14 @@ export function setupCinematicSystem(): void {
       fadeTimer = 0
     }
     preFadeStarted = false
-    cinematicState.roundOverVisible = false
+    cinematicState.roundOverVisible = true  // keep "Round Over" visible during black hold
     cinematicTimer = 11.1
+    postRespawnHoldTimer = POST_RESPAWN_HOLD_DUR  // hold black while podium sets up
 
     orbitActive = !noScorersRound
     if (!noScorersRound) startCelebration()
 
-    // Teleport podium players + activate camera
+    // Teleport podium players + activate camera immediately (screen is black)
     const setupDelay = alreadyPreFaded ? 50 : FADE_IN_DUR * 1000 + 50
     setTimeout(() => {
       if (isPodiumPlayer) {
@@ -498,9 +515,11 @@ export function setupCinematicSystem(): void {
         void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
       }
 
-      if (!noScorersRound) {
-        MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
-      }
     }, setupDelay)
+
+    // Activate orbit camera immediately (while still black) so players never see spawn
+    if (!noScorersRound) {
+      MainCamera.getMutable(engine.CameraEntity).virtualCameraEntity = cinematicCam
+    }
   })
 }

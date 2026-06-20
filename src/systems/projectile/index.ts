@@ -510,6 +510,7 @@ export function projectileClientSystem(dt: number): void {
     room.send('chargeStop', { t: now })
     charge.burnoutFlashUntil = Date.now() + BURNOUT_FLASH_MS
     console.log('[Projectile] 💥 BURNOUT — held too long, self-stun!')
+    triggerHitFlash(PROJECTILE_STAGGER_MS)
     if (isServerConnected()) {
       room.send('requestDrop', { t: 0 })
     }
