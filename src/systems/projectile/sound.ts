@@ -4,23 +4,27 @@
 import { engine, Transform, AudioSource, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { soundEntities } from './state'
-import { registerSystem } from '../systemManager'
 
-// Pooled sound cleanup — single system handles all pending cleanups
-const pendingCleanups: { entity: Entity; expireAt: number }[] = []
-let _cleanupRegistered = false
-function ensureCleanupSystem() {
-  if (_cleanupRegistered) return
-  _cleanupRegistered = true
-  registerSystem((_dt: number) => {
-    const now = Date.now()
-    for (let i = pendingCleanups.length - 1; i >= 0; i--) {
-      if (now >= pendingCleanups[i].expireAt) {
-        engine.removeEntity(pendingCleanups[i].entity)
-        pendingCleanups.splice(i, 1)
-      }
-    }
-  })
+// ── Release sound pool ──
+// Pre-create a fixed pool of entities for positional release sounds.
+// Rotate through them instead of addEntity/removeEntity per throw.
+const RELEASE_SOUND_POOL_SIZE = 6
+const releaseSoundPool: Entity[] = []
+let releaseSoundPoolIdx = 0
+let releaseSoundPoolReady = false
+
+function initReleaseSoundPool(): void {
+  if (releaseSoundPoolReady) return
+  releaseSoundPoolReady = true
+  for (let i = 0; i < RELEASE_SOUND_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: Vector3.create(0, -200, 0) })
+    AudioSource.create(e, {
+      audioClipUrl: RELEASE_SOUND_SRC,
+      playing: false, loop: false, volume: 0, global: false, pitch: 1.0
+    })
+    releaseSoundPool.push(e)
+  }
 }
 
 const CHARGE_SOUND_SRC = 'assets/sounds/charge.mp3'
@@ -58,14 +62,14 @@ export function playReleaseSound(): void {
 }
 
 export function playReleaseSoundAt(pos: Vector3): void {
-  const e = engine.addEntity()
-  Transform.create(e, { position: pos })
-  AudioSource.create(e, {
+  initReleaseSoundPool()
+  const e = releaseSoundPool[releaseSoundPoolIdx % RELEASE_SOUND_POOL_SIZE]
+  releaseSoundPoolIdx++
+  Transform.getMutable(e).position = pos
+  AudioSource.createOrReplace(e, {
     audioClipUrl: RELEASE_SOUND_SRC,
     playing: true, loop: false, volume: 0.35, global: false, pitch: 1.0
   })
-  ensureCleanupSystem()
-  pendingCleanups.push({ entity: e, expireAt: Date.now() + 2000 })
 }
 
 export function attachProjectileSound(entity: Entity): void {

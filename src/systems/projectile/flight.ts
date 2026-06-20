@@ -24,6 +24,8 @@ import { getBoomerangModelSrc } from '../../gameState/boomerangColor'
 import { getPlayerForward } from './utils'
 
 // ── Wall raycasts ──
+// Raycast entities don't have GltfContainer, so create/destroy is safe
+// (won't trigger the rendering bug that affects GLB models).
 
 export function fireWallRaycast(pos: Vector3, dirX: number, dirZ: number): void {
   const rayEntity = engine.addEntity()

@@ -140,7 +140,7 @@ function removeRemoteBoomerang(playerId: string): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb) return
   if (rb.orbit) {
-    engine.removeEntity(rb.orbit.entity)
+    releaseOrbitEntity(rb.orbit.entity)
   }
   if (rb.charge) {
     engine.removeEntity(rb.charge.glow)
@@ -312,21 +312,76 @@ const REMOTE_ORBIT_DURATION_MS = 3500
 const REMOTE_ORBIT_VIS_SPEED = (REMOTE_ORBIT_FULL_ROTATIONS * 360) / (REMOTE_ORBIT_DURATION_MS / 1000)
 const REMOTE_ORBIT_PROJ_SCALE = Vector3.create(2.5, 4.5, 2.5)
 
+// ── Orbit entity pool ──
+// Pre-create orbit visual entities to avoid entity churn during long sessions.
+const ORBIT_POOL_SIZE = 5
+const orbitPool: Entity[] = []
+let orbitPoolReady = false
+const ORBIT_HIDDEN_POS = Vector3.create(0, -200, 0)
+const ORBIT_COLORS: BoomerangColor[] = ['r', 'y', 'b', 'g']
+
+function initOrbitPool(): void {
+  if (orbitPoolReady) return
+  orbitPoolReady = true
+  for (let i = 0; i < ORBIT_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: ORBIT_HIDDEN_POS, scale: Vector3.Zero() })
+    GltfContainer.create(e, {
+      src: 'assets/models/boomerang.g.glb',
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0
+    })
+    AudioSource.create(e, {
+      audioClipUrl: 'assets/sounds/boomerang2.mp3',
+      playing: false, loop: false, volume: 0, global: false, pitch: 1.3
+    })
+    orbitPool.push(e)
+  }
+  console.log('[RemoteBoomerang] Pre-created orbit entity pool of', ORBIT_POOL_SIZE)
+}
+
+function acquireOrbitEntity(color: BoomerangColor): Entity | null {
+  initOrbitPool()
+  // Find one not currently used by any remote boomerang
+  for (const e of orbitPool) {
+    let inUse = false
+    remoteBoomerangs.forEach((rb) => {
+      if (rb.orbit && rb.orbit.entity === e) inUse = true
+    })
+    if (!inUse) {
+      GltfContainer.createOrReplace(e, {
+        src: `assets/models/boomerang.${color}.glb`,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
+      return e
+    }
+  }
+  return null
+}
+
+function releaseOrbitEntity(entity: Entity): void {
+  if (AudioSource.has(entity)) {
+    const a = AudioSource.getMutable(entity)
+    a.playing = false
+    a.volume = 0
+    a.loop = false
+  }
+  const t = Transform.getMutable(entity)
+  t.position = ORBIT_HIDDEN_POS
+  t.scale = Vector3.Zero()
+}
+
 function startRemoteOrbit(playerId: string, durationMs: number, startAngle: number = 0): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb) return
   if (rb.orbit) return // already orbiting
 
-  const orbitEnt = engine.addEntity()
-  Transform.create(orbitEnt, { position: Vector3.Zero(), scale: Vector3.Zero() })
-  GltfContainer.create(orbitEnt, {
-    src: `assets/models/boomerang.${rb.color}.glb`,
-    visibleMeshesCollisionMask: 0,
-    invisibleMeshesCollisionMask: 0
-  })
+  const orbitEnt = acquireOrbitEntity(rb.color)
+  if (!orbitEnt) return
 
-  // Attach looping spatial sound so other players hear the orbit
-  AudioSource.create(orbitEnt, {
+  // Start looping spatial sound
+  AudioSource.createOrReplace(orbitEnt, {
     audioClipUrl: 'assets/sounds/boomerang2.mp3',
     playing: true,
     loop: true,
@@ -347,14 +402,7 @@ function startRemoteOrbit(playerId: string, durationMs: number, startAngle: numb
 function stopRemoteOrbit(playerId: string): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb || !rb.orbit) return
-  // Stop sound before removing
-  if (AudioSource.has(rb.orbit.entity)) {
-    const a = AudioSource.getMutable(rb.orbit.entity)
-    a.playing = false
-    a.volume = 0
-    a.loop = false
-  }
-  engine.removeEntity(rb.orbit.entity)
+  releaseOrbitEntity(rb.orbit.entity)
   rb.orbit = undefined
   // Restore hand model
   if (Transform.has(rb.model)) {

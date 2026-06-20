@@ -252,7 +252,9 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   const playerProjectiles = activeProjectiles.filter(s => s.firedBy === playerId)
   const maxActive = color === 'y' ? 2 : PROJECTILE_MAX_ACTIVE
   if (playerProjectiles.length >= maxActive) {
-    console.log('[Server] Projectile denied: max active projectiles reached')
+    const detail = playerId.slice(0, 8) + ' ' + color + ' ' + playerProjectiles.map(p => 'id=' + p.shellId + ' age=' + ((Date.now() - p.firedAtMs) / 1000).toFixed(1) + 's ret=' + p.returning).join(',')
+    console.log('[Server] ⚠️ Projectile denied: max active reached (' + playerProjectiles.length + '/' + maxActive + ') —', detail)
+    if (typeof (globalThis as any).__diagShellDenied === 'function') (globalThis as any).__diagShellDenied(detail)
     return
   }
 

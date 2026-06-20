@@ -48,12 +48,12 @@ import { room } from '../shared/messages'
 import { CoinState, COIN_STATE_SYNC_ID } from '../shared/coins'
 import { registerEconomyHandlers, coinServerSystem } from './economy'
 import { flagServerSystem, holdTimeServerSystem, checkProximitySteal, registerFlagHandlers } from './flagLogic'
-import { bananaServerSystem, shellServerSystem, orbitServerSystem, registerCombatHandlers } from './combat'
+import { bananaServerSystem, shellServerSystem, orbitServerSystem, registerCombatHandlers, activeTraps, activeProjectiles, activeOrbits } from './combat'
 import { registerGhostHandlers, ghostServerSystem } from './ghostSystem'
 import { registerMushroomHandlers, spawnMushrooms } from './mushroomSystem'
 import { playerTrackingSystem, nameResolverServerSystem } from './playerTracking'
 import { countdownServerSystem, lightningServerSystem, updraftServerSystem, registerRoundHandlers, loadRoundWinnerWebhook } from './roundManager'
-import { initPostHog } from './posthog'
+import { initPostHog, capture } from './posthog'
 
 // ── Setup ──
 
@@ -226,6 +226,36 @@ function registerSystems() {
   engine.addSystem(safe('updraftServerSystem', updraftServerSystem))
   engine.addSystem(safe('ghostServerSystem', ghostServerSystem))
   engine.addSystem(safe('coinServerSystem', coinServerSystem))
+
+  // Diagnostic: log entity/combat stats every 60s to PostHog
+  let diagTimer = 0
+  let entityCreatedTotal = 0
+  let shellDenials = 0
+  let shellDenialDetails: string[] = []
+  const origAddEntity = engine.addEntity.bind(engine)
+  ;(engine as any).addEntity = () => { entityCreatedTotal++; return origAddEntity() }
+  // Expose denial tracker for combat.ts
+  ;(globalThis as any).__diagShellDenied = (detail: string) => { shellDenials++; shellDenialDetails.push(detail) }
+  engine.addSystem((dt: number) => {
+    diagTimer += dt
+    if (diagTimer >= 60) {
+      diagTimer = 0
+      const props: Record<string, any> = {
+        traps: activeTraps.length,
+        projectiles: activeProjectiles.length,
+        orbits: activeOrbits.length,
+        entityCreatedTotal,
+        shellDenials,
+      }
+      if (shellDenialDetails.length > 0) {
+        props.shellDenialSamples = shellDenialDetails.slice(-5).join(' | ')
+      }
+      capture('server', 'server_diag', props)
+      console.log('[Server] 📊 DIAG —', JSON.stringify(props))
+      shellDenials = 0
+      shellDenialDetails = []
+    }
+  })
 }
 
 

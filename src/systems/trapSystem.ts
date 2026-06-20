@@ -182,8 +182,8 @@ export function getTrapCooldownRemaining(): number {
 }
 
 // ── Trap ground raycasts ──
-// When the server drops a trap, the client fires a downward raycast to find the
-// actual ground height and reports it back so the server can land the trap properly.
+// Raycast entities don't have GltfContainer, so create/destroy is safe
+// (won't trigger the rendering bug that affects GLB models).
 interface PendingTrapRay {
   entity: Entity
   bananaX: number
@@ -194,7 +194,7 @@ const pendingTrapRays: PendingTrapRay[] = []
 function fireTrapGroundRaycast(x: number, y: number, z: number): void {
   const rayEntity = engine.addEntity()
   Transform.create(rayEntity, {
-    position: Vector3.create(x, y + 0.5, z) // start slightly above drop point
+    position: Vector3.create(x, y + 0.5, z)
   })
   Raycast.create(rayEntity, {
     direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
