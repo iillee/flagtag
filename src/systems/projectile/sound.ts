@@ -4,6 +4,7 @@
 import { engine, Transform, AudioSource, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { soundEntities } from './state'
+import { playSpatialSound } from '../../utils/spatialAudio'
 
 // ── Release sound pool ──
 // Pre-create a fixed pool of entities for positional release sounds.
@@ -65,18 +66,13 @@ export function playReleaseSoundAt(pos: Vector3): void {
   initReleaseSoundPool()
   const e = releaseSoundPool[releaseSoundPoolIdx % RELEASE_SOUND_POOL_SIZE]
   releaseSoundPoolIdx++
-  Transform.getMutable(e).position = pos
-  AudioSource.createOrReplace(e, {
-    audioClipUrl: RELEASE_SOUND_SRC,
-    playing: true, loop: false, volume: 0.35, global: false, pitch: 1.0
-  })
+  playSpatialSound(e, RELEASE_SOUND_SRC, pos, 0.35, { pitch: 1.0 })
 }
 
 export function attachProjectileSound(entity: Entity): void {
-  AudioSource.createOrReplace(entity, {
-    audioClipUrl: PROJECTILE_SOUND_SRC,
-    playing: true, loop: true, volume: 1.0, global: false, pitch: 1.3
-  })
+  // Get position for distance check
+  const pos = Transform.has(entity) ? Transform.get(entity).position : Vector3.Zero()
+  playSpatialSound(entity, PROJECTILE_SOUND_SRC, pos, 1.0, { loop: true, pitch: 1.3 })
 }
 
 export function stopProjectileSound(entity: Entity): void {

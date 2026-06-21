@@ -180,6 +180,9 @@ export async function main() {
   setupWorldLeaderboard()
   setupProximityLights()
   setSmokeMobileFlag(isMobile())
+
+  const { setSpatialAudioMobile } = await import('./utils/spatialAudio')
+  setSpatialAudioMobile(isMobile())
   setupUpdraftSystem()
 
   // ── Register all systems through the system manager ──

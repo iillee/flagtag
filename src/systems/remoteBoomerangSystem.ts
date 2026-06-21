@@ -380,12 +380,12 @@ function startRemoteOrbit(playerId: string, durationMs: number, startAngle: numb
   const orbitEnt = acquireOrbitEntity(rb.color)
   if (!orbitEnt) return
 
-  // Start looping spatial sound
+  // Start looping spatial sound (lower volume to reduce mobile noise)
   AudioSource.createOrReplace(orbitEnt, {
     audioClipUrl: 'assets/sounds/boomerang2.mp3',
     playing: true,
     loop: true,
-    volume: 1.0,
+    volume: 0.4,
     global: false,
     pitch: 1.3
   })

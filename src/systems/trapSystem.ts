@@ -31,6 +31,7 @@ import { isCinematicActive } from '../gameState/cinematicState'
 import { triggerHitFlash } from '../gameState/hitFlashState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect } from './combatSystem'
+import { playSpatialSound } from '../utils/spatialAudio'
 
 
 const TRAP_MODEL_SRC = 'assets/models/banana_scaled.glb'
@@ -57,9 +58,7 @@ function playTrapDropSound(position: Vector3): void {
       global: false
     })
   }
-  const t = Transform.getMutable(trapDropSoundEntity)
-  t.position = position
-  AudioSource.createOrReplace(trapDropSoundEntity, { audioClipUrl: 'assets/sounds/trap2.mp3', playing: true, loop: false, volume: 1, global: false })
+  playSpatialSound(trapDropSoundEntity, 'assets/sounds/trap2.mp3', position, 1)
 }
 
 function playTrapSplatSound(position: Vector3): void {
@@ -74,9 +73,7 @@ function playTrapSplatSound(position: Vector3): void {
       global: false
     })
   }
-  const t = Transform.getMutable(trapSplatSoundEntity)
-  t.position = position
-  AudioSource.createOrReplace(trapSplatSoundEntity, { audioClipUrl: 'assets/sounds/hit.mp3', playing: true, loop: false, volume: 1, global: false })
+  playSpatialSound(trapSplatSoundEntity, 'assets/sounds/hit.mp3', position, 1)
 }
 
 // ── Splat VFX pool ──

@@ -17,6 +17,7 @@ import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { PlayerIdentityData } from '@dcl/sdk/ecs'
 import { room } from '../shared/messages'
+import { playSpatialSound } from '../utils/spatialAudio'
 import { triggerEmote } from '~system/RestrictedActions'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { triggerHitFlash } from '../gameState/hitFlashState'
@@ -196,10 +197,7 @@ export function playHitSound(position: Vector3): void {
   }
   const e = hitSoundPool[hitSoundPoolIndex % HIT_SOUND_POOL_SIZE]
   hitSoundPoolIndex++
-  // Position the sound at the hit location
-  const t = Transform.getMutable(e)
-  t.position = position
-  AudioSource.createOrReplace(e, { audioClipUrl: HIT_SOUND_PATH, playing: true, loop: false, volume: 1, global: false })
+  playSpatialSound(e, HIT_SOUND_PATH, position, 1)
 }
 
 export function playMissSound(position: Vector3): void {
@@ -208,10 +206,7 @@ export function playMissSound(position: Vector3): void {
     Transform.create(missSoundEntity, { position: Vector3.Zero() })
     AudioSource.create(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: false, loop: false, volume: 2.5, global: false })
   }
-  // Position the sound at the miss location
-  const t = Transform.getMutable(missSoundEntity)
-  t.position = position
-  AudioSource.createOrReplace(missSoundEntity, { audioClipUrl: MISS_SOUND_PATH, playing: true, loop: false, volume: 2.5, global: false })
+  playSpatialSound(missSoundEntity, MISS_SOUND_PATH, position, 2.5)
 }
 
 // ── Stagger & message handling ──

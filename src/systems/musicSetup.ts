@@ -14,7 +14,7 @@ export function setupMusic() {
     audioClipUrl: 'assets/sounds/SpriteSprint_Loop.wav',
     playing: true,
     loop: true,
-    volume: 0.0984375,
+    volume: 0.4,
     global: true
   })
 }
