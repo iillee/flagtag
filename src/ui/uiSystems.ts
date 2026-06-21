@@ -30,6 +30,7 @@ import {
   countdownState,
   notifyOverlayClosed, isAnyOverlayOpen,
   flashUIScale,
+  popupState, mobileState,
 } from './uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
@@ -259,9 +260,11 @@ export function registerUiSystems() {
           if (serverDownState.timer >= SERVER_DOWN_CONFIRM_SEC) {
             if (serverDownState.dismissedAt === 0) {
               serverDownState.visible = true
+              closeNonEssentialOverlays()
             } else if (Date.now() - serverDownState.dismissedAt >= SERVER_DOWN_RESHOW_SEC * 1000) {
               serverDownState.visible = true
               serverDownState.dismissedAt = 0
+              closeNonEssentialOverlays()
             }
           }
         }
@@ -287,4 +290,14 @@ export function registerUiSystems() {
       if (closed) { notifyOverlayClosed() }
     }
   })
+}
+
+/** Close all pop-up overlays except HUD, death screens, and end-round sequences */
+function closeNonEssentialOverlays(): void {
+  setWinConditionOverlayVisible(false)
+  setLeaderboardOverlayVisible(false)
+  popupState.chest = false
+  popupState.mailbox = false
+  popupState.gravestone = false
+  mobileState.scoreboardVisible = false
 }

@@ -58,6 +58,7 @@ import { exitSpectatorMode, setSpectatorMode, selectFollowPlayer } from './syste
 import { spectatorState, type SpectatorMode } from './shared/clientState'
 import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from './systems/waterSystem'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible, isLightningWarningActive } from './systems/lightningSystem'
+import { requestManualDrop } from './systems/flagSystem'
 import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/ghostSystem'
 
 // Reusable components
@@ -342,13 +343,24 @@ function PlayerListUi() {
         const carrierId = getCurrentFlagCarrierUserId()
         const isCarrier = localPlayer && carrierId && localPlayer.userId?.toLowerCase() === carrierId.toLowerCase()
         return isCarrier ? (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? 140 : S(180) }, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
-            <UiEntity uiTransform={{ padding: { top: mobile ? 12 : S(10), bottom: mobile ? 12 : S(10), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, borderRadius: mobile ? 12 : S(10) }}
-              uiBackground={{ color: Color4.create(0.1, 0.1, 0.15, 0.9) }}
-            >
-              <Label value="Press 3 to Drop!" fontSize={mobile ? 36 : S(24)} color={Color4.create(1, 0.9, 0.3, 1)} font="sans-serif" />
+          mobile ? (
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 140 }, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+              <UiEntity uiTransform={{ padding: { top: 16, bottom: 16, left: 32, right: 32 }, borderRadius: 14 }}
+                uiBackground={{ color: Color4.create(0.15, 0.1, 0.05, 0.92) }}
+                onMouseDown={() => { requestManualDrop() }}
+              >
+                <Label value="Drop Flag!" fontSize={38} color={Color4.create(1, 0.9, 0.3, 1)} font="sans-serif" />
+              </UiEntity>
             </UiEntity>
-          </UiEntity>
+          ) : (
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(180) }, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
+              <UiEntity uiTransform={{ padding: { top: S(10), bottom: S(10), left: S(20), right: S(20) }, borderRadius: S(10) }}
+                uiBackground={{ color: Color4.create(0.1, 0.1, 0.15, 0.9) }}
+              >
+                <Label value="Press 3 to Drop!" fontSize={S(24)} color={Color4.create(1, 0.9, 0.3, 1)} font="sans-serif" />
+              </UiEntity>
+            </UiEntity>
+          )
         ) : null
       })()}
 
@@ -551,17 +563,17 @@ function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgr
       {/* Earnings breakdown */}
       {activeRoundEarnings && (
         <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
-          <UiEntity uiTransform={{ width: mobile ? 420 : S(320), padding: { top: mobile ? 28 : S(22), bottom: mobile ? 36 : S(28), left: mobile ? 24 : S(18), right: mobile ? 24 : S(18) }, flexDirection: 'column', alignItems: 'center' }}
+          <UiEntity uiTransform={{ width: mobile ? 420 : S(320), padding: { top: mobile ? 20 : S(22), bottom: mobile ? 24 : S(28), left: mobile ? 24 : S(18), right: mobile ? 24 : S(18) }, flexDirection: 'column', alignItems: 'center' }}
             uiBackground={{ textureMode: 'nine-slices', texture: { src: 'assets/images/rounded-outline.png' }, textureSlices: { top: 0.25, bottom: 0.25, left: 0.25, right: 0.25 }, color: Color4.White() }}
           >
-            <Label value="You Earned" fontSize={mobile ? 72 : S(46)} color={GOLD} font="sans-serif" />
-            <UiEntity uiTransform={{ height: mobile ? 24 : S(18) }} />
+            <Label value="You Earned" fontSize={mobile ? 56 : S(46)} color={GOLD} font="sans-serif" />
+            <UiEntity uiTransform={{ height: mobile ? 16 : S(18) }} />
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-              <UiEntity uiTransform={{ width: mobile ? 56 : S(48), height: mobile ? 56 : S(48), margin: { right: mobile ? 16 : S(14) } }}
+              <UiEntity uiTransform={{ width: mobile ? 48 : S(48), height: mobile ? 48 : S(48), margin: { right: mobile ? 14 : S(14) } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }} />
-              <Label value={`+${activeRoundEarnings.total}`} fontSize={mobile ? 96 : S(62)} color={GOLD} font="sans-serif" />
+              <Label value={`+${activeRoundEarnings.total}`} fontSize={mobile ? 76 : S(62)} color={GOLD} font="sans-serif" />
             </UiEntity>
-            <UiEntity uiTransform={{ height: mobile ? 28 : S(20) }} />
+            <UiEntity uiTransform={{ height: mobile ? 20 : S(20) }} />
             <Label value={`Participation: +${activeRoundEarnings.participation}`} fontSize={mobile ? 34 : S(21)} color={LIGHT_GREY} font="sans-serif" />
             {activeRoundEarnings.holdTime > 0 && <Label value={`Flag Hold Time: +${activeRoundEarnings.holdTime}`} fontSize={mobile ? 34 : S(21)} color={LIGHT_GREY} font="sans-serif" />}
             {activeRoundEarnings.placement > 0 && <Label value={`${activeRoundEarnings.rank === 1 ? '1st' : activeRoundEarnings.rank === 2 ? '2nd' : '3rd'} Place Bonus: +${activeRoundEarnings.placement}`} fontSize={mobile ? 34 : S(21)} color={activeRoundEarnings.rank === 1 ? GOLD : activeRoundEarnings.rank === 2 ? SILVER : BRONZE} font="sans-serif" />}
@@ -592,8 +604,8 @@ function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgr
         </UiEntity>
       )}
 
-      {creditsCountdown > 0 && (
-        <Label value={`Next round in ${Math.ceil(creditsCountdown)}...`} fontSize={mobile ? 42 : S(26)} color={GOLD} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { bottom: '3%' }, width: '100%', justifyContent: 'center' }} />
+      {!mobile && creditsCountdown > 0 && (
+        <Label value={`Next round in ${Math.ceil(creditsCountdown)}...`} fontSize={S(26)} color={GOLD} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { bottom: '3%' }, width: '100%', justifyContent: 'center' }} />
       )}
     </UiEntity>
   )

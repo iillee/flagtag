@@ -26,7 +26,7 @@ export function RoundEndSplash() {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'flex-end',
-        padding: { bottom: mobile ? 114 : S(40) },
+        padding: { bottom: mobile ? 40 : S(40) },
         pointerFilter: 'none',
       }}
     >
@@ -34,32 +34,18 @@ export function RoundEndSplash() {
         uiTransform={{
           positionType: 'relative',
           width: mobile ? '40%' : S(360),
-          minHeight: mobile ? 260 : S(220),
+          minHeight: mobile ? 80 : S(220),
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           borderRadius: mobile ? 16 : S(16),
           padding: mobile
-            ? { top: 24, bottom: 20, left: 24, right: 24 }
+            ? { top: 16, bottom: 16, left: 24, right: 24 }
             : { top: S(24), bottom: S(20), left: S(28), right: S(28) },
           overflow: 'hidden',
         }}
         uiBackground={{ color: Color4.create(0.1, 0.1, 0.1, 0.6) }}
       >
-        {mobile && (
-          <UiEntity
-            uiTransform={{
-              positionType: 'absolute',
-              position: { top: 4, right: 4 },
-              width: 88, height: 88,
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            }}
-            onMouseDown={() => { playClickSound(); splashState.visible = false; notifyOverlayClosed() }}
-          >
-            <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
-          </UiEntity>
-        )}
-
         <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%' }}>
           <Label
             value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
@@ -69,27 +55,27 @@ export function RoundEndSplash() {
             color={GOLD}
             font="sans-serif"
           />
-          <UiEntity uiTransform={{ height: mobile ? 24 : S(28) }} />
-          {splashPlayers.map((p, i) => {
+          {!mobile && <UiEntity uiTransform={{ height: S(28) }} />}
+          {!mobile && splashPlayers.map((p, i) => {
             const rankColor = i === 0 ? GOLD : i === 1 ? SILVER : BRONZE
             return (
               <UiEntity
                 key={`splash-${i}`}
                 uiTransform={{
                   width: '100%',
-                  height: mobile ? 42 : S(34),
+                  height: S(34),
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: { left: mobile ? 8 : S(4), right: mobile ? 8 : S(4) },
+                  padding: { left: S(4), right: S(4) },
                 }}
               >
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Label value={`#${i + 1}`} fontSize={mobile ? 26 : S(20)} color={rankColor} font="sans-serif" />
-                  <UiEntity uiTransform={{ width: mobile ? 10 : S(10) }} />
-                  <Label value={p.name} fontSize={mobile ? 26 : S(20)} color={rankColor} font="sans-serif" />
+                  <Label value={`#${i + 1}`} fontSize={S(20)} color={rankColor} font="sans-serif" />
+                  <UiEntity uiTransform={{ width: S(10) }} />
+                  <Label value={p.name} fontSize={S(20)} color={rankColor} font="sans-serif" />
                 </UiEntity>
-                <Label value={`${p.seconds}`} fontSize={mobile ? 26 : S(20)} color={LIGHT_GREY} font="sans-serif" />
+                <Label value={`${p.seconds}`} fontSize={S(20)} color={LIGHT_GREY} font="sans-serif" />
               </UiEntity>
             )
           })}

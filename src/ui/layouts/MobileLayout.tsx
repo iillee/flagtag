@@ -60,19 +60,19 @@ export function MobileLayout() {
         return (
           <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 28 }, width: '100%', height: 68, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-              <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28, right: 28 }, borderRadius: 34, margin: { right: 10 } }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_timer.png' } }}
+              <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28, right: 28 }, borderRadius: 34, margin: { right: 10 }, borderWidth: 3, borderColor: Color4.create(1, 1, 1, 0.8) }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 0.8) }}
               >
                 <Label value={formatCountdown(countdownSeconds)} fontSize={32} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18, right: 30 }, borderRadius: 34 }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' } }}
+              <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18, right: 30 }, borderRadius: 34, borderWidth: 3, borderColor: Color4.create(1, 1, 1, 0.8) }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 0.8) }}
                 onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setLeaderboardOverlayVisible(false); mobileState.scoreboardVisible = !mobileState.scoreboardVisible }}
               >
                 <UiEntity uiTransform={{ width: 34, height: 34, margin: { right: 8 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/expand.png' }, color: Color4.White() }} />
                 <Label value="Score:" fontSize={32} color={scoreColor} font="sans-serif" />
                 <UiEntity uiTransform={{ width: 6 }} />
-                <Label value={`${myScore}`} fontSize={32} color={scoreColor} font="sans-serif" />
+                <Label value={`${myScore}`} fontSize={32} color={scoreColor} font="sans-serif" uiTransform={{ minWidth: 40 }} />
                 {hasFlag && <UiEntity uiTransform={{ width: 22, height: 22, margin: { left: 6 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 10 } }}
@@ -146,7 +146,6 @@ export function MobileLayout() {
             </UiEntity>
             <UiEntity uiTransform={{ height: 48, flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
               <Label value="Scoreboard" fontSize={38} color={MUTED} font="sans-serif" />
-              <Label value={isNightTime() ? '☾' : '☀️'} fontSize={28} font="sans-serif" />
             </UiEntity>
             <UiEntity uiTransform={{ height: 12, flexShrink: 0 }} />
             <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>

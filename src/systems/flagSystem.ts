@@ -346,6 +346,34 @@ const IDLE_BOB_SPEED = 2
 const IDLE_ROT_SPEED_DEG_PER_SEC = 25
 let flagVisualEntity: Entity | null = null
 export let flagSyncedEntity: Entity | null = null
+
+/** Manually drop the flag — called from mobile UI button */
+export function requestManualDrop(): void {
+  const userId = getPlayerData()?.userId?.toLowerCase()
+  if (!userId) return
+  let amCarrying = false
+  for (const [, flag] of engine.getEntitiesWith(Flag)) {
+    if (flag.state === FlagState.Carried && flag.carrierPlayerId === userId) {
+      amCarrying = true
+      break
+    }
+  }
+  if (!amCarrying && Date.now() < confirmedGraceUntil && confirmedGraceCarrier === userId) {
+    amCarrying = true
+  }
+  if (!amCarrying && cloneVisible && carryCloneCarrierId === userId) {
+    amCarrying = true
+  }
+  if (amCarrying) {
+    playDropSound()
+    skipNextDropSound = true
+    lastDropTimeMs = Date.now()
+    confirmedGraceUntil = 0
+    confirmedGraceCarrier = ''
+    hideShieldForPlayer(userId)
+    room.send('requestDrop', { t: 0 })
+  }
+}
 let flagBobTime = 0
 let flagModelAttached = false
 
