@@ -431,7 +431,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
         <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: { top: 12, bottom: 12, left: 12, right: 12 } }}
           uiBackground={{ color: PANEL }}
         >
-          {[...SPEC_MODES, { key: 'exit' as any, label: 'x' }].map((m, i) => {
+          {[...SPEC_MODES, { key: 'exit' as any, label: '×' }].map((m, i) => {
             const isExit = m.key === 'exit'
             const isActive = !isExit && mode === m.key
             return (
@@ -448,7 +448,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
                   }
                 }}
               >
-                <Label value={m.label} fontSize={isExit ? 48 : 26} color={isActive ? Color4.Black() : Color4.White()} font={isExit ? 'serif' : 'sans-serif'} uiTransform={isExit ? { margin: { top: -4 } } : undefined} />
+                <Label value={m.label} fontSize={isExit ? 60 : 26} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" uiTransform={isExit ? { margin: { top: -10 } } : undefined} />
               </UiEntity>
             )
           })}
