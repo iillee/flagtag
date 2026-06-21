@@ -208,26 +208,33 @@ export function registerUiSystems() {
             splashState.winnerUserId = null
           }
 
-          const trumpet = splashState.trumpetEntity
-          if (trumpet) engine.removeEntity(trumpet)
-          const t = engine.addEntity()
-          Transform.create(t, { position: Vector3.Zero() })
-          AudioSource.create(t, {
-            audioClipUrl: 'assets/sounds/trumpets.mp3',
-            playing: true,
-            volume: 0.8,
-            loop: false,
-            global: true,
-          })
-          splashState.trumpetEntity = t
+          // Trumpet sound is deferred until cinematic camera starts (cinematicState.showing = true)
         }
         break
+      }
+
+      // Play trumpet when cinematic camera starts (not at 0:00)
+      if (splashState.visible && cinematicState.showing && !splashState.trumpetPlayed) {
+        splashState.trumpetPlayed = true
+        const trumpet = splashState.trumpetEntity
+        if (trumpet) engine.removeEntity(trumpet)
+        const t = engine.addEntity()
+        Transform.create(t, { position: Vector3.Zero() })
+        AudioSource.create(t, {
+          audioClipUrl: 'assets/sounds/trumpets.mp3',
+          playing: true,
+          volume: 0.8,
+          loop: false,
+          global: true,
+        })
+        splashState.trumpetEntity = t
       }
 
       if (splashState.visible && !cinematicState.showing && now >= splashState.hideTime) {
         splashState.visible = false
         splashState.players = []
         splashState.winnerUserId = null
+        splashState.trumpetPlayed = false
         const trumpet = splashState.trumpetEntity
         if (trumpet) {
           engine.removeEntity(trumpet)

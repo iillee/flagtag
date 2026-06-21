@@ -151,6 +151,7 @@ export const splashState = {
   visible: false,
   hideTime: 0,
   trumpetEntity: null as Entity | null,
+  trumpetPlayed: false,
   players: [] as SplashPlayer[],
   winnerUserId: null as string | null,
   lastRoundWinnerJson: '',
