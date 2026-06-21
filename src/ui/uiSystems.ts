@@ -15,7 +15,7 @@ import { getKnownPlayerName } from '../gameState/flagHoldTime'
 import { consumePendingRoundEarnings } from '../gameState/roundEarnings'
 import { applyDeferredBalance } from '../shared/clientState'
 import { spectatorState } from '../shared/clientState'
-import { musicEntity } from '../systems/musicSetup'
+
 
 import { getServerConnectionStatus, cycleUIScale } from './uiConstants'
 import { playTickSound } from './uiSounds'
@@ -33,9 +33,9 @@ import {
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible,
-  getAnalyticsOverlayVisible, setAnalyticsOverlayVisible,
+
 } from '../gameState/overlayState'
-import { getEquippedTape, setEquippedTape, getLastTapeId, TAPE_ITEMS } from './screens/boomboxState'
+import { toggleMusic } from './screens/boomboxState'
 
 let _registered = false
 
@@ -266,32 +266,9 @@ export function registerUiSystems() {
       }
     }
 
-    // ── Key inputs (1=UI scale, 2=eject/insert tape, 4=close overlay) ──
+    // ── Key inputs (1=UI scale, 2=toggle music, 4=close overlay) ──
     if (inputSystem.isTriggered(InputAction.IA_ACTION_4, PointerEventType.PET_DOWN)) {
-      const equipped = getEquippedTape()
-      if (equipped !== null) {
-        // Eject tape
-        setEquippedTape(null)
-        try {
-          const audio = AudioSource.getMutable(musicEntity)
-          audio.playing = false
-          audio.volume = 0
-        } catch (e) { console.error('[UI] Failed to eject tape:', e) }
-      } else {
-        // Re-insert last tape
-        const lastId = getLastTapeId()
-        const tape = TAPE_ITEMS.find((t: any) => t.id === lastId)
-        if (tape) {
-          setEquippedTape(tape.id)
-          try {
-            const audio = AudioSource.getMutable(musicEntity)
-            audio.audioClipUrl = tape.audioSrc
-            audio.playing = true
-            audio.loop = true
-            audio.volume = 0.0984375
-          } catch (e) { console.error('[UI] Failed to insert tape:', e) }
-        }
-      }
+      toggleMusic()
     }
 
     if (inputSystem.isTriggered(InputAction.IA_ACTION_3, PointerEventType.PET_DOWN)) {
@@ -305,7 +282,6 @@ export function registerUiSystems() {
       let closed = false
       if (getWinConditionOverlayVisible()) { setWinConditionOverlayVisible(false); closed = true }
       if (getLeaderboardOverlayVisible()) { setLeaderboardOverlayVisible(false); closed = true }
-      if (getAnalyticsOverlayVisible()) { setAnalyticsOverlayVisible(false); closed = true }
       if (closed) { notifyOverlayClosed() }
     }
   })

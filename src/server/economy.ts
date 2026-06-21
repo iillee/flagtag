@@ -13,7 +13,7 @@ import {
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
 } from '../shared/coins'
 import {
-  parseUpgrades, serializeUpgrades, BOOMERANG_STORE,
+  parseUpgrades, serializeUpgrades, BOOMERANG_STORE, MUSIC_STORE,
   type UpgradeData
 } from '../shared/upgrades'
 import { room } from '../shared/messages'
@@ -71,12 +71,12 @@ export async function loadPlayerUpgrades(walletAddress: string): Promise<Upgrade
 
   try {
     const saved = await Storage.get<string>(`upgrades:${key}`)
-    const data = saved ? parseUpgrades(saved) : { boomerangs: ['r'] as BoomerangColor[], equipped: 'r' as BoomerangColor }
+    const data = saved ? parseUpgrades(saved) : parseUpgrades('{}')
     playerUpgradeData.set(key, data)
     return data
   } catch (err) {
     console.error('[Upgrades] Failed to load for', key.slice(0, 8), err)
-    return { boomerangs: ['r'], equipped: 'r' }
+    return parseUpgrades('{}')
   }
 }
 
@@ -225,6 +225,51 @@ async function handleBuyBoomerang(playerId: string, color: string): Promise<void
   room.send('playerColorChanged', { playerId: key, color: boomerangColor })
 }
 
+async function handleBuyTape(playerId: string, tapeId: string): Promise<void> {
+  const key = playerId.toLowerCase()
+
+  const item = MUSIC_STORE.find(i => i.id === tapeId)
+  if (!item) {
+    room.send('buyTapeResult', { success: false, tapeId, reason: 'Invalid item', newBalance: 0, upgradesJson: '' }, { to: [key] })
+    return
+  }
+
+  const upgrades = await loadPlayerUpgrades(key)
+  if (upgrades.tapes.includes(tapeId)) {
+    room.send('buyTapeResult', { success: false, tapeId, reason: 'Already owned', newBalance: 0, upgradesJson: '' }, { to: [key] })
+    return
+  }
+
+  const wins = await loadPlayerLifetimeWins(key)
+  if (wins < item.flagsRequired) {
+    room.send('buyTapeResult', { success: false, tapeId, reason: `Need ${item.flagsRequired} flags (you have ${wins})`, newBalance: 0, upgradesJson: '' }, { to: [key] })
+    return
+  }
+
+  const balance = await loadPlayerCoinBalance(key)
+  if (balance < item.coinCost) {
+    room.send('buyTapeResult', { success: false, tapeId, reason: `Need ${item.coinCost} coins (you have ${balance})`, newBalance: 0, upgradesJson: '' }, { to: [key] })
+    return
+  }
+
+  const newBalance = balance - item.coinCost
+  await setPlayerCoinBalance(key, newBalance)
+
+  upgrades.tapes.push(tapeId)
+  upgrades.equippedTape = tapeId
+  await savePlayerUpgrades(key, upgrades)
+
+  console.log('[Store] Player', key.slice(0, 8), 'bought tape', item.label, 'for', item.coinCost, 'coins. New balance:', newBalance)
+
+  room.send('buyTapeResult', {
+    success: true,
+    tapeId,
+    reason: '',
+    newBalance,
+    upgradesJson: serializeUpgrades(upgrades)
+  }, { to: [key] })
+}
+
 // ── CRDT sync ──
 
 function updateCoinStateCRDT(): void {
@@ -344,6 +389,16 @@ export function registerEconomyHandlers(): void {
       await handleBuyBoomerang(from, data.color)
     } catch (err) {
       console.error('[Store] buyBoomerang error:', err)
+    }
+  })
+
+  room.onMessage('buyTape', async (data, context) => {
+    if (!context || !data.tapeId) return
+    const from = context.from.toLowerCase()
+    try {
+      await handleBuyTape(from, data.tapeId)
+    } catch (err) {
+      console.error('[Store] buyTape error:', err)
     }
   })
 

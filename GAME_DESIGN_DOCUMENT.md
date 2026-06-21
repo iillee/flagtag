@@ -1,6 +1,6 @@
 # Flag Tag — Game Design Document
 
-> **Version:** 2.0 · **Last Updated:** June 6, 2026  
+> **Version:** 2.1 · **Last Updated:** June 20, 2026  
 > **Platform:** Decentraland SDK7 · **Deployment:** World (`flagtag.dcl.eth`)  
 > **Scene Size:** 32×32 parcels (512m × 512m, 1024 parcels)
 
@@ -58,13 +58,12 @@ The server code is split into focused domain modules:
 | `src/ui/layouts/DesktopLayout.tsx` | ~201 | Desktop UI layout |
 | `src/ui/layouts/MobileLayout.tsx` | ~228 | Mobile UI layout |
 | `src/ui/screens/HowToPlay.tsx` | ~151 | 3-column how-to-play overlay |
-| `src/ui/screens/LeaderboardOverlay.tsx` | ~299 | Leaderboard tabs overlay |
-| `src/ui/screens/AnalyticsOverlay.tsx` | ~109 | Visitor analytics overlay |
-| `src/ui/screens/ChestPopup.tsx` | ~162 | Boomerang color picker popup |
-| `src/ui/screens/BoomboxPopup.tsx` | ~180 | Boombox tape selection popup |
+| `src/ui/screens/LeaderboardOverlay.tsx` | ~104 | Status popup (inventory, equipment, daily) |
+| `src/ui/screens/ChestPopup.tsx` | ~330 | Tabbed universal store (Throw/Traps/Music/Wearables) |
+| `src/ui/screens/boomboxState.ts` | ~70 | Music state, toggleMusic(), tape queries |
 | `src/ui/screens/RoundEndSplash.tsx` | ~101 | Round-end top 3 splash |
 | `src/ui/uiConstants.ts` | ~207 | Colors, scale helpers, formatters, caching |
-| `src/ui/components/` | Various | Reusable UI components (CloseButton, DeathOverlay, IconButton, KeyBinding, ProgressBar, Scrollbar, StatsRow, SubTabBar) |
+| `src/ui/components/` | Various | Reusable UI components (CloseButton, DeathOverlay, IconButton, KeyBinding, ProgressBar, Scrollbar, SubTabBar) |
 | `src/systems/flagSystem.ts` | ~694 | Client-side flag rendering (bob, spin, particles, carry visual) |
 | `src/systems/projectile/` | ~1571 | Client-side boomerang (modular: charge, flight, hand visual, orbit, pool, sound, state) |
 | `src/systems/trapSystem.ts` | ~675 | Client-side banana input, visuals, sound |
@@ -83,7 +82,7 @@ The server code is split into focused domain modules:
 | `src/systems/boostTrailSystem.ts` | ~228 | Gold orb trail VFX during speed boosts |
 | `src/systems/deathPenaltySystem.ts` | ~44 | Coin penalty on death |
 | `src/systems/pedestalSystem.ts` | ~308 | Ritual pedestal — daily blessing reward |
-| `src/systems/boomboxSystem.ts` | ~181 | Clickable boombox with music ring VFX |
+| `src/systems/boomboxSystem.ts` | ~150 | Clickable boombox mute/unmute toggle with music ring VFX |
 | `src/systems/worldLeaderboard.ts` | ~277 | In-world 3D leaderboard text display |
 | `src/systems/proximityLights.ts` | ~169 | ~60 point lights that activate near the player |
 | `src/systems/remoteBoomerangSystem.ts` | ~565 | Other players' hand boomerangs + charge VFX |
@@ -95,7 +94,7 @@ The server code is split into focused domain modules:
 | `src/systems/waterBobSystem.ts` | ~77 | Bobbing animation for water planes/lilypads |
 | `src/systems/waterSplashSystem.ts` | ~175 | Splash VFX when walking in water |
 | `src/systems/mailboxSystem.ts` | ~51 | Clickable mailbox for feedback |
-| `src/systems/chestSystem.ts` | ~62 | Clickable chest (boomerang color picker) |
+| `src/systems/chestSystem.ts` | ~62 | Clickable chest (universal store) |
 | `src/systems/gravestoneSystem.ts` | ~41 | Clickable gravestone |
 | `src/systems/terminalSystem.ts` | ~61 | Clickable terminal (metrics panel) |
 | `src/systems/systemManager.ts` | ~95 | Centralized system registration (per-frame + throttled) |
@@ -108,7 +107,7 @@ The server code is split into focused domain modules:
 | `src/gameState/boomerangColor.ts` | ~36 | Boomerang color state + callbacks |
 | `src/gameState/playerUpgradeState.ts` | ~183 | Client-side upgrade/store state |
 | `src/gameState/roundsWon.ts` | ~64 | Cached leaderboard parsing |
-| `src/gameState/visitorState.ts` | ~74 | Cached visitor analytics parsing |
+
 | `src/gameState/roundEarnings.ts` | ~27 | Round-end coin earnings display state |
 | `src/gameState/overlayState.ts` | ~22 | Overlay visibility state |
 | `src/gameState/cinematicState.ts` | ~5 | Cinematic active flag |
@@ -118,7 +117,7 @@ The server code is split into focused domain modules:
 | `src/shared/dateUtils.ts` | ~35 | UTC date/time helpers |
 | `src/shared/messages.ts` | ~116 | Client↔Server message schemas |
 | `src/shared/coins.ts` | ~72 | Coin component definitions, economy constants |
-| `src/shared/upgrades.ts` | ~88 | Upgrade/store definitions, boomerang prices |
+| `src/shared/upgrades.ts` | ~155 | Upgrade/store definitions (boomerangs, music, traps, wearables) |
 | `src/shared/dayNight.ts` | ~38 | Day/night cycle detection |
 | `src/shared/syncIdPool.ts` | ~31 | Reusable sync ID pool factory |
 | `src/shared/clientState.ts` | ~30 | Shared client state (avoids circular imports) |
@@ -182,14 +181,19 @@ The server code is split into focused domain modules:
 
 ### 3.4 Upgrade / Store System
 
-- **Boomerang Store:** 4 boomerang variants with escalating costs and flag-win requirements:
+The **Chest** is the universal shop with 4 tabbed categories. Each tab shows 4 item slots (filled items + empty "?" placeholders for future content).
+
+- **Projectiles Tab (Throw):** 4 boomerang variants with escalating costs and flag-win requirements:
   - **Red (Base):** Free, 0 wins required
   - **Yellow (Dubs):** 50 coins, 1 win required
   - **Green (Orbit):** 150 coins, 5 wins required
   - **Blue (Charge):** 300 coins, 10 wins required
-- **Purchase Flow:** Click chest → chest popup UI → select variant → `buyBoomerang` message → server validates balance + wins → `buyResult` response
-- **Equipment:** Players can equip any owned boomerang. Equipped choice synced to all players.
-- **Persistence:** `PlayerUpgrades` component (JSON: `{boomerangs: ["r","y"], equipped: "r"}`), `PlayerLifetimeWins`, `PlayerLifetimeHoldTime` — all server-persisted
+- **Traps Tab:** Banana (free, default) + 3 empty slots for future traps
+- **Music Tab:** Purchasable music tapes that unlock in the boombox. Sprite Sprint (free, default) + 3 empty slots for future tracks. Equipping a tape in the chest changes the boombox music.
+- **Wearables Tab:** 4 empty slots for future wearable rewards (cape planned)
+- **Purchase Flow:** Click chest → tabbed popup UI → select item → `buyBoomerang`/`buyTape` message → server validates balance + wins → `buyResult`/`buyTapeResult` response
+- **Equipment:** Players can equip owned items per category. Boomerang choice synced to all players. Tape choice is local (controls boombox music).
+- **Persistence:** `PlayerUpgrades` component (JSON: `{boomerangs: ["r","y"], equipped: "r", tapes: ["w"], equippedTape: "w", traps: ["banana"], equippedTrap: "banana"}`), `PlayerLifetimeWins`, `PlayerLifetimeHoldTime` — all server-persisted
 
 ### 3.5 Combat: Boomerang (E Key)
 
@@ -309,8 +313,8 @@ The server code is split into focused domain modules:
 - **Ladders:** Climbable ladders (click to teleport to top/bottom)
 - **Portal:** Genesis Plaza portal at (225.95, 2.15, 224.9) — parallax door effect with interactive open/close states
 - **Mailbox:** Clickable — opens feedback popup. Messages sent to Discord webhook via server. Rate-limited to 1 per 60s per player.
-- **Chest:** Clickable — opens boomerang store UI (4 variants with costs, win requirements, and owned/equipped state)
-- **Boombox:** Clickable — opens tape selection popup. Animated music rings when playing. Toggle mute with key 2.
+- **Chest:** Clickable — opens universal store UI with 4 tabs (Throw, Traps, Music, Wearables). Each tab has 4 item slots.
+- **Boombox:** Clickable — toggles music mute/unmute. Animated gold rings when playing. Tooltip shows "♪ Music". Tapes are purchased and equipped in the Chest.
 - **Gravestone:** Clickable — displays information popup
 - **Terminal:** Clickable — opens metrics/analytics panel
 - **Ritual Pedestal:** "Blessing of the Gods" — click to kneel, beam of light activates, rolling credits play. If player stays for full 32-second duration, earns 5 coins (once per day per player).
@@ -327,12 +331,12 @@ The server code is split into focused domain modules:
 ### 5.1 Component Architecture
 UI is built with React-ECS (JSX) and split into reusable components:
 - **Layouts:** `DesktopLayout.tsx`, `MobileLayout.tsx` — platform-specific arrangement
-- **Screens:** `HowToPlay`, `LeaderboardOverlay`, `AnalyticsOverlay`, `ChestPopup`, `BoomboxPopup`, `RoundEndSplash`
-- **Components:** `CloseButton`, `DeathOverlay`, `IconButton`, `KeyBinding`, `ProgressBar`, `Scrollbar`, `StatsRow`, `SubTabBar`
+- **Screens:** `HowToPlay`, `LeaderboardOverlay` (StatusPopup), `ChestPopup` (tabbed store), `RoundEndSplash`
+- **Components:** `CloseButton`, `DeathOverlay`, `IconButton`, `KeyBinding`, `ProgressBar`, `Scrollbar`, `SubTabBar`
 
 ### 5.2 Desktop Layout (scaled by viewport)
-- **Top Center:** Round countdown timer (MM:SS format, pill-shaped dark background). Gold color in last 10 seconds with tick sound.
-- **Right Side:** Scoreboard panel — lists all players sorted by hold time, gold highlight for leader, flag icon for current carrier. Coin balance displayed. Two icon buttons stacked vertically:
+- **Top Center:** Round countdown timer (M:SS format, fixed-width dark background). Gold color in last 10 seconds with tick sound. Hidden during round-end cinematic.
+- **Right Side:** Scoreboard panel — lists all players sorted by hold time, gold highlight for leader, flag icon for current carrier. Sun/moon icon right-aligned in header. Coin balance displayed. Two icon buttons stacked vertically:
   - Flag icon → Leaderboards overlay (folder-tab UI)
   - `?` → How to Play overlay (3-column cards: Flag, Combat, Win + Controls)
 - **Bottom Center:** Ability icons — Boomerang (E) and Banana (F) with cooldown overlays
@@ -348,11 +352,8 @@ Three-column card layout:
 - **Combat:** Boomerang (E) throw and banana (F) drop instructions with images
 - **Win + Controls:** Scoring explanation + key bindings (E: Throw Boomerang, F: Drop Banana, 3: Drop Flag, 2: Mute/Insert Tape, 1: Toggle UI Size)
 
-### 5.4 Leaderboards Overlay
-Folder-tab design with 3 top-level tabs:
-- **Status** — Game status and info
-- **Leaderboards** — Sub-tabs for Daily / Monthly / All Time. Shows rank, player name, address (monthly/all-time), and win count.
-- **Metrics** — Sub-tabs for Daily / Monthly. Visitor list with online indicator, name, address, playtime. Summary stats. Bot detection separates likely bots (unnamed + ≤1s playtime).
+### 5.4 Status Popup
+Simple popup showing player inventory (coins, flags), equipped items (projectile, trap), and daily status (blessing). Opened via flag icon button on desktop or mobile.
 
 ### 5.5 Mobile Layout
 - Repositioned for touch-safe areas (avoids joystick, chat, action buttons)
@@ -382,8 +383,7 @@ Folder-tab design with 3 top-level tabs:
 - Dismissable, re-shows every 60s if server remains down
 
 ### 5.10 Other UI Features
-- **Boombox Popup:** Tape selection UI with insert/eject
-- **Chest Popup:** Boomerang store with purchase/equip actions, coin balance, win requirements
+- **Chest Popup:** Tabbed universal store (Throw / Traps / Music / Wearables) with purchase/equip actions, coin balance, win requirements. 4 slots per tab, empty slots show "?" placeholder.
 - **Spectator Mode:** Bottom overlay with controls hint + exit button
 - **UI Scale Toast:** Brief notification when UI scale changes
 - **Scare Bar:** Grey/red progress bar when ghost is nearby

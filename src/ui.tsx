@@ -24,7 +24,6 @@ import {
   PANEL_BG, PANEL_BG_SEMI,
   getUIScaleLabel,
   formatCountdown,
-  type VisitorOrSeparator,
 } from './ui/uiConstants'
 import {
   cinematicState, setCinematicFade,
@@ -37,13 +36,11 @@ import {
   showChestPopup, hideChestPopup,
   showMailboxPopup, hideMailboxPopup,
   showGravestonePopup, hideGravestonePopup,
-  showBoomboxPopup, hideBoomboxPopup,
   getMailboxStatus, setMailboxStatus,
-  metricsState,
   splashState,
   serverDownState,
   hover,
-  scroll, tabs,
+  scroll,
   getUIScaleFlash,
   mobileState,
   miscState,
@@ -51,7 +48,7 @@ import {
 } from './ui/uiState'
 
 // Overlay visibility state
-import { getWinConditionOverlayVisible, setWinConditionOverlayVisible, getLeaderboardOverlayVisible, setLeaderboardOverlayVisible, getAnalyticsOverlayVisible, setAnalyticsOverlayVisible } from './gameState/overlayState'
+import { getWinConditionOverlayVisible, setWinConditionOverlayVisible, getLeaderboardOverlayVisible, setLeaderboardOverlayVisible } from './gameState/overlayState'
 
 // Game state
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from './gameState/flagHoldTime'
@@ -71,7 +68,7 @@ import { DeathOverlay } from './ui/components/DeathOverlay'
 
 // Screens
 import { ChestPopup } from './ui/screens/ChestPopup'
-import { BoomboxPopup } from './ui/screens/BoomboxPopup'
+
 
 // Layouts
 import { DesktopLayout } from './ui/layouts/DesktopLayout'
@@ -87,7 +84,6 @@ export {
   showChestPopup, hideChestPopup,
   showMailboxPopup, hideMailboxPopup,
   showGravestonePopup, hideGravestonePopup,
-  showBoomboxPopup, hideBoomboxPopup,
 }
 
 // Re-export state objects for systems that need direct access
@@ -98,34 +94,10 @@ export { cinematicState, creditsState, popupState, splashState }
 // ═══════════════════════════════════════════════════════════
 
 export function setupUi() {
-  registerOverlayChecks(getWinConditionOverlayVisible, getLeaderboardOverlayVisible, getAnalyticsOverlayVisible)
+  registerOverlayChecks(getWinConditionOverlayVisible, getLeaderboardOverlayVisible)
   registerUiSystems()
 
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
-}
-
-// ═══════════════════════════════════════════════════════════
-// METRICS PANEL (opened from Terminal in-world)
-// ═══════════════════════════════════════════════════════════
-
-export function openMetricsPanel() {
-  metricsState.openedFromTerminal = true
-  setLeaderboardOverlayVisible(true)
-  tabs.folder = 'metrics'; tabs.leaderboard = 'metrics'; tabs.metrics = 'daily'
-  scroll.leaderboardOffset = 0; scroll.visitorOffset = 0
-}
-
-export function closeMetricsPanel() {
-  if (metricsState.openedFromTerminal) {
-    metricsState.openedFromTerminal = false
-    setLeaderboardOverlayVisible(false)
-    tabs.folder = 'leaderboards'; tabs.leaderboard = 'alltime'
-    notifyOverlayClosed()
-  }
-}
-
-export function isMetricsPanelOpen(): boolean {
-  return metricsState.openedFromTerminal && getLeaderboardOverlayVisible()
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -308,8 +280,7 @@ function PlayerListUi() {
           >
             <CloseButton hoverKey="closeMailbox" onClose={() => { hideMailboxPopup(); notifyOverlayClosed() }} />
             <Label value="Leave a Message" fontSize={mobile ? 42 : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 8 : S(8) } }} />
-            <Label value={`Leave feedback, report a bug,
-or just say hi!`} fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 6 : S(4), bottom: mobile ? 16 : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? 65 : S(28) }} textAlign="middle-center" />
+            <Label value="Leave feedback, report a bug, or just say hi!" fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 6 : S(4), bottom: mobile ? 16 : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? 65 : S(28) }} textAlign="middle-center" />
             <Input
               placeholder="Type your message..."
               fontSize={mobile ? 22 : S(15)}
@@ -350,7 +321,7 @@ or just say hi!`} fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform=
       {popupState.chest && <ChestPopup />}
 
       {/* Boombox / Tape popup */}
-      {popupState.boombox && <BoomboxPopup />}
+
 
       {/* Progress bars */}
       {isDrownBarVisible() && <DrownBar />}

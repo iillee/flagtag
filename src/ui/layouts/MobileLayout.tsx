@@ -2,7 +2,6 @@ import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { isNightTime } from '../../shared/dayNight'
-import { isCinematicActive } from '../../gameState/cinematicState'
 
 import {
   WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY, GOLD,
@@ -12,7 +11,7 @@ import {
 import { playClickSound } from '../uiSounds'
 import {
   notifyOverlayClosed,
-  scroll, tabs,
+  scroll,
   mobileState,
 
   earnedState,
@@ -21,7 +20,7 @@ import {
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible, toggleWinConditionOverlay,
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible, toggleLeaderboardOverlay,
-  setAnalyticsOverlayVisible,
+
 } from '../../gameState/overlayState'
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../../gameState/flagHoldTime'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
@@ -64,11 +63,11 @@ export function MobileLayout() {
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28, right: 28 }, borderRadius: 34, margin: { right: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_timer.png' } }}
               >
-                <Label value={isCinematicActive() ? 'Round Over!' : `${isNightTime() ? '\u263e' : '\u2600\ufe0f'} ${formatCountdown(countdownSeconds)}`} fontSize={32} color={isCinematicActive() ? GOLD : WHITE} font="sans-serif" />
+                <Label value={formatCountdown(countdownSeconds)} fontSize={32} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ height: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18, right: 30 }, borderRadius: 34 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_pill_score.png' } }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); setLeaderboardOverlayVisible(false); mobileState.scoreboardVisible = !mobileState.scoreboardVisible }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setLeaderboardOverlayVisible(false); mobileState.scoreboardVisible = !mobileState.scoreboardVisible }}
               >
                 <UiEntity uiTransform={{ width: 34, height: 34, margin: { right: 8 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/expand.png' }, color: Color4.White() }} />
                 <Label value="Score:" fontSize={32} color={scoreColor} font="sans-serif" />
@@ -78,13 +77,13 @@ export function MobileLayout() {
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 10 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; toggleWinConditionOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); mobileState.scoreboardVisible = false; toggleWinConditionOverlay(); notifyOverlayClosed() }}
               >
                 <Label value="?" fontSize={36} color={winConditionVisible ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
               <UiEntity uiTransform={{ width: M_CIRCLE_SIZE, height: M_CIRCLE_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 6 } }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); mobileState.scoreboardVisible = false; tabs.folder = 'status'; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
+                onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); mobileState.scoreboardVisible = false; toggleLeaderboardOverlay(); notifyOverlayClosed() }}
               >
                 <UiEntity uiTransform={{ width: 52, height: 52 }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: leaderboardVisible ? GOLD : WHITE }} />
               </UiEntity>
@@ -145,7 +144,10 @@ export function MobileLayout() {
             >
               <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <Label value="Scoreboard" fontSize={38} color={MUTED} font="sans-serif" uiTransform={{ height: 48, flexShrink: 0 }} />
+            <UiEntity uiTransform={{ height: 48, flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <Label value="Scoreboard" fontSize={38} color={MUTED} font="sans-serif" />
+              <Label value={isNightTime() ? '☾' : '☀️'} fontSize={28} font="sans-serif" />
+            </UiEntity>
             <UiEntity uiTransform={{ height: 12, flexShrink: 0 }} />
             <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
               {players.length === 0 ? (

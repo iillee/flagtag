@@ -1,20 +1,31 @@
 /**
- * Boombox state — tape definitions and equipped tape tracking.
+ * Boombox state — tape definitions, equipped tape tracking, and music toggle.
+ * Owned tapes come from playerUpgradeState; this file manages playback state.
+ * 
+ * toggleMusic() is the single source of truth for mute/unmute — called from
+ * boomboxSystem (click), uiSystems (key), and StatsRow (UI click).
  */
+import { AudioSource } from '@dcl/sdk/ecs'
+import { MUSIC_STORE, type MusicStoreItem } from '../../shared/upgrades'
+import { getLocalUpgrades } from '../../gameState/playerUpgradeState'
+import { musicEntity } from '../../systems/musicSetup'
 
-export interface TapeItem {
-  id: string
-  name: string
-  author: string
-  icon: string
-  audioSrc: string
+export type { MusicStoreItem as TapeItem }
+
+// ── Tape queries ──
+
+/** Get the list of tapes the player owns (from upgrade data) */
+export function getOwnedTapes(): MusicStoreItem[] {
+  const owned = getLocalUpgrades().tapes
+  return MUSIC_STORE.filter(t => owned.includes(t.id))
 }
 
-export const TAPE_ITEMS: TapeItem[] = [
-  { id: 'w', name: 'Sprite Sprint', author: 'Dylan Taylor', icon: 'assets/images/tape.w.png', audioSrc: 'assets/sounds/SpriteSprint_Loop.wav' },
-  // { id: 'o', name: 'Medieval',        icon: 'assets/images/tape.o.png', audioSrc: 'assets/sounds/Medieval.mp3' },
-  // { id: 'p', name: 'Qualudes',        icon: 'assets/images/tape.p.png', audioSrc: 'assets/sounds/Qualudes 95Bpm - AuthrAudio.mp3' },
-]
+/** Get all available tapes (for store display) */
+export function getAllTapes(): MusicStoreItem[] {
+  return MUSIC_STORE
+}
+
+// ── Equipped state ──
 
 let equippedTapeId: string | null = 'w'
 let lastTapeId: string = 'w'
@@ -30,4 +41,32 @@ export function setEquippedTape(id: string | null): void {
 
 export function getLastTapeId(): string {
   return lastTapeId
+}
+
+// ── Toggle (single source of truth for mute/unmute) ──
+
+/** Toggle music on/off. Call from boombox click, key press, or UI button. */
+export function toggleMusic(): void {
+  if (equippedTapeId !== null) {
+    // Mute
+    setEquippedTape(null)
+    try {
+      const audio = AudioSource.getMutable(musicEntity)
+      audio.playing = false
+      audio.volume = 0
+    } catch (e) { console.error('[Music] Failed to mute:', e) }
+  } else {
+    // Unmute — restore last tape
+    const tape = MUSIC_STORE.find(t => t.id === lastTapeId)
+    if (tape) {
+      setEquippedTape(tape.id)
+      try {
+        const audio = AudioSource.getMutable(musicEntity)
+        audio.audioClipUrl = tape.audioSrc
+        audio.playing = true
+        audio.loop = true
+        audio.volume = 0.0984375
+      } catch (e) { console.error('[Music] Failed to unmute:', e) }
+    }
+  }
 }

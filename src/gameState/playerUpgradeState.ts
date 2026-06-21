@@ -11,7 +11,7 @@ import { room } from '../shared/messages'
 import { setBoomerangColor, type BoomerangColor } from './boomerangColor'
 
 // ── Local cache ──
-let localUpgrades: UpgradeData = { boomerangs: ['r'], equipped: 'r' }
+let localUpgrades: UpgradeData = { boomerangs: ['r'], equipped: 'r', tapes: ['w'], equippedTape: 'w', traps: ['banana'], equippedTrap: 'banana' }
 let localLifetimeWins = 0
 let localLifetimeHoldTime = 0
 let winsReceived = false
@@ -79,6 +79,15 @@ export function requestBuyBoomerang(color: BoomerangColor): void {
   console.log('[Store] Requesting purchase of', color)
 }
 
+/** Request purchase of a music tape */
+export function requestBuyTape(tapeId: string): void {
+  if (buyPending) return
+  buyPending = true
+  lastBuyError = ''
+  room.send('buyTape', { tapeId })
+  console.log('[Store] Requesting tape purchase:', tapeId)
+}
+
 /** Request equip of an owned boomerang */
 export function requestEquipBoomerang(color: BoomerangColor): void {
   if (!localUpgrades.boomerangs.includes(color)) return
@@ -101,6 +110,21 @@ export function initUpgradeListeners(): void {
       setBoomerangColor(parsed.equipped)
     }
     console.log('[Store] Got upgrade data - owned:', parsed.boomerangs.join(','), 'wins:', localLifetimeWins, 'holdTime:', localLifetimeHoldTime.toFixed(1))
+  })
+
+  room.onMessage('buyTapeResult', (data) => {
+    buyPending = false
+    if (data.success) {
+      const updated = parseUpgrades(data.upgradesJson)
+      localUpgrades = updated
+      lastBuyError = ''
+      AudioSource.createOrReplace(purchaseSoundEntity, { audioClipUrl: 'assets/sounds/purchase.mp3', playing: true, loop: false, volume: 1, global: true })
+      console.log('[Store] Tape purchase successful:', data.tapeId)
+    } else {
+      lastBuyError = data.reason
+      lastBuyErrorTimer = 3
+      console.log('[Store] Tape purchase failed:', data.reason)
+    }
   })
 
   room.onMessage('buyResult', (data) => {

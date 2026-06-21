@@ -15,8 +15,4 @@ export function getLeaderboardOverlayVisible(): boolean { return leaderboardOver
 export function setLeaderboardOverlayVisible(visible: boolean): void { leaderboardOverlayVisible = visible }
 export function toggleLeaderboardOverlay(): void { leaderboardOverlayVisible = !leaderboardOverlayVisible }
 
-// ── Analytics ──
-let analyticsOverlayVisible = false
-export function getAnalyticsOverlayVisible(): boolean { return analyticsOverlayVisible }
-export function setAnalyticsOverlayVisible(visible: boolean): void { analyticsOverlayVisible = visible }
-export function toggleAnalyticsOverlay(): void { analyticsOverlayVisible = !analyticsOverlayVisible }
+

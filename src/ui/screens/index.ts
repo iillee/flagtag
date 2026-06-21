@@ -1,5 +1,4 @@
 export { HowToPlayOverlay } from './HowToPlay'
 export { RoundEndSplash } from './RoundEndSplash'
 export { ChestPopup } from './ChestPopup'
-export { StatusPopup, MetricsOverlay } from './LeaderboardOverlay'
-export { AnalyticsOverlay } from './AnalyticsOverlay'
+export { StatusPopup } from './LeaderboardOverlay'

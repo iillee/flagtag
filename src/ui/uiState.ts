@@ -113,7 +113,6 @@ export const popupState = {
   chest: false,
   mailbox: false,
   gravestone: false,
-  boombox: false,
   mailboxStatusMessage: '',
   mailboxStatusTime: 0,
 }
@@ -127,8 +126,6 @@ export function hideMailboxPopup() { popupState.mailbox = false; notifyOverlayCl
 export function showGravestonePopup() { popupState.gravestone = true }
 export function hideGravestonePopup() { popupState.gravestone = false; notifyOverlayClosed() }
 
-export function showBoomboxPopup() { popupState.boombox = true }
-export function hideBoomboxPopup() { popupState.boombox = false; notifyOverlayClosed() }
 
 export function getMailboxStatus(): string {
   if (Date.now() - popupState.mailboxStatusTime > 5000) return ''
@@ -138,13 +135,6 @@ export function getMailboxStatus(): string {
 export function setMailboxStatus(msg: string) {
   popupState.mailboxStatusMessage = msg
   popupState.mailboxStatusTime = Date.now()
-}
-
-// ═══════════════════════════════════════════════════════════
-// METRICS / TERMINAL
-// ═══════════════════════════════════════════════════════════
-export const metricsState = {
-  openedFromTerminal: false,
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -186,14 +176,14 @@ export const serverDownState = {
 export const hover = {
   squareIcon: false,
   questionIcon: false,
-  analyticsIcon: false,
+
   closeWinCondition: false,
   closeLeaderboard: false,
-  closeAnalytics: false,
+
   closeMailbox: false,
   closeChest: false,
   closeServerDown: false,
-  closeBoombox: false,
+
   closeSpectator: false,
 }
 
@@ -201,14 +191,7 @@ export const hover = {
 // SCROLL & TAB STATE
 // ═══════════════════════════════════════════════════════════
 export const scroll = {
-  visitorOffset: 0,
   leaderboardOffset: 0,
-}
-
-export const tabs = {
-  folder: 'status' as 'leaderboards' | 'metrics' | 'status',
-  leaderboard: 'alltime' as 'daily' | 'monthly' | 'alltime' | 'metrics',
-  metrics: 'daily' as 'daily' | 'monthly',
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -256,16 +239,13 @@ export const COMMUNITY_ID = 'f7d69445-4889-49a9-8b50-07100125cbdc'
 // Lazy imports to avoid circular deps — these are set by ui.tsx at init time
 let _getWinConditionOverlayVisible: () => boolean = () => false
 let _getLeaderboardOverlayVisible: () => boolean = () => false
-let _getAnalyticsOverlayVisible: () => boolean = () => false
 
 export function registerOverlayChecks(
   winFn: () => boolean,
   lbFn: () => boolean,
-  analyticsFn: () => boolean,
 ) {
   _getWinConditionOverlayVisible = winFn
   _getLeaderboardOverlayVisible = lbFn
-  _getAnalyticsOverlayVisible = analyticsFn
 }
 
 /** Returns true if any UI overlay is currently visible */
@@ -273,14 +253,12 @@ export function isAnyOverlayOpen(): boolean {
   return cinematicState.titleSplashVisible
     || _getWinConditionOverlayVisible()
     || _getLeaderboardOverlayVisible()
-    || _getAnalyticsOverlayVisible()
     || splashState.visible
     || serverDownState.visible
     || mobileState.scoreboardVisible
     || popupState.mailbox
     || popupState.chest
     || popupState.gravestone
-    || popupState.boombox
     || blessingState.active
     || blessingState.completed
 }

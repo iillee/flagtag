@@ -15,14 +15,13 @@ import {
   notifyOverlayClosed,
   splashState,
   earnedState,
-  hover, scroll, tabs,
+  hover, scroll,
   hideChestPopup,
-  hideBoomboxPopup,
 } from '../uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible,
-  setAnalyticsOverlayVisible,
+
 } from '../../gameState/overlayState'
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../../gameState/flagHoldTime'
 
@@ -58,22 +57,12 @@ export function DesktopLayout() {
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {/* Timer */}
-      {!splashVisible && (cinematicFadeOpacity === 0 ? (!isCinematicActive() && countdownSeconds > 0) : cinematicState.roundOverVisible) && (
+      {!splashVisible && !isCinematicActive() && countdownSeconds > 0 && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: S(14), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center', pointerFilter: 'none' }}>
-          <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: S(2 * _ROW_HEIGHT + 2 * _PADDING), padding: { left: S(20), right: S(20) }, borderRadius: S(_BORDER_RADIUS) }}
+          <UiEntity uiTransform={{ width: S(140), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS) }}
             uiBackground={{ color: PANEL_BG }}
           >
-            {isCinematicActive() && cinematicState.roundOverVisible ? (
-              <Label value="Round Over!" fontSize={S(40)} color={GOLD} font="sans-serif" />
-            ) : (
-              <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>
-                <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: S(-6) } }}>
-                  <Label value={isNightTime() ? '☾' : '☀️'} fontSize={S(16)} font="sans-serif" uiTransform={{ margin: { right: S(4) } }} />
-                  <Label value="Round ends in:" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" />
-                </UiEntity>
-                <Label value={formatCountdown(countdownSeconds)} fontSize={S(40)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" uiTransform={{ margin: { top: S(-6) } }} />
-              </UiEntity>
-            )}
+            <Label value={formatCountdown(countdownSeconds)} fontSize={S(42)} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" textAlign="middle-center" uiTransform={{ width: S(140), height: '100%' }} />
           </UiEntity>
         </UiEntity>
       )}
@@ -121,12 +110,12 @@ export function DesktopLayout() {
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
           <IconButton hoverKey="squareIcon" label="Status" isActive={leaderboardVisible}
             iconContent={<UiEntity uiTransform={{ width: S(38), height: S(38), margin: { left: S(6), right: S(-9) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE }} />}
-            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); setAnalyticsOverlayVisible(false); hideChestPopup(); hideBoomboxPopup(); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); hideChestPopup(); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
           <UiEntity uiTransform={{ height: S(4) }} />
           <IconButton hoverKey="questionIcon" label="Help" isActive={winConditionVisible}
             iconContent={<UiEntity uiTransform={{ width: S(17), height: S(17), justifyContent: 'center', alignItems: 'center' }}><Label value="?" fontSize={S(24)} color={winConditionVisible || hover.questionIcon ? GOLD : WHITE} font="sans-serif" textAlign="middle-center" /></UiEntity>}
-            onClick={() => { const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); setAnalyticsOverlayVisible(false); hideChestPopup(); hideBoomboxPopup(); setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+            onClick={() => { const wasOpen = getWinConditionOverlayVisible(); setLeaderboardOverlayVisible(false); hideChestPopup(); setWinConditionOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
           />
         </UiEntity>
 
@@ -159,6 +148,7 @@ export function DesktopLayout() {
         >
           <UiEntity uiTransform={{ height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Label value="Scoreboard" fontSize={S(20)} color={MUTED} font="sans-serif" />
+            <Label value={isNightTime() ? '☾' : '☀️'} fontSize={S(16)} font="sans-serif" />
           </UiEntity>
           {players.length === 0 ? (
             <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>

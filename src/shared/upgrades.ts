@@ -8,22 +8,46 @@ import { engine, Schemas } from '@dcl/sdk/ecs'
 import { AUTH_SERVER_PEER_ID } from '@dcl/sdk/network/message-bus-sync'
 import type { BoomerangColor } from '../gameState/boomerangColor'
 
+// ── Store Categories ──
+
+export type StoreCategory = 'projectiles' | 'music' | 'traps' | 'wearables'
+
 // ── Store Items ──
 
 export interface StoreItem {
-  id: BoomerangColor
+  id: string
+  category: StoreCategory
   label: string
   coinCost: number
   flagsRequired: number  // lifetime rounds won required
   description: string
+  icon: string           // image path for the store card
 }
 
 export const BOOMERANG_STORE: StoreItem[] = [
-  { id: 'r', label: 'Base',   coinCost: 0,   flagsRequired: 0,  description: 'Standard boomerang' },
-  { id: 'y', label: 'Dubs',   coinCost: 50,  flagsRequired: 1,  description: 'Throws two boomerangs' },
-  { id: 'g', label: 'Orbit',  coinCost: 150, flagsRequired: 5,  description: 'Orbiting boomerang' },
-  { id: 'b', label: 'Charge', coinCost: 300, flagsRequired: 10, description: 'Chargeable boomerang' },
+  { id: 'r', category: 'projectiles', label: 'Base',   coinCost: 0,   flagsRequired: 0,  description: 'Standard boomerang', icon: 'assets/images/boomerang.r.png' },
+  { id: 'y', category: 'projectiles', label: 'Dubs',   coinCost: 50,  flagsRequired: 1,  description: 'Throws two boomerangs', icon: 'assets/images/boomerang.y.png' },
+  { id: 'g', category: 'projectiles', label: 'Orbit',  coinCost: 150, flagsRequired: 5,  description: 'Orbiting boomerang', icon: 'assets/images/boomerang.g.png' },
+  { id: 'b', category: 'projectiles', label: 'Charge', coinCost: 300, flagsRequired: 10, description: 'Chargeable boomerang', icon: 'assets/images/boomerang.b.png' },
 ]
+
+export interface MusicStoreItem extends StoreItem {
+  audioSrc: string
+  author: string
+}
+
+export const MUSIC_STORE: MusicStoreItem[] = [
+  { id: 'w', category: 'music', label: 'Sprite Sprint', author: 'Dylan Taylor', coinCost: 0,   flagsRequired: 0, description: 'Default track',       icon: 'assets/images/tape.w.png', audioSrc: 'assets/sounds/SpriteSprint_Loop.wav' },
+  // Add new tracks here:
+  // { id: 'o', category: 'music', label: 'Medieval',      author: 'Unknown',      coinCost: 100, flagsRequired: 3, description: 'Medieval vibes',      icon: 'assets/images/tape.o.png', audioSrc: 'assets/sounds/Medieval.mp3' },
+  // { id: 'p', category: 'music', label: 'Qualudes',      author: 'AuthrAudio',   coinCost: 200, flagsRequired: 5, description: 'Chill 95 BPM beats',  icon: 'assets/images/tape.p.png', audioSrc: 'assets/sounds/Qualudes 95Bpm - AuthrAudio.mp3' },
+]
+
+// Placeholder stores for future categories
+export const TRAP_STORE: StoreItem[] = [
+  { id: 'banana', category: 'traps', label: 'Banana', coinCost: 0, flagsRequired: 0, description: 'Standard banana trap', icon: 'assets/images/banana.png' },
+]
+export const WEARABLE_STORE: StoreItem[] = []
 
 // ── Components ──
 
@@ -89,7 +113,13 @@ export function getLifetimeHoldTimeSyncId(userId: string): number {
 export interface UpgradeData {
   boomerangs: BoomerangColor[]
   equipped: BoomerangColor
+  tapes: string[]              // owned music tape IDs
+  equippedTape: string | null  // currently selected tape (null = no music)
+  traps: string[]              // owned trap IDs
+  equippedTrap: string         // currently selected trap
 }
+
+const DEFAULT_UPGRADES: UpgradeData = { boomerangs: ['r'], equipped: 'r', tapes: ['w'], equippedTape: 'w', traps: ['banana'], equippedTrap: 'banana' }
 
 export function parseUpgrades(json: string): UpgradeData {
   try {
@@ -97,12 +127,23 @@ export function parseUpgrades(json: string): UpgradeData {
     return {
       boomerangs: Array.isArray(data.boomerangs) ? data.boomerangs : ['r'],
       equipped: data.equipped || 'r',
+      tapes: Array.isArray(data.tapes) ? data.tapes : ['w'],
+      equippedTape: data.equippedTape !== undefined ? data.equippedTape : 'w',
+      traps: Array.isArray(data.traps) ? data.traps : ['banana'],
+      equippedTrap: data.equippedTrap || 'banana',
     }
   } catch {
-    return { boomerangs: ['r'], equipped: 'r' }
+    return { ...DEFAULT_UPGRADES }
   }
 }
 
 export function serializeUpgrades(data: UpgradeData): string {
-  return JSON.stringify({ boomerangs: data.boomerangs, equipped: data.equipped })
+  return JSON.stringify({
+    boomerangs: data.boomerangs,
+    equipped: data.equipped,
+    tapes: data.tapes,
+    equippedTape: data.equippedTape,
+    traps: data.traps,
+    equippedTrap: data.equippedTrap,
+  })
 }

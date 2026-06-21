@@ -6,7 +6,7 @@ import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { setCinematicFade, cinematicState, creditsState, hideMailboxPopup, hideChestPopup } from '../ui'
 import { setCinematicActive, isCinematicActive } from '../gameState/cinematicState'
 import { getCountdownSeconds } from '../shared/components'
-import { setWinConditionOverlayVisible, setLeaderboardOverlayVisible, setAnalyticsOverlayVisible } from '../gameState/overlayState'
+import { setWinConditionOverlayVisible, setLeaderboardOverlayVisible } from '../gameState/overlayState'
 import { cancelDrownRespawn } from './waterSystem'
 import { cancelLightningRespawn } from './lightningSystem'
 import { exitSpectatorMode } from './spectatorSystem'
@@ -275,7 +275,7 @@ export function setupCinematicSystem(): void {
         setCinematicActive(true)
         setWinConditionOverlayVisible(false)
         setLeaderboardOverlayVisible(false)
-        setAnalyticsOverlayVisible(false)
+
         hideMailboxPopup()
         hideChestPopup()
         exitSpectatorMode()
@@ -472,7 +472,6 @@ export function setupCinematicSystem(): void {
       setCinematicActive(true)
       setWinConditionOverlayVisible(false)
       setLeaderboardOverlayVisible(false)
-      setAnalyticsOverlayVisible(false)
       hideMailboxPopup()
       hideChestPopup()
       exitSpectatorMode()

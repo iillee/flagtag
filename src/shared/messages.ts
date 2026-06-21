@@ -90,6 +90,8 @@ export const Messages = {
   buyBoomerang: Schemas.Map({ color: Schemas.String }),                // Client → Server: purchase a boomerang
   buyResult: Schemas.Map({ success: Schemas.Boolean, color: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),  // Server → Client
   equipBoomerang: Schemas.Map({ color: Schemas.String }),              // Client → Server: equip an owned boomerang
+  buyTape: Schemas.Map({ tapeId: Schemas.String }),                    // Client → Server: purchase a music tape
+  buyTapeResult: Schemas.Map({ success: Schemas.Boolean, tapeId: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),  // Server → Client
 
   // Ghost messages
   ghostHit: Schemas.Map({ ghostId: Schemas.Float }),          // Client → Server: boomerang hit a ghost

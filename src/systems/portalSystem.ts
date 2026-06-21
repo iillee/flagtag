@@ -367,10 +367,6 @@ export class Portal {
         if (!inRange) {
           inRange = true
           stepTimer = 0
-          // Portal load sound disabled — too noisy when passing multiple portals
-          // const a = AudioSource.getMutable(this.audioOpen)
-          // a.playing = false
-          // a.playing = true
         }
         // Stagger-load outer → inner (largest first)
         if (loadedCount < this.layers.length) {
@@ -508,9 +504,6 @@ export class Portal {
     }
     if (onExit) {
       triggerAreaEventsSystem.onTriggerExit(entity, (result) => {
-        // const uid = result?.trigger && this.getUserId(result?.trigger?.entity)
-        // if (!uid) return
-        // onExit(uid)
         onExit(`${result?.trigger?.entity}`)
       })
     }
