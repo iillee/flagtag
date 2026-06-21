@@ -6,6 +6,9 @@ import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { isSpectatorMode, exitSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 
+// Interior room bypass
+let _isInInterior = false
+export function setInteriorBypass(v: boolean) { _isInInterior = v }
 
 // Water surface Y level
 const WATER_SURFACE_Y = 1.58
@@ -138,7 +141,7 @@ export function waterSystem(dt: number) {
   ensureDrownBar()
 
   const playerPos = Transform.get(engine.PlayerEntity).position
-  const inWater = playerPos.y <= WATER_SURFACE_Y && isInWaterZone(playerPos.x, playerPos.z)
+  const inWater = !_isInInterior && playerPos.y <= WATER_SURFACE_Y && isInWaterZone(playerPos.x, playerPos.z)
 
   // Respawn delay — fade to black, teleport, fade back
   if (respawnDelay > 0) {

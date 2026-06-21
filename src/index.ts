@@ -256,6 +256,10 @@ export async function main() {
   // Cinematic system (round-end camera, fade state machine, respawnPlayers handler)
   setupCinematicSystem()
 
+  // Interior room system (prototype)
+  const { setupInteriorSystem } = await import('./systems/interiorSystem')
+  setupInteriorSystem()
+
   // ── Initialize the system manager LAST — registers the 2 actual engine systems ──
   initSystemManager()
 }
