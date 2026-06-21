@@ -27,7 +27,7 @@ const ENTRY_DOOR_POS = Vector3.create(230.56, 2.26, 259.49)
 const ENTRY_DOOR_INTERACT_DIST = 6
 
 /** Interior room center — hidden under the castle at parcel (15,19), 1m above water (Y=1.58) */
-const ROOM_CENTER = Vector3.create(256, 2.6, 320)
+const ROOM_CENTER = Vector3.create(256, 2.6, 328)
 const ROOM_SIZE = 10       // meters square
 const ROOM_WALL_H = 4      // wall height
 const ROOM_FLOOR_Y = ROOM_CENTER.y - 0.05
@@ -119,7 +119,7 @@ function buildRoom(): void {
   roomEntities.push(floor)
 
   // Skirt helper (defined early so vestibule can use it)
-  const SKIRT_EXT = 15
+  const SKIRT_EXT = 13.5
   const SKIRT_Y = cy + ROOM_WALL_H + 0.05
   const skirtColor = Color4.create(0.04, 0.04, 0.05, 1)
   const skirtMat = { albedoColor: skirtColor, roughness: 1, metallic: 0 }

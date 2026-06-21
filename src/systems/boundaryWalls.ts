@@ -13,7 +13,7 @@ export function setupBoundaryWalls(): void {
   const BOUNDARY_RADIUS = 128
   const BOUNDARY_HEIGHT = 200
   const BOUNDARY_SEGMENTS = 48
-  const BOUNDARY_SHOW_DIST = 40
+  const BOUNDARY_SHOW_DIST = 30
   const angleStep = (Math.PI * 2) / BOUNDARY_SEGMENTS
   const planeWidth = 2 * BOUNDARY_RADIUS * Math.sin(angleStep / 2) + 0.2
   const BOUNDARY_TEX = Material.Texture.Common({ src: 'assets/images/boundary-rgba.png' })
