@@ -22,7 +22,7 @@ import {
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible, toggleLeaderboardOverlay,
 
 } from '../../gameState/overlayState'
-import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../../gameState/flagHoldTime'
+import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId, getCinematicSnapshot } from '../../gameState/flagHoldTime'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
@@ -35,7 +35,7 @@ import { HowToPlayOverlay } from '../screens/HowToPlay'
 import { RoundEndSplash } from '../screens/RoundEndSplash'
 
 export function MobileLayout() {
-  const players = getPlayersWithHoldTimes()
+  const players = getCinematicSnapshot() ?? getPlayersWithHoldTimes()
   const localUserId = getPlayer()?.userId ?? null
   const leaderUserId = players.length > 0 && players[0].seconds > 0 ? players[0].userId : null
   const carrierUserId = getCurrentFlagCarrierUserId()

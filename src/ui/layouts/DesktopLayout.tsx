@@ -23,7 +23,7 @@ import {
   getLeaderboardOverlayVisible, setLeaderboardOverlayVisible,
 
 } from '../../gameState/overlayState'
-import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../../gameState/flagHoldTime'
+import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId, getCinematicSnapshot } from '../../gameState/flagHoldTime'
 
 import { getCountdownSeconds } from '../../shared/components'
 import { isCinematicActive } from '../../gameState/cinematicState'
@@ -42,7 +42,8 @@ import { RoundEndSplash } from '../screens/RoundEndSplash'
 import { StatusPopup } from '../screens/LeaderboardOverlay'
 
 export function DesktopLayout() {
-  const rawPlayers = getPlayersWithHoldTimes()
+  const snapshot = getCinematicSnapshot()
+  const rawPlayers = snapshot ?? getPlayersWithHoldTimes()
   const players = rawPlayers
   const localUserId = getPlayer()?.userId ?? null
   const leaderUserId = players.length > 0 && players[0].seconds > 0 ? players[0].userId : null

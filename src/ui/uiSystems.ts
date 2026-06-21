@@ -18,6 +18,7 @@ import { spectatorState } from '../shared/clientState'
 
 
 import { getServerConnectionStatus, cycleUIScale } from './uiConstants'
+import { clearCinematicSnapshot } from '../gameState/flagHoldTime'
 import { playTickSound } from './uiSounds'
 import {
   cinematicState,
@@ -127,6 +128,7 @@ export function registerUiSystems() {
       const wasVisible = earnedState.wasNextRoundVisible
 
       if (!wasVisible && creditsShowing && earnedState.pendingLocal) {
+        clearCinematicSnapshot() // reset scoreboard to live (zero) scores
         earnedState.activeRoundEarnings = earnedState.pendingLocal
         earnedState.pendingLocal = null
         earnedState.visible = true

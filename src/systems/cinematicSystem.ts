@@ -12,6 +12,7 @@ import { cancelLightningRespawn } from './lightningSystem'
 import { exitSpectatorMode } from './spectatorSystem'
 import { room } from '../shared/messages'
 import { clearSpeedBoost } from './speedBoostSystem'
+import { snapshotScoresForCinematic, snapshotScoresFromWinners, clearCinematicSnapshot, getKnownPlayerName } from '../gameState/flagHoldTime'
 
 // ── Camera entities ──
 const PODIUM_CENTER = Vector3.create(265.57, 19.51, 219.65) // winner position as orbit center
@@ -258,6 +259,7 @@ export function setupCinematicSystem(): void {
       if (secsLeft === 0) {
         preFadeStarted = true
         preFadeElapsed = 0
+        snapshotScoresForCinematic()
         fadePhase = 1
         fadeTimer = FADE_IN_DUR
         cinematicState.roundOverVisible = true
@@ -318,7 +320,7 @@ export function setupCinematicSystem(): void {
         // Safety: if respawnPlayers never arrives within 8s, abort
         if (preFadeElapsed > 8 && cinematicTimer <= 0) {
           setCinematicFade(0); fadePhase = 0; preFadeStarted = false
-          cinematicState.roundOverVisible = false; setCinematicActive(false)
+          cinematicState.roundOverVisible = false; clearCinematicSnapshot(); setCinematicActive(false)
           if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
           return
         }
@@ -365,7 +367,7 @@ export function setupCinematicSystem(): void {
       } else if (fadePhase === 7) {
         const progress = Math.max(0, fadeTimer / END_FADE_OUT_DUR)
         setCinematicFade(progress)
-        if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 0; preFadeStarted = false; cinematicState.roundOverVisible = false; setCinematicActive(false) }
+        if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 0; preFadeStarted = false; cinematicState.roundOverVisible = false; clearCinematicSnapshot(); setCinematicActive(false) }
       }
     }
 
@@ -454,6 +456,14 @@ export function setupCinematicSystem(): void {
     const isThirdPlace = !!(place3 && place3 === localUserId)
     isPodiumPlayer = isWinnerLocalPlayer || isSecondPlace || isThirdPlace
     noScorersRound = topPlayers.length === 0
+
+    // Snapshot scores for cinematic scoreboard (fallback if pre-fade missed)
+    if (!preFadeStarted) snapshotScoresForCinematic()
+    snapshotScoresFromWinners(topPlayers.map(p => ({
+      userId: p.userId,
+      name: getKnownPlayerName(p.userId) || p.userId.slice(0, 8),
+      seconds: p.seconds,
+    })))
 
     const GREEN_CUBE = { x: 258.78, y: 19.25, z: 227.81 }
     const alreadyPreFaded = preFadeStarted

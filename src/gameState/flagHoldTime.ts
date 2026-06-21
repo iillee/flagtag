@@ -197,6 +197,34 @@ export function updateHoldTimeInterpolation(): void {
   }
 }
 
+// ── Cinematic snapshot: freeze scoreboard during round-end cinematic ──
+let _cinematicSnapshot: { userId: string; name: string; seconds: number }[] | null = null
+
+/** Snapshot current scores for display during cinematic. Call BEFORE CRDT resets arrive. */
+export function snapshotScoresForCinematic(): void {
+  // Force a fresh computation (bypass cache)
+  _holdTimeCacheTime = 0
+  _cinematicSnapshot = getPlayersWithHoldTimes().map(p => ({ ...p }))
+  console.log('[FlagHoldTime] Cinematic snapshot:', _cinematicSnapshot.length, 'players')
+}
+
+/** Provide final scores from winnersJson as fallback if snapshot was missed. */
+export function snapshotScoresFromWinners(winners: { userId: string; name: string; seconds: number }[]): void {
+  if (_cinematicSnapshot && _cinematicSnapshot.some(p => p.seconds > 0)) return // already have good data
+  _cinematicSnapshot = winners.map(p => ({ ...p }))
+  console.log('[FlagHoldTime] Cinematic snapshot from winners:', _cinematicSnapshot.length, 'players')
+}
+
+/** Clear the cinematic snapshot (scores reset to live CRDT). */
+export function clearCinematicSnapshot(): void {
+  _cinematicSnapshot = null
+}
+
+/** Get frozen scores if in cinematic, null otherwise. */
+export function getCinematicSnapshot(): { userId: string; name: string; seconds: number }[] | null {
+  return _cinematicSnapshot
+}
+
 // Cached result — recomputed at most every 250ms to keep UI render loop lightweight
 let _cachedHoldTimes: { userId: string; name: string; seconds: number }[] = []
 let _holdTimeCacheTime = 0

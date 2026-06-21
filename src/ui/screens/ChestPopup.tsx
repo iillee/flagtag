@@ -31,7 +31,7 @@ let hoveredItemId: string | null = null
 // ── Tab definitions ──
 
 const TABS: { id: StoreCategory; label: string; hasContent: boolean }[] = [
-  { id: 'projectiles', label: 'Throw',     hasContent: true },
+  { id: 'projectiles', label: 'Boomerangs',     hasContent: true },
   { id: 'traps',       label: 'Traps',     hasContent: true },
   { id: 'music',       label: 'Music',     hasContent: true },
   { id: 'wearables',   label: 'Wearables', hasContent: false },
