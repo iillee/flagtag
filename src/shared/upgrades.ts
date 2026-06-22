@@ -39,9 +39,6 @@ export interface MusicStoreItem extends StoreItem {
 export const MUSIC_STORE: MusicStoreItem[] = [
   { id: 'w', category: 'music', label: 'Sprite Sprint', author: 'Dylan Taylor', coinCost: 0,   flagsRequired: 0, description: 'Default track',       icon: 'assets/images/tape.w.png', audioSrc: 'assets/sounds/SpriteSprint_Loop.wav' },
   { id: 'o', category: 'music', label: 'Digital Water',  author: 'AuthrAudio',   coinCost: 150, flagsRequired: 3, description: '115 BPM electronic',  icon: 'assets/images/tape.o.png', audioSrc: 'assets/sounds/DigitalWater-AuthrAudio-115Bpm.mp3' },
-  // Add new tracks here:
-  // { id: 'o', category: 'music', label: 'Medieval',      author: 'Unknown',      coinCost: 100, flagsRequired: 3, description: 'Medieval vibes',      icon: 'assets/images/tape.o.png', audioSrc: 'assets/sounds/Medieval.mp3' },
-  // { id: 'p', category: 'music', label: 'Qualudes',      author: 'AuthrAudio',   coinCost: 200, flagsRequired: 5, description: 'Chill 95 BPM beats',  icon: 'assets/images/tape.p.png', audioSrc: 'assets/sounds/Qualudes 95Bpm - AuthrAudio.mp3' },
 ]
 
 // Placeholder stores for future categories
