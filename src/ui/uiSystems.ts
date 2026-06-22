@@ -213,8 +213,9 @@ export function registerUiSystems() {
         break
       }
 
-      // Play trumpet when cinematic camera starts (not at 0:00)
-      if (splashState.visible && cinematicState.showing && !splashState.trumpetPlayed) {
+      // Play trumpet when cinematic camera starts — only if someone actually scored
+      const hasScorers = splashState.players.length > 0 && splashState.players.some(p => p.seconds > 0)
+      if (splashState.visible && cinematicState.showing && !splashState.trumpetPlayed && hasScorers) {
         splashState.trumpetPlayed = true
         const trumpet = splashState.trumpetEntity
         if (trumpet) engine.removeEntity(trumpet)

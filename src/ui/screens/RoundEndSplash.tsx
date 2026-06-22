@@ -50,7 +50,7 @@ export function RoundEndSplash() {
           <Label
             value={splashPlayers.length === 1 || splashPlayers[0].seconds > (splashPlayers[1]?.seconds ?? 0)
               ? `${splashPlayers[0].name} Wins!`
-              : 'Round Over!'}
+              : 'Round Over'}
             fontSize={mobile ? 42 : S(36)}
             color={GOLD}
             font="sans-serif"

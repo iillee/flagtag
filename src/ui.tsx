@@ -173,7 +173,7 @@ function PlayerListUi() {
           onMouseDown={() => {}}
         >
           {cinematicState.roundOverVisible && (
-            <Label value="Round Over!" fontSize={mobile ? 64 : S(52)} color={Color4.create(1, 0.84, 0, 1)} font="sans-serif" />
+            <Label value="Round Over" fontSize={mobile ? 64 : S(52)} color={Color4.create(1, 0.84, 0, 1)} font="sans-serif" />
           )}
           {(noScorersCreditsVisible || (nextRoundStartingVisible && !cinematicShowing)) && (
             <CreditsScreen

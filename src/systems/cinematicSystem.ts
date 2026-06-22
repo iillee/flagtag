@@ -428,6 +428,8 @@ export function setupCinematicSystem(): void {
       if (noScorersRound) {
         cinematicState.showing = false; creditsState.noScorersVisible = false; creditsState.countdown = 0
         if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
+        // Teleport player back to spawn
+        void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
         fadePhase = 7; fadeTimer = END_FADE_OUT_DUR
         return
       }
