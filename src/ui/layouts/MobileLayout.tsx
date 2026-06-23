@@ -124,13 +124,8 @@ export function MobileLayout() {
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               onMouseDown={() => { playClickSound(); triggerTrapFromUI() }}
             >
-              {(() => {
-                const isBomb = getLocalUpgrades().equippedTrap === 'bomb'
-                const h = Math.round(AB_ICON * 1.25 * 0.675 * 1.1)
-                const w = isBomb ? Math.round(h * 0.67) : h
-                return <UiEntity uiTransform={{ width: w, height: h }}
-                  uiBackground={{ textureMode: 'stretch', texture: { src: isBomb ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
-              })()}
+              <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
               {isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
           </UiEntity>

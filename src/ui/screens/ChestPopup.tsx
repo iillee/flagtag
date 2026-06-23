@@ -270,9 +270,9 @@ export function ChestPopup() {
                   }
                 }}
               >
-                {/* Item icon — bomb is tall (2:3), so use narrower width to avoid distortion */}
+                {/* Item icon */}
                 <UiEntity
-                  uiTransform={{ width: item.id === 'bomb' ? iconSize * 0.67 : iconSize, height: iconSize, margin: { top: mobile ? 6 : S(8) } }}
+                  uiTransform={{ width: iconSize, height: iconSize, margin: { top: mobile ? 6 : S(8) } }}
                   uiBackground={{
                     textureMode: 'stretch',
                     texture: { src: item.icon },
