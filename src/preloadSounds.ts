@@ -34,6 +34,8 @@ const ALL_SOUNDS = [
   'assets/sounds/trumpets.mp3',
   'assets/sounds/water.mp3',
   'assets/sounds/binoculars.mp3',
+  'assets/sounds/fuse.mp3',
+  'assets/sounds/explode.mp3',
 ]
 
 export function preloadAllSounds(): void {

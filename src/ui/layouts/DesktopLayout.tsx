@@ -28,7 +28,7 @@ import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId, getCinematicSnaps
 import { getCountdownSeconds } from '../../shared/components'
 import { isCinematicActive } from '../../gameState/cinematicState'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
-import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
+import { getLocalLifetimeWins, isWinsLoaded, getLocalUpgrades } from '../../gameState/playerUpgradeState'
 import { isSpectatorTransitioning } from '../../systems/spectatorSystem'
 import { spectatorState } from '../../shared/clientState'
 
@@ -97,8 +97,13 @@ export function DesktopLayout() {
               uiBackground={{ color: PANEL_BG_SEMI }}
             >
               <Label value="F" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) } }} />
-              <UiEntity uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, height: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, margin: { top: S(2) } }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
+              {(() => {
+                const isBomb = getLocalUpgrades().equippedTrap === 'bomb'
+                const h = S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1
+                const w = isBomb ? h * 0.67 : h
+                return <UiEntity uiTransform={{ width: w, height: h, margin: { top: S(2) } }}
+                  uiBackground={{ textureMode: 'stretch', texture: { src: isBomb ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
+              })()}
               {isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
           </UiEntity>

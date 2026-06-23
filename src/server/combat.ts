@@ -9,8 +9,10 @@ import {
   Flag, FlagState,
   Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
   Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
+  BOMB_FUSE_SEC, BOMB_COOLDOWN_SEC, BOMB_EXPLOSION_RADIUS, BOMB_STAGGER_MS, BOMB_IMPACT_HEIGHT,
   recycleGhostSyncId,
 } from '../shared/components'
+import { loadPlayerUpgrades } from './economy'
 import { room } from '../shared/messages'
 import {
   flagEntity, getPlayerPosition, FLAG_GRAVITY,
@@ -36,6 +38,92 @@ export const activeTraps: ActiveTrap[] = []
 
 function removeTrap(trap: ActiveTrap): void {
   engine.removeEntity(trap.entity)
+}
+
+// ── Bomb state ──
+
+let nextBombId = 1
+
+export interface ActiveBomb {
+  entity: Entity
+  bombId: number
+  droppedBy: string
+  droppedAtMs: number
+  falling: boolean
+  fallVelocity: number
+  targetY: number
+  groundResolved: boolean
+  dropY: number  // initial Y when dropped (for impact explosion check)
+  exploded: boolean
+}
+export const activeBombs: ActiveBomb[] = []
+
+function removeBomb(bomb: ActiveBomb): void {
+  engine.removeEntity(bomb.entity)
+}
+
+function explodeBomb(bomb: ActiveBomb): void {
+  if (bomb.exploded) return
+  bomb.exploded = true
+
+  const bombPos = Transform.get(bomb.entity).position
+  const victims: string[] = []
+
+  // Check all players in explosion radius
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+    const addr = identity.address.toLowerCase()
+    const playerPos = getPlayerPosition(addr)
+    if (!playerPos) continue
+
+    const dist = Vector3.distance(playerPos, bombPos)
+    if (dist < BOMB_EXPLOSION_RADIUS) {
+      victims.push(addr)
+
+      // Drop flag if carrying
+      const flag = Flag.getOrNull(flagEntity)
+      if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
+        console.log('[Server] 💣 Bomb victim was carrying flag — forcing drop!')
+        handleDrop(addr)
+      }
+    }
+  }
+
+  // Kill ghosts in blast radius
+  for (let gi = activeGhosts.length - 1; gi >= 0; gi--) {
+    const z = activeGhosts[gi]
+    const dx = z.posX - bombPos.x
+    const dy = z.posY - bombPos.y
+    const dz = z.posZ - bombPos.z
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    if (dist < BOMB_EXPLOSION_RADIUS) {
+      console.log('[Server] 💣 Bomb killed ghost!')
+      room.send('ghostKilled', { x: z.posX, y: z.posY, z: z.posZ })
+      engine.removeEntity(z.entity)
+      recycleGhostSyncId(z.syncId)
+      activeGhosts.splice(gi, 1)
+      setGhostRespawnCooldown(GHOST_RESPAWN_COOLDOWN)
+    }
+  }
+
+  // Destroy nearby banana traps
+  for (let ti = activeTraps.length - 1; ti >= 0; ti--) {
+    const trap = activeTraps[ti]
+    const trapPos = Transform.get(trap.entity).position
+    const dist = Vector3.distance(trapPos, bombPos)
+    if (dist < BOMB_EXPLOSION_RADIUS) {
+      room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
+      removeTrap(trap)
+      activeTraps.splice(ti, 1)
+    }
+  }
+
+  room.send('bombExploded', {
+    x: bombPos.x, y: bombPos.y, z: bombPos.z,
+    bombId: bomb.bombId,
+    victimsJson: JSON.stringify(victims)
+  })
+
+  console.log('[Server] 💣 Bomb exploded at', bombPos.x.toFixed(1), bombPos.y.toFixed(1), bombPos.z.toFixed(1), '— victims:', victims.length)
 }
 
 // ── Projectile state ──
@@ -92,20 +180,18 @@ const lastOrbitTime = new Map<string, number>()
 
 // ── Trap logic ──
 
-function handleTrapDrop(playerId: string): void {
+async function handleTrapDrop(playerId: string): Promise<void> {
   const now = Date.now()
 
-  const lastDrop = lastTrapDropTime.get(playerId) ?? 0
-  if (now - lastDrop < TRAP_COOLDOWN_SEC * 1000) {
-    console.log('[Server] Trap denied: cooldown active, wait', ((TRAP_COOLDOWN_SEC * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
-    room.send('bananaDenied', { reason: 'cooldown' }, { to: [playerId] })
-    return
-  }
+  // Check equipped trap type first so we use the right cooldown
+  const upgrades = await loadPlayerUpgrades(playerId)
+  const trapType = upgrades.equippedTrap || 'banana'
+  const cooldown = trapType === 'bomb' ? BOMB_COOLDOWN_SEC : TRAP_COOLDOWN_SEC
 
-  const playerTraps = activeTraps.filter(b => b.droppedBy === playerId)
-  if (playerTraps.length >= TRAP_MAX_ACTIVE) {
-    console.log('[Server] Trap denied: max active traps reached (', TRAP_MAX_ACTIVE, ')')
-    room.send('bananaDenied', { reason: 'max_active' }, { to: [playerId] })
+  const lastDrop = lastTrapDropTime.get(playerId) ?? 0
+  if (now - lastDrop < cooldown * 1000) {
+    console.log('[Server] Trap denied: cooldown active, wait', ((cooldown * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
+    room.send('bananaDenied', { reason: 'cooldown' }, { to: [playerId] })
     return
   }
 
@@ -113,6 +199,49 @@ function handleTrapDrop(playerId: string): void {
   if (!playerPos) {
     console.log('[Server] Trap denied: player position not found')
     room.send('bananaDenied', { reason: 'no_position' }, { to: [playerId] })
+    return
+  }
+
+  if (trapType === 'bomb') {
+    // Bomb: count active bombs toward the same max
+    const playerBombs = activeBombs.filter(b => b.droppedBy === playerId)
+    if (playerBombs.length >= TRAP_MAX_ACTIVE) {
+      console.log('[Server] Bomb denied: max active reached (', TRAP_MAX_ACTIVE, ')')
+      room.send('bananaDenied', { reason: 'max_active' }, { to: [playerId] })
+      return
+    }
+
+    const dropPos = Vector3.create(playerPos.x, playerPos.y - 0.2, playerPos.z)
+    const bombId = nextBombId++
+
+    const bombEntity = engine.addEntity()
+    Transform.create(bombEntity, { position: dropPos, scale: Vector3.create(1, 1, 1) })
+
+    activeBombs.push({
+      entity: bombEntity,
+      bombId,
+      droppedBy: playerId,
+      droppedAtMs: now,
+      falling: true,
+      fallVelocity: 0,
+      targetY: 0,
+      groundResolved: false,
+      dropY: dropPos.y,
+      exploded: false,
+    })
+    lastTrapDropTime.set(playerId, now)
+    sessionBananasDropped.set(playerId, (sessionBananasDropped.get(playerId) ?? 0) + 1)
+
+    room.send('bombDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z, ownerId: playerId, bombId })
+    console.log('[Server] 💣 Bomb dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1))
+    return
+  }
+
+  // Default: banana trap
+  const playerTraps = activeTraps.filter(b => b.droppedBy === playerId)
+  if (playerTraps.length >= TRAP_MAX_ACTIVE) {
+    console.log('[Server] Trap denied: max active traps reached (', TRAP_MAX_ACTIVE, ')')
+    room.send('bananaDenied', { reason: 'max_active' }, { to: [playerId] })
     return
   }
 
@@ -231,6 +360,76 @@ export function bananaServerSystem(dt: number): void {
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
         removeTrap(trap)
         activeTraps.splice(i, 1)
+        break
+      }
+    }
+  }
+}
+
+/** Server system: bomb gravity, fuse timer, proximity trigger, and impact explosion. */
+export function bombServerSystem(dt: number): void {
+  const now = Date.now()
+  const clampedDt = Math.min(dt, 0.1)
+
+  for (let i = activeBombs.length - 1; i >= 0; i--) {
+    const bomb = activeBombs[i]
+    if (bomb.exploded) { removeBomb(bomb); activeBombs.splice(i, 1); continue }
+
+    if (!Transform.has(bomb.entity)) {
+      console.log('[Server] 💣⚠️ Ghost bomb detected — cleaning up')
+      activeBombs.splice(i, 1)
+      continue
+    }
+
+    // Gravity
+    if (bomb.falling) {
+      bomb.fallVelocity += FLAG_GRAVITY * clampedDt
+      const pos = Transform.get(bomb.entity).position
+      let newY = pos.y - bomb.fallVelocity * clampedDt
+      if (newY <= bomb.targetY) {
+        newY = bomb.targetY
+        bomb.falling = false
+        bomb.fallVelocity = 0
+
+        // Impact explosion if dropped from sufficient height
+        const dropHeight = bomb.dropY - bomb.targetY
+        if (dropHeight >= BOMB_IMPACT_HEIGHT) {
+          console.log('[Server] 💣 Bomb impact explosion! Drop height:', dropHeight.toFixed(1), 'm')
+          explodeBomb(bomb)
+          removeBomb(bomb)
+          activeBombs.splice(i, 1)
+          continue
+        }
+      }
+      const t = Transform.getMutable(bomb.entity)
+      t.position = Vector3.create(pos.x, newY, pos.z)
+    }
+
+    // Fuse timer — explode after BOMB_FUSE_SEC
+    const ageMs = now - bomb.droppedAtMs
+    if (ageMs >= BOMB_FUSE_SEC * 1000) {
+      console.log('[Server] 💣 Bomb fuse expired — exploding!')
+      explodeBomb(bomb)
+      removeBomb(bomb)
+      activeBombs.splice(i, 1)
+      continue
+    }
+
+    // Proximity trigger — any player walks into it (1s grace for dropper)
+    const bombPos = Transform.get(bomb.entity).position
+    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      const addr = identity.address.toLowerCase()
+      if (addr === bomb.droppedBy && ageMs < 2000) continue  // grace period for dropper
+
+      const playerPos = getPlayerPosition(addr)
+      if (!playerPos) continue
+
+      const dist = Vector3.distance(playerPos, bombPos)
+      if (dist < TRAP_TRIGGER_RADIUS) {
+        console.log('[Server] 💣 Bomb proximity triggered by', addr.slice(0, 8))
+        explodeBomb(bomb)
+        removeBomb(bomb)
+        activeBombs.splice(i, 1)
         break
       }
     }
@@ -462,6 +661,36 @@ export function shellServerSystem(dt: number): void {
         break
       }
     }
+
+    // Bomb collision — projectile detonates the bomb
+    if (!shellConsumed) {
+      for (let j = activeBombs.length - 1; j >= 0; j--) {
+        const bomb = activeBombs[j]
+        if (bomb.exploded) continue
+        const bPos = Transform.get(bomb.entity).position
+        const dist = Vector3.distance(projectilePos, bPos)
+        if (dist < PROJECTILE_HIT_RADIUS * projectile.chargeScale) {
+          console.log('[Server] 🎯💣 Projectile detonated bomb!')
+          room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: '', firedBy: projectile.firedBy, shellId: projectile.shellId })
+          explodeBomb(bomb)
+          removeBomb(bomb)
+          activeBombs.splice(j, 1)
+
+          if (projectile.returning) {
+            room.send('shellReturned', { firedBy: projectile.firedBy, shellId: projectile.shellId })
+            removeProjectile(projectile)
+            activeProjectiles.splice(i, 1)
+            shellConsumed = true
+          } else {
+            projectile.returning = true
+            projectile.returnX = projectilePos.x
+            projectile.returnY = projectilePos.y
+            projectile.returnZ = projectilePos.z
+          }
+          break
+        }
+      }
+    }
   }
 }
 
@@ -651,6 +880,36 @@ export function registerCombatHandlers(): void {
         }
       }
     } catch (err) { console.error('[Server] ❌ reportBananaGroundY handler error:', err) }
+  })
+  room.onMessage('reportBombGroundY', (data, context) => {
+    try {
+      if (!context) return
+      const bombId = data.bombId
+      const bomb = activeBombs.find(b => b.bombId === bombId)
+      if (bomb && !bomb.groundResolved) {
+        bomb.targetY = Math.max(0, data.groundY)
+        bomb.groundResolved = true
+        if (!bomb.exploded) {
+          const currentY = Transform.get(bomb.entity).position.y
+          if (currentY <= bomb.targetY) {
+            const t = Transform.getMutable(bomb.entity)
+            t.position = Vector3.create(t.position.x, bomb.targetY, t.position.z)
+            // Check impact explosion
+            const dropHeight = bomb.dropY - bomb.targetY
+            if (dropHeight >= BOMB_IMPACT_HEIGHT) {
+              console.log('[Server] 💣 Bomb impact explosion on ground resolve! Height:', dropHeight.toFixed(1))
+              explodeBomb(bomb)
+              removeBomb(bomb)
+              const idx = activeBombs.indexOf(bomb)
+              if (idx !== -1) activeBombs.splice(idx, 1)
+            } else {
+              bomb.falling = false
+              bomb.fallVelocity = 0
+            }
+          }
+        }
+      }
+    } catch (err) { console.error('[Server] ❌ reportBombGroundY handler error:', err) }
   })
   room.onMessage('requestOrbit', (_data, context) => {
     try {

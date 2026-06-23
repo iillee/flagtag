@@ -25,7 +25,7 @@ import {
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId, getCinematicSnapshot } from '../../gameState/flagHoldTime'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
-import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
+import { getLocalLifetimeWins, isWinsLoaded, getLocalUpgrades } from '../../gameState/playerUpgradeState'
 import { getCountdownSeconds } from '../../shared/components'
 import { isTrapOnCooldown, getTrapCooldownRemaining, triggerTrapFromUI } from '../../systems/trapSystem'
 import { isProjectileOnCooldown, getProjectileCooldownRemaining, triggerProjectileFromUI, triggerProjectileReleaseFromUI, getChargeFraction } from '../../systems/projectile'
@@ -124,8 +124,13 @@ export function MobileLayout() {
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               onMouseDown={() => { playClickSound(); triggerTrapFromUI() }}
             >
-              <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
+              {(() => {
+                const isBomb = getLocalUpgrades().equippedTrap === 'bomb'
+                const h = Math.round(AB_ICON * 1.25 * 0.675 * 1.1)
+                const w = isBomb ? Math.round(h * 0.67) : h
+                return <UiEntity uiTransform={{ width: w, height: h }}
+                  uiBackground={{ textureMode: 'stretch', texture: { src: isBomb ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
+              })()}
               {isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={52} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
           </UiEntity>
@@ -222,7 +227,7 @@ function MobileStatusPopup() {
         {iconRow('Flags', isWinsLoaded() ? `${myFlags}` : '--', 'assets/images/flag-icon-white.png', GOLD, GOLD)}
         <Label value="EQUIPMENT" fontSize={20} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4, top: 14 } }} textAlign="middle-left" />
         {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`, WHITE, Color4.White(), 1.5)}
-        {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
+        {iconRow('Trap', getLocalUpgrades().equippedTrap === 'bomb' ? 'Bomb' : 'Banana', getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png')}
         <Label value="DAILY" fontSize={20} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4, top: 14 } }} textAlign="middle-left" />
         <UiEntity uiTransform={{ width: '100%', height: 48, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
           <Label value="Blessed Today" fontSize={22} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 48 }} textAlign="middle-left" />

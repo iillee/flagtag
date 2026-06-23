@@ -35,6 +35,7 @@ export async function main() {
   const { combatClientSystem, initPools: initCombatPools } = await import('./systems/combatSystem')
   const { updateHitFlash } = await import('./gameState/hitFlashState')
   const { trapClientSystem, initTrapPool } = await import('./systems/trapSystem')
+  const { bombClientSystem, initBombPool, setupBombMessages } = await import('./systems/bombSystem')
   const { projectileClientSystem, initProjectilePool } = await import('./systems/projectile')
   const { mushroomClientSystem } = await import('./systems/mushroomSystem')
   const { shieldSystem } = await import('./systems/shieldSystem')
@@ -77,6 +78,7 @@ export async function main() {
   // (fixes first boomerang/banana being invisible on fresh load)
   initProjectilePool()
   initTrapPool()
+  // Bomb pool is lazy-initialized on first drop to avoid overloading GLB loading at startup
   initCombatPools()
 
   // Preload all sound effects at volume 0 so there's no delay on first play
@@ -167,6 +169,7 @@ export async function main() {
   // Message handlers (no systems, just wire up listeners)
   setupCoinMessages()
   setupBoostTrailMessages()
+  setupBombMessages()
   initUpgradeListeners()
   setupDeathPenaltyMessages()
   setupLightning()
@@ -201,6 +204,7 @@ export async function main() {
     updateHitFlash(dt)
     projectileClientSystem(dt)
     trapClientSystem(dt)
+    try { bombClientSystem(dt) } catch (e) { console.error('[Bomb] System error:', e) }
     waterSystem(dt)
     ghostClientSystem(dt)
   })

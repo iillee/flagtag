@@ -13,7 +13,7 @@ import {
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
 } from '../shared/coins'
 import {
-  parseUpgrades, serializeUpgrades, BOOMERANG_STORE, MUSIC_STORE,
+  parseUpgrades, serializeUpgrades, BOOMERANG_STORE, MUSIC_STORE, TRAP_STORE,
   type UpgradeData
 } from '../shared/upgrades'
 import { room } from '../shared/messages'
@@ -270,6 +270,51 @@ async function handleBuyTape(playerId: string, tapeId: string): Promise<void> {
   }, { to: [key] })
 }
 
+async function handleBuyTrap(playerId: string, trapId: string): Promise<void> {
+  const key = playerId.toLowerCase()
+
+  const item = TRAP_STORE.find(i => i.id === trapId)
+  if (!item) {
+    room.send('buyTrapResult', { success: false, trapId, reason: 'Invalid item', newBalance: 0, upgradesJson: '' }, { to: [key] })
+    return
+  }
+
+  const upgrades = await loadPlayerUpgrades(key)
+  if (upgrades.traps.includes(trapId)) {
+    room.send('buyTrapResult', { success: false, trapId, reason: 'Already owned', newBalance: 0, upgradesJson: '' }, { to: [key] })
+    return
+  }
+
+  const wins = await loadPlayerLifetimeWins(key)
+  if (wins < item.flagsRequired) {
+    room.send('buyTrapResult', { success: false, trapId, reason: `Need ${item.flagsRequired} flags (you have ${wins})`, newBalance: 0, upgradesJson: '' }, { to: [key] })
+    return
+  }
+
+  const balance = await loadPlayerCoinBalance(key)
+  if (balance < item.coinCost) {
+    room.send('buyTrapResult', { success: false, trapId, reason: `Need ${item.coinCost} coins (you have ${balance})`, newBalance: 0, upgradesJson: '' }, { to: [key] })
+    return
+  }
+
+  const newBalance = balance - item.coinCost
+  await setPlayerCoinBalance(key, newBalance)
+
+  upgrades.traps.push(trapId)
+  upgrades.equippedTrap = trapId
+  await savePlayerUpgrades(key, upgrades)
+
+  console.log('[Store] Player', key.slice(0, 8), 'bought trap', item.label, 'for', item.coinCost, 'coins. New balance:', newBalance)
+
+  room.send('buyTrapResult', {
+    success: true,
+    trapId,
+    reason: '',
+    newBalance,
+    upgradesJson: serializeUpgrades(upgrades)
+  }, { to: [key] })
+}
+
 // ── CRDT sync ──
 
 function updateCoinStateCRDT(): void {
@@ -400,6 +445,31 @@ export function registerEconomyHandlers(): void {
     } catch (err) {
       console.error('[Store] buyTape error:', err)
     }
+  })
+
+  room.onMessage('buyTrap', async (data, context) => {
+    if (!context || !data.trapId) return
+    const from = context.from.toLowerCase()
+    try {
+      await handleBuyTrap(from, data.trapId)
+    } catch (err) {
+      console.error('[Store] buyTrap error:', err)
+    }
+  })
+
+  room.onMessage('equipTrap', async (data, context) => {
+    if (!context || !data.trapId) return
+    const from = context.from.toLowerCase()
+
+    const upgrades = await loadPlayerUpgrades(from)
+    if (!upgrades.traps.includes(data.trapId)) {
+      console.log('[Store] equipTrap rejected — not owned:', data.trapId, 'by', from.slice(0, 8))
+      return
+    }
+
+    upgrades.equippedTrap = data.trapId
+    await savePlayerUpgrades(from, upgrades)
+    console.log('[Store] Player', from.slice(0, 8), 'equipped trap', data.trapId)
   })
 
   room.onMessage('equipBoomerang', async (data, context) => {

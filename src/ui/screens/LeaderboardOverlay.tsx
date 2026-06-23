@@ -11,7 +11,7 @@ import { hover, notifyOverlayClosed, earnedState } from '../uiState'
 import { setLeaderboardOverlayVisible } from '../../gameState/overlayState'
 import { playClickSound } from '../uiSounds'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
-import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
+import { getLocalLifetimeWins, isWinsLoaded, getLocalUpgrades } from '../../gameState/playerUpgradeState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { blessingState } from '../uiState'
 
@@ -91,7 +91,7 @@ export function StatusPopup() {
         <UiEntity uiTransform={{ width: '100%', height: 1, margin: { top: S(6), bottom: S(2) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.35, 0.6) }} />
         {sectionHeader('EQUIPMENT')}
         {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`, WHITE, Color4.White(), 1.5)}
-        {iconRow('Trap', 'Banana', 'assets/images/banana.png')}
+        {iconRow('Trap', getLocalUpgrades().equippedTrap === 'bomb' ? 'Bomb' : 'Banana', getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png')}
         <UiEntity uiTransform={{ width: '100%', height: 1, margin: { top: S(6), bottom: S(2) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.35, 0.6) }} />
         {sectionHeader('DAILY')}
         <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(12), right: S(12) } }}>

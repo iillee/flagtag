@@ -53,6 +53,19 @@ export const PROJECTILE_HIT_RADIUS = 2.0
 /** Max time a projectile can exist (seconds) — safety net. */
 export const PROJECTILE_LIFETIME_SEC = 8
 
+// ── Bomb ──
+
+/** Bomb fuse time before explosion (seconds). */
+export const BOMB_FUSE_SEC = 5
+/** Bomb cooldown between drops (seconds). */
+export const BOMB_COOLDOWN_SEC = 10
+/** Bomb explosion radius (meters). */
+export const BOMB_EXPLOSION_RADIUS = 6
+/** Bomb stagger duration (ms) — longer than banana. */
+export const BOMB_STAGGER_MS = 3000
+/** Minimum drop height to trigger impact explosion (meters). */
+export const BOMB_IMPACT_HEIGHT = 2
+
 // ── Ghost ──
 
 /** Ghost detection radius (meters) — starts homing when player is within this. */

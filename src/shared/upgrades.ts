@@ -43,7 +43,8 @@ export const MUSIC_STORE: MusicStoreItem[] = [
 
 // Placeholder stores for future categories
 export const TRAP_STORE: StoreItem[] = [
-  { id: 'banana', category: 'traps', label: 'Banana', coinCost: 0, flagsRequired: 0, description: 'Standard banana trap', icon: 'assets/images/banana.png' },
+  { id: 'banana', category: 'traps', label: 'Banana', coinCost: 0, flagsRequired: 0, description: 'Slip trap that stuns', icon: 'assets/images/banana.png' },
+  { id: 'bomb', category: 'traps', label: 'Bomb', coinCost: 200, flagsRequired: 5, description: 'Explodes after 5s or on contact', icon: 'assets/images/bomb.png' },
 ]
 export const WEARABLE_STORE: StoreItem[] = []
 

@@ -20,7 +20,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
-import { TRAP_COOLDOWN_SEC, TRAP_LIFETIME_SEC, TRAP_TRIGGER_RADIUS } from '../shared/components'
+import { TRAP_COOLDOWN_SEC, BOMB_COOLDOWN_SEC, TRAP_LIFETIME_SEC, TRAP_TRIGGER_RADIUS } from '../shared/components'
 
 import { room } from '../shared/messages'
 import { playErrorSound, isServerConnected } from './clientUtils'
@@ -29,6 +29,7 @@ import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { triggerHitFlash } from '../gameState/hitFlashState'
+import { getLocalUpgrades } from '../gameState/playerUpgradeState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect } from './combatSystem'
 import { playSpatialSound } from '../utils/spatialAudio'
@@ -162,17 +163,21 @@ function hideSplat(entity: Entity): void {
 // ── Client cooldown tracking ──
 let lastLocalTrapDropTime = 0
 
+function getActiveCooldown(): number {
+  return getLocalUpgrades().equippedTrap === 'bomb' ? BOMB_COOLDOWN_SEC : TRAP_COOLDOWN_SEC
+}
+
 /** Returns true if trap is on cooldown (for UI). */
 export function isTrapOnCooldown(): boolean {
   if (lastLocalTrapDropTime === 0) return false
-  const cooldown = TRAP_COOLDOWN_SEC
+  const cooldown = getActiveCooldown()
   return (Date.now() - lastLocalTrapDropTime) < cooldown * 1000
 }
 
 /** Returns cooldown remaining in seconds (0 if ready). */
 export function getTrapCooldownRemaining(): number {
   if (lastLocalTrapDropTime === 0) return 0
-  const cooldown = TRAP_COOLDOWN_SEC
+  const cooldown = getActiveCooldown()
   const elapsed = Date.now() - lastLocalTrapDropTime
   const remaining = cooldown * 1000 - elapsed
   return remaining > 0 ? Math.ceil(remaining / 1000) : 0
@@ -591,7 +596,7 @@ export function triggerTrapFromUI(): void {
   const userId = getPlayerData()?.userId
   if (!userId) return
 
-  if (now - lastLocalTrapDropTime < TRAP_COOLDOWN_SEC * 1000) { playErrorSound(); return }
+  if (now - lastLocalTrapDropTime < getActiveCooldown() * 1000) { playErrorSound(); return }
 
   lastLocalTrapDropTime = now
   const serverUp = isServerConnected()
@@ -652,7 +657,7 @@ export function trapClientSystem(dt: number): void {
     if (!userId) return
 
     // Client-side cooldown check (prevents spamming server)
-    const trapCd = TRAP_COOLDOWN_SEC
+    const trapCd = getActiveCooldown()
     if (now - lastLocalTrapDropTime < trapCd * 1000) {
       const remaining = ((trapCd * 1000 - (now - lastLocalTrapDropTime)) / 1000).toFixed(1)
       console.log('[Trap] F pressed but cooldown active —', remaining, 's remaining')

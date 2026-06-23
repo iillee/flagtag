@@ -23,7 +23,7 @@ import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyRe
 
 import { awardRoundCoins } from './economy'
 import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState, computeGravityTarget } from './flagLogic'
-import { activeTraps, activeProjectiles, activeOrbits, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
+import { activeTraps, activeProjectiles, activeOrbits, activeBombs, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime, loadPlayerUpgrades, loadPlayerLifetimeWins, loadPlayerLifetimeHoldTime } from './economy'
 import { serializeUpgrades } from '../shared/upgrades'
@@ -340,7 +340,11 @@ async function handleRoundEnd(): Promise<void> {
     removeTrap(trap)
   }
   activeTraps.length = 0
-  console.log('[Server] 🪤 All traps cleared for new round')
+  for (const bomb of activeBombs) {
+    engine.removeEntity(bomb.entity)
+  }
+  activeBombs.length = 0
+  console.log('[Server] 🪤 All traps + bombs cleared for new round')
 
   // ── 3b. Remove all active projectiles + orbits ──
   for (const projectile of activeProjectiles) {

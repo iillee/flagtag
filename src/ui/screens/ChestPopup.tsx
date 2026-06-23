@@ -13,6 +13,7 @@ import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSys
 import {
   getLocalUpgrades, getLocalLifetimeWins, isWinsLoaded,
   requestBuyBoomerang, requestEquipBoomerang, requestBuyTape,
+  requestBuyTrap, requestEquipTrap,
   isBuyPending, getLastBuyError,
 } from '../../gameState/playerUpgradeState'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
@@ -77,11 +78,12 @@ function isEquipped(tab: StoreCategory, itemId: string, upgrades: ReturnType<typ
 function handleBuy(tab: StoreCategory, itemId: string): void {
   if (tab === 'projectiles') requestBuyBoomerang(itemId as BoomerangColor)
   if (tab === 'music')       requestBuyTape(itemId)
-  // Traps: add buy handler when needed
+  if (tab === 'traps')       requestBuyTrap(itemId)
 }
 
 function handleEquip(tab: StoreCategory, itemId: string): void {
   if (tab === 'projectiles') requestEquipBoomerang(itemId as BoomerangColor)
+  if (tab === 'traps')       requestEquipTrap(itemId)
   if (tab === 'music') {
     const tape = getAllTapes().find(t => t.id === itemId)
     if (tape) {
@@ -268,9 +270,9 @@ export function ChestPopup() {
                   }
                 }}
               >
-                {/* Item icon */}
+                {/* Item icon — bomb is tall (2:3), so use narrower width to avoid distortion */}
                 <UiEntity
-                  uiTransform={{ width: iconSize, height: iconSize, margin: { top: mobile ? 6 : S(8) } }}
+                  uiTransform={{ width: item.id === 'bomb' ? iconSize * 0.67 : iconSize, height: iconSize, margin: { top: mobile ? 6 : S(8) } }}
                   uiBackground={{
                     textureMode: 'stretch',
                     texture: { src: item.icon },

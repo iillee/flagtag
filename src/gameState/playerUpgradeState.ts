@@ -88,6 +88,23 @@ export function requestBuyTape(tapeId: string): void {
   console.log('[Store] Requesting tape purchase:', tapeId)
 }
 
+/** Request purchase of a trap */
+export function requestBuyTrap(trapId: string): void {
+  if (buyPending) return
+  buyPending = true
+  lastBuyError = ''
+  room.send('buyTrap', { trapId })
+  console.log('[Store] Requesting trap purchase:', trapId)
+}
+
+/** Request equip of an owned trap */
+export function requestEquipTrap(trapId: string): void {
+  if (!localUpgrades.traps.includes(trapId)) return
+  localUpgrades.equippedTrap = trapId
+  room.send('equipTrap', { trapId })
+  console.log('[Store] Equipping trap:', trapId)
+}
+
 /** Request equip of an owned boomerang */
 export function requestEquipBoomerang(color: BoomerangColor): void {
   if (!localUpgrades.boomerangs.includes(color)) return
@@ -124,6 +141,21 @@ export function initUpgradeListeners(): void {
       lastBuyError = data.reason
       lastBuyErrorTimer = 3
       console.log('[Store] Tape purchase failed:', data.reason)
+    }
+  })
+
+  room.onMessage('buyTrapResult', (data) => {
+    buyPending = false
+    if (data.success) {
+      const updated = parseUpgrades(data.upgradesJson)
+      localUpgrades = updated
+      lastBuyError = ''
+      AudioSource.createOrReplace(purchaseSoundEntity, { audioClipUrl: 'assets/sounds/purchase.mp3', playing: true, loop: false, volume: 1, global: true })
+      console.log('[Store] Trap purchase successful:', data.trapId)
+    } else {
+      lastBuyError = data.reason
+      lastBuyErrorTimer = 3
+      console.log('[Store] Trap purchase failed:', data.reason)
     }
   })
 

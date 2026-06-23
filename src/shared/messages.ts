@@ -92,6 +92,14 @@ export const Messages = {
   equipBoomerang: Schemas.Map({ color: Schemas.String }),              // Client → Server: equip an owned boomerang
   buyTape: Schemas.Map({ tapeId: Schemas.String }),                    // Client → Server: purchase a music tape
   buyTapeResult: Schemas.Map({ success: Schemas.Boolean, tapeId: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),  // Server → Client
+  buyTrap: Schemas.Map({ trapId: Schemas.String }),                    // Client → Server: purchase a trap
+  buyTrapResult: Schemas.Map({ success: Schemas.Boolean, trapId: Schemas.String, reason: Schemas.String, newBalance: Schemas.Int, upgradesJson: Schemas.String }),  // Server → Client
+  equipTrap: Schemas.Map({ trapId: Schemas.String }),                  // Client → Server: equip an owned trap
+
+  // Bomb messages
+  bombDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String, bombId: Schemas.Int }),
+  bombExploded: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, bombId: Schemas.Int, victimsJson: Schemas.String }),
+  reportBombGroundY: Schemas.Map({ bombId: Schemas.Int, groundY: Schemas.Float }),
 
   // Ghost messages
   ghostHit: Schemas.Map({ ghostId: Schemas.Float }),          // Client → Server: boomerang hit a ghost
