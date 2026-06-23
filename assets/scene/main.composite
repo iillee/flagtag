@@ -114,20 +114,20 @@
         "514": {
           "json": {
             "position": {
-              "x": 245.07034301757812,
+              "x": 252.57034301757812,
               "y": 1,
-              "z": 232.52447509765625
-            },
-            "scale": {
-              "x": 2.0999999046325684,
-              "y": 0.5,
-              "z": 2.0999999046325684
+              "z": 258.02447509765625
             },
             "rotation": {
               "x": 0,
               "y": 0,
               "z": 0,
               "w": 1
+            },
+            "scale": {
+              "x": 2.0999999046325684,
+              "y": 0.5,
+              "z": 2.0999999046325684
             },
             "parent": 0
           }
@@ -4101,6 +4101,27 @@
             "parent": 0
           }
         },
+        "709": {
+          "json": {
+            "position": {
+              "x": 219.2759552001953,
+              "y": 1.6066970825195312,
+              "z": 185.7361297607422
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.18800263106822968,
+              "z": 0,
+              "w": 0.9821684956550598
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
         "710": {
           "json": {
             "position": {
@@ -4118,6 +4139,69 @@
               "y": 0.5252547860145569,
               "z": 0,
               "w": 0.850944995880127
+            },
+            "parent": 0
+          }
+        },
+        "711": {
+          "json": {
+            "position": {
+              "x": 227.25,
+              "y": 0.648759126663208,
+              "z": 343.25
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.20205886662006378,
+              "z": 0,
+              "w": -0.9793733954429626
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "parent": 0
+          }
+        },
+        "712": {
+          "json": {
+            "position": {
+              "x": 288.4172668457031,
+              "y": 0.648759126663208,
+              "z": 335.8793640136719
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.5239110589027405,
+              "z": 0,
+              "w": -0.8517730236053467
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "parent": 0
+          }
+        },
+        "714": {
+          "json": {
+            "position": {
+              "x": 207.2281951904297,
+              "y": 2.6600000858306885,
+              "z": 180.66107177734375
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.9581598043441772,
+              "z": 0,
+              "w": -0.2862338721752167
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
             },
             "parent": 0
           }
@@ -5447,9 +5531,37 @@
             "invisibleMeshesCollisionMask": 3
           }
         },
+        "709": {
+          "json": {
+            "src": "assets/asset-packs/rowboat/Boat_01/Boat_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
         "710": {
           "json": {
             "src": "assets/asset-packs/stone_brick_wall/Module_Stone_Straight_01/Module_Stone_Straight_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "711": {
+          "json": {
+            "src": "assets/asset-packs/medium_straight_dock_module/DocksModuleMedium_01/DocksModuleMedium_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "712": {
+          "json": {
+            "src": "assets/asset-packs/medium_straight_dock_module/DocksModuleMedium_01/DocksModuleMedium_01.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        },
+        "714": {
+          "json": {
+            "src": "assets/asset-packs/carronade/Cannon_02/Cannon_02.glb",
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
@@ -6419,9 +6531,29 @@
             "value": "Wooden Door"
           }
         },
+        "709": {
+          "json": {
+            "value": "Rowboat"
+          }
+        },
         "710": {
           "json": {
             "value": "Stone Brick Wall"
+          }
+        },
+        "711": {
+          "json": {
+            "value": "Medium Straight Dock Module"
+          }
+        },
+        "712": {
+          "json": {
+            "value": "Medium Straight Dock Module_2"
+          }
+        },
+        "714": {
+          "json": {
+            "value": "Carronade"
           }
         }
       }
@@ -7488,7 +7620,7 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "517": {
           "json": {
             "gizmo": 0
           }
@@ -7667,7 +7799,11 @@
                   708,
                   710,
                   549,
-                  676
+                  676,
+                  709,
+                  711,
+                  712,
+                  714
                 ]
               },
               {
@@ -8544,6 +8680,22 @@
               {
                 "entity": 676,
                 "children": []
+              },
+              {
+                "entity": 709,
+                "children": []
+              },
+              {
+                "entity": 711,
+                "children": []
+              },
+              {
+                "entity": 712,
+                "children": []
+              },
+              {
+                "entity": 714,
+                "children": []
               }
             ]
           }
@@ -8963,7 +9115,19 @@
         "708": {
           "json": {}
         },
+        "709": {
+          "json": {}
+        },
         "710": {
+          "json": {}
+        },
+        "711": {
+          "json": {}
+        },
+        "712": {
+          "json": {}
+        },
+        "714": {
           "json": {}
         }
       }

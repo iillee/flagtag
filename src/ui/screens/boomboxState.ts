@@ -48,24 +48,21 @@ export function getLastTapeId(): string {
 /** Toggle music on/off. Call from boombox click, key press, or UI button. */
 export function toggleMusic(): void {
   if (equippedTapeId !== null) {
-    // Mute
+    // Mute — just zero volume, keep playing so position is preserved
     setEquippedTape(null)
     try {
       const audio = AudioSource.getMutable(musicEntity)
-      audio.playing = false
       audio.volume = 0
     } catch (e) { console.error('[Music] Failed to mute:', e) }
   } else {
-    // Unmute — restore last tape
+    // Unmute — resume last tape (don't re-set audioClipUrl or it restarts)
     const tape = MUSIC_STORE.find(t => t.id === lastTapeId)
     if (tape) {
       setEquippedTape(tape.id)
       try {
         const audio = AudioSource.getMutable(musicEntity)
-        audio.audioClipUrl = tape.audioSrc
-        audio.playing = true
-        audio.loop = true
         audio.volume = 0.0984375
+        audio.playing = true
       } catch (e) { console.error('[Music] Failed to unmute:', e) }
     }
   }

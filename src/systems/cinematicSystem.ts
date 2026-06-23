@@ -331,7 +331,7 @@ export function setupCinematicSystem(): void {
             if (postRespawnHoldTimer <= 0) {
               cinematicState.roundOverVisible = false
               if (noScorersRound) { cinematicState.showing = true; creditsState.noScorersVisible = true; fadePhase = 4 }
-              else { fadePhase = 3; fadeTimer = FADE_OUT_DUR }
+              else { fadePhase = 3; fadeTimer = FADE_OUT_DUR; cinematicState.showing = true }
             }
           }
         }
