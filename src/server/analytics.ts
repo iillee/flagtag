@@ -33,12 +33,8 @@ export async function loadDiscordWebhookUrl(): Promise<void> {
     console.log('[Server] ⚠️ Could not detect realm info:', err)
   }
 
-  DISCORD_WEBHOOK_URL = (await EnvVar.get('DISCORD_WEBHOOK_URL')) || 'https://discordapp.com/api/webhooks/1519451487242031277/N7-eJgllAUTrDPCP1Zy6ga_Sdjp0ilgJXPpWvH5ome4kYHCWYbf1yveS98nowGgFbH9b'
-  if (!DISCORD_WEBHOOK_URL) {
-    console.log('[Server] ⚠️ DISCORD_WEBHOOK_URL env var not set — Discord notifications disabled')
-  } else {
-    console.log('[Server] ✅ Discord webhook URL loaded from EnvVar')
-  }
+  DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1519451487242031277/N7-eJgllAUTrDPCP1Zy6ga_Sdjp0ilgJXPpWvH5ome4kYHCWYbf1yveS98nowGgFbH9b'
+  console.log('[Server] ✅ Discord player-join webhook set')
 }
 
 // ── Player join Discord notification ──
