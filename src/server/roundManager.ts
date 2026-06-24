@@ -31,7 +31,7 @@ import { capture } from './posthog'
 import { EnvVar } from '@dcl/sdk/server'
 import { isPreview } from './analytics'
 
-const ROUND_WINNER_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1512612923548373135/kDMyVFdidPBhHuenVmrvYaNgPCZGfXI8xhMbXSPlbRLvo05SjgcdzlKDcVNxOjaKmH10'
+const ROUND_WINNER_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1519451777831796736/HQjwWnNLW0ejguz5N5FcllRTkkl_DeD3xJ-ISFLDLrV5zlxLhvqFDTeNatjB6iZpxRYa'
 let ROUND_WINNER_WEBHOOK = ROUND_WINNER_WEBHOOK_FALLBACK
 
 export async function loadRoundWinnerWebhook(): Promise<void> {

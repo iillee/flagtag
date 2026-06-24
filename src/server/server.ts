@@ -261,7 +261,7 @@ function registerSystems() {
 
 
 /** Register the registerName handler (only handler still in server.ts). */
-const MAILBOX_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1504487871648632843/usPz24jkxogWcXoS7gYGZjOmHCW90plbLJCBZYLfQzNACEe6fyKQ-fNoYM5Da8Lf0YMD'
+const MAILBOX_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1519451678448029706/SIYadqP_pFBDTOO6gn0o8-uiwZG57Mi9C9LiVHJqHixrOeycqxTfaFSbdlbdNdjqf33E'
 let mailboxWebhook = MAILBOX_WEBHOOK_FALLBACK
 
 async function loadMailboxWebhook(): Promise<void> {
