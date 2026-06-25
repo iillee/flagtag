@@ -27,7 +27,9 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { triggerEmote } from '~system/RestrictedActions'
 
 import { room } from '../shared/messages'
-import { BOMB_FUSE_SEC, BOMB_STAGGER_MS, BOMB_EXPLOSION_RADIUS } from '../shared/components'
+import { BOMB_FUSE_SEC, BOMB_EXPLOSION_RADIUS } from '../shared/components'
+
+const BOMB_STAGGER_MS = 1000 // match regular hit stun duration
 import { triggerHitFlash } from '../gameState/hitFlashState'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { isDrownRespawning } from './waterSystem'
