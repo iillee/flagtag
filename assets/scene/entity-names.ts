@@ -79,7 +79,6 @@ export enum EntityNames {
   Doubloon_9 = "Doubloon_9",
   Flower_Sprouts = "Flower Sprouts",
   Grave__20 = "Grave  20",
-  Iron_Grenade = "Iron Grenade",
   Lilypad = "Lilypad",
   Lilypad_10 = "Lilypad_10",
   Lilypad_11 = "Lilypad_11",

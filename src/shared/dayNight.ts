@@ -1,12 +1,10 @@
 /**
  * Shared day/night cycle utilities.
  *
- * Uses Decentraland's default 24-minute day/night cycle (auto skybox).
- * We just read getWorldTime() periodically to know if it's night
- * (for ghost spawning, proximity lights, UI icons, etc.)
+ * Enforces a 5-minute day/night cycle via SkyboxTime so that
+ * players cannot override the skybox with their UI slider.
  *
- * Default cycle: 1 minute per second, full cycle = 24 real minutes.
- * getWorldTime() returns 0–86400 (seconds in a 24h day).
+ * SkyboxTime uses 0–86400 (seconds in a 24h day).
  *   0     = midnight (00:00)
  *   21600 = sunrise  (06:00)
  *   43200 = noon     (12:00)
@@ -14,36 +12,51 @@
  *   86400 = midnight again
  */
 
-import { getWorldTime } from '~system/Runtime'
+import { engine, SkyboxTime } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
+
+const IS_SERVER = isServer()
 
 const SUNSET_TIME = 64800   // 6 PM
 const SUNRISE_TIME = 21600  // 6 AM
 
-let cachedWorldSeconds = 43200 // default to noon
-let lastFetchTime = 0
-const FETCH_INTERVAL_MS = 5000 // refresh every 5 seconds
+// Day duration in real-world seconds (5 minutes = 300 seconds)
+const DAY_DURATION = 60 * 15
+// How fast game time advances relative to real time
+const RATE_FACTOR = (60 * 60 * 24) / DAY_DURATION
+// Update SkyboxTime every game-hour (avoids excessive writes)
+const UPDATE_INTERVAL = 10
+
+// Start at midday
+let time = 60 * 60 * 8
+let setTime = 0
 
 /**
- * Call periodically to keep the cached time fresh.
- * No longer writes SkyboxTime — the platform handles the skybox.
+ * Call every frame to advance the day/night cycle.
+ * On the client, also writes SkyboxTime to lock out player overrides.
  */
-export function updateWorldTime(_dt?: number, _applyToSkybox?: boolean): void {
-  const now = Date.now()
-  if (now - lastFetchTime < FETCH_INTERVAL_MS) return
-  lastFetchTime = now
-  getWorldTime({}).then((result) => {
-    cachedWorldSeconds = result.seconds % 86400
-  }).catch(() => {})
+export function updateWorldTime(dt?: number, _applyToSkybox?: boolean): void {
+  if (!dt || dt <= 0) return
+
+  time += dt * RATE_FACTOR
+  if (time > 86400) time = time % 86400
+
+  if (time - setTime > UPDATE_INTERVAL || setTime === 0) {
+    setTime = time
+    if (!IS_SERVER) {
+      SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: setTime })
+    }
+  }
 }
 
 /** Get the current world time (0–86400). */
 export function getCurrentSkyTime(): number {
-  return cachedWorldSeconds
+  return time
 }
 
 /**
  * Returns true when it's night: 6 PM – 6 AM.
  */
 export function isNightTime(): boolean {
-  return cachedWorldSeconds >= SUNSET_TIME || cachedWorldSeconds < SUNRISE_TIME
+  return time >= SUNSET_TIME || time < SUNRISE_TIME
 }
