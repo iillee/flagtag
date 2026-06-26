@@ -20,15 +20,15 @@ const IS_SERVER = isServer()
 const SUNSET_TIME = 64800   // 6 PM
 const SUNRISE_TIME = 21600  // 6 AM
 
-// Day duration in real-world seconds (5 minutes = 300 seconds)
-const DAY_DURATION = 60 * 15
+// Day duration in real-world seconds (30 minutes = 1800 seconds)
+const DAY_DURATION = 60 * 30
 // How fast game time advances relative to real time
 const RATE_FACTOR = (60 * 60 * 24) / DAY_DURATION
 // Update SkyboxTime every game-hour (avoids excessive writes)
 const UPDATE_INTERVAL = 10
 
-// Start at midday
-let time = 60 * 60 * 8
+// Start at sunrise (06:00 = 21600)
+let time = SUNRISE_TIME
 let setTime = 0
 
 /**

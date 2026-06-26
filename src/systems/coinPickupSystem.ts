@@ -21,6 +21,8 @@ import { registerDeferredBalanceApplier } from '../shared/clientState'
 // ── Types ──
 
 interface TrackedCoin {
+  /** Original base Y position (for bob reset on respawn) */
+  baseY: number
   /** The bob-parent entity (has the world position) */
   bobParent: Entity
   /** The coin entity itself (has GltfContainer + visibility) */
@@ -223,6 +225,7 @@ function setupCoins(): void {
         coinEntity: entity,
         coinId,
         position: pos,
+        baseY: pos.y,
         hidden: false
       })
       count++
@@ -236,6 +239,7 @@ function setupCoins(): void {
         coinEntity: entity,
         coinId,
         position: pos,
+        baseY: pos.y,
         hidden: false
       })
       count++
@@ -426,9 +430,11 @@ function restoreBobSpin(coin: TrackedCoin): void {
   const BOB_DURATION = 1500
   const SPIN_DURATION = 2000
 
-  // Restore bob on parent
+  // Restore bob on parent — use stored base Y to prevent drift across respawn cycles
   const t = Transform.get(coin.bobParent)
-  const baseY = t.position.y
+  const baseY = coin.baseY
+  // Reset bobParent to original base position before applying new tween
+  Transform.getMutable(coin.bobParent).position = Vector3.create(t.position.x, baseY, t.position.z)
   const upPos = Vector3.create(t.position.x, baseY + BOB_AMOUNT, t.position.z)
   const downPos = Vector3.create(t.position.x, baseY - BOB_AMOUNT, t.position.z)
 

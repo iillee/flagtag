@@ -19,6 +19,7 @@ import { isCinematicActive } from '../../gameState/cinematicState'
 import { triggerHitFlash } from '../../gameState/hitFlashState'
 import { isDrownRespawning } from '../waterSystem'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
+import { isWinsLoaded } from '../../gameState/playerUpgradeState'
 
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from '../combatSystem'
 
@@ -218,6 +219,7 @@ room.onMessage('orbitEnded', (data) => {
 /** Fire a projectile from the UI (mobile tap). For blue: starts charging on press. */
 export function triggerProjectileFromUI(): void {
   if (isDrownRespawning()) return
+  if (!isWinsLoaded() && isServerConnected()) return  // Block firing until profile loaded (skip if no server)
   const now = Date.now()
   const userId = getPlayerData()?.userId
   if (!userId) return
@@ -408,7 +410,7 @@ export function projectileClientSystem(dt: number): void {
 
   // Projectile key — charge on press (blue only), instant fire for other colors
   const projAction = InputAction.IA_PRIMARY
-  if (inputSystem.isTriggered(projAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
+  if (inputSystem.isTriggered(projAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning() && (isWinsLoaded() || !isServerConnected())) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

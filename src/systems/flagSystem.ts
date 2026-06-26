@@ -303,7 +303,9 @@ function playPickupSound(): void {
   if (!pickupSoundEntity) {
     pickupSoundEntity = engine.addEntity()
     Transform.create(pickupSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: false, loop: false, volume: 2, global: true })
+    // On first call, create with playing: true directly (avoid create + replace in same frame causing double audio)
+    AudioSource.create(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: true, loop: false, volume: 2, global: true })
+    return
   }
   AudioSource.createOrReplace(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: true, loop: false, volume: 2, global: true })
 }

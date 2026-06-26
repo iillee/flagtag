@@ -257,13 +257,15 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
   }
 
   // Client-side interpolation: add elapsed time since last CRDT update for the current carrier.
-  // Only apply if the synced value is still > 0 — if the server reset scores to 0 (round end)
-  // but updateHoldTimeInterpolation hasn't run yet this frame, we must not inject stale data.
-  if (lastCarrierId && lastCarrierSyncedSeconds > 0) {
+  // Start interpolating from 0 immediately on pickup so the scoreboard counts from 1, not 2.
+  // Skip interpolation only if the server has reset scores to 0 (round end) AND we had a
+  // non-zero synced value before (meaning a true reset, not just a fresh pickup).
+  if (lastCarrierId) {
     const carrierSynced = synced.get(lastCarrierId) ?? 0
-    if (carrierSynced > 0) {
-      const elapsedSec = (Date.now() - interpolationStartTime) / 1000
-      const interpolated = lastCarrierSyncedSeconds + elapsedSec
+    const elapsedSec = (Date.now() - interpolationStartTime) / 1000
+    const interpolated = lastCarrierSyncedSeconds + elapsedSec
+    // Only apply if we haven't been reset to 0 by the server mid-round
+    if (carrierSynced > 0 || lastCarrierSyncedSeconds === 0) {
       synced.set(lastCarrierId, Math.max(carrierSynced, interpolated))
     }
   }

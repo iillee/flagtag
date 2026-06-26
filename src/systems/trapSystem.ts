@@ -29,7 +29,7 @@ import { triggerEmote } from '~system/RestrictedActions'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { triggerHitFlash } from '../gameState/hitFlashState'
-import { getLocalUpgrades } from '../gameState/playerUpgradeState'
+import { getLocalUpgrades, isWinsLoaded } from '../gameState/playerUpgradeState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect } from './combatSystem'
 import { playSpatialSound } from '../utils/spatialAudio'
@@ -592,6 +592,7 @@ function updateMsgTrapVisuals(dt: number): void {
 /** Drop a trap from the UI (mobile tap). Same logic as F key press. */
 export function triggerTrapFromUI(): void {
   if (isDrownRespawning()) return
+  if (!isWinsLoaded() && isServerConnected()) return  // Block traps until profile loaded (skip if no server)
   const now = Date.now()
   const userId = getPlayerData()?.userId
   if (!userId) return
@@ -652,7 +653,7 @@ export function trapClientSystem(dt: number): void {
 
   // Trap key — drop trap (disabled in spectator mode)
   const trapAction = InputAction.IA_SECONDARY
-  if (inputSystem.isTriggered(trapAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning()) {
+  if (inputSystem.isTriggered(trapAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning() && (isWinsLoaded() || !isServerConnected())) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 
