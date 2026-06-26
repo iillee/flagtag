@@ -1,8 +1,12 @@
 /**
  * Shared day/night cycle utilities.
  *
- * Enforces a 5-minute day/night cycle via SkyboxTime so that
- * players cannot override the skybox with their UI slider.
+ * Uses absolute wall-clock time (Date.now()) so server and all clients
+ * always agree on what time of day it is — no drift, no sync needed.
+ *
+ * Full cycle = 30 real-world minutes (1800 seconds).
+ * Day = 15 minutes, Night = 15 minutes.
+ * Cycle starts at sunrise (06:00) at epoch 0, repeating every 30 min.
  *
  * SkyboxTime uses 0–86400 (seconds in a 24h day).
  *   0     = midnight (00:00)
@@ -20,43 +24,56 @@ const IS_SERVER = isServer()
 const SUNSET_TIME = 64800   // 6 PM
 const SUNRISE_TIME = 21600  // 6 AM
 
-// Day duration in real-world seconds (30 minutes = 1800 seconds)
-const DAY_DURATION = 60 * 30
-// How fast game time advances relative to real time
-const RATE_FACTOR = (60 * 60 * 24) / DAY_DURATION
-// Update SkyboxTime every game-hour (avoids excessive writes)
-const UPDATE_INTERVAL = 10
+// Full day/night cycle = 30 real-world minutes = 1800 seconds
+const DAY_DURATION_SEC = 60 * 30
+// Maps 1800 real seconds to 86400 game seconds
+const RATE_FACTOR = 86400 / DAY_DURATION_SEC  // 48
 
-// Start at sunrise (06:00 = 21600)
-let time = SUNRISE_TIME
-let setTime = 0
+// Update SkyboxTime every N game-seconds (avoids excessive CRDT writes)
+const UPDATE_INTERVAL = 10
+let lastSkyboxTime = -999
 
 /**
- * Call every frame to advance the day/night cycle.
- * On the client, also writes SkyboxTime to lock out player overrides.
+ * Compute the current game time (0–86400) from wall-clock.
+ * Cycle starts at sunrise (21600) at Unix epoch, repeating every 30 min.
  */
-export function updateWorldTime(dt?: number, _applyToSkybox?: boolean): void {
-  if (!dt || dt <= 0) return
+function computeGameTime(): number {
+  const nowSec = Date.now() / 1000
+  // Position within the current 30-minute cycle (0 – 1800)
+  const cyclePos = nowSec % DAY_DURATION_SEC
+  // Convert to game-seconds (0 – 86400) and offset so cycle starts at sunrise
+  return (SUNRISE_TIME + cyclePos * RATE_FACTOR) % 86400
+}
 
-  time += dt * RATE_FACTOR
-  if (time > 86400) time = time % 86400
+/**
+ * Call every frame to keep the skybox locked to the cycle.
+ * On the client, writes SkyboxTime periodically.
+ * On the server, just keeps the time fresh for isNightTime() queries.
+ */
+export function updateWorldTime(_dt?: number, _applyToSkybox?: boolean): void {
+  const gameTime = computeGameTime()
 
-  if (time - setTime > UPDATE_INTERVAL || setTime === 0) {
-    setTime = time
-    if (!IS_SERVER) {
-      SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: setTime })
+  if (!IS_SERVER) {
+    // Update SkyboxTime periodically to lock out player overrides
+    const delta = Math.abs(gameTime - lastSkyboxTime)
+    // Handle wrap-around (e.g. 86399 -> 100)
+    const wrappedDelta = Math.min(delta, 86400 - delta)
+    if (wrappedDelta >= UPDATE_INTERVAL || lastSkyboxTime < 0) {
+      lastSkyboxTime = gameTime
+      SkyboxTime.createOrReplace(engine.RootEntity, { fixedTime: gameTime })
     }
   }
 }
 
 /** Get the current world time (0–86400). */
 export function getCurrentSkyTime(): number {
-  return time
+  return computeGameTime()
 }
 
 /**
  * Returns true when it's night: 6 PM – 6 AM.
  */
 export function isNightTime(): boolean {
-  return time >= SUNSET_TIME || time < SUNRISE_TIME
+  const t = computeGameTime()
+  return t >= SUNSET_TIME || t < SUNRISE_TIME
 }
