@@ -4,7 +4,8 @@
  */
 import {
   engine, Entity, Transform, MeshRenderer, Material,
-  GltfContainer, pointerEventsSystem, InputAction
+  GltfContainer, PointerEvents, PointerEventType, InputAction,
+  inputSystem
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { getEquippedTape, toggleMusic } from '../ui/screens/boomboxState'
@@ -84,17 +85,16 @@ function setupBoombox(): void {
         invisibleMeshesCollisionMask: 3
       })
 
-      pointerEventsSystem.onPointerDown(
-        {
-          entity,
-          opts: {
+      PointerEvents.create(entity, {
+        pointerEvents: [{
+          eventType: PointerEventType.PET_DOWN,
+          eventInfo: {
             button: InputAction.IA_POINTER,
-            hoverText: '♪ Music',
+            hoverText: getEquippedTape() ? '♪ Mute' : '♪ Unmute',
             maxDistance: 12
           }
-        },
-        () => { toggleMusic() }
-      )
+        }]
+      })
 
       console.log('[Boombox] Found boombox at', boomboxPos.x.toFixed(1), boomboxPos.y.toFixed(1), boomboxPos.z.toFixed(1))
       initialized = true
@@ -112,6 +112,20 @@ export function boomboxSystem(dt: number): void {
   }
 
   const silent = getEquippedTape() === null
+
+  // Handle click
+  if (boomboxEntity !== null && inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN, boomboxEntity)) {
+    toggleMusic()
+  }
+
+  // Update tooltip
+  if (boomboxEntity !== null && PointerEvents.has(boomboxEntity)) {
+    const pe = PointerEvents.getMutable(boomboxEntity)
+    const newText = getEquippedTape() ? '♪ Mute' : '♪ Unmute'
+    if (pe.pointerEvents[0]?.eventInfo?.hoverText !== newText) {
+      pe.pointerEvents[0].eventInfo!.hoverText = newText
+    }
+  }
 
   // Spawn rings when not muted
   if (!silent) {

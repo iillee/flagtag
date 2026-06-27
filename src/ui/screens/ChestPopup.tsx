@@ -93,7 +93,7 @@ function handleEquip(tab: StoreCategory, itemId: string): void {
         audio.audioClipUrl = tape.audioSrc
         audio.playing = true
         audio.loop = true
-        audio.volume = 0.0984375
+        audio.volume = 0.1
       } catch (e) {
         console.error('[Chest] Failed to equip tape:', e)
       }

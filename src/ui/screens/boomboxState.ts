@@ -61,7 +61,7 @@ export function toggleMusic(): void {
       setEquippedTape(tape.id)
       try {
         const audio = AudioSource.getMutable(musicEntity)
-        audio.volume = 0.0984375
+        audio.volume = 0.1
         audio.playing = true
       } catch (e) { console.error('[Music] Failed to unmute:', e) }
     }

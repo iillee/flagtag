@@ -20,6 +20,8 @@ import {
   Raycast,
   RaycastResult,
   RaycastQueryType,
+  Physics,
+  KnockbackFalloff,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
@@ -37,6 +39,7 @@ import { isSpectatorMode } from './spectatorSystem'
 import { playSpatialSound } from '../utils/spatialAudio'
 
 const BOMB_MODEL_SRC = 'assets/asset-packs/iron_grenade/Bomb_01/Bomb_01.glb'
+const BOMB_RED_MODEL_SRC = 'assets/asset-packs/iron_grenade/Bomb_01/Bomb_red.glb'
 const BOMB_SCALE = Vector3.create(2, 2, 2)
 const LOCAL_GRAVITY = 15
 
@@ -243,9 +246,9 @@ function playBombExplodeSound(position: Vector3): void {
   if (!bombExplodeSoundEntity) {
     bombExplodeSoundEntity = engine.addEntity()
     Transform.create(bombExplodeSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(bombExplodeSoundEntity, { audioClipUrl: 'assets/sounds/explode.mp3', playing: false, loop: false, volume: 1.0, global: false })
+    AudioSource.create(bombExplodeSoundEntity, { audioClipUrl: 'assets/sounds/bomb_exploding.mp3', playing: false, loop: false, volume: 1.0, global: false })
   }
-  playSpatialSound(bombExplodeSoundEntity, 'assets/sounds/explode.mp3', position, 10)
+  playSpatialSound(bombExplodeSoundEntity, 'assets/sounds/bomb_exploding.mp3', position, 50)
 }
 
 // ── Active bomb visuals (message-driven) ──
@@ -361,6 +364,7 @@ room.onMessage('bombExploded', (data) => {
       const now = Date.now()
       if (bombStaggerUntil <= now) {
         console.log('[Bomb] 💣 Local player hit by explosion!')
+        Physics.applyKnockbackToPlayer(pos, 40, BOMB_EXPLOSION_RADIUS, KnockbackFalloff.LINEAR)
         triggerHitFlash(BOMB_STAGGER_MS)
         triggerEmote({ predefinedEmote: 'getHit' })
         InputModifier.createOrReplace(engine.PlayerEntity, {
@@ -381,6 +385,11 @@ function createBombVisual(x: number, y: number, z: number, ownerId: string, bomb
   const t = Transform.getMutable(entity)
   t.position = Vector3.create(x, y, z)
   t.scale = BOMB_SCALE
+  GltfContainer.createOrReplace(entity, {
+    src: BOMB_MODEL_SRC,
+    visibleMeshesCollisionMask: 0,
+    invisibleMeshesCollisionMask: 0
+  })
 
   // Fire ground raycast
   const groundRayEntity = engine.addEntity()
@@ -488,16 +497,16 @@ export function bombClientSystem(dt: number): void {
     // Blink interval: 800ms → 100ms as fuse runs out
     const blinkInterval = 800 - fuseProgress * 700
 
-    if (now - vis.lastBlinkMs > blinkInterval) {
+    if (age >= 2000 && now - vis.lastBlinkMs > blinkInterval) {
       vis.blinkOn = !vis.blinkOn
       vis.lastBlinkMs = now
 
-      // Scale pulse: slightly grow when blink is on
-      if (vis.blinkOn) {
-        t.scale = Vector3.create(BOMB_SCALE.x * 1.15, BOMB_SCALE.y * 1.15, BOMB_SCALE.z * 1.15)
-      } else {
-        t.scale = BOMB_SCALE
-      }
+      // Flash red model and pulse scale on blink
+      GltfContainer.createOrReplace(vis.entity, {
+        src: vis.blinkOn ? BOMB_RED_MODEL_SRC : BOMB_MODEL_SRC,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
     }
 
     // Update fuse flame — flicker size/position
