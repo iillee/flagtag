@@ -7,8 +7,8 @@ import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import {
   Flag, FlagState,
-  Trap, TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
-  Projectile, PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
+  TRAP_LIFETIME_SEC, TRAP_COOLDOWN_SEC, TRAP_MAX_ACTIVE, TRAP_TRIGGER_RADIUS,
+  PROJECTILE_LIFETIME_SEC, PROJECTILE_COOLDOWN_SEC, PROJECTILE_MAX_ACTIVE, PROJECTILE_SPEED, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS,
   BOMB_FUSE_SEC, BOMB_COOLDOWN_SEC, BOMB_EXPLOSION_RADIUS, BOMB_STAGGER_MS, BOMB_IMPACT_HEIGHT,
   recycleGhostSyncId,
 } from '../shared/components'
@@ -20,6 +20,111 @@ import {
   sessionBananasDropped, sessionBoomerangsFired,
 } from './serverState'
 import { handleDrop } from './flagLogic'
+
+// ══════════════════════════════════════════════════════════════════════
+// SERVER ENTITY POOLS
+// Pre-create a fixed set of entities at startup. Reuse by toggling
+// position between active and hidden. ZERO entity create/destroy
+// during gameplay = zero CRDT tombstone accumulation.
+// ══════════════════════════════════════════════════════════════════════
+
+const SERVER_HIDDEN_POS = Vector3.create(0, -500, 0)
+
+// ── Trap entity pool ──
+const TRAP_POOL_SIZE = 40  // matches sync ID pool size
+const trapEntityPool: Entity[] = []
+let trapPoolReady = false
+
+function initTrapEntityPool(): void {
+  if (trapPoolReady) return
+  trapPoolReady = true
+  for (let i = 0; i < TRAP_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+    trapEntityPool.push(e)
+  }
+  console.log('[Server] 🪤 Pre-created trap entity pool of', TRAP_POOL_SIZE)
+}
+
+function acquireTrapEntity(): Entity | null {
+  initTrapEntityPool()
+  // Find entity not currently in use (check against activeTraps)
+  const inUse = new Set(activeTraps.map(t => t.entity))
+  for (const e of trapEntityPool) {
+    if (!inUse.has(e)) return e
+  }
+  console.error('[Server] 🪤 Trap entity pool exhausted!')
+  return null
+}
+
+function releaseTrapEntity(entity: Entity): void {
+  const t = Transform.getMutable(entity)
+  t.position = SERVER_HIDDEN_POS
+}
+
+// ── Projectile entity pool ──
+const PROJECTILE_POOL_SIZE = 30  // matches sync ID pool size
+const projectileEntityPool: Entity[] = []
+let projectilePoolReady = false
+
+function initProjectileEntityPool(): void {
+  if (projectilePoolReady) return
+  projectilePoolReady = true
+  for (let i = 0; i < PROJECTILE_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+    projectileEntityPool.push(e)
+  }
+  console.log('[Server] 🎯 Pre-created projectile entity pool of', PROJECTILE_POOL_SIZE)
+}
+
+function acquireProjectileEntity(): Entity | null {
+  initProjectileEntityPool()
+  const inUse = new Set(activeProjectiles.map(p => p.entity))
+  for (const e of projectileEntityPool) {
+    if (!inUse.has(e)) return e
+  }
+  console.error('[Server] 🎯 Projectile entity pool exhausted!')
+  return null
+}
+
+function releaseProjectileEntity(entity: Entity): void {
+  const t = Transform.getMutable(entity)
+  t.position = SERVER_HIDDEN_POS
+}
+
+// ── Bomb entity pool ──
+const BOMB_POOL_SIZE = 12
+const bombEntityPool: Entity[] = []
+let bombPoolReady = false
+
+function initBombEntityPool(): void {
+  if (bombPoolReady) return
+  bombPoolReady = true
+  for (let i = 0; i < BOMB_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+    bombEntityPool.push(e)
+  }
+  console.log('[Server] 💣 Pre-created bomb entity pool of', BOMB_POOL_SIZE)
+}
+
+function acquireBombEntity(): Entity | null {
+  initBombEntityPool()
+  const inUse = new Set(activeBombs.map(b => b.entity))
+  for (const e of bombEntityPool) {
+    if (!inUse.has(e)) return e
+  }
+  console.error('[Server] 💣 Bomb entity pool exhausted!')
+  return null
+}
+
+function releaseBombEntity(entity: Entity): void {
+  const t = Transform.getMutable(entity)
+  t.position = SERVER_HIDDEN_POS
+}
+
+// ══════════════════════════════════════════════════════════════════════
 
 // ── Trap state ──
 
@@ -37,7 +142,7 @@ export interface ActiveTrap {
 export const activeTraps: ActiveTrap[] = []
 
 function removeTrap(trap: ActiveTrap): void {
-  engine.removeEntity(trap.entity)
+  releaseTrapEntity(trap.entity)
 }
 
 // ── Bomb state ──
@@ -59,7 +164,7 @@ export interface ActiveBomb {
 export const activeBombs: ActiveBomb[] = []
 
 function removeBomb(bomb: ActiveBomb): void {
-  engine.removeEntity(bomb.entity)
+  releaseBombEntity(bomb.entity)
 }
 
 function explodeBomb(bomb: ActiveBomb): void {
@@ -160,7 +265,7 @@ export interface ActiveProjectile {
 export const activeProjectiles: ActiveProjectile[] = []
 
 function removeProjectile(projectile: ActiveProjectile): void {
-  engine.removeEntity(projectile.entity)
+  releaseProjectileEntity(projectile.entity)
 }
 
 // ── Green orbit state ──
@@ -214,8 +319,15 @@ async function handleTrapDrop(playerId: string): Promise<void> {
     const dropPos = Vector3.create(playerPos.x, playerPos.y - 0.2, playerPos.z)
     const bombId = nextBombId++
 
-    const bombEntity = engine.addEntity()
-    Transform.create(bombEntity, { position: dropPos, scale: Vector3.create(1, 1, 1) })
+    const bombEntity = acquireBombEntity()
+    if (!bombEntity) {
+      console.log('[Server] Bomb denied: pool exhausted')
+      room.send('bananaDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
+      return
+    }
+    const bt = Transform.getMutable(bombEntity)
+    bt.position = dropPos
+    bt.scale = Vector3.create(1, 1, 1)
 
     activeBombs.push({
       entity: bombEntity,
@@ -247,15 +359,15 @@ async function handleTrapDrop(playerId: string): Promise<void> {
 
   const dropPos = Vector3.create(playerPos.x, playerPos.y - 0.2, playerPos.z)
 
-  const trapEntity = engine.addEntity()
-  Transform.create(trapEntity, {
-    position: dropPos,
-    scale: Vector3.create(1, 1, 1)
-  })
-  Trap.create(trapEntity, {
-    droppedByPlayerId: playerId,
-    droppedAtMs: now,
-  })
+  const trapEntity = acquireTrapEntity()
+  if (!trapEntity) {
+    console.log('[Server] Trap denied: pool exhausted')
+    room.send('bananaDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
+    return
+  }
+  const tt = Transform.getMutable(trapEntity)
+  tt.position = dropPos
+  tt.scale = Vector3.create(1, 1, 1)
   activeTraps.push({
     entity: trapEntity,
     droppedBy: playerId,
@@ -477,24 +589,15 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     playerPos.z + nDirZ * 1.0
   )
 
-  const projectileEntity = engine.addEntity()
-  Transform.create(projectileEntity, {
-    position: spawnPos,
-    scale: Vector3.create(1, 1, 1),
-    rotation: Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
-  })
-  Projectile.create(projectileEntity, {
-    firedByPlayerId: playerId,
-    firedAtMs: now,
-    startX: spawnPos.x,
-    startY: spawnPos.y,
-    startZ: spawnPos.z,
-    dirX: nDirX,
-    dirZ: nDirZ,
-    distanceTraveled: 0,
-    maxDistance: chargeRange,
-    active: true,
-  })
+  const projectileEntity = acquireProjectileEntity()
+  if (!projectileEntity) {
+    console.log('[Server] Projectile denied: pool exhausted')
+    return
+  }
+  const pt = Transform.getMutable(projectileEntity)
+  pt.position = spawnPos
+  pt.scale = Vector3.create(1, 1, 1)
+  pt.rotation = Quaternion.fromEulerDegrees(0, Math.atan2(nDirX, nDirZ) * (180 / Math.PI), 0)
   const shellId = nextShellId++
   activeProjectiles.push({
     entity: projectileEntity,
@@ -779,7 +882,7 @@ export function orbitServerSystem(_dt: number): void {
 
 // ── Cleanup helpers (used by roundManager) ──
 
-export { removeTrap, removeProjectile }
+export { removeTrap, removeProjectile, removeBomb }
 
 // ── Cooldown map cleanup (called on player disconnect) ──
 

@@ -23,7 +23,7 @@ import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyRe
 
 import { awardRoundCoins } from './economy'
 import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState, computeGravityTarget } from './flagLogic'
-import { activeTraps, activeProjectiles, activeOrbits, activeBombs, removeTrap, removeProjectile, clearAllCombatCooldowns } from './combat'
+import { activeTraps, activeProjectiles, activeOrbits, activeBombs, removeTrap, removeProjectile, removeBomb, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime, loadPlayerUpgrades, loadPlayerLifetimeWins, loadPlayerLifetimeHoldTime } from './economy'
 import { serializeUpgrades } from '../shared/upgrades'
@@ -335,18 +335,18 @@ async function handleRoundEnd(): Promise<void> {
   // Force-clear accumulator again (defensive)
   clearHoldTimeAccum()
 
-  // ── 3. Remove all active traps ──
+  // ── 3. Release all active traps back to pool ──
   for (const trap of activeTraps) {
     removeTrap(trap)
   }
   activeTraps.length = 0
   for (const bomb of activeBombs) {
-    engine.removeEntity(bomb.entity)
+    removeBomb(bomb)
   }
   activeBombs.length = 0
-  console.log('[Server] 🪤 All traps + bombs cleared for new round')
+  console.log('[Server] 🪤 All traps + bombs released to pool for new round')
 
-  // ── 3b. Remove all active projectiles + orbits ──
+  // ── 3b. Release all active projectiles + orbits back to pool ──
   for (const projectile of activeProjectiles) {
     removeProjectile(projectile)
   }
