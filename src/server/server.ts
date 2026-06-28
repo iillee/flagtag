@@ -336,4 +336,9 @@ function registerHandlers(): void {
       }
     } catch (err) { console.error('[Server] ❌ requestAllColors handler error:', err) }
   })
+
+  // Relay water lever pull to all clients
+  room.onMessage('waterLeverPulled', (_data, _context) => {
+    room.send('waterLeverPulled', { t: Date.now() })
+  })
 }

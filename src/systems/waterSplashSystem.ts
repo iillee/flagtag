@@ -10,9 +10,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { isSpectatorMode } from './spectatorSystem'
-
-// Must match waterSystem.ts
-const WATER_SURFACE_Y = 1.58
+import { getWaterSurfaceY } from './waterSystem'
 
 // Water plane now covers the entire scene (160m × 240m)
 function isInWaterZone(px: number, pz: number): boolean {
@@ -147,7 +145,7 @@ export function waterSplashSystem(dt: number) {
   if (isSpectatorMode()) return
 
   const playerPos = Transform.get(engine.PlayerEntity).position
-  const inWater = playerPos.y <= WATER_SURFACE_Y && isInWaterZone(playerPos.x, playerPos.z)
+  const inWater = playerPos.y <= getWaterSurfaceY() && isInWaterZone(playerPos.x, playerPos.z)
 
   if (inWater) {
     const dx = playerPos.x - lastPlayerPos.x
@@ -161,7 +159,7 @@ export function waterSplashSystem(dt: number) {
         // Spawn 2-3 droplets per step
         const count = 2 + Math.floor(Math.random() * 2)
         for (let i = 0; i < count; i++) {
-          spawnSplash(playerPos.x, playerPos.z, WATER_SURFACE_Y)
+          spawnSplash(playerPos.x, playerPos.z, getWaterSurfaceY())
         }
       }
     } else {

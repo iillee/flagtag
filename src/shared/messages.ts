@@ -42,6 +42,7 @@ export const Messages = {
   shieldConsumed: Schemas.Map({ playerId: Schemas.String }),
   flagImmunity: Schemas.Map({ playerId: Schemas.String, durationMs: Schemas.Int }),
   flagSinking: Schemas.Map({ t: Schemas.Int }),
+  waterLeverPulled: Schemas.Map({ t: Schemas.Int }),
   playerShieldActive: Schemas.Map({ playerId: Schemas.String, active: Schemas.Int }),
 
   // Boomerang color sync

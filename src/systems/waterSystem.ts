@@ -11,7 +11,17 @@ let _isInInterior = false
 export function setInteriorBypass(v: boolean) { _isInInterior = v }
 
 // Water surface Y level
-const WATER_SURFACE_Y = 1.58
+let WATER_SURFACE_Y = 1.58
+
+/** Update the water surface Y for drowning checks (called by interior lever system) */
+export function setWaterSurfaceY(y: number): void {
+  WATER_SURFACE_Y = y
+}
+
+/** Get current water surface Y (used by splash system) */
+export function getWaterSurfaceY(): number {
+  return WATER_SURFACE_Y
+}
 
 // Drowning config
 const DROWN_TIME = 5.0 // seconds in water before death
@@ -141,7 +151,11 @@ export function waterSystem(dt: number) {
   ensureDrownBar()
 
   const playerPos = Transform.get(engine.PlayerEntity).position
-  const inWater = !_isInInterior && playerPos.y <= WATER_SURFACE_Y && isInWaterZone(playerPos.x, playerPos.z)
+  // Feet in water — for sound + movement effects
+  const feetInWater = !_isInInterior && playerPos.y <= WATER_SURFACE_Y && isInWaterZone(playerPos.x, playerPos.z)
+  // Drown when shoulders (feet + 1.3m) are below the water surface
+  const headY = playerPos.y + 1.3
+  const inWater = !_isInInterior && headY <= WATER_SURFACE_Y && isInWaterZone(playerPos.x, playerPos.z)
 
   // Respawn delay — fade to black, teleport, fade back
   if (respawnDelay > 0) {
@@ -195,12 +209,12 @@ export function waterSystem(dt: number) {
     })
   }
 
-  // Toggle run disable on water enter/exit
-  if (inWater && !wasInWater) {
+  // Toggle run disable on water enter/exit (feet level)
+  if (feetInWater && !wasInWater) {
     InputModifier.createOrReplace(engine.PlayerEntity, {
       mode: InputModifier.Mode.Standard({ disableRun: true })
     })
-  } else if (!inWater && wasInWater) {
+  } else if (!feetInWater && wasInWater) {
     InputModifier.createOrReplace(engine.PlayerEntity, {
       mode: InputModifier.Mode.Standard({ disableRun: false })
     })
@@ -261,8 +275,8 @@ export function waterSystem(dt: number) {
     }
   }
 
-  // Water sound — play when moving in water (but not during respawn)
-  if (inWater && waterSoundEntity && respawnDelay <= 0) {
+  // Water sound — play when moving in water at feet level (but not during respawn)
+  if (feetInWater && waterSoundEntity && respawnDelay <= 0) {
     const dx = playerPos.x - lastPlayerPos.x
     const dz = playerPos.z - lastPlayerPos.z
     const isMoving = (dx * dx + dz * dz) > 0.0001
@@ -275,13 +289,13 @@ export function waterSystem(dt: number) {
         AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
       }
     }
-  } else if (!inWater && waterSoundEntity) {
+  } else if (!feetInWater && waterSoundEntity) {
     const audio = AudioSource.getMutableOrNull(waterSoundEntity)
     if (audio && audio.playing) {
       AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
     }
   }
 
-  wasInWater = inWater
+  wasInWater = feetInWater
   lastPlayerPos = playerPos
 }

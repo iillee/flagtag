@@ -7,6 +7,7 @@
  */
 import {
   engine, Entity, Transform, MeshRenderer, MeshCollider, Material,
+  Animator, Tween, TweenSequence, EasingFunction,
   GltfContainer, VirtualCamera, MainCamera, CameraModeArea, CameraType,
   pointerEventsSystem, InputAction, AudioSource, VisibilityComponent,
   TriggerArea, triggerAreaEventsSystem,
@@ -15,7 +16,7 @@ import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { registerSystem } from './systemManager'
 import { setCinematicFade, cinematicState } from '../ui'
-import { setInteriorBypass } from './waterSystem'
+import { setInteriorBypass, setWaterSurfaceY } from './waterSystem'
 import { room } from '../shared/messages'
 import { Flag, FlagState } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
@@ -237,12 +238,8 @@ function buildRoom(): void {
     Vector3.create(cx + 3.5, cy + 0.8, cz - 3.5),
     Vector3.create(cx - 1,   cy + 0.8, cz + 3.5),
     Vector3.create(cx - 1,   cy + 0.8, cz - 3.5),
-    Vector3.create(cx + 1,   cy + 0.8, cz + 2),
-    Vector3.create(cx + 1,   cy + 0.8, cz - 2),
-    Vector3.create(cx + 3,   cy + 0.8, cz),
     Vector3.create(cx - 3,   cy + 0.8, cz + 1.5),
     Vector3.create(cx - 3,   cy + 0.8, cz - 1.5),
-    Vector3.create(cx - 0.5, cy + 0.8, cz),
   ]
 
   for (const pos of coinPositions) {
@@ -257,6 +254,29 @@ function buildRoom(): void {
     roomEntities.push(coin)
   }
   console.log('[Interior] Spawned', coinPositions.length, 'treasure coins')
+
+  // ── Lever (placed at room center, code-managed) ──
+  const leverEntity = engine.addEntity()
+  const leverPos = rotPos(ROOM_CENTER.x, ROOM_CENTER.y, ROOM_CENTER.z)
+  Transform.create(leverEntity, {
+    position: Vector3.create(leverPos.x, leverPos.y, leverPos.z),
+    scale: Vector3.create(1, 1, 1),
+    rotation: ROOM_QUAT,
+  })
+  GltfContainer.create(leverEntity, {
+    src: 'assets/asset-packs/pirate_lever/lever_pirates.glb',
+    visibleMeshesCollisionMask: 1,
+    invisibleMeshesCollisionMask: 3,
+  })
+  Animator.create(leverEntity, {
+    states: [
+      { clip: 'activate', playing: false, loop: false },
+      { clip: 'deactivate', playing: false, loop: false },
+    ]
+  })
+  roomEntities.push(leverEntity)
+  _leverEntity = leverEntity
+  console.log('[Interior] Lever placed at room center')
 }
 
 function buildEntryTrigger(): void {
@@ -418,5 +438,188 @@ export function setupInteriorSystem(): void {
   registerSystem(interiorFadeSystem)
   registerSystem(interiorSafetySystem)
 
+  // Wire up the lever to raise/lower water
+  setupWaterRise()
+
   console.log('[Interior] Room built at Y=180, entry door wired')
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// WATER RISE — lever toggles water rising from 1.58m to 16m over 60s
+// Local-only visual effect (only the player who pulled the lever sees it)
+// ══════════════════════════════════════════════════════════════════════
+
+const WATER_BASE_Y = 1.58
+const WATER_MAX_Y = 8
+const WATER_RISE_DURATION = 120  // seconds to go from base to max
+
+type WaterCyclePhase = 'idle' | 'rising' | 'peak' | 'lowering'
+let waterPhase: WaterCyclePhase = 'idle'
+let waterPeakTimer = 0
+const WATER_PEAK_HOLD = 60  // seconds to hold at peak
+
+let waterEntity: Entity | null = null
+let _leverEntity: Entity | null = null
+
+const WATER_CENTER_X = 256
+const WATER_CENTER_Z = 256
+const WATER_DIAMETER = 460  // meters
+
+function buildCircularWater(): void {
+  // Hide the composite water GLB
+  for (const [entity] of engine.getEntitiesWith(GltfContainer, Transform)) {
+    const gltf = GltfContainer.get(entity)
+    if (gltf.src.includes('WaterPatchFull')) {
+      VisibilityComponent.createOrReplace(entity, { visible: false })
+      console.log('[Interior] Hid composite water entity')
+      break
+    }
+  }
+
+  // Single flat cylinder as circular water surface
+  waterEntity = engine.addEntity()
+  Transform.create(waterEntity, {
+    position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y, WATER_CENTER_Z),
+    scale: Vector3.create(WATER_DIAMETER - 64, 0.02, WATER_DIAMETER - 64),
+  })
+  MeshRenderer.setCylinder(waterEntity, 0.5, 0.5)
+  Material.setPbrMaterial(waterEntity, {
+    albedoColor: Color4.create(0.55, 0.75, 0.78, 1.0),
+    roughness: 1.0,
+    metallic: 0.0,
+    specularIntensity: 0.0,
+  })
+  // Bottom layer — opaque seafloor tint just above ground
+  const waterFloor = engine.addEntity()
+  Transform.create(waterFloor, {
+    position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y - 0.3, WATER_CENTER_Z),
+    scale: Vector3.create(WATER_DIAMETER, 0.02, WATER_DIAMETER),
+  })
+  MeshRenderer.setCylinder(waterFloor, 0.5, 0.5)
+  Material.setPbrMaterial(waterFloor, {
+    albedoColor: Color4.create(0.624, 0.804, 0.765, 1.0),
+    emissiveColor: Color4.create(0.0, 0.0, 0.0),
+    emissiveIntensity: 0.0,
+    roughness: 0.5,
+    metallic: 0.0,
+  })
+
+  console.log('[Interior] Created circular water surface, diameter:', WATER_DIAMETER, 'm')
+}
+
+function tweenWaterTo(targetY: number, durationSec: number): void {
+  if (!waterEntity) return
+  const pos = Transform.get(waterEntity).position
+  const currentY = pos.y
+  if (Math.abs(currentY - targetY) < 0.01) return
+
+  // Remove existing tweens
+  if (TweenSequence.has(waterEntity)) TweenSequence.deleteFrom(waterEntity)
+  if (Tween.has(waterEntity)) Tween.deleteFrom(waterEntity)
+
+  Tween.createOrReplace(waterEntity, {
+    mode: Tween.Mode.Move({
+      start: Vector3.create(pos.x, currentY, pos.z),
+      end: Vector3.create(pos.x, targetY, pos.z),
+    }),
+    duration: Math.max(500, durationSec * 1000),
+    easingFunction: EasingFunction.EF_LINEAR,
+  })
+}
+
+function startWaterCycle(): void {
+  if (waterPhase !== 'idle') return  // already in cycle
+  waterPhase = 'rising'
+  tweenWaterTo(WATER_MAX_Y, WATER_RISE_DURATION)
+  // Play lever
+  if (_leverEntity) {
+    AudioSource.createOrReplace(_leverEntity, {
+      audioClipUrl: 'assets/asset-packs/pirate_lever/sound.mp3',
+      playing: true, loop: false, volume: 1.0, global: false
+    })
+    if (Animator.has(_leverEntity)) {
+      Animator.playSingleAnimation(_leverEntity, 'activate', true)
+    }
+  }
+  console.log('[Interior] Water cycle started — RISING')
+}
+
+function waterCycleSystem(dt: number): void {
+  if (!waterEntity || waterPhase === 'idle') return
+
+  const waterY = Transform.get(waterEntity).position.y
+
+  if (waterPhase === 'rising' && waterY >= WATER_MAX_Y - 0.05) {
+    waterPhase = 'peak'
+    waterPeakTimer = WATER_PEAK_HOLD
+    console.log('[Interior] Water at peak — holding for', WATER_PEAK_HOLD, 's')
+  } else if (waterPhase === 'peak') {
+    waterPeakTimer -= dt
+    if (waterPeakTimer <= 0) {
+      waterPhase = 'lowering'
+      tweenWaterTo(WATER_BASE_Y, WATER_RISE_DURATION)
+      // Play lever back
+      if (_leverEntity) {
+        AudioSource.createOrReplace(_leverEntity, {
+          audioClipUrl: 'assets/asset-packs/pirate_lever/sound.mp3',
+          playing: true, loop: false, volume: 1.0, global: false
+        })
+        if (Animator.has(_leverEntity)) {
+          Animator.playSingleAnimation(_leverEntity, 'deactivate', true)
+        }
+      }
+      console.log('[Interior] Water LOWERING')
+    }
+  } else if (waterPhase === 'lowering' && waterY <= WATER_BASE_Y + 0.05) {
+    waterPhase = 'idle'
+    console.log('[Interior] Water cycle complete — idle')
+  }
+}
+
+/** Sync the drown mechanic with the rising water level + underwater overlay */
+let isUnderwater = false
+export function getIsUnderwater(): boolean { return isUnderwater }
+
+function waterLevelSyncSystem(_dt: number): void {
+  if (!waterEntity) return
+  const waterY = Transform.get(waterEntity).position.y
+  setWaterSurfaceY(waterY)
+
+  if (!Transform.has(engine.PlayerEntity)) return
+  const playerY = Transform.get(engine.PlayerEntity).position.y
+  isUnderwater = waterY > WATER_BASE_Y + 0.1 && playerY < waterY - 2.0
+}
+
+function setupWaterRise(): void {
+  if (!_leverEntity) {
+    console.error('[Interior] Lever entity not set!')
+    return
+  }
+
+  buildCircularWater()
+  if (!waterEntity) {
+    console.log('[Interior] Water entity not created!')
+    return
+  }
+
+  pointerEventsSystem.onPointerDown(
+    {
+      entity: _leverEntity,
+      opts: { button: InputAction.IA_POINTER, hoverText: 'Pull Lever', maxDistance: 20 },
+    },
+    () => {
+      if (waterPhase !== 'idle') return
+      // Broadcast to all players (including self)
+      room.send('waterLeverPulled', { t: Date.now() })
+    }
+  )
+
+  // All clients listen for the lever pull message
+  room.onMessage('waterLeverPulled', () => {
+    startWaterCycle()
+  })
+
+  registerSystem(waterCycleSystem)
+  registerSystem(waterLevelSyncSystem)
+  console.log('[Interior] Lever wired to water rise (synced)')
 }

@@ -60,6 +60,7 @@ import { getDrownFraction, isDrownBarVisible, getRespawnCountdown, getDrownFadeO
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible, isLightningWarningActive } from './systems/lightningSystem'
 import { requestManualDrop } from './systems/flagSystem'
 import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible, getScareFraction, isScareBarVisible } from './systems/ghostSystem'
+import { getIsUnderwater } from './systems/interiorSystem'
 
 // Reusable components
 import { CloseButton } from './ui/components/CloseButton'
@@ -144,6 +145,7 @@ function ScareBar() {
 
 function PlayerListUi() {
   const mobile = isMobile()
+  const underwaterVisible = getIsUnderwater()
   const cinematicFadeOpacity = cinematicState.fadeOpacity
   const cinematicShowing = cinematicState.showing
   const nextRoundStartingVisible = creditsState.nextRoundVisible
@@ -162,6 +164,14 @@ function PlayerListUi() {
         <UiEntity
           uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', pointerFilter: 'none' }}
           uiBackground={{ color: Color4.create(0.8, 0, 0, getHitFlashAlpha()) }}
+        />
+      )}
+
+      {/* Underwater overlay */}
+      {underwaterVisible && (
+        <UiEntity
+          uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%' }}
+          uiBackground={{ color: Color4.create(0.15, 0.35, 0.55, 0.45) }}
         />
       )}
 

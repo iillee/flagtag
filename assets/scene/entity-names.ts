@@ -100,6 +100,7 @@ export enum EntityNames {
   Loot_Trunk_3 = "Loot Trunk_3",
   Medium_Straight_Dock_Module = "Medium Straight Dock Module",
   Medium_Straight_Dock_Module_2 = "Medium Straight Dock Module_2",
+  Pirate_Lever = "Pirate Lever",
   Ritual_Pedestal = "Ritual Pedestal",
   Rowboat = "Rowboat",
   Rug = "Rug",
