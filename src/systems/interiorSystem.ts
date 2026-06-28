@@ -326,6 +326,14 @@ function enterInterior(): void {
   if (isInInterior || fadeState !== 'none') return
   if (cinematicState.showing) return // don't allow during round-end cinematic
 
+  // Play door sound (local)
+  if (entryClickEntity) {
+    AudioSource.createOrReplace(entryClickEntity, {
+      audioClipUrl: 'assets/sounds/door.mp3',
+      playing: true, loop: false, volume: 1.0, global: true
+    })
+  }
+
   // Drop the flag if carrying
   const localUserId = getPlayer()?.userId ?? ''
   for (const [, flag] of engine.getEntitiesWith(Flag)) {
@@ -460,6 +468,7 @@ const WATER_PEAK_HOLD = 60  // seconds to hold at peak
 
 let waterEntity: Entity | null = null
 let _leverEntity: Entity | null = null
+let waterRiseSoundEntity: Entity | null = null
 
 const WATER_CENTER_X = 256
 const WATER_CENTER_Z = 256
@@ -541,6 +550,15 @@ function startWaterCycle(): void {
       Animator.playSingleAnimation(_leverEntity, 'activate', true)
     }
   }
+  // Start water rise sound (global, looping)
+  if (!waterRiseSoundEntity) {
+    waterRiseSoundEntity = engine.addEntity()
+    Transform.create(waterRiseSoundEntity, { position: Vector3.create(256, 4, 256) })
+  }
+  AudioSource.createOrReplace(waterRiseSoundEntity, {
+    audioClipUrl: 'assets/sounds/waterrise.mp3',
+    playing: true, loop: true, volume: 0.075, global: true
+  })
   console.log('[Interior] Water cycle started — RISING')
 }
 
@@ -552,6 +570,13 @@ function waterCycleSystem(dt: number): void {
   if (waterPhase === 'rising' && waterY >= WATER_MAX_Y - 0.05) {
     waterPhase = 'peak'
     waterPeakTimer = WATER_PEAK_HOLD
+    // Stop water rise sound during peak hold
+    if (waterRiseSoundEntity) {
+      AudioSource.createOrReplace(waterRiseSoundEntity, {
+        audioClipUrl: 'assets/sounds/waterrise.mp3',
+        playing: false, loop: true, volume: 0.075, global: true
+      })
+    }
     console.log('[Interior] Water at peak — holding for', WATER_PEAK_HOLD, 's')
   } else if (waterPhase === 'peak') {
     waterPeakTimer -= dt
@@ -568,10 +593,24 @@ function waterCycleSystem(dt: number): void {
           Animator.playSingleAnimation(_leverEntity, 'deactivate', true)
         }
       }
+      // Resume water rise sound for lowering
+      if (waterRiseSoundEntity) {
+        AudioSource.createOrReplace(waterRiseSoundEntity, {
+          audioClipUrl: 'assets/sounds/waterrise.mp3',
+          playing: true, loop: true, volume: 0.075, global: true
+        })
+      }
       console.log('[Interior] Water LOWERING')
     }
   } else if (waterPhase === 'lowering' && waterY <= WATER_BASE_Y + 0.05) {
     waterPhase = 'idle'
+    // Stop water rise sound when cycle complete
+    if (waterRiseSoundEntity) {
+      AudioSource.createOrReplace(waterRiseSoundEntity, {
+        audioClipUrl: 'assets/sounds/waterrise.mp3',
+        playing: false, loop: true, volume: 0.075, global: true
+      })
+    }
     console.log('[Interior] Water cycle complete — idle')
   }
 }
