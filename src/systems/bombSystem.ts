@@ -229,9 +229,9 @@ function playBombFuseSound(position: Vector3): void {
   if (!bombFuseSoundEntity) {
     bombFuseSoundEntity = engine.addEntity()
     Transform.create(bombFuseSoundEntity, { position: Vector3.Zero() })
-    AudioSource.create(bombFuseSoundEntity, { audioClipUrl: 'assets/sounds/fuse.mp3', playing: false, loop: false, volume: 1.0, global: false })
+    AudioSource.create(bombFuseSoundEntity, { audioClipUrl: 'assets/sounds/fuse.mp3', playing: false, loop: false, volume: 0.5, global: false })
   }
-  playSpatialSound(bombFuseSoundEntity, 'assets/sounds/fuse.mp3', position, 1)
+  playSpatialSound(bombFuseSoundEntity, 'assets/sounds/fuse.mp3', position, 0.5)
 }
 
 function stopBombFuseSound(): void {
