@@ -136,13 +136,13 @@ let preFadeStarted = false  // tracks whether we already started the pre-fade fo
 let preFadeElapsed = 0      // safety timeout for pre-fade
 let postRespawnHoldTimer = 0 // countdown: hold black after respawnPlayers arrives
 let pendingPreFadeTeleport = false // defer audience teleport until screen is fully black
-const FADE_IN_DUR = 1.0
+const FADE_IN_DUR = 0.6
 const FADE_HOLD_DUR = 0
 const FADE_OUT_DUR = 1.0
-const POST_RESPAWN_HOLD_DUR = 2.5 // hold black after respawnPlayers while podium sets up
-const END_FADE_IN_DUR = 0.8
+const POST_RESPAWN_HOLD_DUR = 1.0 // hold black after respawnPlayers while podium sets up
+const END_FADE_IN_DUR = 0.5
 const END_FADE_HOLD_DUR = 0.3
-const END_FADE_OUT_DUR = 0.8
+const END_FADE_OUT_DUR = 0.5
 
 // ── Podium emote helper ──
 // When teleported mid-glide/fall/emote, InputModifier can leave the avatar in a stuck
@@ -357,7 +357,8 @@ export function setupCinematicSystem(): void {
             void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
           }
           fadePhase = 6
-          fadeTimer = 5.4
+          fadeTimer = 5.0
+          cinematicState.roundOverVisible = false
           creditsState.nextRoundVisible = true
         }
       } else if (fadePhase === 6) {
