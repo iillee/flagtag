@@ -10,6 +10,7 @@ export interface RoundEarnings {
   participation: number
   holdTime: number
   placement: number
+  bloom: number
   rank: number
   newBalance: number
 }

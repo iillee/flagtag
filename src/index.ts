@@ -72,6 +72,7 @@ export async function main() {
   const { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } = await import('./gameState/flagHoldTime')
   await import('./gameState/overlayState')
   const { setupDeathPenaltyMessages } = await import('./systems/deathPenaltySystem')
+  const { setupPlantGrowth } = await import('./systems/plantGrowthSystem')
 
   // ── Client setup ──
   // Pre-initialize entity pools so GLB models are loaded before first use
@@ -87,6 +88,7 @@ export async function main() {
 
   setupUi()
   setupBeacon()
+  setupPlantGrowth()
   setupLadder()
 
 

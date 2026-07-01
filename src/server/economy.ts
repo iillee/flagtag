@@ -384,7 +384,31 @@ export async function awardRoundCoins(players: { userId: string; seconds: number
 
 const DEATH_PENALTY_COINS = 10
 
+// ── Bloom bonus constants ──
+/** Max coins from 100% bloom at round end */
+const BLOOM_MAX_COINS = 10
+
 export function registerEconomyHandlers(): void {
+  // ── Plant Growth bloom reward ──
+  room.onMessage('reportBloomPercentage', async (data, context) => {
+    try {
+      if (!context) return
+      const from = context.from.toLowerCase()
+      const pct = Math.max(0, Math.min(100, data.percentage || 0))
+      if (pct <= 0) return
+
+      const coins = Math.floor((pct / 100) * BLOOM_MAX_COINS)
+      if (coins <= 0) return
+
+      const newBalance = await addPlayerCoins(from, coins)
+      room.send('walletBalance', { playerId: from, coins: newBalance }, { to: [from] })
+      room.send('bloomCoinsEarned', { playerId: from, coins, percentage: pct, newBalance }, { to: [from] })
+      console.log(`[Coins] 🌸 Bloom bonus: ${from.slice(0, 8)} earned ${coins} coins (${pct}% bloom, balance: ${newBalance})`)
+    } catch (err) {
+      console.error('[Coins] ❌ reportBloomPercentage error:', err)
+    }
+  })
+
   room.onMessage('requestCoinPickup', (data, context) => {
     if (!context || !data.coinId) return
     const from = context.from.toLowerCase()

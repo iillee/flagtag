@@ -587,6 +587,7 @@ function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgr
             <Label value={`Participation: +${activeRoundEarnings.participation}`} fontSize={mobile ? 34 : S(21)} color={LIGHT_GREY} font="sans-serif" />
             {activeRoundEarnings.holdTime > 0 && <Label value={`Flag Hold Time: +${activeRoundEarnings.holdTime}`} fontSize={mobile ? 34 : S(21)} color={LIGHT_GREY} font="sans-serif" />}
             {activeRoundEarnings.placement > 0 && <Label value={`${activeRoundEarnings.rank === 1 ? '1st' : activeRoundEarnings.rank === 2 ? '2nd' : '3rd'} Place Bonus: +${activeRoundEarnings.placement}`} fontSize={mobile ? 34 : S(21)} color={activeRoundEarnings.rank === 1 ? GOLD : activeRoundEarnings.rank === 2 ? SILVER : BRONZE} font="sans-serif" />}
+            {activeRoundEarnings.bloom > 0 && <Label value={`Garden Bloom: +${activeRoundEarnings.bloom}`} fontSize={mobile ? 34 : S(21)} color={Color4.create(0.4, 0.9, 0.4, 1)} font="sans-serif" />}
             {activeRoundEarnings.rank === 1 && <Label value="Winning: +1 Flag" fontSize={mobile ? 34 : S(21)} color={GOLD} font="sans-serif" />}
           </UiEntity>
 

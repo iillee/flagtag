@@ -84,6 +84,8 @@ export const Messages = {
   requestWalletBalance: Schemas.Map({ t: Schemas.Int }),                // Client → Server: request current balance on join
   walletBalance: Schemas.Map({ playerId: Schemas.String, coins: Schemas.Int }),  // Server → Client: your current balance
   roundCoinsEarned: Schemas.Map({ playerId: Schemas.String, total: Schemas.Int, participation: Schemas.Int, holdTime: Schemas.Int, placement: Schemas.Int, rank: Schemas.Int, newBalance: Schemas.Int }), // Server → Client: round-end earnings breakdown
+  reportBloomPercentage: Schemas.Map({ percentage: Schemas.Int }), // Client → Server: bloom % at round end
+  bloomCoinsEarned: Schemas.Map({ playerId: Schemas.String, coins: Schemas.Int, percentage: Schemas.Int, newBalance: Schemas.Int }), // Server → Client: bloom bonus coins
 
   // Store / upgrade messages
   requestUpgrades: Schemas.Map({ t: Schemas.Int }),                    // Client → Server: request my upgrades + lifetime wins on join

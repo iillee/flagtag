@@ -14,7 +14,7 @@ import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { CoinState, COIN_PICKUP_RADIUS } from '../shared/coins'
 import { room } from '../shared/messages'
-import { setPendingRoundEarnings } from '../gameState/roundEarnings'
+import { setPendingRoundEarnings, consumePendingRoundEarnings } from '../gameState/roundEarnings'
 import { registerDeferredBalanceApplier } from '../shared/clientState'
 
 
@@ -313,10 +313,37 @@ export function setupCoinMessages(): void {
       participation: data.participation,
       holdTime: data.holdTime,
       placement: data.placement,
+      bloom: 0,
       rank: data.rank,
       newBalance: data.newBalance
     })
     console.log('[CoinPickup] Round earnings received:', data.total, 'coins (deferred until animation)')
+  })
+
+  // Bloom bonus coins (plant growth minigame)
+  room.onMessage('bloomCoinsEarned', (data) => {
+    const player = getPlayer()
+    if (!player) return
+    if (data.playerId !== player.userId.toLowerCase()) return
+    // Add bloom coins to pending earnings if they exist, otherwise create standalone
+    const existing = consumePendingRoundEarnings()
+    if (existing) {
+      existing.bloom = data.coins
+      existing.total += data.coins
+      existing.newBalance = data.newBalance
+      setPendingRoundEarnings(existing)
+    } else {
+      setPendingRoundEarnings({
+        total: data.coins,
+        participation: 0,
+        holdTime: 0,
+        placement: 0,
+        bloom: data.coins,
+        rank: 0,
+        newBalance: data.newBalance
+      })
+    }
+    console.log(`[CoinPickup] 🌸 Bloom bonus: +${data.coins} coins (${data.percentage}% bloom)`)
   })
 }
 

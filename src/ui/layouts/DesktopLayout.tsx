@@ -2,6 +2,7 @@ import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { isNightTime } from '../../shared/dayNight'
+import { getPlantProgress } from '../../systems/plantGrowthSystem'
 
 import {
   S, WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GOLD,
@@ -67,6 +68,22 @@ export function DesktopLayout() {
           </UiEntity>
         </UiEntity>
       )}
+
+      {/* Plant Growth Progress */}
+      {!splashVisible && !isCinematicActive() && (() => {
+        const progress = getPlantProgress()
+        if (progress.total === 0 || progress.bloomed === 0) return null
+        const GREEN = Color4.create(0.4, 0.9, 0.4, 1)
+        return (
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: S(70), left: 0 }, width: '100%', flexDirection: 'row', justifyContent: 'center', pointerFilter: 'none' }}>
+            <UiEntity uiTransform={{ width: S(180), height: S(36), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS) }}
+              uiBackground={{ color: Color4.create(0, 0.15, 0, 0.7) }}
+            >
+              <Label value={`🌱 ${progress.bloomed}/${progress.total} Bloomed`} fontSize={S(18)} color={progress.bloomed === progress.total ? GOLD : GREEN} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
+            </UiEntity>
+          </UiEntity>
+        )
+      })()}
 
       <RoundEndSplash />
       {winConditionVisible && <HowToPlayOverlay />}
