@@ -494,14 +494,13 @@ export function flagClientSystem(dt: number): void {
         if (flag.state === FlagState.Carried) continue
         const dist = Vector3.distance(myPos, Transform.get(flagEnt).position)
         if (dist <= AUTO_PICKUP_RADIUS) {
-          // Optimistic Phase 1: show clone + sound + shield immediately (no server round-trip lag)
+          // Optimistic Phase 1: show clone + sound immediately (no server round-trip lag)
+          // Shield waits for server confirmation to avoid false positives.
           // If server rejects, the pending-pickup timeout will roll everything back.
           if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
           showClone(userId)
           playPickupSound()
           skipNextPickupSound = true  // suppress duplicate when pickupConfirmed arrives
-          showShieldForPlayer(userId)
-          setShieldAlpha(userId, 1.0)
           pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
           
           room.send('requestPickup', { t: 0 })
@@ -541,14 +540,11 @@ export function flagClientSystem(dt: number): void {
         if (identity.address.toLowerCase() === carrierIdForSteal) {
           const dist = Vector3.distance(myPos, transform.position)
           if (dist <= PROXIMITY_STEAL_RADIUS) {
-            // Optimistic steal: show clone + sound + shield immediately
+            // Optimistic steal: show clone + sound immediately, shield waits for confirmation
             if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
             showClone(userId)
             playPickupSound()
             skipNextPickupSound = true
-            hideAllShields()
-            showShieldForPlayer(userId)
-            setShieldAlpha(userId, 1.0)
             pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
 
             room.send('requestSteal', { victimId: carrierIdForSteal })
