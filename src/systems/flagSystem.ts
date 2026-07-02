@@ -322,20 +322,16 @@ room.onMessage('flagHeartbeat', (data) => {
   console.log('[Flag] 💓 Heartbeat correction: CRDT says', crdtState, '/', crdtCarrier.slice(0, 8),
     '— server says', hbState, '/', hbCarrier.slice(0, 8))
 
-  // Fix visuals to match server truth
+  // Fix clone + flag visibility only — shield is driven by CRDT state changes
   if (hbState === FlagState.Carried && hbCarrier) {
     if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
     if (carryCloneCarrierId !== hbCarrier || !cloneVisible) {
       showClone(hbCarrier)
     }
-    hideAllShields()
-    showShieldForPlayer(hbCarrier)
-    setShieldAlpha(hbCarrier, 1.0)
   } else {
     // Server says not carried — clear any stale clone
     if (cloneVisible) {
       hideClone()
-      hideAllShields()
     }
     if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
   }
