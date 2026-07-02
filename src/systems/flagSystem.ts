@@ -494,11 +494,13 @@ export function flagClientSystem(dt: number): void {
         if (flag.state === FlagState.Carried) continue
         const dist = Vector3.distance(myPos, Transform.get(flagEnt).position)
         if (dist <= AUTO_PICKUP_RADIUS) {
-          // Optimistic Phase 1: show clone immediately (no server round-trip lag)
-          // Sound + shield wait for server confirmation to avoid false positives.
+          // Optimistic Phase 1: show clone + sound immediately (no server round-trip lag)
+          // Shield waits for server confirmation to avoid false positives.
           // If server rejects, the pending-pickup timeout will roll everything back.
           if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
           showClone(userId)
+          playPickupSound()
+          skipNextPickupSound = true  // suppress duplicate when pickupConfirmed arrives
           pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
           
           room.send('requestPickup', { t: 0 })

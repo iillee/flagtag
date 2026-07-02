@@ -210,9 +210,21 @@ export function snapshotScoresForCinematic(): void {
 
 /** Provide final scores from winnersJson as fallback if snapshot was missed. */
 export function snapshotScoresFromWinners(winners: { userId: string; name: string; seconds: number }[]): void {
-  if (_cinematicSnapshot && _cinematicSnapshot.some(p => p.seconds > 0)) return // already have good data
-  _cinematicSnapshot = winners.map(p => ({ ...p }))
-  console.log('[FlagHoldTime] Cinematic snapshot from winners:', _cinematicSnapshot.length, 'players')
+  // If no existing snapshot, seed from CRDT first
+  if (!_cinematicSnapshot) {
+    _cinematicSnapshot = getPlayersWithHoldTimes().map(p => ({ ...p }))
+  }
+  // Merge server's authoritative scores into snapshot (top 3 are accurate)
+  for (const w of winners) {
+    const key = w.userId.toLowerCase()
+    const existing = _cinematicSnapshot.find(p => p.userId.toLowerCase() === key)
+    if (existing) {
+      existing.seconds = w.seconds
+    } else {
+      _cinematicSnapshot.push({ ...w })
+    }
+  }
+  console.log('[FlagHoldTime] Cinematic snapshot merged with server winners:', winners.length, 'updated')
 }
 
 /** Clear the cinematic snapshot (scores reset to live CRDT). */
