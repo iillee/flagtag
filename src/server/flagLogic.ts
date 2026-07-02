@@ -259,11 +259,29 @@ export function checkProximitySteal(): void {
   }
 }
 
+// ── Flag heartbeat: periodic WS broadcast so clients can self-correct stale CRDT ──
+const FLAG_HEARTBEAT_INTERVAL_MS = 5000
+let lastHeartbeatMs = 0
+
 // ── Server systems ──
 
 export function flagServerSystem(dt: number): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
+
+  // Heartbeat: broadcast flag state every 5s so clients can fix stale visuals
+  const nowForHb = Date.now()
+  if (nowForHb - lastHeartbeatMs >= FLAG_HEARTBEAT_INTERVAL_MS) {
+    lastHeartbeatMs = nowForHb
+    const pos = Transform.get(flagEntity).position
+    room.send('flagHeartbeat', {
+      state: flag.state as string,
+      carrierId: flag.carrierPlayerId || '',
+      x: pos.x,
+      y: pos.y,
+      z: pos.z
+    })
+  }
 
   const clampedDt = Math.min(dt, 0.1)
 

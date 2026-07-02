@@ -121,7 +121,8 @@ export const Messages = {
   requestBlessing: Schemas.Map({ t: Schemas.Int }),                                         // Client → Server (claim after ritual)
   blessingResult: Schemas.Map({ success: Schemas.Boolean, reason: Schemas.String, newBalance: Schemas.Int }),  // Server → Client
 
-
+  // Flag heartbeat (server → client, every 5s, read-only visual correction)
+  flagHeartbeat: Schemas.Map({ state: Schemas.String, carrierId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
 }
 
 export const room = registerMessages(Messages)

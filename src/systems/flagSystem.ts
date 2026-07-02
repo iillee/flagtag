@@ -294,11 +294,52 @@ room.onMessage('pickupConfirmed', (data) => {
     playPickupSound()
   }
   skipNextPickupSound = true  // skip the CRDT-triggered sound since we already played it
-
-
 })
 
+// ── Flag heartbeat: periodic server broadcast to fix stale CRDT visuals ──
+room.onMessage('flagHeartbeat', (data) => {
+  const hbState = data.state as FlagState
+  const hbCarrier = (data.carrierId || '').toLowerCase()
 
+  // Read current CRDT state
+  let crdtState: FlagState | null = null
+  let crdtCarrier = ''
+  for (const [, flag] of engine.getEntitiesWith(Flag)) {
+    crdtState = flag.state
+    crdtCarrier = flag.carrierPlayerId
+    break
+  }
+
+  // Only act if CRDT disagrees with the heartbeat (stale)
+  if (crdtState === null) return
+  const stateMatch = crdtState === hbState
+  const carrierMatch = crdtCarrier === hbCarrier
+  if (stateMatch && carrierMatch) return
+
+  // Don't override during pending pickup or grace period
+  if (pendingPickupUntil > 0 || Date.now() < confirmedGraceUntil) return
+
+  console.log('[Flag] 💓 Heartbeat correction: CRDT says', crdtState, '/', crdtCarrier.slice(0, 8),
+    '— server says', hbState, '/', hbCarrier.slice(0, 8))
+
+  // Fix visuals to match server truth
+  if (hbState === FlagState.Carried && hbCarrier) {
+    if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+    if (carryCloneCarrierId !== hbCarrier || !cloneVisible) {
+      showClone(hbCarrier)
+    }
+    hideAllShields()
+    showShieldForPlayer(hbCarrier)
+    setShieldAlpha(hbCarrier, 1.0)
+  } else {
+    // Server says not carried — clear any stale clone
+    if (cloneVisible) {
+      hideClone()
+      hideAllShields()
+    }
+    if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
+  }
+})
 
 function playPickupSound(): void {
   if (!pickupSoundEntity) {
