@@ -9,15 +9,17 @@ import {
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import {
-  PROJECTILE_SPEED, PROJECTILE_LIFETIME_SEC, PROJECTILE_MAX_RANGE
+  PROJECTILE_SPEED, PROJECTILE_LIFETIME_SEC, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS
 } from '../../shared/components'
 import { room } from '../../shared/messages'
 import {
   localProjectiles, msgProjectileVisuals, pendingWallRays, localThrow,
   PROJECTILE_SCALE, PROJECTILE_SPIN_SPEED, PROJECTILE_CHEST_OFFSET,
+  predictedHitShellIds,
   type LocalProjectile, type MsgProjectileVisual
 } from './state'
 import { attachProjectileSound, stopProjectileSound } from './sound'
+import { showHitEffect, playHitSound } from '../combatSystem'
 import { acquireProjectileFromPool, releaseProjectileToPool } from './pool'
 import { updateHandBoomerangVisibility } from './handVisual'
 import { getBoomerangModelSrc } from '../../gameState/boomerangColor'
@@ -345,6 +347,30 @@ export function updateMsgProjectileVisuals(dt: number): void {
       const t = Transform.getMutable(vis.entity)
       t.position = Vector3.create(shellPos.x + nx * moveDist, shellPos.y + ny * moveDist, shellPos.z + nz * moveDist)
       t.rotation = Quaternion.fromEulerDegrees(0, headingDeg + vis.spinAngle, 0)
+    }
+
+    // ── Client-side hit prediction ──
+    // If this is OUR projectile, check proximity to other players for instant feedback.
+    // The server still validates — we just show VFX immediately.
+    const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+    if (vis.firedBy === localUserId && !vis.returning) {
+      const shellPos = Transform.get(vis.entity).position
+      for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+        const addr = identity.address.toLowerCase()
+        if (addr === localUserId) continue
+        const playerDist = Vector3.distance(shellPos, transform.position)
+        if (playerDist < PROJECTILE_HIT_RADIUS) {
+          // Predict hit: show VFX immediately
+          showHitEffect(shellPos)
+          playHitSound(shellPos)
+          if (vis.shellId > 0) predictedHitShellIds.add(vis.shellId)
+          console.log('[Projectile] 🎯 Client hit prediction on', addr.slice(0, 8))
+          // Start returning — server will confirm and send shellTriggered
+          vis.returning = true
+          vis.returnDistance = 0
+          break
+        }
+      }
     }
   }
 }

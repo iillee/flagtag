@@ -6,7 +6,7 @@ export const Messages = {
   registerName: Schemas.Map({ name: Schemas.String }),
   requestPickup: Schemas.Map({ t: Schemas.Int }),
   requestDrop: Schemas.Map({ t: Schemas.Int }),
-  // requestAttack removed — proximity steal replaced melee attack
+  requestSteal: Schemas.Map({ victimId: Schemas.String }),  // Client-side proximity steal prediction
   reportGroundY: Schemas.Map({ y: Schemas.Float }),
   requestBanana: Schemas.Map({ t: Schemas.Int }),
   reportBananaGroundY: Schemas.Map({ bananaX: Schemas.Float, bananaZ: Schemas.Float, groundY: Schemas.Float }),

@@ -28,6 +28,7 @@ import { isMobile } from '@dcl/sdk/platform'
 
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
+import { PROXIMITY_STEAL_RADIUS } from '../shared/constants'
 import { room } from '../shared/messages'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
@@ -474,7 +475,54 @@ export function flagClientSystem(dt: number): void {
     }
   }
 
-  // Left click — melee attack removed (proximity steal replaces it)
+  // ── Client-side proximity steal prediction ──
+  // If flag is carried by someone else and we're within steal radius, send requestSteal
+  // and show optimistic visuals immediately (clone swaps to us, shield, sound).
+  if (userId && Transform.has(engine.PlayerEntity) && !isLightningRespawning()) {
+    const now = Date.now()
+    let amCarrying = false
+    let carrierIdForSteal = ''
+    for (const [, flag] of engine.getEntitiesWith(Flag)) {
+      if (flag.state === FlagState.Carried) {
+        if (flag.carrierPlayerId === userId) {
+          amCarrying = true
+        } else {
+          carrierIdForSteal = flag.carrierPlayerId
+        }
+      }
+      break
+    }
+    // Also check grace period — if server confirmed someone else is carrying
+    if (!amCarrying && !carrierIdForSteal && confirmedGraceUntil > now && confirmedGraceCarrier && confirmedGraceCarrier !== userId) {
+      carrierIdForSteal = confirmedGraceCarrier
+    }
+
+    if (!amCarrying && carrierIdForSteal && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS) {
+      // Find carrier position among players
+      const myPos = Transform.get(engine.PlayerEntity).position
+      for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+        if (identity.address.toLowerCase() === carrierIdForSteal) {
+          const dist = Vector3.distance(myPos, transform.position)
+          if (dist <= PROXIMITY_STEAL_RADIUS) {
+            // Optimistic steal: show clone + sound + shield immediately
+            if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+            showClone(userId)
+            playPickupSound()
+            skipNextPickupSound = true
+            hideAllShields()
+            showShieldForPlayer(userId)
+            setShieldAlpha(userId, 1.0)
+            pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
+
+            room.send('requestSteal', { victimId: carrierIdForSteal })
+            lastAutoPickupRequestMs = now
+            console.log('[Flag] 🚩 Client proximity steal prediction — sending requestSteal for', carrierIdForSteal.slice(0, 8))
+          }
+          break
+        }
+      }
+    }
+  }
 
   // ── Manual drop (3 key) ──
   if (inputSystem.isTriggered(InputAction.IA_ACTION_5, PointerEventType.PET_DOWN) && userId) {

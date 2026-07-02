@@ -27,6 +27,13 @@ export function getRandomSpawnPoint(): { x: number; y: number; z: number } {
 /** Round length in minutes; aligned to 5-minute UTC boundaries. */
 export const ROUND_LENGTH_MINUTES = 5
 
+// ── Proximity Steal ──
+
+/** Radius for proximity steal (meters). */
+export const PROXIMITY_STEAL_RADIUS = 2.0
+/** Immunity duration after stealing/picking up flag (ms). */
+export const STEAL_IMMUNITY_MS = 3000
+
 // ── Trap (banana) ──
 
 /** How long a trap stays on the ground before despawning (seconds). */

@@ -73,6 +73,10 @@ export const stagger = {
   until: 0,
 }
 
+// ── Client-side hit prediction dedup ──
+// Track shellIds where we already showed hit VFX locally, so server confirmation doesn't double-play
+export const predictedHitShellIds = new Set<number>()
+
 // ── Cooldown ──
 export const cooldown = {
   lastFireTime: 0,

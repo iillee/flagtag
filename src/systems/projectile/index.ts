@@ -26,7 +26,7 @@ import { showHitEffect, showMissEffect, playHitSound, playMissSound } from '../c
 // Sub-modules
 import {
   charge, cooldown, localThrow, yellow, stagger, hand,
-  localProjectiles, msgProjectileVisuals,
+  localProjectiles, msgProjectileVisuals, predictedHitShellIds,
   CHARGE_TIME_SEC, CHARGE_MIN_SPEED, CHARGE_MIN_RANGE, RED_RANGE,
   PROJECTILE_STAGGER_MS, LOCAL_THROW_SAFETY_MS, YELLOW_SECOND_THROW_DELAY_MS,
   BURNOUT_FLASH_MS
@@ -85,9 +85,13 @@ room.onMessage('shellDropped', (data) => {
 room.onMessage('shellTriggered', (data) => {
   const pos = Vector3.create(data.x, data.y, data.z)
   removeMsgProjectileVisualByThrower(data.firedBy || '', data.x, data.y, data.z, !!data.peak, data.shellId || 0)
+  // Dedup: if client-side prediction already showed hit VFX for this shell, skip VFX
+  const alreadyPredicted = (data.shellId && data.shellId > 0) ? predictedHitShellIds.delete(data.shellId) : false
   if (data.victimId && data.victimId !== '') {
-    showHitEffect(pos)
-    playHitSound(pos)
+    if (!alreadyPredicted) {
+      showHitEffect(pos)
+      playHitSound(pos)
+    }
     const me = getPlayerData()?.userId?.toLowerCase()
     if (me && data.victimId === me && !isCinematicActive()) {
       triggerHitFlash(PROJECTILE_STAGGER_MS)

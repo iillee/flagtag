@@ -464,6 +464,39 @@ export function registerFlagHandlers(): void {
     } catch (err) { console.error('[Server] ❌ requestReloadRespawn handler error:', err) }
   })
 
+  room.onMessage('requestSteal', (data, context) => {
+    try {
+      if (!context) return
+      const attackerId = context.from.toLowerCase()
+      const victimId = (data.victimId || '').toLowerCase()
+      if (!victimId || victimId === attackerId) return
+
+      const flag = Flag.getOrNull(flagEntity)
+      if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) return
+
+      // Check steal immunity
+      const now = Date.now()
+      const carrierStealTime = lastStealTime.get(victimId) ?? 0
+      if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
+
+      // Validate proximity with generous radius (client has fresher positions)
+      const attackerPos = getPlayerPosition(attackerId)
+      const carrierPos = getPlayerPosition(victimId)
+      if (attackerPos && carrierPos) {
+        const dist = Vector3.distance(attackerPos, carrierPos)
+        // Use 2x radius as validation — client already checked at 1x
+        if (dist > PROXIMITY_STEAL_RADIUS * 2) {
+          console.log('[Server] 🚩 requestSteal rejected: server dist', dist.toFixed(1), 'too far (2x radius check)')
+          return
+        }
+      }
+      // If either position is missing, trust the client report
+
+      console.log('[Server] 🚩 Client-requested steal:', attackerId.slice(0, 8), '<-', victimId.slice(0, 8))
+      handleFlagSteal(victimId, attackerId)
+    } catch (err) { console.error('[Server] ❌ requestSteal handler error:', err) }
+  })
+
   room.onMessage('reportGroundY', (data, context) => {
     try {
       if (!context) return

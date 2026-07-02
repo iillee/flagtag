@@ -55,8 +55,7 @@ export const currentlyConnected = new Set<string>()
 // ── Constants ──
 
 export const PICKUP_RADIUS = 3
-export const PROXIMITY_STEAL_RADIUS = 2.0
-export const STEAL_IMMUNITY_MS = 3000
+export { PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS } from '../shared/constants'
 export const HOLD_TIME_SYNC_INTERVAL = 2.0 // seconds between CRDT hold-time writes (was 0.5)
 export const SPLASH_DURATION_MS = 3000
 export const FLAG_GRAVITY = 15
