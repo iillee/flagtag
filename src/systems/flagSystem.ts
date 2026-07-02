@@ -297,6 +297,7 @@ room.onMessage('pickupConfirmed', (data) => {
 })
 
 // ── Flag heartbeat: periodic server broadcast to fix stale CRDT visuals ──
+let heartbeatMismatchCount = 0
 room.onMessage('flagHeartbeat', (data) => {
   const hbState = data.state as FlagState
   const hbCarrier = (data.carrierId || '').toLowerCase()
@@ -314,13 +315,27 @@ room.onMessage('flagHeartbeat', (data) => {
   if (crdtState === null) return
   const stateMatch = crdtState === hbState
   const carrierMatch = crdtCarrier === hbCarrier
-  if (stateMatch && carrierMatch) return
+  if (stateMatch && carrierMatch) {
+    // CRDT matches server — reset mismatch counter
+    heartbeatMismatchCount = 0
+    return
+  }
 
   // Don't override during pending pickup or grace period
   if (pendingPickupUntil > 0 || Date.now() < confirmedGraceUntil) return
 
-  console.log('[Flag] 💓 Heartbeat correction: CRDT says', crdtState, '/', crdtCarrier.slice(0, 8),
+  // Require 2 consecutive mismatches (10s) before correcting —
+  // brief CRDT propagation delays are normal, don't fight them.
+  heartbeatMismatchCount++
+  if (heartbeatMismatchCount < 2) {
+    console.log('[Flag] 💓 Heartbeat mismatch #' + heartbeatMismatchCount + ': CRDT says', crdtState, '/', crdtCarrier.slice(0, 8),
+      '— server says', hbState, '/', hbCarrier.slice(0, 8), '— waiting for next heartbeat')
+    return
+  }
+
+  console.log('[Flag] 💓 Heartbeat correction (stale ' + heartbeatMismatchCount + 'x): CRDT says', crdtState, '/', crdtCarrier.slice(0, 8),
     '— server says', hbState, '/', hbCarrier.slice(0, 8))
+  heartbeatMismatchCount = 0
 
   // Fix clone + flag visibility only — shield is driven by CRDT state changes
   if (hbState === FlagState.Carried && hbCarrier) {
