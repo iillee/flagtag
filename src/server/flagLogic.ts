@@ -166,7 +166,7 @@ export function handlePickup(playerId: string): void {
   persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 
-export function handleDrop(playerId: string): void {
+export function handleDrop(playerId: string, forced: boolean = false): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
   if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return
@@ -199,6 +199,10 @@ export function handleDrop(playerId: string): void {
   computeGravityTarget(dropPos.y)
 
   room.send('dropSound', { t: 0 })
+  // Fast-path WS message for combat-forced drops so clients don't wait for CRDT
+  if (forced) {
+    room.send('dropForced', { playerId })
+  }
   persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 

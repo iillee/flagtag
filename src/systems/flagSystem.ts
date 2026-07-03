@@ -296,6 +296,28 @@ room.onMessage('pickupConfirmed', (data) => {
   skipNextPickupSound = true  // skip the CRDT-triggered sound since we already played it
 })
 
+// ── Fast-path for combat-forced drops (arrives before CRDT) ──
+room.onMessage('dropForced', (data) => {
+  const droppedPlayerId = data.playerId
+  console.log('[Flag] ⚡ dropForced received for', droppedPlayerId?.slice(0, 8))
+  // Immediately clear grace period so safety net doesn't re-show the clone
+  confirmedGraceUntil = 0
+  confirmedGraceCarrier = ''
+  clearConfirmedCarrier()
+  pendingPickupUntil = 0
+  skipNextPickupSound = false  // reset for next pickup
+  // Hide clone + shield, restore flag visual
+  hideClone()
+  hideAllShields()
+  if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
+  // Apply drop cooldown if we were the carrier
+  const userId = getPlayerData()?.userId?.toLowerCase()
+  if (userId && droppedPlayerId === userId) {
+    lastDropTimeMs = Date.now()
+  }
+  lastWitnessedDropTimeMs = Date.now()
+})
+
 // ── Flag heartbeat: periodic server broadcast to fix stale CRDT visuals ──
 let heartbeatMismatchCount = 0
 room.onMessage('flagHeartbeat', (data) => {
@@ -628,6 +650,7 @@ export function flagClientSystem(dt: number): void {
     hideClone()
     if (userId) hideShieldForPlayer(userId)
     if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
+    skipNextPickupSound = false  // reset so next pickup's sound plays correctly
     // Apply a longer cooldown to prevent rapid re-pickup attempts when server keeps rejecting
     lastAutoPickupRequestMs = Date.now() + 2000  // won't retry for 2.5s (cooldown is 500ms, so 2000 + 500)
   }
@@ -692,6 +715,7 @@ export function flagClientSystem(dt: number): void {
       confirmedGraceUntil = 0
       confirmedGraceCarrier = ''
       clearConfirmedCarrier()
+      skipNextPickupSound = false  // reset so next pickup's sound plays correctly
 
       if (!isFirstFrame) {
         // Check if this drop is caused by round end (flag forced back from carrier)
@@ -803,8 +827,21 @@ export function flagClientSystem(dt: number): void {
   // Particle effects based on flag state and movement
   for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
     if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
-      beaconSpawnAccum = 0 // No beacon particles when carried
-      
+      // Beacon particles float up from the carrier
+      let carrierPos: Vector3 | null = null
+      for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+        if (identity.address.toLowerCase() === flag.carrierPlayerId) {
+          carrierPos = transform.position
+          break
+        }
+      }
+      if (carrierPos) {
+        beaconSpawnAccum += clampedDt
+        while (beaconSpawnAccum >= BEACON_SPAWN_INTERVAL) {
+          beaconSpawnAccum -= BEACON_SPAWN_INTERVAL
+          spawnBeaconPuff(carrierPos)
+        }
+      }
     } else if (flag.state === FlagState.AtBase || flag.state === FlagState.Dropped) {
       // Beacon particles floating up from flag when idle
       const flagPos = Transform.get(flagEntity).position

@@ -21,6 +21,7 @@ export const Messages = {
   pickupConfirmed: Schemas.Map({ playerId: Schemas.String }),
   pickupSound: Schemas.Map({ t: Schemas.Int }),
   dropSound: Schemas.Map({ t: Schemas.Int }),
+  dropForced: Schemas.Map({ playerId: Schemas.String }),
   bananaDenied: Schemas.Map({ reason: Schemas.String }),
   bananaDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String }),
   bananaTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),

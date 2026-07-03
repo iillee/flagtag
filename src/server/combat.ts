@@ -188,7 +188,7 @@ function explodeBomb(bomb: ActiveBomb): void {
       const flag = Flag.getOrNull(flagEntity)
       if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
         console.log('[Server] 💣 Bomb victim was carrying flag — forcing drop!')
-        handleDrop(addr)
+        handleDrop(addr, true)
       }
     }
   }
@@ -466,7 +466,7 @@ export function bananaServerSystem(dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🪤 Victim was carrying flag — forcing drop!')
-          handleDrop(addr)
+          handleDrop(addr, true)
         }
 
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
@@ -716,7 +716,7 @@ export function shellServerSystem(dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🎯 Victim was carrying flag — forcing drop!')
-          handleDrop(addr)
+          handleDrop(addr, true)
         }
 
         room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr, firedBy: projectile.firedBy, shellId: projectile.shellId })
@@ -868,7 +868,7 @@ export function orbitServerSystem(_dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🌀 Orbit victim was carrying flag — forcing drop!')
-          handleDrop(addr)
+          handleDrop(addr, true)
         }
 
         room.send('orbitHit', { x: victimPos.x, y: victimPos.y, z: victimPos.z, victimId: addr, attackerId: orbit.playerId })
