@@ -827,21 +827,8 @@ export function flagClientSystem(dt: number): void {
   // Particle effects based on flag state and movement
   for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
     if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
-      // Beacon particles float up from the carrier
-      let carrierPos: Vector3 | null = null
-      for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-        if (identity.address.toLowerCase() === flag.carrierPlayerId) {
-          carrierPos = transform.position
-          break
-        }
-      }
-      if (carrierPos) {
-        beaconSpawnAccum += clampedDt
-        while (beaconSpawnAccum >= BEACON_SPAWN_INTERVAL) {
-          beaconSpawnAccum -= BEACON_SPAWN_INTERVAL
-          spawnBeaconPuff(carrierPos)
-        }
-      }
+      beaconSpawnAccum = 0 // No beacon particles when carried
+      
     } else if (flag.state === FlagState.AtBase || flag.state === FlagState.Dropped) {
       // Beacon particles floating up from flag when idle
       const flagPos = Transform.get(flagEntity).position
