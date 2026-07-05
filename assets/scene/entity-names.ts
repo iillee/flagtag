@@ -197,7 +197,6 @@ export enum EntityNames {
   Small_Straight_Dock_Module = "Small Straight Dock Module",
   Small_Straight_Dock_Module_2 = "Small Straight Dock Module_2",
   Small_Straight_Dock_Module_5 = "Small Straight Dock Module_5",
-  Spider_Net_02 = "Spider Net 02",
   Starfish = "Starfish",
   Stone_Brick_Wall = "Stone Brick Wall",
   Street_Mailbox = "Street Mailbox",
