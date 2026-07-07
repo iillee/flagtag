@@ -468,7 +468,11 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
     const winners = players.filter(p => p.seconds >= maxSeconds)
     if (winners.length > 0) {
       const label = winners.length > 1 ? '🏆 Tie between' : '🏆 Winner:'
-      const content = `\`[${matchId}]\` ${label} ${winners.map(w => `**${w.name}** (${w.userId})`).join(' & ')}`
+      const content = `\`[${matchId}]\` ${label} ${winners.map(w => {
+        const key = w.userId.toLowerCase()
+        const name = playerNames.get(key) || key.slice(0, 8)
+        return `**${name}** (${w.userId})`
+      }).join(' & ')}`
       if (!ROUND_WINNER_WEBHOOK || isPreview) { /* webhook not configured or preview */ }
       else fetch(ROUND_WINNER_WEBHOOK, {
         method: 'POST',
