@@ -207,7 +207,7 @@ export function countdownServerSystem(): void {
     
     console.log('[Server] Next round will end at:', new Date(nextBoundary).toISOString())
     
-    handleRoundEnd().catch((err) => {
+    handleRoundEnd(timer.roundEndTimeMs).catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
       try {
         const flag = Flag.getOrNull(flagEntity)
@@ -236,8 +236,29 @@ export function countdownServerSystem(): void {
 }
 
 // ── Round end orchestrator ──
-async function handleRoundEnd(): Promise<void> {
+/**
+ * Compute a deterministic match ID from the round's end time (UTC-aligned to 5-min boundary).
+ * Format: YYYYMMDD-HH-NN  where NN is 01–12 (match index within the hour).
+ * Example: 20260706-14-03 = 3rd match of the 14:00 UTC hour on July 6, 2026.
+ *
+ * Derived from the *start* of the match (endMs - 5min) so a match started at 14:04:59
+ * that ends at 14:10:00 is still labeled 14-01.
+ */
+function computeMatchId(roundEndMs: number): string {
+  const startMs = roundEndMs - 5 * 60 * 1000
+  const d = new Date(startMs)
+  const YYYY = d.getUTCFullYear()
+  const MM = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const DD = String(d.getUTCDate()).padStart(2, '0')
+  const HH = String(d.getUTCHours()).padStart(2, '0')
+  const NN = String(Math.floor(d.getUTCMinutes() / 5) + 1).padStart(2, '0')
+  return `${YYYY}${MM}${DD}-${HH}-${NN}`
+}
+
+async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   const now = Date.now()
+  const matchId = computeMatchId(endedRoundEndMs)
+  console.log('[Server] Match ID:', matchId)
 
   // ══════════════════════════════════════════════════════════════════════
   // CRITICAL: All state mutations that affect holdTimeServerSystem MUST
@@ -442,23 +463,25 @@ async function handleRoundEnd(): Promise<void> {
   // ── 8. Persist flag state ──
   await persistFlagState()
 
-  // ── 8b. Discord webhook: announce round winner ──
-  if (topPlayers.length > 0 && maxSeconds > 0) {
-    const w = topPlayers[0]
-    let content = `🏆 **${w.name}** won the round with **${w.seconds}s** flag time`
-    if (topPlayers[1]) content += ` — 🥈 ${topPlayers[1].name} (${topPlayers[1].seconds}s)`
-    if (topPlayers[2]) content += ` — 🥉 ${topPlayers[2].name} (${topPlayers[2].seconds}s)`
-    content += ` — ${players.length} player${players.length !== 1 ? 's' : ''}`
-    if (!ROUND_WINNER_WEBHOOK || isPreview) { /* webhook not configured or preview */ }
-    else fetch(ROUND_WINNER_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
-    }).then(() => {}, () => {})
+  // ── 8b. Discord webhook: announce round winner(s) ──
+  if (maxSeconds > 0) {
+    const winners = players.filter(p => p.seconds >= maxSeconds)
+    if (winners.length > 0) {
+      const label = winners.length > 1 ? '🏆 Tie between' : '🏆 Winner:'
+      const content = `\`[${matchId}]\` ${label} ${winners.map(w => `**${w.name}** (${w.userId})`).join(' & ')}`
+      if (!ROUND_WINNER_WEBHOOK || isPreview) { /* webhook not configured or preview */ }
+      else fetch(ROUND_WINNER_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      }).then(() => {}, () => {})
+    }
   }
 
   // ── 9. Track round completion in PostHog ──
   capture('flagtag-server', 'round_ended', {
+    match_id: matchId,
+    round_end_utc: new Date(endedRoundEndMs).toISOString(),
     player_count: players.length,
     max_hold_seconds: Math.floor(maxSeconds),
     winner_name: topPlayers[0]?.name ?? null,
