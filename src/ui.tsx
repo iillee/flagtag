@@ -406,7 +406,7 @@ function PlayerListUi() {
             uiBackground={{ color: PANEL_BG }}
             onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
           >
-            <Label value="FLAG TAG!" fontSize={s(72)} color={GOLD} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(360), height: s(84), margin: { bottom: s(12) } }} />
+            <Label value="FLAG TAG!" fontSize={s(72)} color={GOLD} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(460), height: s(88), margin: { bottom: s(12) } }} />
             <Label value="A multiplayer keep away game!" fontSize={s(16)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(360), height: s(22), margin: { bottom: s(28) } }} />
             <Label value="Click anywhere to continue" fontSize={s(14)} color={Color4.create(1, 1, 1, 0.5)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(360), height: s(20) }} />
           </UiEntity>

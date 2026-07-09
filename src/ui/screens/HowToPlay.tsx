@@ -65,9 +65,9 @@ export function HowToPlayOverlay() {
           uiBackground={{ color: cardBg }}
         >
           <Label value="Flag" fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: s(12) } }} />
-          <Label value={"Follow the gold beacon\nto find the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { bottom: s(4) } }} />
+          <Label value={"Follow the gold beacon\nto find the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { bottom: mobile ? s(4) : S(24) } }} />
           <UiEntity
-            uiTransform={{ width: s(140), height: s(231), borderRadius: s(8), margin: { top: s(20), bottom: s(4) } }}
+            uiTransform={{ width: s(140), height: s(231), borderRadius: s(8), margin: { top: mobile ? s(20) : S(40), bottom: mobile ? s(4) : S(20) } }}
             uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/beacon2.png' } }}
           />
           <Label value={"Move close to the Flag\nto pickup or steal\nfrom another player"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: s(8) } }} />
@@ -87,14 +87,14 @@ export function HowToPlayOverlay() {
           uiBackground={{ color: cardBg }}
         >
           <Label value="Combat" fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: s(12) } }} />
-          <Label value={"Throw boomerang (E)\nto stun rivals and force\nthem to drop the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: s(40), bottom: s(10) } }} />
+          <Label value={"Throw boomerang (E)\nto stun rivals and force\nthem to drop the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: mobile ? s(40) : S(8), bottom: s(10) } }} />
           <UiEntity
-            uiTransform={{ width: s(100), height: s(118), flexShrink: 0, margin: { top: s(48), bottom: s(2) } }}
+            uiTransform={{ width: s(100), height: s(118), flexShrink: 0, margin: { top: mobile ? s(48) : S(56), bottom: s(2) } }}
             uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
           />
-          <Label value={"Drop bananas (F) to\nblock boomerangs and\nstun pursuers"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { bottom: s(24) } }} />
+          <Label value={"Drop bananas (F) to\nblock boomerangs and\nstun pursuers"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: mobile ? 0 : S(20), bottom: s(24) } }} />
           <UiEntity
-            uiTransform={{ width: s(72), height: s(72), flexShrink: 0, margin: { top: s(56), bottom: s(20) } }}
+            uiTransform={{ width: s(72), height: s(72), flexShrink: 0, margin: { top: mobile ? s(56) : S(64), bottom: s(20) } }}
             uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: Color4.White() }}
           />
           <UiEntity uiTransform={{ flexGrow: 1 }} />

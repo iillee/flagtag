@@ -33,6 +33,7 @@ import { BOMB_FUSE_SEC, BOMB_EXPLOSION_RADIUS } from '../shared/components'
 
 const BOMB_STAGGER_MS = 1000 // match regular hit stun duration
 import { triggerHitFlash } from '../gameState/hitFlashState'
+import { showHitEffect, playHitSound } from './combatSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { isDrownRespawning } from './waterSystem'
 import { isSpectatorMode } from './spectatorSystem'
@@ -364,12 +365,19 @@ room.onMessage('bombExploded', (data) => {
       const now = Date.now()
       if (bombStaggerUntil <= now) {
         console.log('[Bomb] 💣 Local player hit by explosion!')
-        Physics.applyKnockbackToPlayer(pos, 40, BOMB_EXPLOSION_RADIUS, KnockbackFalloff.LINEAR)
-        triggerHitFlash(BOMB_STAGGER_MS)
+        // Fire stagger emote FIRST — knockback movement can interrupt the emote if applied before it starts.
         triggerEmote({ predefinedEmote: 'getHit' })
         InputModifier.createOrReplace(engine.PlayerEntity, {
           mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
         })
+        triggerHitFlash(BOMB_STAGGER_MS)
+        // Red-star hit VFX + sound at player position (parity with boomerang hits)
+        const vfxPos = Transform.has(engine.PlayerEntity)
+          ? Transform.get(engine.PlayerEntity).position
+          : pos
+        showHitEffect(vfxPos)
+        playHitSound(vfxPos)
+        Physics.applyKnockbackToPlayer(pos, 40, BOMB_EXPLOSION_RADIUS, KnockbackFalloff.LINEAR)
         bombStaggerUntil = now + BOMB_STAGGER_MS
       }
     }
