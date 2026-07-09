@@ -134,46 +134,45 @@ export function MobileLayout() {
       })()}
 
       {/* Mobile Scoreboard Overlay */}
-      {mobileState.scoreboardVisible && (
+      {mobileState.scoreboardVisible && (() => { const M = 2; return (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
           >
-          <UiEntity uiTransform={{ positionType: 'relative', width: '46%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 28, overflow: 'hidden', borderRadius: 20 }}
+          <UiEntity uiTransform={{ positionType: 'relative', width: '46%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, overflow: 'hidden', borderRadius: 40 }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 4, right: 4 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 8, right: 8 }, width: 52 * M, height: 52 * M, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               onMouseDown={() => { playClickSound(); mobileState.scoreboardVisible = false; notifyOverlayClosed() }}
             >
-              <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={52 * M} color={CLOSE_GREY} font="sans-serif" />
             </UiEntity>
-            <UiEntity uiTransform={{ height: 48, flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <Label value="Scoreboard" fontSize={38} color={MUTED} font="sans-serif" />
+            <UiEntity uiTransform={{ height: 52 * M, flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+              <Label value="Scoreboard" fontSize={32 * M} color={GOLD} font="sans-serif" textAlign="middle-center" />
             </UiEntity>
-            <UiEntity uiTransform={{ height: 12, flexShrink: 0 }} />
             <UiEntity uiTransform={{ flexGrow: 1, flexDirection: 'column' }}>
               {players.length === 0 ? (
                 <UiEntity uiTransform={{ height: 88, justifyContent: 'center', alignItems: 'center' }}>
-                  <Label value="Waiting for players..." fontSize={22} color={MUTED} font="sans-serif" />
+                  <Label value="Waiting for players..." fontSize={16 * M} color={MUTED} font="sans-serif" />
                 </UiEntity>
               ) : players.map((p, i) => {
                 const isPlayerLeader = leaderUserId !== null && p.userId === leaderUserId
                 const isSelf = localUserId !== null && p.userId === localUserId
                 const isCarrier = carrierUserId !== null && p.userId === carrierUserId
                 return (
-                  <UiEntity key={`m-sb-${p.userId}-${i}`} uiTransform={{ height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: 8, right: 8, top: 2, bottom: 2 } }}
+                  <UiEntity key={`m-sb-${p.userId}-${i}`} uiTransform={{ height: 44 * M, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: 8 * M, right: 8 * M, top: 2 * M, bottom: 2 * M } }}
                     uiBackground={{ color: isPlayerLeader ? Color4.create(0.3, 0.25, 0.1, 0.3) : Color4.create(0, 0, 0, 0) }}
                   >
                     <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-                      {isCarrier && <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
-                      <Label value={p.name} fontSize={22} color={isPlayerLeader ? BRIGHT_GOLD : isSelf ? BRIGHT_WHITE : LIGHT_GREY} font="sans-serif" />
+                      {isCarrier && <UiEntity uiTransform={{ width: 16 * M, height: 16 * M, margin: { right: 4 * M } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
+                      <Label value={p.name} fontSize={16 * M} color={isPlayerLeader ? BRIGHT_GOLD : isSelf ? BRIGHT_WHITE : LIGHT_GREY} font="sans-serif" />
                     </UiEntity>
-                    <Label value={`${p.seconds}`} fontSize={22} color={isPlayerLeader ? GOLD : p.seconds > 0 ? WHITE : MUTED} font="sans-serif" />
+                    <Label value={`${p.seconds}`} fontSize={16 * M} color={isPlayerLeader ? GOLD : p.seconds > 0 ? WHITE : MUTED} font="sans-serif" />
                   </UiEntity>
                 )
               })}
             </UiEntity>
           </UiEntity>
         </UiEntity>
-      )}
+      )})()}
 
       <RoundEndSplash />
       {winConditionVisible && <HowToPlayOverlay />}
@@ -193,12 +192,14 @@ function MobileStatusPopup() {
   const boomerang = getBoomerangColor()
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
+  const M = 2 // match HowToPlay mobile scale
   const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White(), iconScale: number = 1) => {
-    const icoSize = Math.round(30 * iconScale)
+    const icoSize = Math.round(30 * iconScale * M)
+    const rowH = 48 * M
     return (
-      <UiEntity uiTransform={{ width: '100%', height: 48, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
-        <Label value={label} fontSize={22} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 48 }} textAlign="middle-left" />
-        <Label value={value} fontSize={22} color={valueColor} font="sans-serif" uiTransform={{ height: 48, margin: { right: 6 } }} textAlign="middle-right" />
+      <UiEntity uiTransform={{ width: '100%', height: rowH, flexDirection: 'row', alignItems: 'center', padding: { left: 12 * M, right: 12 * M } }}>
+        <Label value={label} fontSize={16 * M} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: rowH }} textAlign="middle-left" />
+        <Label value={value} fontSize={16 * M} color={valueColor} font="sans-serif" uiTransform={{ height: rowH, margin: { right: 6 * M } }} textAlign="middle-right" />
         <UiEntity uiTransform={{ width: icoSize, height: icoSize }} uiBackground={{ textureMode: 'stretch', texture: { src: iconSrc }, color: iconColor }} />
       </UiEntity>
     )
@@ -207,28 +208,24 @@ function MobileStatusPopup() {
   return (
     <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
       >
-      <UiEntity uiTransform={{ width: '30%', flexDirection: 'column', alignItems: 'stretch', padding: 22, borderRadius: 20, margin: { top: 80 } }}
+      <UiEntity uiTransform={{ width: '24%', height: 860, flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, borderRadius: 40, margin: { top: 140 } }}
         uiBackground={{ color: PANEL_BG }}
       >
-        <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 52, alignItems: 'center', margin: { bottom: 10 } }}>
-          <Label value="Status" fontSize={38} color={GOLD} font="sans-serif" uiTransform={{ flexGrow: 1 }} />
-          <UiEntity uiTransform={{ width: 52, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+        <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 52 * M, alignItems: 'center', justifyContent: 'center', margin: { bottom: 10 * M } }}>
+          <Label value="Status" fontSize={32 * M} color={GOLD} font="sans-serif" textAlign="middle-center" />
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -50, right: -35 }, width: 52 * M, height: 52 * M, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
             onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
           >
-            <Label value="×" fontSize={52} color={CLOSE_GREY} font="sans-serif" />
+            <Label value="×" fontSize={52 * M} color={CLOSE_GREY} font="sans-serif" />
           </UiEntity>
         </UiEntity>
-        <Label value="INVENTORY" fontSize={20} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4, top: 4 } }} textAlign="middle-left" />
+        <UiEntity uiTransform={{ height: 24 * M, flexShrink: 0 }} />
+        <Label value="INVENTORY" fontSize={16 * M} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4 * M, top: 4 * M } }} textAlign="middle-left" />
         {iconRow('Coins', isCoinBalanceLoaded() ? `${coins}` : '--', 'assets/images/coin.png', GOLD, GOLD)}
         {iconRow('Flags', isWinsLoaded() ? `${myFlags}` : '--', 'assets/images/flag-icon-white.png', GOLD, GOLD)}
-        <Label value="EQUIPMENT" fontSize={20} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4, top: 14 } }} textAlign="middle-left" />
+        <Label value="EQUIPMENT" fontSize={16 * M} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4 * M, top: 14 * M } }} textAlign="middle-left" />
         {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`, WHITE, Color4.White(), 1.5)}
         {iconRow('Trap', getLocalUpgrades().equippedTrap === 'bomb' ? 'Bomb' : 'Banana', getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png')}
-        <Label value="DAILY" fontSize={20} color={GOLD} font="sans-serif" uiTransform={{ padding: { left: 4, top: 14 } }} textAlign="middle-left" />
-        <UiEntity uiTransform={{ width: '100%', height: 48, flexDirection: 'row', alignItems: 'center', padding: { left: 12, right: 12 } }}>
-          <Label value="Blessed Today" fontSize={22} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: 48 }} textAlign="middle-left" />
-          <Label value={blessingState.alreadyUsed ? 'Yes' : 'No'} fontSize={22} color={blessingState.alreadyUsed ? GOLD : GREY} font="sans-serif" uiTransform={{ height: 48 }} textAlign="middle-right" />
-        </UiEntity>
       </UiEntity>
     </UiEntity>
   )

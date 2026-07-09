@@ -92,12 +92,6 @@ export function StatusPopup() {
         {sectionHeader('EQUIPMENT')}
         {iconRow('Projectile', boomerangLabel, `assets/images/boomerang.${boomerang}.png`, WHITE, Color4.White(), 1.5)}
         {iconRow('Trap', getLocalUpgrades().equippedTrap === 'bomb' ? 'Bomb' : 'Banana', getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png')}
-        <UiEntity uiTransform={{ width: '100%', height: 1, margin: { top: S(6), bottom: S(2) } }} uiBackground={{ color: Color4.create(0.3, 0.3, 0.35, 0.6) }} />
-        {sectionHeader('DAILY')}
-        <UiEntity uiTransform={{ width: '100%', height: S(SR), flexDirection: 'row', alignItems: 'center', padding: { left: S(12), right: S(12) } }}>
-          <Label value="Blessed Today" fontSize={S(SF)} color={GREY} font="sans-serif" uiTransform={{ flexGrow: 1, height: S(SR) }} textAlign="middle-left" />
-          <Label value={blessingState.alreadyUsed ? 'Yes' : 'No'} fontSize={S(SF)} color={blessingState.alreadyUsed ? GOLD : GREY} font="sans-serif" uiTransform={{ height: S(SR) }} textAlign="middle-right" />
-        </UiEntity>
       </UiEntity>
     </UiEntity>
   )

@@ -272,12 +272,22 @@ function PlayerListUi() {
           uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}
           onMouseDown={() => {}}
         >
-          <UiEntity uiTransform={{ width: mobile ? 560 : S(460), flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(20), padding: mobile ? { top: 44, bottom: 24, left: 24, right: 24 } : { top: S(36), bottom: S(28), left: S(40), right: S(40) } }}
+          <UiEntity uiTransform={{ width: mobile ? 900 : S(460), flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 40 : S(20), padding: mobile ? { top: 64, bottom: 48, left: 48, right: 48 } : { top: S(36), bottom: S(28), left: S(40), right: S(40) } }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />
-            <Label value="Server Disconnected" fontSize={mobile ? 36 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 10 : S(8) } }} />
-            <Label value={`all players please leave scene\nfor 5 minutes while server resets`} fontSize={mobile ? 20 : S(18)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: mobile ? '90%' : S(380), height: mobile ? 56 : S(48) }} textAlign="middle-center" />
+            {mobile ? (
+              <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -20, right: -5 }, width: 104, height: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={() => { hover.closeServerDown = true }}
+                onMouseLeave={() => { hover.closeServerDown = false }}
+                onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false; hover.closeServerDown = false }}
+              >
+                <Label value="×" fontSize={104} color={hover.closeServerDown ? Color4.create(0.85, 0.85, 0.9, 1) : Color4.create(0.55, 0.55, 0.6, 1)} font="sans-serif" />
+              </UiEntity>
+            ) : (
+              <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />
+            )}
+            <Label value="Server Disconnected" fontSize={mobile ? 64 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 20 : S(8) } }} />
+            <Label value={`all players please leave scene\nfor 5 minutes while server resets`} fontSize={mobile ? 32 : S(18)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: mobile ? '95%' : S(380), height: mobile ? 96 : S(48) }} textAlign="middle-center" />
           </UiEntity>
         </UiEntity>
       )}
@@ -383,21 +393,26 @@ function PlayerListUi() {
       {spectatorState.active && <SpectatorHUD mobile={mobile} />}
 
       {/* Title Splash */}
-      {cinematicState.titleSplashVisible && (
+      {cinematicState.titleSplashVisible && (() => {
+        const mobile = isMobile()
+        const M = 2
+        const s = mobile ? (v: number) => Math.round(v * M) : S
+        const radius = mobile ? 40 : S(16)
+        return (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
-          
           onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
         >
-          <UiEntity uiTransform={{ width: S(420), padding: { top: S(32), bottom: S(32), left: S(24), right: S(24) }, borderRadius: S(16), flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
+          <UiEntity uiTransform={{ padding: { top: s(24), bottom: s(24), left: s(32), right: s(32) }, borderRadius: radius, flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
             uiBackground={{ color: PANEL_BG }}
             onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
           >
-            <Label value="FLAG TAG!" fontSize={S(56)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(6) } }} />
-            <Label value="A multiplayer keep away game!" fontSize={S(22)} color={MUTED} font="sans-serif" uiTransform={{ margin: { bottom: S(24) } }} />
-            <Label value="Click anywhere to continue" fontSize={S(18)} color={Color4.create(1, 1, 1, 0.5)} font="sans-serif" />
+            <Label value="FLAG TAG!" fontSize={s(72)} color={GOLD} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(360), height: s(84), margin: { bottom: s(12) } }} />
+            <Label value="A multiplayer keep away game!" fontSize={s(16)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(360), height: s(22), margin: { bottom: s(28) } }} />
+            <Label value="Click anywhere to continue" fontSize={s(14)} color={Color4.create(1, 1, 1, 0.5)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(360), height: s(20) }} />
           </UiEntity>
         </UiEntity>
-      )}
+        )
+      })()}
     </UiEntity>
   )
 }
