@@ -365,11 +365,11 @@ room.onMessage('bombExploded', (data) => {
       const now = Date.now()
       if (bombStaggerUntil <= now) {
         console.log('[Bomb] 💣 Local player hit by explosion!')
-        // Fire stagger emote FIRST — knockback movement can interrupt the emote if applied before it starts.
-        triggerEmote({ predefinedEmote: 'getHit' })
-        InputModifier.createOrReplace(engine.PlayerEntity, {
-          mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
-        })
+        // ORDER MATTERS: knockback FIRST, InputModifier LAST.
+        // If InputModifier is applied before knockback, the SDK's knockback conflicts
+        // with the movement lock and leaves the player unable to move until any input
+        // event (throwing a boomerang, reload) shakes it loose.
+        Physics.applyKnockbackToPlayer(pos, 40, BOMB_EXPLOSION_RADIUS, KnockbackFalloff.LINEAR)
         triggerHitFlash(BOMB_STAGGER_MS)
         // Red-star hit VFX + sound at player position (parity with boomerang hits)
         const vfxPos = Transform.has(engine.PlayerEntity)
@@ -377,7 +377,10 @@ room.onMessage('bombExploded', (data) => {
           : pos
         showHitEffect(vfxPos)
         playHitSound(vfxPos)
-        Physics.applyKnockbackToPlayer(pos, 40, BOMB_EXPLOSION_RADIUS, KnockbackFalloff.LINEAR)
+        triggerEmote({ predefinedEmote: 'getHit' })
+        InputModifier.createOrReplace(engine.PlayerEntity, {
+          mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
+        })
         bombStaggerUntil = now + BOMB_STAGGER_MS
       }
     }
