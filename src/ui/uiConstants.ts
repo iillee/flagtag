@@ -32,7 +32,7 @@ const UI_ADJUST_PRESETS = [
   { label: 'Medium', mult: 1.0  },
   { label: 'Large',  mult: 1.2  },
 ]
-let uiAdjustIndex = 2
+let uiAdjustIndex = 1
 let autoBaseScale = 1.0
 
 // System that reads screen size and computes auto base scale + cached scale
@@ -40,7 +40,7 @@ registerThrottled(() => {
   const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
   if (canvas && canvas.width > 0) {
     const raw = Math.min(canvas.width / 1920, canvas.height / 1080)
-    autoBaseScale = Math.max(0.6, Math.min(1.6, raw))
+    autoBaseScale = Math.max(0.5, Math.min(1.0, raw))
   }
   cachedScale = autoBaseScale * UI_ADJUST_PRESETS[uiAdjustIndex].mult
 }, 0.5)
