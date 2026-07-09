@@ -30,7 +30,7 @@ export const ROUND_LENGTH_MINUTES = 5
 // ── Proximity Steal ──
 
 /** Radius for proximity steal (meters). */
-export const PROXIMITY_STEAL_RADIUS = 2.0
+export const PROXIMITY_STEAL_RADIUS = 1.2
 /** Immunity duration after stealing/picking up flag (ms). */
 export const STEAL_IMMUNITY_MS = 3000
 

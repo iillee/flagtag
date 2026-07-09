@@ -15,7 +15,7 @@ import {
 import { loadPlayerUpgrades } from './economy'
 import { room } from '../shared/messages'
 import {
-  flagEntity, getPlayerPosition, FLAG_GRAVITY,
+  flagEntity, getPlayerPosition, wasWithinRadius, FLAG_GRAVITY,
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   sessionBananasDropped, sessionBoomerangsFired,
 } from './serverState'
@@ -702,16 +702,35 @@ export function shellServerSystem(dt: number): void {
     const projectilePos = Transform.get(projectile.entity).position
     let shellConsumed = false
 
+    // Lag-forgiving hit check: first pass uses current position (cheap, exact).
+    // Second pass checks the last ~300ms of positions per player — the shooter's
+    // client predicted a hit against a slightly-lagged victim Transform, so if
+    // the victim *was* within radius recently, we count it. Prevents "red star
+    // but no stagger/drop" from position desync during chases.
+    const hitRadius = PROJECTILE_HIT_RADIUS * projectile.chargeScale
+    const LOOKBACK_MS = 300
+    let hitAddr: string | null = null
+    let hitMode: 'current' | 'lookback' = 'current'
     for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
       const addr = identity.address.toLowerCase()
       if (addr === projectile.firedBy) continue
-
       const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
-
-      const dist = Vector3.distance(playerPos, projectilePos)
-      if (dist < PROJECTILE_HIT_RADIUS * projectile.chargeScale) {
-        console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)')
+      if (Vector3.distance(playerPos, projectilePos) < hitRadius) { hitAddr = addr; break }
+    }
+    if (!hitAddr) {
+      for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+        const addr = identity.address.toLowerCase()
+        if (addr === projectile.firedBy) continue
+        if (wasWithinRadius(addr, projectilePos, hitRadius, LOOKBACK_MS)) {
+          hitAddr = addr; hitMode = 'lookback'; break
+        }
+      }
+    }
+    if (hitAddr) {
+      const addr = hitAddr
+      {
+        console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)', hitMode === 'lookback' ? '(lookback)' : '')
 
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
@@ -733,7 +752,6 @@ export function shellServerSystem(dt: number): void {
           projectile.returnZ = projectilePos.z
           console.log('[Server] 🎯 Projectile hit on outbound — returning to shooter')
         }
-        break
       }
     }
     if (shellConsumed) continue

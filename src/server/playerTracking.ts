@@ -12,7 +12,7 @@ import {
   playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
   playerLifetimeHoldTimeCache, lastStealTime, deathPenaltyCooldowns,
   sessionDeaths, sessionBananasDropped, sessionBoomerangsFired,
-  isRealName
+  isRealName, clearPositionHistory
 } from './serverState'
 import { persistPlayerNames } from './persistence'
 import { updatePlayerName } from './leaderboard'
@@ -142,6 +142,7 @@ export function playerTrackingSystem(): void {
       sessionDeaths.delete(userKey)
       sessionBananasDropped.delete(userKey)
       sessionBoomerangsFired.delete(userKey)
+      clearPositionHistory(userKey)
 
       changed = true
     }
