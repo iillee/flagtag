@@ -113,17 +113,20 @@ export function ChestPopup() {
   const buyError = getLastBuyError()
 
   const SLOTS = 4
-  const panelWidth = mobile ? 500 : S(620)
-  const pad = mobile ? 20 : S(20)
-  const r = mobile ? 20 : S(20)
+  // Mobile scale multiplier — bump this to grow the whole chest UI on mobile.
+  const MS = 2
+  const m = (v: number) => Math.round(v * MS)
+  const panelWidth = mobile ? m(500) : S(620)
+  const pad = mobile ? m(20) : S(20)
+  const r = mobile ? m(20) : S(20)
 
   const items = getItemsForTab(activeTab)
 
   // Card sizing: always 4 in a row
-  const cardGap = mobile ? 8 : S(8)
+  const cardGap = mobile ? m(8) : S(8)
   const totalGap = cardGap * (SLOTS - 1) + pad * 2
   const cardWidth = Math.floor((panelWidth - totalGap) / SLOTS)
-  const cardHeight = mobile ? 200 : S(230)
+  const cardHeight = mobile ? m(200) : S(230)
 
   return (
     <UiEntity uiTransform={{
@@ -139,34 +142,42 @@ export function ChestPopup() {
         alignItems: 'center',
         padding: { top: pad, bottom: pad, left: pad, right: pad },
         borderRadius: r,
+        margin: { top: mobile ? m(50) : S(80) },
       }}
       uiBackground={{ color: PANEL_BG }}
       >
-        <CloseButton hoverKey="closeChest" onClose={() => { hideChestPopup(); hoveredItemId = null; hoveredTab = null }} />
+        <CloseButton
+          hoverKey="closeChest"
+          onClose={() => { hideChestPopup(); hoveredItemId = null; hoveredTab = null }}
+          size={mobile ? 88 * MS : undefined}
+          fontSize={mobile ? 52 * MS : undefined}
+          topOffset={mobile ? -20 : undefined}
+          rightOffset={mobile ? -4 : undefined}
+        />
 
         {/* Title */}
-        <Label value="Chest" fontSize={mobile ? 38 : S(32)} color={GOLD} font="sans-serif"
-          uiTransform={{ margin: { bottom: mobile ? 4 : S(4) } }} />
+        <Label value="Chest" fontSize={mobile ? m(38) : S(32)} color={GOLD} font="sans-serif"
+          uiTransform={{ margin: { bottom: mobile ? m(4) : S(4) } }} />
 
         {/* Wallet row */}
         <UiEntity uiTransform={{
           flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-          margin: { top: mobile ? 4 : S(4), bottom: mobile ? 16 : S(14) },
+          margin: { top: mobile ? m(4) : S(4), bottom: mobile ? m(16) : S(14) },
         }}>
-          <UiEntity uiTransform={{ width: mobile ? 20 : S(18), height: mobile ? 20 : S(18), margin: { right: mobile ? 5 : S(5) } }}
+          <UiEntity uiTransform={{ width: mobile ? m(20) : S(18), height: mobile ? m(20) : S(18), margin: { right: mobile ? m(5) : S(5) } }}
             uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.White() }} />
-          <Label value={isCoinBalanceLoaded() ? `${coins}` : '--'} fontSize={mobile ? 22 : S(18)} color={GOLD} font="sans-serif"
-            uiTransform={{ margin: { right: mobile ? 20 : S(20) } }} />
-          <UiEntity uiTransform={{ width: mobile ? 20 : S(20), height: mobile ? 20 : S(20), margin: { right: mobile ? 5 : S(5) } }}
+          <Label value={isCoinBalanceLoaded() ? `${coins}` : '--'} fontSize={mobile ? m(22) : S(18)} color={GOLD} font="sans-serif"
+            uiTransform={{ margin: { right: mobile ? m(20) : S(20) } }} />
+          <UiEntity uiTransform={{ width: mobile ? m(20) : S(20), height: mobile ? m(20) : S(20), margin: { right: mobile ? m(5) : S(5) } }}
             uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />
-          <Label value={isWinsLoaded() ? `${lifetimeWins}` : '--'} fontSize={mobile ? 22 : S(18)} color={GOLD} font="sans-serif" />
+          <Label value={isWinsLoaded() ? `${lifetimeWins}` : '--'} fontSize={mobile ? m(22) : S(18)} color={GOLD} font="sans-serif" />
         </UiEntity>
 
         {/* Tab bar */}
         <UiEntity uiTransform={{
           flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
           width: '100%',
-          margin: { bottom: mobile ? 14 : S(12) },
+          margin: { bottom: mobile ? m(14) : S(12) },
         }}>
           {TABS.map((tab, i) => {
             const isActive = activeTab === tab.id
@@ -178,10 +189,10 @@ export function ChestPopup() {
               <UiEntity
                 key={`tab-${tab.id}`}
                 uiTransform={{
-                  height: mobile ? 40 : S(36),
-                  padding: { left: mobile ? 12 : S(10), right: mobile ? 12 : S(10) },
-                  margin: { left: i === 0 ? 0 : (mobile ? 6 : S(6)) },
-                  borderRadius: mobile ? 10 : S(8),
+                  height: mobile ? m(40) : S(36),
+                  padding: { left: mobile ? m(12) : S(10), right: mobile ? m(12) : S(10) },
+                  margin: { left: i === 0 ? 0 : (mobile ? m(6) : S(6)) },
+                  borderRadius: mobile ? m(10) : S(8),
                   justifyContent: 'center', alignItems: 'center',
                   borderWidth: isActive ? (mobile ? 1 : S(1)) : 0,
                   borderColor: isActive ? GOLD : Color4.Clear(),
@@ -191,7 +202,7 @@ export function ChestPopup() {
                 onMouseLeave={() => { if (hoveredTab === tab.id) hoveredTab = null }}
                 onMouseDown={() => { playClickSound(); activeTab = tab.id; hoveredItemId = null }}
               >
-                <Label value={tab.label} fontSize={mobile ? 17 : S(14)} color={textColor} font="sans-serif"
+                <Label value={tab.label} fontSize={mobile ? m(17) : S(14)} color={textColor} font="sans-serif"
                   uiTransform={{ pointerFilter: 'none' }} />
               </UiEntity>
             )
@@ -216,12 +227,12 @@ export function ChestPopup() {
                     width: cardWidth,
                     height: cardHeight,
                     margin: { left: i === 0 ? 0 : cardGap },
-                    borderRadius: mobile ? 14 : S(14),
+                    borderRadius: mobile ? m(14) : S(14),
                     justifyContent: 'center', alignItems: 'center',
                   }}
                   uiBackground={{ color: EMPTY_SLOT_BG }}
                 >
-                  <Label value="?" fontSize={mobile ? 36 : S(32)} color={GREY} font="sans-serif"
+                  <Label value="?" fontSize={mobile ? m(36) : S(32)} color={GREY} font="sans-serif"
                     uiTransform={{ pointerFilter: 'none' }} />
                 </UiEntity>
               )
@@ -241,7 +252,7 @@ export function ChestPopup() {
             const isMusic = activeTab === 'music'
             const musicItem = isMusic ? (item as MusicStoreItem) : null
 
-            const iconSize = mobile ? 72 : S(80)
+            const iconSize = mobile ? m(72) : S(80)
 
             return (
               <UiEntity
@@ -250,9 +261,9 @@ export function ChestPopup() {
                   width: cardWidth,
                   height: cardHeight,
                   margin: { left: i === 0 ? 0 : cardGap },
-                  padding: mobile ? 8 : S(8),
-                  borderRadius: mobile ? 14 : S(14),
-                  borderWidth: canBuy ? (mobile ? 2 : S(2)) : 0,
+                  padding: mobile ? m(8) : S(8),
+                  borderRadius: mobile ? m(14) : S(14),
+                  borderWidth: canBuy ? (mobile ? m(2) : S(2)) : 0,
                   borderColor: canBuy ? BRIGHT_WHITE : Color4.Clear(),
                   justifyContent: 'flex-start',
                   alignItems: 'center',
@@ -272,7 +283,7 @@ export function ChestPopup() {
               >
                 {/* Item icon */}
                 <UiEntity
-                  uiTransform={{ width: iconSize, height: iconSize, margin: { top: mobile ? 6 : S(8) } }}
+                  uiTransform={{ width: iconSize, height: iconSize, margin: { top: mobile ? m(6) : S(8) } }}
                   uiBackground={{
                     textureMode: 'stretch',
                     texture: { src: item.icon },
@@ -281,51 +292,51 @@ export function ChestPopup() {
                 />
 
                 {/* Item name */}
-                <Label value={item.label} fontSize={mobile ? 18 : S(16)} color={equipped ? GOLD : owned ? LIGHT_GREY : GREY}
-                  uiTransform={{ margin: { top: mobile ? 4 : S(4) }, pointerFilter: 'none' }} />
+                <Label value={item.label} fontSize={mobile ? m(18) : S(16)} color={equipped ? GOLD : owned ? LIGHT_GREY : GREY}
+                  uiTransform={{ margin: { top: mobile ? m(4) : S(4) }, pointerFilter: 'none' }} />
 
                 {/* Author (music only) */}
                 {musicItem && (
-                  <Label value={musicItem.author} fontSize={mobile ? 14 : S(12)} color={GREY}
-                    uiTransform={{ margin: { top: mobile ? 1 : S(1) }, pointerFilter: 'none' }} />
+                  <Label value={musicItem.author} fontSize={mobile ? m(14) : S(12)} color={GREY}
+                    uiTransform={{ margin: { top: mobile ? m(1) : S(1) }, pointerFilter: 'none' }} />
                 )}
 
                 {/* Status / Price area */}
                 {owned ? (
                   <Label
                     value={equipped ? 'Equipped' : 'Equip'}
-                    fontSize={mobile ? 16 : S(14)}
+                    fontSize={mobile ? m(16) : S(14)}
                     color={equipped ? GOLD : LIGHT_GREY}
-                    uiTransform={{ margin: { top: mobile ? 6 : S(6) }, pointerFilter: 'none' }}
+                    uiTransform={{ margin: { top: mobile ? m(6) : S(6) }, pointerFilter: 'none' }}
                   />
                 ) : (
-                  <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', margin: { top: mobile ? 4 : S(4) }, pointerFilter: 'none' }}>
+                  <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', margin: { top: mobile ? m(4) : S(4) }, pointerFilter: 'none' }}>
                     {item.coinCost > 0 && (
-                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: mobile ? 3 : S(3) }, pointerFilter: 'none' }}>
-                        <UiEntity uiTransform={{ width: mobile ? 14 : S(14), height: mobile ? 14 : S(14), margin: { right: mobile ? 4 : S(3) }, pointerFilter: 'none' }}
+                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: mobile ? m(3) : S(3) }, pointerFilter: 'none' }}>
+                        <UiEntity uiTransform={{ width: mobile ? m(14) : S(14), height: mobile ? m(14) : S(14), margin: { right: mobile ? m(4) : S(3) }, pointerFilter: 'none' }}
                           uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: canAfford ? Color4.White() : Color4.create(0.5, 0.5, 0.5, 1) }} />
-                        <Label value={`${item.coinCost}`} fontSize={mobile ? 16 : S(14)} color={canAfford ? GOLD : RED_DIM}
+                        <Label value={`${item.coinCost}`} fontSize={mobile ? m(16) : S(14)} color={canAfford ? GOLD : RED_DIM}
                           uiTransform={{ pointerFilter: 'none' }} />
                       </UiEntity>
                     )}
                     {item.flagsRequired > 0 && (
-                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: mobile ? 3 : S(3) }, pointerFilter: 'none' }}>
-                        <UiEntity uiTransform={{ width: mobile ? 13 : S(12), height: mobile ? 13 : S(12), margin: { right: mobile ? 3 : S(3) }, pointerFilter: 'none' }}
+                      <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', margin: { bottom: mobile ? m(3) : S(3) }, pointerFilter: 'none' }}>
+                        <UiEntity uiTransform={{ width: mobile ? m(13) : S(12), height: mobile ? m(13) : S(12), margin: { right: mobile ? m(3) : S(3) }, pointerFilter: 'none' }}
                           uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: hasFlags ? GOLD : Color4.create(0.5, 0.5, 0.5, 1) }} />
-                        <Label value={`${Math.min(lifetimeWins, item.flagsRequired)}/${item.flagsRequired}`} fontSize={mobile ? 15 : S(14)} color={hasFlags ? GOLD : RED_DIM}
+                        <Label value={`${Math.min(lifetimeWins, item.flagsRequired)}/${item.flagsRequired}`} fontSize={mobile ? m(15) : S(14)} color={hasFlags ? GOLD : RED_DIM}
                           uiTransform={{ pointerFilter: 'none' }} />
                       </UiEntity>
                     )}
                     {canBuy && (
                       <Label
                         value={pending ? '...' : 'Buy'}
-                        fontSize={mobile ? 17 : S(14)}
+                        fontSize={mobile ? m(17) : S(14)}
                         color={pending ? GREY : BRIGHT_WHITE}
-                        uiTransform={{ margin: { top: mobile ? 2 : S(2) }, pointerFilter: 'none' }}
+                        uiTransform={{ margin: { top: mobile ? m(2) : S(2) }, pointerFilter: 'none' }}
                       />
                     )}
                     {locked && !canBuy && (
-                      <UiEntity uiTransform={{ width: mobile ? 18 : S(18), height: mobile ? 18 : S(18), margin: { top: mobile ? 2 : S(2) }, pointerFilter: 'none' }}
+                      <UiEntity uiTransform={{ width: mobile ? m(18) : S(18), height: mobile ? m(18) : S(18), margin: { top: mobile ? m(2) : S(2) }, pointerFilter: 'none' }}
                         uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/lock.png' }, color: GREY }} />
                     )}
                   </UiEntity>
@@ -337,8 +348,8 @@ export function ChestPopup() {
 
         {/* Buy error */}
         {buyError ? (
-          <Label value={buyError} fontSize={mobile ? 17 : S(14)} color={CORAL_RED}
-            uiTransform={{ margin: { top: mobile ? 10 : S(10) } }} />
+          <Label value={buyError} fontSize={mobile ? m(17) : S(14)} color={CORAL_RED}
+            uiTransform={{ margin: { top: mobile ? m(10) : S(10) } }} />
         ) : null}
       </UiEntity>
     </UiEntity>

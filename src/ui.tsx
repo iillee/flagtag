@@ -293,36 +293,48 @@ function PlayerListUi() {
       )}
 
       {/* Mailbox popup */}
-      {popupState.mailbox && (
+      {popupState.mailbox && (() => {
+        // Match chest UI mobile scale.
+        const MB = 2
+        const mb = (v: number) => Math.round(v * MB)
+        return (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
           >
-          <UiEntity uiTransform={{ width: mobile ? 540 : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 36, bottom: 36, left: 28, right: 28 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
+          <UiEntity uiTransform={{ width: mobile ? mb(540) : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: mb(36), bottom: mb(36), left: mb(28), right: mb(28) } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? mb(20) : S(20), margin: { top: mobile ? mb(50) : 0 } }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <CloseButton hoverKey="closeMailbox" onClose={() => { hideMailboxPopup(); notifyOverlayClosed() }} />
-            <Label value="Leave a Message" fontSize={mobile ? 42 : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 8 : S(8) } }} />
-            <Label value="Leave feedback, report a bug, or just say hi!" fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 6 : S(4), bottom: mobile ? 16 : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? 65 : S(28) }} textAlign="middle-center" />
+            <CloseButton
+              hoverKey="closeMailbox"
+              onClose={() => { hideMailboxPopup(); notifyOverlayClosed() }}
+              size={mobile ? 88 * MB : undefined}
+              fontSize={mobile ? 52 * MB : undefined}
+              topOffset={mobile ? -20 : undefined}
+              rightOffset={mobile ? -4 : undefined}
+            />
+            <Label value="Leave a Message" fontSize={mobile ? mb(42) : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? mb(8) : S(8) } }} />
+            <Label value="Leave feedback, report a bug, or just say hi!" fontSize={mobile ? mb(24) : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? mb(6) : S(4), bottom: mobile ? mb(16) : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? mb(65) : S(28) }} textAlign="middle-center" />
             <Input
               placeholder="Type your message..."
-              fontSize={mobile ? 22 : S(15)}
+              fontSize={mobile ? mb(22) : S(15)}
               color={Color4.White()}
               placeholderColor={Color4.create(0.6, 0.6, 0.6, 1)}
-              uiTransform={{ width: mobile ? '95%' : S(420), height: mobile ? 54 : S(40), margin: { bottom: mobile ? 16 : S(12) }, borderRadius: mobile ? 10 : S(8), padding: { left: mobile ? 12 : S(8), right: mobile ? 12 : S(8) } }}
+              uiTransform={{ width: mobile ? '95%' : S(420), height: mobile ? mb(54) : S(40), margin: { bottom: mobile ? mb(16) : S(12) }, borderRadius: mobile ? mb(10) : S(8), padding: { left: mobile ? mb(12) : S(8), right: mobile ? mb(12) : S(8) } }}
               uiBackground={{ color: Color4.create(0.15, 0.15, 0.2, 1) }}
               onChange={(val) => { feedbackText = val }}
               onSubmit={(val) => { feedbackText = val; sendFeedback() }}
               value={feedbackText}
             />
-            <UiEntity uiTransform={{ width: mobile ? 240 : S(200), height: mobile ? 54 : S(44), borderRadius: mobile ? 10 : S(8), justifyContent: 'center', alignItems: 'center' }}
+            <UiEntity uiTransform={{ width: mobile ? mb(240) : S(200), height: mobile ? mb(54) : S(44), borderRadius: mobile ? mb(10) : S(8), justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
               onMouseDown={() => { sendFeedback() }}
             >
-              <Label value="Send" fontSize={mobile ? 24 : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
+              <Label value="Send" fontSize={mobile ? mb(24) : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
             </UiEntity>
-            {getMailboxStatus() ? <Label value={getMailboxStatus()} fontSize={mobile ? 16 : S(13)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 12 : S(12) }, width: mobile ? '95%' : S(360) }} textAlign="middle-center" /> : null}
+            {getMailboxStatus() ? <Label value={getMailboxStatus()} fontSize={mobile ? mb(16) : S(13)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? mb(12) : S(12) }, width: mobile ? '95%' : S(360) }} textAlign="middle-center" /> : null}
           </UiEntity>
         </UiEntity>
-      )}
+        )
+      })()}
 
       {/* Gravestone popup */}
       {popupState.gravestone && (
@@ -406,9 +418,9 @@ function PlayerListUi() {
             uiBackground={{ color: PANEL_BG }}
             onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
           >
-            <Label value="FLAG TAG!" fontSize={s(72)} color={GOLD} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(460), height: s(88), margin: { bottom: s(12) } }} />
-            <Label value="A multiplayer keep away game!" fontSize={s(16)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(360), height: s(22), margin: { bottom: s(28) } }} />
-            <Label value="Click anywhere to continue" fontSize={s(14)} color={Color4.create(1, 1, 1, 0.5)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(360), height: s(20) }} />
+            <Label value="FLAG TAG!" fontSize={s(72)} color={GOLD} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(380), height: s(88), margin: { bottom: s(12) } }} />
+            <Label value="A multiplayer keep away game!" fontSize={s(16)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(300), height: s(22), margin: { bottom: s(28) } }} />
+            <Label value="Click anywhere to continue" fontSize={s(14)} color={Color4.create(1, 1, 1, 0.5)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(300), height: s(20) }} />
           </UiEntity>
         </UiEntity>
         )
@@ -437,11 +449,15 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
   const TAB_ACTIVE = Color4.create(0.9, 0.75, 0.2, 1)
   const PANEL = Color4.create(0.08, 0.08, 0.1, 0.94)
 
+  // Mobile scale multiplier for the spectator HUD.
+  const SS = 1.5
+  const sm = (v: number) => Math.round(v * SS)
+
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? 60 : S(16), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? sm(20) : S(16), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
       {/* Mobile player picker (above bar) */}
       {mobile && mode === 'player' && spectatorState.playerPickerOpen && players.length > 0 && (
-        <UiEntity uiTransform={{ flexDirection: 'column', width: 280, maxHeight: 260, margin: { bottom: 4 }, borderRadius: 10, padding: { top: 6, bottom: 6 } }}
+        <UiEntity uiTransform={{ flexDirection: 'column', width: sm(280), maxHeight: sm(260), margin: { bottom: sm(4) }, borderRadius: sm(10), padding: { top: sm(6), bottom: sm(6) } }}
           uiBackground={{ color: PANEL }}
         >
           {players.map((p, i) => {
@@ -449,13 +465,13 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
             const isSelected = spectatorState.followPlayerId?.toLowerCase() === p.userId.toLowerCase()
             return (
               <UiEntity key={`sp-${i}`}
-                uiTransform={{ height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: 12, right: 12 }, borderRadius: 6, margin: { left: 4, right: 4, top: 2, bottom: 2 } }}
+                uiTransform={{ height: sm(38), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: sm(12), right: sm(12) }, borderRadius: sm(6), margin: { left: sm(4), right: sm(4), top: sm(2), bottom: sm(2) } }}
                 uiBackground={{ color: isSelected ? Color4.create(0.9, 0.75, 0.2, 0.25) : Color4.create(0, 0, 0, 0) }}
                 onMouseDown={() => { selectFollowPlayer(p.userId, p.name) }}
               >
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-                  {isCarrier && <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
-                  <Label value={p.name} fontSize={18} color={isSelected ? TAB_ACTIVE : LIGHT_GREY} font="sans-serif" />
+                  {isCarrier && <UiEntity uiTransform={{ width: sm(16), height: sm(16), margin: { right: sm(4) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
+                  <Label value={p.name} fontSize={sm(18)} color={isSelected ? TAB_ACTIVE : LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
               </UiEntity>
             )
@@ -465,7 +481,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
 
       {/* Main bar */}
       {mobile ? (
-        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: { top: 12, bottom: 12, left: 12, right: 12 } }}
+        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', borderRadius: sm(18), padding: { top: sm(12), bottom: sm(12), left: sm(12), right: sm(12) } }}
           uiBackground={{ color: PANEL }}
         >
           {[...SPEC_MODES, { key: 'exit' as any, label: '×' }].map((m, i) => {
@@ -473,7 +489,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
             const isActive = !isExit && mode === m.key
             return (
               <UiEntity key={`tab-${i}`}
-                uiTransform={{ height: 60, width: isExit ? 60 : undefined, padding: isExit ? undefined : { left: 24, right: 24 }, margin: { left: i > 0 ? 6 : 0 }, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}
+                uiTransform={{ height: sm(60), width: isExit ? sm(60) : undefined, padding: isExit ? undefined : { left: sm(24), right: sm(24) }, margin: { left: i > 0 ? sm(6) : 0 }, borderRadius: sm(12), justifyContent: 'center', alignItems: 'center' }}
                 uiBackground={{ color: isActive ? TAB_ACTIVE : TAB_BG }}
                 onMouseDown={() => {
                   if (isExit) {
@@ -485,7 +501,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
                   }
                 }}
               >
-                <Label value={m.label} fontSize={isExit ? 60 : 26} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" uiTransform={isExit ? { margin: { top: -10 } } : undefined} />
+                <Label value={m.label} fontSize={isExit ? sm(60) : sm(26)} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" uiTransform={isExit ? { margin: { top: sm(-10) } } : undefined} />
               </UiEntity>
             )
           })}
