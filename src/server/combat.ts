@@ -17,9 +17,16 @@ import { room } from '../shared/messages'
 import {
   flagEntity, getPlayerPosition, wasWithinRadius, FLAG_GRAVITY,
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
-  sessionBananasDropped, sessionBoomerangsFired,
+  sessionBananasDropped, sessionBoomerangsFired, lastStealTime, STEAL_IMMUNITY_MS,
 } from './serverState'
 import { handleDrop } from './flagLogic'
+
+// Full combat immunity while the carrier's pickup/steal shield is active.
+// Matches STEAL_IMMUNITY_MS so shield visual = actual protection.
+function isFlagImmune(playerId: string): boolean {
+  const t = lastStealTime.get(playerId) ?? 0
+  return Date.now() - t < STEAL_IMMUNITY_MS
+}
 
 // ══════════════════════════════════════════════════════════════════════
 // SERVER ENTITY POOLS
@@ -182,6 +189,10 @@ function explodeBomb(bomb: ActiveBomb): void {
 
     const dist = Vector3.distance(playerPos, bombPos)
     if (dist < BOMB_EXPLOSION_RADIUS) {
+      if (isFlagImmune(addr)) {
+        console.log('[Server] 🛡️ Bomb ignored — player has flag immunity')
+        continue
+      }
       victims.push(addr)
 
       // Drop flag if carrying
@@ -461,6 +472,10 @@ export function bananaServerSystem(dt: number): void {
 
       const dist = Vector3.distance(playerPos, trapPos)
       if (dist < TRAP_TRIGGER_RADIUS) {
+        if (isFlagImmune(addr)) {
+          console.log('[Server] 🛡️ Trap ignored — player has flag immunity')
+          continue
+        }
         console.log('[Server] 🪤 Trap triggered by', addr.slice(0, 8), '! Staggering...')
 
         const flag = Flag.getOrNull(flagEntity)
@@ -727,6 +742,10 @@ export function shellServerSystem(dt: number): void {
         }
       }
     }
+    if (hitAddr && isFlagImmune(hitAddr)) {
+      console.log('[Server] 🛡️ Projectile ignored — player has flag immunity')
+      hitAddr = null
+    }
     if (hitAddr) {
       const addr = hitAddr
       {
@@ -880,6 +899,10 @@ export function orbitServerSystem(_dt: number): void {
 
       const dist = Vector3.distance(orbiterPos, victimPos)
       if (dist < ORBIT_RADIUS + ORBIT_HIT_RADIUS && dist > 0.5) {
+        if (isFlagImmune(addr)) {
+          console.log('[Server] 🛡️ Orbit hit ignored — player has flag immunity')
+          continue
+        }
         orbit.hitPlayers.add(addr)
         console.log('[Server] 🌀 Orbit hit player', addr.slice(0, 8), '— ending orbit')
 
