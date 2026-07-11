@@ -374,7 +374,12 @@ room.onMessage('flagHeartbeat', (data) => {
   }
 })
 
+let lastPickupSoundMs = 0
+const PICKUP_SOUND_COOLDOWN_MS = 250
 function playPickupSound(): void {
+  const now = Date.now()
+  if (now - lastPickupSoundMs < PICKUP_SOUND_COOLDOWN_MS) return
+  lastPickupSoundMs = now
   if (!pickupSoundEntity) {
     pickupSoundEntity = engine.addEntity()
     Transform.create(pickupSoundEntity, { position: Vector3.Zero() })

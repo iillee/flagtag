@@ -117,8 +117,8 @@ function getSmokeMaterial() {
 // ── Physics lift configuration ──────────────────────────────
 const TRIGGER_RADIUS  = 2.5
 const TRIGGER_HEIGHT  = 30
-const UPDRAFT_FORCE   = Vector3.create(0, 40, 0)
-const UPDRAFT_KICK    = Vector3.create(0, 10, 0)
+const UPDRAFT_FORCE   = Vector3.create(0, 140, 0)  // continuous lift — must overpower gravity strongly
+const UPDRAFT_KICK    = Vector3.create(0, 25, 0)   // snappy pop on entry
 
 // ── Transition configuration ────────────────────────────────
 const TRANSITION_DELAY = 1 // seconds to wait after drain completes
