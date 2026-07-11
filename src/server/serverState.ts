@@ -128,3 +128,63 @@ export function getPlayerPosition(address: string): Vector3 | null {
   }
   return null
 }
+
+// ── Player position history (rolling ring buffer for lag-forgiving hit checks) ──
+// Keeps ~500ms of positions per player. Used by combat to reconcile shooter/victim
+// position lag: a projectile that would have hit the victim ~300ms ago still counts.
+
+interface PosSample { t: number; x: number; y: number; z: number }
+const POS_HISTORY_MAX_MS = 500
+const positionHistory = new Map<string, PosSample[]>()
+
+/** Called each server tick — snapshot every connected player's CRDT Transform. */
+export function recordPlayerPositions(): void {
+  const now = Date.now()
+  const cutoff = now - POS_HISTORY_MAX_MS
+  const seen = new Set<string>()
+  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+    const addr = identity.address.toLowerCase()
+    seen.add(addr)
+    const p = Transform.get(entity).position
+    let arr = positionHistory.get(addr)
+    if (!arr) { arr = []; positionHistory.set(addr, arr) }
+    arr.push({ t: now, x: p.x, y: p.y, z: p.z })
+    // Drop stale samples from front
+    while (arr.length > 0 && arr[0].t < cutoff) arr.shift()
+  }
+  // Clean up disconnected players
+  for (const addr of positionHistory.keys()) {
+    if (!seen.has(addr)) positionHistory.delete(addr)
+  }
+}
+
+/**
+ * True if the player was within `radius` of `target` at any point in the last `lookbackMs`.
+ * Used for lag-forgiving projectile hit checks: the shooter's client already saw the
+ * hit against a slightly-lagged victim position; the server accepts if the victim
+ * *was* recently there. If no history exists, falls back to current position.
+ */
+export function wasWithinRadius(address: string, target: Vector3, radius: number, lookbackMs: number): boolean {
+  const addr = address.toLowerCase()
+  const arr = positionHistory.get(addr)
+  const now = Date.now()
+  const cutoff = now - lookbackMs
+  if (arr && arr.length > 0) {
+    const r2 = radius * radius
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const s = arr[i]
+      if (s.t < cutoff) break
+      const dx = s.x - target.x, dy = s.y - target.y, dz = s.z - target.z
+      if (dx * dx + dy * dy + dz * dz < r2) return true
+    }
+    return false
+  }
+  // Fallback: no history — use current position
+  const cur = getPlayerPosition(addr)
+  if (!cur) return false
+  return Vector3.distance(cur, target) < radius
+}
+
+export function clearPositionHistory(address: string): void {
+  positionHistory.delete(address.toLowerCase())
+}

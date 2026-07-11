@@ -271,7 +271,7 @@ let skipNextDropSound = false
 // Phase 1 (instant): hide flag visual + play sound on auto-pickup
 // Phase 2 (~50-100ms): create clone + shield when pickupConfirmed arrives
 let pendingPickupUntil = 0                       // Suppress flag-visual restore until this timestamp
-const PENDING_PICKUP_TIMEOUT_MS = 1500           // Give up waiting for confirmation after 1.5s
+const PENDING_PICKUP_TIMEOUT_MS = 700            // Give up waiting for confirmation after 700ms (server RTT is ~100-200ms; shorter = less jarring rollback)
 let confirmedCarrierId: string | null = null     // Set by pickupConfirmed message, consumed by system
 
 // Post-confirmation grace period — trust the server message over CRDT until CRDT catches up.

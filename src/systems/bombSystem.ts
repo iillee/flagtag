@@ -33,6 +33,7 @@ import { BOMB_FUSE_SEC, BOMB_EXPLOSION_RADIUS } from '../shared/components'
 
 const BOMB_STAGGER_MS = 1000 // match regular hit stun duration
 import { triggerHitFlash } from '../gameState/hitFlashState'
+import { showHitEffect, playHitSound } from './combatSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { isDrownRespawning } from './waterSystem'
 import { isSpectatorMode } from './spectatorSystem'
@@ -364,8 +365,18 @@ room.onMessage('bombExploded', (data) => {
       const now = Date.now()
       if (bombStaggerUntil <= now) {
         console.log('[Bomb] 💣 Local player hit by explosion!')
+        // ORDER MATTERS: knockback FIRST, InputModifier LAST.
+        // If InputModifier is applied before knockback, the SDK's knockback conflicts
+        // with the movement lock and leaves the player unable to move until any input
+        // event (throwing a boomerang, reload) shakes it loose.
         Physics.applyKnockbackToPlayer(pos, 40, BOMB_EXPLOSION_RADIUS, KnockbackFalloff.LINEAR)
         triggerHitFlash(BOMB_STAGGER_MS)
+        // Red-star hit VFX + sound at player position (parity with boomerang hits)
+        const vfxPos = Transform.has(engine.PlayerEntity)
+          ? Transform.get(engine.PlayerEntity).position
+          : pos
+        showHitEffect(vfxPos)
+        playHitSound(vfxPos)
         triggerEmote({ predefinedEmote: 'getHit' })
         InputModifier.createOrReplace(engine.PlayerEntity, {
           mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })

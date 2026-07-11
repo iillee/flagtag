@@ -272,47 +272,69 @@ function PlayerListUi() {
           uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}
           onMouseDown={() => {}}
         >
-          <UiEntity uiTransform={{ width: mobile ? 560 : S(460), flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(20), padding: mobile ? { top: 44, bottom: 24, left: 24, right: 24 } : { top: S(36), bottom: S(28), left: S(40), right: S(40) } }}
+          <UiEntity uiTransform={{ width: mobile ? 900 : S(460), flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 40 : S(20), padding: mobile ? { top: 64, bottom: 48, left: 48, right: 48 } : { top: S(36), bottom: S(28), left: S(40), right: S(40) } }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />
-            <Label value="Server Disconnected" fontSize={mobile ? 36 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 10 : S(8) } }} />
-            <Label value={`all players please leave scene\nfor 5 minutes while server resets`} fontSize={mobile ? 20 : S(18)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: mobile ? '90%' : S(380), height: mobile ? 56 : S(48) }} textAlign="middle-center" />
+            {mobile ? (
+              <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -20, right: -5 }, width: 104, height: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={() => { hover.closeServerDown = true }}
+                onMouseLeave={() => { hover.closeServerDown = false }}
+                onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false; hover.closeServerDown = false }}
+              >
+                <Label value="×" fontSize={104} color={hover.closeServerDown ? Color4.create(0.85, 0.85, 0.9, 1) : Color4.create(0.55, 0.55, 0.6, 1)} font="sans-serif" />
+              </UiEntity>
+            ) : (
+              <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />
+            )}
+            <Label value="Server Disconnected" fontSize={mobile ? 64 : S(32)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 20 : S(8) } }} />
+            <Label value={`all players please leave scene\nfor 5 minutes while server resets`} fontSize={mobile ? 32 : S(18)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ width: mobile ? '95%' : S(380), height: mobile ? 96 : S(48) }} textAlign="middle-center" />
           </UiEntity>
         </UiEntity>
       )}
 
       {/* Mailbox popup */}
-      {popupState.mailbox && (
+      {popupState.mailbox && (() => {
+        // Match chest UI mobile scale.
+        const MB = 2
+        const mb = (v: number) => Math.round(v * MB)
+        return (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
           >
-          <UiEntity uiTransform={{ width: mobile ? 540 : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 36, bottom: 36, left: 28, right: 28 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
+          <UiEntity uiTransform={{ width: mobile ? mb(540) : S(480), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: mb(36), bottom: mb(36), left: mb(28), right: mb(28) } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? mb(20) : S(20), margin: { top: mobile ? mb(50) : 0 } }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <CloseButton hoverKey="closeMailbox" onClose={() => { hideMailboxPopup(); notifyOverlayClosed() }} />
-            <Label value="Leave a Message" fontSize={mobile ? 42 : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? 8 : S(8) } }} />
-            <Label value="Leave feedback, report a bug, or just say hi!" fontSize={mobile ? 24 : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? 6 : S(4), bottom: mobile ? 16 : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? 65 : S(28) }} textAlign="middle-center" />
+            <CloseButton
+              hoverKey="closeMailbox"
+              onClose={() => { hideMailboxPopup(); notifyOverlayClosed() }}
+              size={mobile ? 88 * MB : undefined}
+              fontSize={mobile ? 52 * MB : undefined}
+              topOffset={mobile ? -20 : undefined}
+              rightOffset={mobile ? -4 : undefined}
+            />
+            <Label value="Leave a Message" fontSize={mobile ? mb(42) : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? mb(8) : S(8) } }} />
+            <Label value="Leave feedback, report a bug, or just say hi!" fontSize={mobile ? mb(24) : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? mb(6) : S(4), bottom: mobile ? mb(16) : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? mb(65) : S(28) }} textAlign="middle-center" />
             <Input
               placeholder="Type your message..."
-              fontSize={mobile ? 22 : S(15)}
+              fontSize={mobile ? mb(22) : S(15)}
               color={Color4.White()}
               placeholderColor={Color4.create(0.6, 0.6, 0.6, 1)}
-              uiTransform={{ width: mobile ? '95%' : S(420), height: mobile ? 54 : S(40), margin: { bottom: mobile ? 16 : S(12) }, borderRadius: mobile ? 10 : S(8), padding: { left: mobile ? 12 : S(8), right: mobile ? 12 : S(8) } }}
+              uiTransform={{ width: mobile ? '95%' : S(420), height: mobile ? mb(54) : S(40), margin: { bottom: mobile ? mb(16) : S(12) }, borderRadius: mobile ? mb(10) : S(8), padding: { left: mobile ? mb(12) : S(8), right: mobile ? mb(12) : S(8) } }}
               uiBackground={{ color: Color4.create(0.15, 0.15, 0.2, 1) }}
               onChange={(val) => { feedbackText = val }}
               onSubmit={(val) => { feedbackText = val; sendFeedback() }}
               value={feedbackText}
             />
-            <UiEntity uiTransform={{ width: mobile ? 240 : S(200), height: mobile ? 54 : S(44), borderRadius: mobile ? 10 : S(8), justifyContent: 'center', alignItems: 'center' }}
+            <UiEntity uiTransform={{ width: mobile ? mb(240) : S(200), height: mobile ? mb(54) : S(44), borderRadius: mobile ? mb(10) : S(8), justifyContent: 'center', alignItems: 'center' }}
               uiBackground={{ color: Color4.create(0.2, 0.6, 1, 1) }}
               onMouseDown={() => { sendFeedback() }}
             >
-              <Label value="Send" fontSize={mobile ? 24 : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
+              <Label value="Send" fontSize={mobile ? mb(24) : S(18)} color={Color4.White()} uiTransform={{ width: '100%', height: '100%' }} textAlign="middle-center" />
             </UiEntity>
-            {getMailboxStatus() ? <Label value={getMailboxStatus()} fontSize={mobile ? 16 : S(13)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 12 : S(12) }, width: mobile ? '95%' : S(360) }} textAlign="middle-center" /> : null}
+            {getMailboxStatus() ? <Label value={getMailboxStatus()} fontSize={mobile ? mb(16) : S(13)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? mb(12) : S(12) }, width: mobile ? '95%' : S(360) }} textAlign="middle-center" /> : null}
           </UiEntity>
         </UiEntity>
-      )}
+        )
+      })()}
 
       {/* Gravestone popup */}
       {popupState.gravestone && (
@@ -383,21 +405,26 @@ function PlayerListUi() {
       {spectatorState.active && <SpectatorHUD mobile={mobile} />}
 
       {/* Title Splash */}
-      {cinematicState.titleSplashVisible && (
+      {cinematicState.titleSplashVisible && (() => {
+        const mobile = isMobile()
+        const M = 2
+        const s = mobile ? (v: number) => Math.round(v * M) : S
+        const radius = mobile ? 40 : S(16)
+        return (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
-          
           onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
         >
-          <UiEntity uiTransform={{ width: S(420), padding: { top: S(32), bottom: S(32), left: S(24), right: S(24) }, borderRadius: S(16), flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
+          <UiEntity uiTransform={{ padding: { top: s(24), bottom: s(24), left: s(32), right: s(32) }, borderRadius: radius, flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
             uiBackground={{ color: PANEL_BG }}
             onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
           >
-            <Label value="FLAG TAG!" fontSize={S(56)} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: S(6) } }} />
-            <Label value="A multiplayer keep away game!" fontSize={S(22)} color={MUTED} font="sans-serif" uiTransform={{ margin: { bottom: S(24) } }} />
-            <Label value="Click anywhere to continue" fontSize={S(18)} color={Color4.create(1, 1, 1, 0.5)} font="sans-serif" />
+            <Label value="FLAG TAG!" fontSize={s(72)} color={GOLD} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(380), height: s(88), margin: { bottom: s(12) } }} />
+            <Label value="A multiplayer keep away game!" fontSize={s(16)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(300), height: s(22), margin: { bottom: s(28) } }} />
+            <Label value="Click anywhere to continue" fontSize={s(14)} color={Color4.create(1, 1, 1, 0.5)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(300), height: s(20) }} />
           </UiEntity>
         </UiEntity>
-      )}
+        )
+      })()}
     </UiEntity>
   )
 }
@@ -422,11 +449,15 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
   const TAB_ACTIVE = Color4.create(0.9, 0.75, 0.2, 1)
   const PANEL = Color4.create(0.08, 0.08, 0.1, 0.94)
 
+  // Mobile scale multiplier for the spectator HUD.
+  const SS = 1.5
+  const sm = (v: number) => Math.round(v * SS)
+
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? 60 : S(16), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: mobile ? sm(20) : S(16), left: 0 }, width: '100%', flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}>
       {/* Mobile player picker (above bar) */}
       {mobile && mode === 'player' && spectatorState.playerPickerOpen && players.length > 0 && (
-        <UiEntity uiTransform={{ flexDirection: 'column', width: 280, maxHeight: 260, margin: { bottom: 4 }, borderRadius: 10, padding: { top: 6, bottom: 6 } }}
+        <UiEntity uiTransform={{ flexDirection: 'column', width: sm(280), maxHeight: sm(260), margin: { bottom: sm(4) }, borderRadius: sm(10), padding: { top: sm(6), bottom: sm(6) } }}
           uiBackground={{ color: PANEL }}
         >
           {players.map((p, i) => {
@@ -434,13 +465,13 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
             const isSelected = spectatorState.followPlayerId?.toLowerCase() === p.userId.toLowerCase()
             return (
               <UiEntity key={`sp-${i}`}
-                uiTransform={{ height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: 12, right: 12 }, borderRadius: 6, margin: { left: 4, right: 4, top: 2, bottom: 2 } }}
+                uiTransform={{ height: sm(38), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: { left: sm(12), right: sm(12) }, borderRadius: sm(6), margin: { left: sm(4), right: sm(4), top: sm(2), bottom: sm(2) } }}
                 uiBackground={{ color: isSelected ? Color4.create(0.9, 0.75, 0.2, 0.25) : Color4.create(0, 0, 0, 0) }}
                 onMouseDown={() => { selectFollowPlayer(p.userId, p.name) }}
               >
                 <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-                  {isCarrier && <UiEntity uiTransform={{ width: 16, height: 16, margin: { right: 4 } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
-                  <Label value={p.name} fontSize={18} color={isSelected ? TAB_ACTIVE : LIGHT_GREY} font="sans-serif" />
+                  {isCarrier && <UiEntity uiTransform={{ width: sm(16), height: sm(16), margin: { right: sm(4) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/flag-icon-white.png' }, color: GOLD }} />}
+                  <Label value={p.name} fontSize={sm(18)} color={isSelected ? TAB_ACTIVE : LIGHT_GREY} font="sans-serif" />
                 </UiEntity>
               </UiEntity>
             )
@@ -450,7 +481,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
 
       {/* Main bar */}
       {mobile ? (
-        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: { top: 12, bottom: 12, left: 12, right: 12 } }}
+        <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center', borderRadius: sm(18), padding: { top: sm(12), bottom: sm(12), left: sm(12), right: sm(12) } }}
           uiBackground={{ color: PANEL }}
         >
           {[...SPEC_MODES, { key: 'exit' as any, label: '×' }].map((m, i) => {
@@ -458,7 +489,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
             const isActive = !isExit && mode === m.key
             return (
               <UiEntity key={`tab-${i}`}
-                uiTransform={{ height: 60, width: isExit ? 60 : undefined, padding: isExit ? undefined : { left: 24, right: 24 }, margin: { left: i > 0 ? 6 : 0 }, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}
+                uiTransform={{ height: sm(60), width: isExit ? sm(60) : undefined, padding: isExit ? undefined : { left: sm(24), right: sm(24) }, margin: { left: i > 0 ? sm(6) : 0 }, borderRadius: sm(12), justifyContent: 'center', alignItems: 'center' }}
                 uiBackground={{ color: isActive ? TAB_ACTIVE : TAB_BG }}
                 onMouseDown={() => {
                   if (isExit) {
@@ -470,7 +501,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
                   }
                 }}
               >
-                <Label value={m.label} fontSize={isExit ? 60 : 26} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" uiTransform={isExit ? { margin: { top: -10 } } : undefined} />
+                <Label value={m.label} fontSize={isExit ? sm(60) : sm(26)} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" uiTransform={isExit ? { margin: { top: sm(-10) } } : undefined} />
               </UiEntity>
             )
           })}
@@ -593,19 +624,27 @@ function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgr
           {/* Flying coins */}
           {(earnedUiPhase === 'coins' || earnedUiPhase === 'fly') && (() => {
             const numCoins = Math.min(activeRoundEarnings.total, 10)
+            // Mobile flying coins scaled up for visibility.
+            const CS = mobile ? 2 : 1
+            const radiusX = 80 * CS
+            const radiusY = 40 * CS
+            const startYBase = 60 * CS
+            const riseHeight = 300 * CS
+            const coinSize = mobile ? 56 : S(24)
+            const centerLeft = mobile ? 210 : S(200) // horizontal center of panel (panel w ≈ 420 on mobile)
             const coins = []
             for (let i = 0; i < numCoins; i++) {
               const angle = (i / numCoins) * Math.PI * 2
-              const startX = Math.cos(angle) * 80
-              const startY = 60 + Math.sin(angle) * 40
+              const startX = Math.cos(angle) * radiusX
+              const startY = startYBase + Math.sin(angle) * radiusY
               const progress = Math.min(1, earnedCoinsFlyProgress * 1.5 - (i * 0.05))
               const cp = Math.max(0, Math.min(1, progress))
               const eased = 1 - Math.pow(1 - cp, 3)
               const x = startX * (1 - eased)
-              const y = startY * (1 - eased) - (300 * eased)
+              const y = startY * (1 - eased) - (riseHeight * eased)
               const opacity = cp < 0.1 ? cp * 10 : (cp > 0.85 ? (1 - cp) * 6.67 : 1)
               coins.push(
-                <UiEntity key={`fly-coin-${i}`} uiTransform={{ positionType: 'absolute', position: { top: y, left: x + (mobile ? 180 : S(200)) }, width: mobile ? 28 : S(24), height: mobile ? 28 : S(24) }}
+                <UiEntity key={`fly-coin-${i}`} uiTransform={{ positionType: 'absolute', position: { top: y, left: x + centerLeft }, width: coinSize, height: coinSize }}
                   uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.create(1, 1, 1, Math.max(0, Math.min(1, opacity))) }} />
               )
             }

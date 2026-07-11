@@ -506,9 +506,9 @@ export function registerFlagHandlers(): void {
       const carrierPos = getPlayerPosition(victimId)
       if (attackerPos && carrierPos) {
         const dist = Vector3.distance(attackerPos, carrierPos)
-        // Use 2x radius as validation — client already checked at 1x
-        if (dist > PROXIMITY_STEAL_RADIUS * 2) {
-          console.log('[Server] 🚩 requestSteal rejected: server dist', dist.toFixed(1), 'too far (2x radius check)')
+        // Use 1.5x radius as validation — client already checked at 1x, small slack for lag
+        if (dist > PROXIMITY_STEAL_RADIUS * 1.5) {
+          console.log('[Server] 🚩 requestSteal rejected: server dist', dist.toFixed(1), 'too far (1.5x radius check)')
           return
         }
       }

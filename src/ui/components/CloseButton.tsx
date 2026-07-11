@@ -16,17 +16,21 @@ interface CloseButtonProps {
   onClose: () => void
   size?: number
   fontSize?: number
+  topOffset?: number
+  rightOffset?: number
 }
 
-export function CloseButton({ hoverKey, onClose, size, fontSize }: CloseButtonProps) {
+export function CloseButton({ hoverKey, onClose, size, fontSize, topOffset, rightOffset }: CloseButtonProps) {
   const mobile = isMobile()
   const s = size ?? (mobile ? 80 : S(80))
   const fs = fontSize ?? (mobile ? 52 : S(44))
+  const top = topOffset ?? (mobile ? 4 : S(4))
+  const right = rightOffset ?? (mobile ? 4 : S(4))
   return (
     <UiEntity
       uiTransform={{
         positionType: 'absolute',
-        position: { top: mobile ? 4 : S(4), right: mobile ? 4 : S(4) },
+        position: { top, right },
         width: s,
         height: s,
         flexDirection: 'row',
