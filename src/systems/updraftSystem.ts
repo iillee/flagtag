@@ -13,8 +13,8 @@ import {
   Material,
   MaterialTransparencyMode,
   PhysicsCombinedForce,
-  PhysicsCombinedImpulse,
   AudioSource,
+  Physics,
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
@@ -169,7 +169,6 @@ const activeSmokePuffs: SmokePuff[] = []
 let smokePoolIdx = 0
 
 let forceActive = false
-let impulseEventId = 0
 
 // ── Debug cylinders (visible trigger zone) ──────────────────
 const debugCylinders: (Entity | null)[] = [null, null]
@@ -315,8 +314,10 @@ function activateForce(): void {
   forceActive = true
   playSwooshSound()
   PhysicsCombinedForce.createOrReplace(engine.PlayerEntity, { vector: UPDRAFT_FORCE })
-  impulseEventId++
-  PhysicsCombinedImpulse.createOrReplace(engine.PlayerEntity, { vector: UPDRAFT_KICK, eventId: impulseEventId })
+  // Use SDK Physics helper so the eventId is coordinated with bomb knockback etc.
+  // Direct createOrReplace here caused Physics.applyKnockbackToPlayer to throw on
+  // subsequent bomb hits ("modified outside Physics helper").
+  Physics.applyImpulseToPlayer(UPDRAFT_KICK)
 }
 
 function deactivateForce(): void {
