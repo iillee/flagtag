@@ -624,19 +624,27 @@ function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgr
           {/* Flying coins */}
           {(earnedUiPhase === 'coins' || earnedUiPhase === 'fly') && (() => {
             const numCoins = Math.min(activeRoundEarnings.total, 10)
+            // Mobile flying coins scaled up for visibility.
+            const CS = mobile ? 2 : 1
+            const radiusX = 80 * CS
+            const radiusY = 40 * CS
+            const startYBase = 60 * CS
+            const riseHeight = 300 * CS
+            const coinSize = mobile ? 56 : S(24)
+            const centerLeft = mobile ? 210 : S(200) // horizontal center of panel (panel w ≈ 420 on mobile)
             const coins = []
             for (let i = 0; i < numCoins; i++) {
               const angle = (i / numCoins) * Math.PI * 2
-              const startX = Math.cos(angle) * 80
-              const startY = 60 + Math.sin(angle) * 40
+              const startX = Math.cos(angle) * radiusX
+              const startY = startYBase + Math.sin(angle) * radiusY
               const progress = Math.min(1, earnedCoinsFlyProgress * 1.5 - (i * 0.05))
               const cp = Math.max(0, Math.min(1, progress))
               const eased = 1 - Math.pow(1 - cp, 3)
               const x = startX * (1 - eased)
-              const y = startY * (1 - eased) - (300 * eased)
+              const y = startY * (1 - eased) - (riseHeight * eased)
               const opacity = cp < 0.1 ? cp * 10 : (cp > 0.85 ? (1 - cp) * 6.67 : 1)
               coins.push(
-                <UiEntity key={`fly-coin-${i}`} uiTransform={{ positionType: 'absolute', position: { top: y, left: x + (mobile ? 180 : S(200)) }, width: mobile ? 28 : S(24), height: mobile ? 28 : S(24) }}
+                <UiEntity key={`fly-coin-${i}`} uiTransform={{ positionType: 'absolute', position: { top: y, left: x + centerLeft }, width: coinSize, height: coinSize }}
                   uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/coin.png' }, color: Color4.create(1, 1, 1, Math.max(0, Math.min(1, opacity))) }} />
               )
             }
