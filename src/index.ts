@@ -150,7 +150,7 @@ export async function main() {
   // Portal to Genesis Plaza — placed at parcel (8,8) scene-local
   new Portal({
     locationId: 'genesis-plaza',
-    position: { x: 395.95, y: 2.15, z: 366.9 },
+    position: { x: 347.95, y: 50.15, z: 318.9 },
     rotation: { x: 0, y: 167, z: 0 },
     size: 1.85,
     name: 'Genesis Plaza',

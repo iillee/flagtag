@@ -12,10 +12,10 @@ import { Flag, FlagState } from '../shared/components'
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../gameState/flagHoldTime'
 
 // ── Constants ──
-const CASTLE_CENTER = Vector3.create(420.75, 11, 397.5)
+const CASTLE_CENTER = Vector3.create(372.75, 59, 349.5)
 const CAM_MOVE_SPEED = 40
-const CAM_MIN_Y = 10
-const CAM_MAX_Y = 150
+const CAM_MIN_Y = 58
+const CAM_MAX_Y = 198
 const SCENE_W = 512
 const SCENE_D = 512
 
@@ -85,10 +85,10 @@ function createScope(pos: { x: number; y: number; z: number }, rotY: number) {
 
 export function setupSpectator() {
   // Place scopes
-  createScope({ x: 385.1, y: 12.1, z: 435.3 }, 180)
-  createScope({ x: 398.7, y: 17.1, z: 441.8 }, 300)
-  createScope({ x: 429.7, y: 47.1, z: 445.9 }, 0)
-  createScope({ x: 420, y: 17.1, z: 357.6 }, 0)
+  createScope({ x: 337.1, y: 60.1, z: 387.3 }, 180)
+  createScope({ x: 350.7, y: 65.1, z: 393.8 }, 300)
+  createScope({ x: 381.7, y: 95.1, z: 397.9 }, 0)
+  createScope({ x: 372, y: 65.1, z: 309.6 }, 0)
 
   // Look-at target entity
   lookTargetEntity = engine.addEntity()
@@ -96,7 +96,7 @@ export function setupSpectator() {
 
   // Virtual camera
   spectatorCamEntity = engine.addEntity()
-  Transform.create(spectatorCamEntity, { position: Vector3.create(426, 80, 398) })
+  Transform.create(spectatorCamEntity, { position: Vector3.create(378, 128, 350) })
   VirtualCamera.create(spectatorCamEntity, {
     lookAtEntity: lookTargetEntity,
     defaultTransition: { transitionMode: VirtualCamera.Transition.Speed(50.0) }

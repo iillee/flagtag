@@ -278,7 +278,7 @@ room.onMessage('bananaTriggered', (data) => {
 // isServerConnected imported from clientUtils
 
 const LOCAL_GRAVITY = 15 // m/s² — matches server FLAG_GRAVITY
-const LOCAL_MIN_Y = 1  // Traps sit on the actual ground surface
+const LOCAL_MIN_Y = 49  // Traps sit on the actual ground surface
 
 interface LocalTrap {
   entity: Entity

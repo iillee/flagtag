@@ -59,7 +59,7 @@ export { PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS } from '../shared/constants'
 export const HOLD_TIME_SYNC_INTERVAL = 2.0 // seconds between CRDT hold-time writes (was 0.5)
 export const SPLASH_DURATION_MS = 3000
 export const FLAG_GRAVITY = 15
-export const FLAG_MIN_Y = 1.5
+export const FLAG_MIN_Y = 49.5
 export const CARRIER_Y_WINDOW_SEC = 2.0
 export const CARRIER_NO_POSITION_TIMEOUT_MS = 5000
 

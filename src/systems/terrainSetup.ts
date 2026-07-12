@@ -9,7 +9,7 @@ import { Vector3 } from '@dcl/sdk/math'
 export function setupTerrain(): void {
   const terrain = engine.addEntity()
   Transform.create(terrain, {
-    position: Vector3.create(0, -13, 0),
+    position: Vector3.create(0, 37, 0),
   })
   GltfContainer.create(terrain, {
     src: 'assets/models/terrain.glb',
@@ -21,7 +21,7 @@ export function setupTerrain(): void {
   // Invisible ground collider covering the entire 800×800 scene at y=0
   const groundCollider = engine.addEntity()
   Transform.create(groundCollider, {
-    position: Vector3.create(400, 0, 400),
+    position: Vector3.create(400, 48, 400),
     scale: Vector3.create(800, 0.1, 800),
   })
   MeshCollider.setBox(groundCollider, ColliderLayer.CL_PHYSICS)

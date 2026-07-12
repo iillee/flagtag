@@ -26,7 +26,7 @@ export function getWaterSurfaceY(): number {
 // Drowning config
 const DROWN_TIME = 5.0 // seconds in water before death
 const RECHARGE_TIME = 5.0 // seconds to fully recharge on land (2x faster)
-const SPAWN_POSITION = Vector3.create(433, 48, 440)
+const SPAWN_POSITION = Vector3.create(385, 96, 392)
 // Scene bounds
 const SCENE_MIN_X = 0
 const SCENE_MAX_X = 512

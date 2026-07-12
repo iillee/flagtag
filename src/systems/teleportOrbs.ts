@@ -80,13 +80,13 @@ export function setupTeleportOrbs(): void {
   const mobile = isMobile()
   const orbPairs: OrbPair[] = [
     createOrbPair(
-      [{ x: 460.5, y: 2.3, z: 396.7 }, { x: 446.56, y: 52.25, z: 443.5 }],
+      [{ x: 412.5, y: 50.3, z: 348.7 }, { x: 398.56, y: 100.25, z: 395.5 }],
       Color3.create(1.0, 0.45, 0.0),
       mobile ? 'assets/models/d20-gold-mobile.glb' : 'assets/models/d20-gold.glb',
       mobile ? 'assets/models/d20-wire-gold-mobile.glb' : 'assets/models/d20-wire-gold.glb'
     ),
     createOrbPair(
-      [{ x: 394, y: 1.5, z: 430 }, { x: 396.3, y: 2.3, z: 353.3 }],
+      [{ x: 346, y: 49.5, z: 382 }, { x: 348.3, y: 50.3, z: 305.3 }],
       Color3.create(0.05, 0.3, 1.0),
       mobile ? 'assets/models/d20-blue-mobile.glb' : 'assets/models/d20-blue.glb',
       mobile ? 'assets/models/d20-wire-blue-mobile.glb' : 'assets/models/d20-wire-blue.glb'

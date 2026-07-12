@@ -344,7 +344,7 @@ export function flagServerSystem(dt: number): void {
   }
 
   // Water respawn (with delay)
-  const WATER_RESPAWN_Y = 1.58
+  const WATER_RESPAWN_Y = 49.58
   if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y && !waterRespawnActive) {
     waterRespawnActive = true
     waterRespawnTimer = WATER_RESPAWN_DELAY

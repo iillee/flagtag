@@ -15,7 +15,7 @@ import { registerThrottled } from './systemManager'
 
 // ── Board config ──
 // Pulled 0.5m perpendicular (sideways) from the wall surface
-const BOARD_POS = Vector3.create(382.991, 7.467, 387.812)
+const BOARD_POS = Vector3.create(334.991, 55.467, 339.812)
 const BOARD_ROT = Quaternion.fromEulerDegrees(0, -19, 0)
 
 const GOLD = Color4.create(1, 0.84, 0, 1)

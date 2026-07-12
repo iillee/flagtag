@@ -8,8 +8,8 @@ import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
  * Registers a proximity-fade system automatically.
  */
 export function setupBoundaryWalls(): void {
-  const BOUNDARY_CX = 420.75
-  const BOUNDARY_CZ = 397.5
+  const BOUNDARY_CX = 372.75
+  const BOUNDARY_CZ = 349.5
   const BOUNDARY_RADIUS = 128
   const BOUNDARY_HEIGHT = 200
   const BOUNDARY_SEGMENTS = 48

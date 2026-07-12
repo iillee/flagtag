@@ -3,12 +3,12 @@
 
 // ── Flag ──
 
-export const FLAG_BASE_POSITION = { x: 400, y: 13, z: 400 }
+export const FLAG_BASE_POSITION = { x: 352, y: 61, z: 352 }
 
 export const FLAG_SPAWN_POINTS = [
-  { x: 398.4, y: 2.6, z: 334.5 },    // Spawn Point 1
-  { x: 387, y: 8.25, z: 400 },        // Spawn Point 2
-  { x: 381.2, y: 13, z: 447.4 }       // Spawn Point 3
+  { x: 350.4, y: 50.6, z: 286.5 },    // Spawn Point 1
+  { x: 339, y: 56.25, z: 352 },        // Spawn Point 2
+  { x: 333.2, y: 61, z: 399.4 }       // Spawn Point 3
 ] as const
 
 /**

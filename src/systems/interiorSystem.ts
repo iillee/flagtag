@@ -24,11 +24,11 @@ import { getPlayer } from '@dcl/sdk/players'
 // ── Config ──
 
 /** Position of the entry door in the world (the wooden door entity 708) */
-const ENTRY_DOOR_POS = Vector3.create(400.56, 2.26, 401.49)
+const ENTRY_DOOR_POS = Vector3.create(352.56, 50.26, 353.49)
 const ENTRY_DOOR_INTERACT_DIST = 6
 
-/** Interior room center — hidden under the castle at parcel (15,19), 1m above water (Y=1.58) */
-const ROOM_CENTER = Vector3.create(426, 2.6, 470)
+/** Interior room center — dedicated interior level at Y=0, with plenty of room for many interiors */
+const ROOM_CENTER = Vector3.create(378, 0, 422)
 const ROOM_SIZE = 10       // meters square
 const ROOM_WALL_H = 4      // wall height
 const ROOM_FLOOR_Y = ROOM_CENTER.y - 0.05
@@ -52,9 +52,9 @@ function combineRot(base: { x: number; y: number; z: number; w: number }) {
   return Quaternion.multiply(ROOM_QUAT, base)
 }
 
-/** Camera offset from room center (west + elevated for isometric 3/4 view) */
-const CAM_OFFSET_RAW = Vector3.create(-6, 13, 0)
-const CAM_OFFSET = rotPos(ROOM_CENTER.x + CAM_OFFSET_RAW.x, CAM_OFFSET_RAW.y, ROOM_CENTER.z + CAM_OFFSET_RAW.z)
+/** Camera offset from room center (west + elevated for isometric 3/4 view). Y is RELATIVE to ROOM_CENTER.y. */
+const CAM_OFFSET_RAW = Vector3.create(-6, 10.4, 0)
+const CAM_OFFSET = rotPos(ROOM_CENTER.x + CAM_OFFSET_RAW.x, ROOM_CENTER.y + CAM_OFFSET_RAW.y, ROOM_CENTER.z + CAM_OFFSET_RAW.z)
 
 /** Player spawn inside the vestibule (west side), facing east into the room */
 const _spawnRaw = rotPos(ROOM_CENTER.x - ROOM_SIZE / 2 - 0.5, ROOM_CENTER.y, ROOM_CENTER.z)
@@ -457,8 +457,8 @@ export function setupInteriorSystem(): void {
 // Local-only visual effect (only the player who pulled the lever sees it)
 // ══════════════════════════════════════════════════════════════════════
 
-const WATER_BASE_Y = 1.58
-const WATER_MAX_Y = 8
+const WATER_BASE_Y = 49.58
+const WATER_MAX_Y = 56
 const WATER_RISE_DURATION = 120  // seconds to go from base to max
 
 type WaterCyclePhase = 'idle' | 'rising' | 'peak' | 'lowering'
@@ -491,7 +491,7 @@ function buildCircularWater(): void {
     position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y, WATER_CENTER_Z),
     scale: Vector3.create(WATER_DIAMETER - 64, 0.02, WATER_DIAMETER - 64),
   })
-  MeshRenderer.setBox(waterEntity)
+  MeshRenderer.setCylinder(waterEntity, 0.5, 0.5)
   Material.setPbrMaterial(waterEntity, {
     albedoColor: Color4.create(0.55, 0.75, 0.78, 1.0),
     roughness: 1.0,
@@ -504,7 +504,7 @@ function buildCircularWater(): void {
     position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y - 0.3, WATER_CENTER_Z),
     scale: Vector3.create(WATER_DIAMETER, 0.02, WATER_DIAMETER),
   })
-  MeshRenderer.setBox(waterFloor)
+  MeshRenderer.setCylinder(waterFloor, 0.5, 0.5)
   Material.setPbrMaterial(waterFloor, {
     albedoColor: Color4.create(0.624, 0.804, 0.765, 1.0),
     emissiveColor: Color4.create(0.0, 0.0, 0.0),
@@ -553,7 +553,7 @@ function startWaterCycle(): void {
   // Start water rise sound (global, looping)
   if (!waterRiseSoundEntity) {
     waterRiseSoundEntity = engine.addEntity()
-    Transform.create(waterRiseSoundEntity, { position: Vector3.create(426, 4, 398) })
+    Transform.create(waterRiseSoundEntity, { position: Vector3.create(378, 52, 350) })
   }
   AudioSource.createOrReplace(waterRiseSoundEntity, {
     audioClipUrl: 'assets/sounds/waterrise.mp3',

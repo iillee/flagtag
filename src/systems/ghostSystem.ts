@@ -62,7 +62,7 @@ const GHOST_DEATH_EMOTE = 'urn:decentraland:matic:collections-v2:0x7bdc37ff3e8dc
 const GHOST_RESPAWN_DURATION = 5.0
 const GHOST_FADE_IN = 1.5
 const GHOST_FADE_OUT = 0.8
-const GHOST_SPAWN_POSITION = Vector3.create(433, 48, 440)
+const GHOST_SPAWN_POSITION = Vector3.create(385, 96, 392)
 
 let ghostDeathRespawnDelay = 0
 let ghostDeathSoundEntity: Entity | null = null
