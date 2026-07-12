@@ -23,7 +23,13 @@ import { handleDrop } from './flagLogic'
 
 // Full combat immunity while the carrier's pickup/steal shield is active.
 // Matches STEAL_IMMUNITY_MS so shield visual = actual protection.
+// IMPORTANT: only the CURRENT carrier gets combat immunity. A player who
+// recently held the flag but lost it must be vulnerable again — otherwise
+// they can chase the new carrier through bananas/bombs and re-steal via
+// proximity as soon as the new carrier's immunity expires.
 function isFlagImmune(playerId: string): boolean {
+  const flag = Flag.getOrNull(flagEntity)
+  if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return false
   const t = lastStealTime.get(playerId) ?? 0
   return Date.now() - t < STEAL_IMMUNITY_MS
 }
