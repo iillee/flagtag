@@ -150,11 +150,22 @@ async function loadFlagState() {
     try {
       const d = JSON.parse(savedFlag)
       if (d.state === FlagState.Dropped || d.state === FlagState.Carried) {
-        state = FlagState.Dropped
-        position = Vector3.create(d.x, d.y, d.z)
-        anchor = d.state === FlagState.Dropped
-          ? { x: d.dropAnchorX || d.x, y: d.dropAnchorY || d.y, z: d.dropAnchorZ || d.z }
-          : { x: d.x, y: d.y, z: d.z }
+        // Sanity check: if persisted position is far from the current base
+        // (e.g. after a scene move), discard it and use fresh base coords.
+        const dx = d.x - FLAG_BASE_POSITION.x
+        const dz = d.z - FLAG_BASE_POSITION.z
+        const distFromBase = Math.sqrt(dx * dx + dz * dz)
+        const MAX_VALID_DIST = 300 // meters — anything further is a stale coord
+        if (distFromBase > MAX_VALID_DIST) {
+          console.log('[Server] ⚠️  Persisted flag position (', d.x.toFixed(1), d.z.toFixed(1),
+            ') is', distFromBase.toFixed(0), 'm from base — discarding, using base')
+        } else {
+          state = FlagState.Dropped
+          position = Vector3.create(d.x, d.y, d.z)
+          anchor = d.state === FlagState.Dropped
+            ? { x: d.dropAnchorX || d.x, y: d.dropAnchorY || d.y, z: d.dropAnchorZ || d.z }
+            : { x: d.x, y: d.y, z: d.z }
+        }
       }
     } catch { /* invalid data, use defaults */ }
   }
