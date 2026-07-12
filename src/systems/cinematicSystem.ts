@@ -15,7 +15,7 @@ import { clearSpeedBoost } from './speedBoostSystem'
 import { snapshotScoresForCinematic, snapshotScoresFromWinners, clearCinematicSnapshot, getKnownPlayerName } from '../gameState/flagHoldTime'
 
 // ── Camera entities ──
-const PODIUM_CENTER = Vector3.create(265.57, 19.51, 219.65) // winner position as orbit center
+const PODIUM_CENTER = Vector3.create(435.57, 19.51, 361.65) // winner position as orbit center
 
 let cinematicCam = 0 as ReturnType<typeof engine.addEntity>
 let lookTarget = 0 as ReturnType<typeof engine.addEntity>
@@ -311,7 +311,7 @@ export function setupCinematicSystem(): void {
           // Now screen is fully black — safe to teleport
           if (pendingPreFadeTeleport) {
             pendingPreFadeTeleport = false
-            void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
+            void movePlayerTo({ newRelativePosition: { x: 431.75 + Math.random() * 3, y: 47.48, z: 438.5 + Math.random() * 3 } })
           }
         }
       } else if (fadePhase === 2) {
@@ -354,7 +354,7 @@ export function setupCinematicSystem(): void {
           if (isPodiumPlayer) {
             isWinnerLocalPlayer = false
             isPodiumPlayer = false
-            void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
+            void movePlayerTo({ newRelativePosition: { x: 431.75 + Math.random() * 3, y: 47.48, z: 438.5 + Math.random() * 3 } })
           }
           fadePhase = 6
           fadeTimer = 5.0
@@ -430,7 +430,7 @@ export function setupCinematicSystem(): void {
         cinematicState.showing = false; creditsState.noScorersVisible = false; creditsState.countdown = 0
         if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
         // Teleport player back to spawn
-        void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
+        void movePlayerTo({ newRelativePosition: { x: 431.75 + Math.random() * 3, y: 47.48, z: 438.5 + Math.random() * 3 } })
         fadePhase = 7; fadeTimer = END_FADE_OUT_DUR
         return
       }
@@ -468,7 +468,7 @@ export function setupCinematicSystem(): void {
       seconds: p.seconds,
     })))
 
-    const GREEN_CUBE = { x: 258.78, y: 19.25, z: 227.81 }
+    const GREEN_CUBE = { x: 428.78, y: 19.25, z: 369.81 }
     const alreadyPreFaded = preFadeStarted
 
     if (!alreadyPreFaded) {
@@ -509,22 +509,22 @@ export function setupCinematicSystem(): void {
     setTimeout(() => {
       if (isPodiumPlayer) {
         if (isWinnerLocalPlayer) {
-          const pos = { x: 265.57, y: 19.51, z: 219.65 }
+          const pos = { x: 435.57, y: 19.51, z: 361.65 }
           void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
           waitForGroundedEmote('handsair', pos)
         } else if (isSecondPlace) {
-          const pos = { x: 266.97, y: 18.85, z: 220.87 }
+          const pos = { x: 436.97, y: 18.85, z: 362.87 }
           void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
           waitForGroundedEmote('clap', pos)
         } else if (isThirdPlace) {
-          const pos = { x: 264.25, y: 18.16, z: 218.57 }
+          const pos = { x: 434.25, y: 18.16, z: 360.57 }
           void movePlayerTo({ newRelativePosition: pos, cameraTarget: GREEN_CUBE })
           waitForGroundedEmote('clap', pos)
         }
       }
       // Audience already teleported by pre-fade; skip if not podium + pre-faded
       if (!alreadyPreFaded && !isPodiumPlayer) {
-        void movePlayerTo({ newRelativePosition: { x: 261.75 + Math.random() * 3, y: 47.48, z: 296.5 + Math.random() * 3 } })
+        void movePlayerTo({ newRelativePosition: { x: 431.75 + Math.random() * 3, y: 47.48, z: 438.5 + Math.random() * 3 } })
       }
 
     }, setupDelay)

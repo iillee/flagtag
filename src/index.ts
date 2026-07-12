@@ -63,6 +63,7 @@ export async function main() {
   const { getBoomerangColor } = await import('./gameState/boomerangColor')
   const { setupHandBoomerangs } = await import('./systems/handBoomerangSetup')
   const { setupLadder } = await import('./systems/ladderSystem')
+  const { setupTerrain } = await import('./systems/terrainSetup')
   const { setupBoundaryWalls } = await import('./systems/boundaryWalls')
   const { setupTeleportOrbs } = await import('./systems/teleportOrbs')
   const { setupCinematicSystem } = await import('./systems/cinematicSystem')
@@ -88,6 +89,7 @@ export async function main() {
   setupUi()
   setupBeacon()
   setupLadder()
+  setupTerrain()
 
 
 
@@ -148,7 +150,7 @@ export async function main() {
   // Portal to Genesis Plaza — placed at parcel (8,8) scene-local
   new Portal({
     locationId: 'genesis-plaza',
-    position: { x: 225.95, y: 2.15, z: 224.9 },
+    position: { x: 395.95, y: 2.15, z: 366.9 },
     rotation: { x: 0, y: 167, z: 0 },
     size: 1.85,
     name: 'Genesis Plaza',

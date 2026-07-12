@@ -10,9 +10,9 @@ import { Vector3 } from '@dcl/sdk/math'
  */
 export function setupAvatarModifier() {
   const avatarModArea = engine.addEntity()
-  Transform.create(avatarModArea, { position: Vector3.create(256, 11, 256) })
+  Transform.create(avatarModArea, { position: Vector3.create(426, 11, 398) })
   AvatarModifierArea.create(avatarModArea, {
-    area: Vector3.create(522, 50, 522),
+    area: Vector3.create(692, 50, 664),
     modifiers: [AvatarModifierType.AMT_DISABLE_PASSPORTS],
     excludeIds: []
   })

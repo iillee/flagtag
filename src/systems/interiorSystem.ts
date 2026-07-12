@@ -24,11 +24,11 @@ import { getPlayer } from '@dcl/sdk/players'
 // ── Config ──
 
 /** Position of the entry door in the world (the wooden door entity 708) */
-const ENTRY_DOOR_POS = Vector3.create(230.56, 2.26, 259.49)
+const ENTRY_DOOR_POS = Vector3.create(400.56, 2.26, 401.49)
 const ENTRY_DOOR_INTERACT_DIST = 6
 
 /** Interior room center — hidden under the castle at parcel (15,19), 1m above water (Y=1.58) */
-const ROOM_CENTER = Vector3.create(256, 2.6, 328)
+const ROOM_CENTER = Vector3.create(426, 2.6, 470)
 const ROOM_SIZE = 10       // meters square
 const ROOM_WALL_H = 4      // wall height
 const ROOM_FLOOR_Y = ROOM_CENTER.y - 0.05
@@ -470,9 +470,9 @@ let waterEntity: Entity | null = null
 let _leverEntity: Entity | null = null
 let waterRiseSoundEntity: Entity | null = null
 
-const WATER_CENTER_X = 256
-const WATER_CENTER_Z = 256
-const WATER_DIAMETER = 460  // meters
+const WATER_CENTER_X = 400
+const WATER_CENTER_Z = 400
+const WATER_DIAMETER = 800  // meters (full scene)
 
 function buildCircularWater(): void {
   // Hide the composite water GLB
@@ -485,13 +485,13 @@ function buildCircularWater(): void {
     }
   }
 
-  // Single flat cylinder as circular water surface
+  // Flat square as water surface (covers entire scene)
   waterEntity = engine.addEntity()
   Transform.create(waterEntity, {
     position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y, WATER_CENTER_Z),
     scale: Vector3.create(WATER_DIAMETER - 64, 0.02, WATER_DIAMETER - 64),
   })
-  MeshRenderer.setCylinder(waterEntity, 0.5, 0.5)
+  MeshRenderer.setBox(waterEntity)
   Material.setPbrMaterial(waterEntity, {
     albedoColor: Color4.create(0.55, 0.75, 0.78, 1.0),
     roughness: 1.0,
@@ -504,7 +504,7 @@ function buildCircularWater(): void {
     position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y - 0.3, WATER_CENTER_Z),
     scale: Vector3.create(WATER_DIAMETER, 0.02, WATER_DIAMETER),
   })
-  MeshRenderer.setCylinder(waterFloor, 0.5, 0.5)
+  MeshRenderer.setBox(waterFloor)
   Material.setPbrMaterial(waterFloor, {
     albedoColor: Color4.create(0.624, 0.804, 0.765, 1.0),
     emissiveColor: Color4.create(0.0, 0.0, 0.0),
@@ -553,7 +553,7 @@ function startWaterCycle(): void {
   // Start water rise sound (global, looping)
   if (!waterRiseSoundEntity) {
     waterRiseSoundEntity = engine.addEntity()
-    Transform.create(waterRiseSoundEntity, { position: Vector3.create(256, 4, 256) })
+    Transform.create(waterRiseSoundEntity, { position: Vector3.create(426, 4, 398) })
   }
   AudioSource.createOrReplace(waterRiseSoundEntity, {
     audioClipUrl: 'assets/sounds/waterrise.mp3',

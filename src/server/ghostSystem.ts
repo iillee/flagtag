@@ -22,7 +22,7 @@ import {
 import { activeProjectiles } from './combat'
 
 // ── Module-local state ──
-const GHOST_SPAWN_POS = Vector3.create(225, 1.25, 287) // Black cube location
+const GHOST_SPAWN_POS = Vector3.create(395, 1.25, 429) // Black cube location
 let ghostSpawnTimer = 10 // first spawn after 10s
 const GHOST_STAGGER_COOLDOWN_MS = 3000 // can only stagger same player every 3s
 const GHOST_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target

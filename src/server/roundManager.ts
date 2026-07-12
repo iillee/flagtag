@@ -111,7 +111,7 @@ export function lightningServerSystem(dt: number): void {
 
       const victimId = carried ? flag!.carrierPlayerId! : ''
 
-      let strikePos = { x: 256, y: 5, z: 256 }
+      let strikePos = { x: 426, y: 5, z: 398 }
       if (carried && victimId) {
         for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
           const identity = PlayerIdentityData.get(entity)

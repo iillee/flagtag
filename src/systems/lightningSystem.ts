@@ -83,7 +83,7 @@ const SPARK_COLOR = Color3.create(0.5, 0.7, 1)
 const LIGHTNING_RESPAWN_DURATION = 10.0
 const LIGHTNING_FADE_IN = 1.5
 const LIGHTNING_FADE_OUT = 0.8 // starts after countdown reaches 1
-const SPAWN_POSITION = Vector3.create(263, 48, 298)
+const SPAWN_POSITION = Vector3.create(433, 48, 440)
 
 // Respawn state
 let lightningRespawnDelay = 0

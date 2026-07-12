@@ -225,7 +225,6 @@ export enum EntityNames {
   plants_glb = "plants.glb",
   plants2_glb = "plants2.glb",
   props_glb = "props.glb",
-  volcano_glb = "volcano.glb",
   whiteflowers_glb = "whiteflowers.glb",
   whiteflowers_glb_2 = "whiteflowers.glb_2",
   whiteflowers_glb_3 = "whiteflowers.glb_3",

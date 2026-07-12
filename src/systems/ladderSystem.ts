@@ -7,14 +7,14 @@ const MAX_CLICK_DISTANCE = 6
 
 const LADDERS = [
   {
-    base: Vector3.create(230.1, 0, 337.8),
-    top: Vector3.create(230.1, 17.9, 337.8),
-    cameraTarget: Vector3.create(230.1, 18.9, 335.8)
+    base: Vector3.create(400.1, 0, 479.8),
+    top: Vector3.create(400.1, 17.9, 479.8),
+    cameraTarget: Vector3.create(400.1, 18.9, 477.8)
   },
   {
-    base: Vector3.create(284.13, 1.25, 333.75),
-    top: Vector3.create(282.7, 17.6, 332.8),
-    cameraTarget: Vector3.create(282.7, 18.6, 330.8)
+    base: Vector3.create(454.13, 1.25, 475.75),
+    top: Vector3.create(452.7, 17.6, 474.8),
+    cameraTarget: Vector3.create(452.7, 18.6, 472.8)
   }
 ]
 

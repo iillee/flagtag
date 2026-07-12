@@ -4,7 +4,7 @@ import {
 import { Vector3 } from '@dcl/sdk/math'
 import { showGravestonePopup, hideGravestonePopup, popupState } from '../ui'
 
-const GRAVESTONE_POS = Vector3.create(221.93, 2, 286.54)
+const GRAVESTONE_POS = Vector3.create(391.93, 2, 428.54)
 const MATCH_DIST = 2
 const CLOSE_DISTANCE = 5
 
