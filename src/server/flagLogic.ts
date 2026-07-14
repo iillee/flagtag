@@ -21,7 +21,7 @@ import {
   holdTimeEntities, knownPlayers, playerNames,
   lastStealTime,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
-  FLAG_GRAVITY, FLAG_MIN_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
+  FLAG_GRAVITY, FLAG_MIN_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
   getPlayerPosition
 } from './serverState'
 
@@ -348,8 +348,8 @@ export function flagServerSystem(dt: number): void {
   if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y && !waterRespawnActive) {
     waterRespawnActive = true
     waterRespawnTimer = WATER_RESPAWN_DELAY
-    // Let the flag sink all the way to Y=0 during the delay
-    flagGravityTargetY = 0
+    // Let the flag sink to the invisible collider floor during the delay
+    flagGravityTargetY = SCENE_FLOOR_Y
     flagFalling = true
     console.log('[Server] 🌊 Flag hit water (Y=' + currentAnchorY.toFixed(2) + ') — sinking to Y=0, respawning in ' + WATER_RESPAWN_DELAY + 's')
     room.send('flagSinking', { t: 0 })
