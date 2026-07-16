@@ -33,6 +33,7 @@ import { BOMB_FUSE_SEC, BOMB_EXPLOSION_RADIUS } from '../shared/components'
 
 const BOMB_STAGGER_MS = 1000 // match regular hit stun duration
 import { triggerHitFlash } from '../gameState/hitFlashState'
+import { hasLocalFlagImmunity } from '../gameState/flagImmunityState'
 import { showHitEffect, playHitSound } from './combatSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { isDrownRespawning } from './waterSystem'
@@ -364,24 +365,33 @@ room.onMessage('bombExploded', (data) => {
     if (isVictim) {
       const now = Date.now()
       if (bombStaggerUntil <= now) {
-        console.log('[Bomb] 💣 Local player hit by explosion!')
+        // Flag pickup/steal shield: keep the knockback impulse (feels good,
+        // tactical juice), but skip the stun, flash, hit VFX, sound, emote,
+        // and InputModifier lock. Server also ignores the hit for flag-drop
+        // purposes, so the flag stays safe.
+        const immune = hasLocalFlagImmunity()
+        console.log(immune
+          ? '[Bomb] 🛡️ Local player in explosion but flag-immune — knockback only'
+          : '[Bomb] 💣 Local player hit by explosion!')
         // ORDER MATTERS: knockback FIRST, InputModifier LAST.
         // If InputModifier is applied before knockback, the SDK's knockback conflicts
         // with the movement lock and leaves the player unable to move until any input
         // event (throwing a boomerang, reload) shakes it loose.
         Physics.applyKnockbackToPlayer(pos, 40, BOMB_EXPLOSION_RADIUS, KnockbackFalloff.LINEAR)
-        triggerHitFlash(BOMB_STAGGER_MS)
-        // Red-star hit VFX + sound at player position (parity with boomerang hits)
-        const vfxPos = Transform.has(engine.PlayerEntity)
-          ? Transform.get(engine.PlayerEntity).position
-          : pos
-        showHitEffect(vfxPos)
-        playHitSound(vfxPos)
-        triggerEmote({ predefinedEmote: 'getHit' })
-        InputModifier.createOrReplace(engine.PlayerEntity, {
-          mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
-        })
-        bombStaggerUntil = now + BOMB_STAGGER_MS
+        if (!immune) {
+          triggerHitFlash(BOMB_STAGGER_MS)
+          // Red-star hit VFX + sound at player position (parity with boomerang hits)
+          const vfxPos = Transform.has(engine.PlayerEntity)
+            ? Transform.get(engine.PlayerEntity).position
+            : pos
+          showHitEffect(vfxPos)
+          playHitSound(vfxPos)
+          triggerEmote({ predefinedEmote: 'getHit' })
+          InputModifier.createOrReplace(engine.PlayerEntity, {
+            mode: InputModifier.Mode.Standard({ disableAll: true, disableGliding: true, disableDoubleJump: true })
+          })
+          bombStaggerUntil = now + BOMB_STAGGER_MS
+        }
       }
     }
   }

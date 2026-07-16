@@ -32,6 +32,7 @@ import { triggerHitFlash } from '../gameState/hitFlashState'
 import { getLocalUpgrades, isWinsLoaded } from '../gameState/playerUpgradeState'
 import { isDrownRespawning } from './waterSystem'
 import { showHitEffect } from './combatSystem'
+import { hasLocalFlagImmunity } from '../gameState/flagImmunityState'
 import { playSpatialSound } from '../utils/spatialAudio'
 
 
@@ -568,6 +569,11 @@ function updateMsgTrapVisuals(dt: number): void {
       const dy = playerPos.y - vis.currentY
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (dist < TRAP_TRIGGER_RADIUS && trapStaggerUntil <= now) {
+        // Flag-pickup/steal shield: server ignores the hit, so skip client prediction too.
+        // Prevents shielded carriers from being locally stunned + flashed on banana walk-in.
+        if (hasLocalFlagImmunity()) {
+          continue
+        }
         // Predict the stagger locally — server will confirm and remove the trap
         triggerHitFlash(TRAP_STAGGER_MS)
         triggerEmote({ predefinedEmote: 'getHit' })

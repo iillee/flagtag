@@ -72,6 +72,7 @@ export async function main() {
   const { Portal } = await import('./systems/portalSystem')
   const { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } = await import('./gameState/flagHoldTime')
   await import('./gameState/overlayState')
+  await import('./gameState/flagImmunityState')
   const { setupDeathPenaltyMessages } = await import('./systems/deathPenaltySystem')
 
   // ── Client setup ──
