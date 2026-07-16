@@ -205,6 +205,17 @@ async function initLeaderboards() {
 function reconcileHoldTimeEntities() {
   let count = 0
   for (const [entity, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+    // Never treat a reserved/avatar-range entity (< 512) as a hold-time entity.
+    // Hold-time entities are always dynamic (engine.addEntity() -> >= 512). If the
+    // component ever rides a reserved slot — e.g. an avatar entity the host
+    // version-bumps and deletes on reconnect — caching it hands out a handle that
+    // goes stale the instant the host recycles the slot (getMutable() then throws
+    // "... for <id> not found"), and removeEntity() on it would delete the avatar.
+    // Leave it untouched; getOrCreateHoldTimeEntity owns the real hold-time entities.
+    if (((entity as number) & 0xffff) < 512) {
+      console.log('[Server] Skipped reserved-range hold-time entity', entity, 'for', data.playerId.slice(0, 8))
+      continue
+    }
     const key = data.playerId.toLowerCase()
     if (!holdTimeEntities.has(key)) {
       holdTimeEntities.set(key, entity)
