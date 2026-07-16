@@ -83,32 +83,6 @@ export const PlayerLifetimeHoldTime = engine.defineComponent('player-lifetime-ho
 
 PlayerLifetimeHoldTime.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 
-// ── Sync IDs ──
-
-const UPGRADES_SYNC_ID_BASE = 5000000
-const LIFETIME_WINS_SYNC_ID_BASE = 6000000
-const LIFETIME_HOLD_TIME_SYNC_ID_BASE = 7000000
-
-function hashString(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) {
-    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
-  }
-  return h >>> 0
-}
-
-export function getUpgradesSyncId(userId: string): number {
-  return UPGRADES_SYNC_ID_BASE + (hashString(userId.toLowerCase()) % 100000)
-}
-
-export function getLifetimeWinsSyncId(userId: string): number {
-  return LIFETIME_WINS_SYNC_ID_BASE + (hashString(userId.toLowerCase()) % 100000)
-}
-
-export function getLifetimeHoldTimeSyncId(userId: string): number {
-  return LIFETIME_HOLD_TIME_SYNC_ID_BASE + (hashString(userId.toLowerCase()) % 100000)
-}
-
 // ── Helpers ──
 
 export interface UpgradeData {

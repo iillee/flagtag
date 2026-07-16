@@ -60,18 +60,3 @@ PlayerWallet.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER
 
 /** Sync ID for the single CoinState entity */
 export const COIN_STATE_SYNC_ID = 300
-
-/** Sync ID base for player wallets — uses same hash approach as hold times */
-const WALLET_SYNC_ID_BASE = 4000000
-
-function hashString(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) {
-    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
-  }
-  return h >>> 0
-}
-
-export function getWalletSyncId(userId: string): number {
-  return WALLET_SYNC_ID_BASE + (hashString(userId.toLowerCase()) % 100000)
-}
