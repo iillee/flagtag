@@ -12,7 +12,7 @@ import { Vector3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import {
   Flag, FlagState, PlayerFlagHoldTime,
-  getHoldTimeEntityEnumId, FLAG_BASE_POSITION, getRandomSpawnPoint, SyncIds
+  FLAG_BASE_POSITION, getRandomSpawnPoint, SyncIds
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { persistFlagState } from './persistence'
@@ -90,12 +90,41 @@ export function resetGravityState(): void {
  */
 export function getOrCreateHoldTimeEntity(userKey: string): Entity {
   const key = userKey.toLowerCase()
-  let entity = holdTimeEntities.get(key)
-  if (entity) return entity
+  const cached = holdTimeEntities.get(key)
 
-  entity = engine.addEntity()
+  // Only reuse the cached entity if it STILL carries the component. On a
+  // long-running authoritative server the engine recycles entity slots (e.g.
+  // when a reconnecting player's avatar slot is version-bumped), which can drop
+  // our PlayerFlagHoldTime component while the map still points at the now-dead
+  // entity id. Reusing it blindly makes every later getMutable() throw
+  // "[mutable] Component ctf-player-flag-hold-time for <id> not found" on every
+  // frame (and also breaks handleRoundEnd). Validate, and recreate if stale.
+  if (cached !== undefined && PlayerFlagHoldTime.getOrNull(cached) !== null) {
+    return cached
+  }
+  if (cached !== undefined) {
+    // Drop the stale reference and release the dead entity (best-effort) so its
+    // sync-id registration is freed before we re-create with the same enum id.
+    holdTimeEntities.delete(key)
+    knownPlayers.delete(key)
+    try {
+      engine.removeEntity(cached)
+    } catch {
+      // Entity already gone from the engine — nothing left to release.
+    }
+  }
+
+  const entity = engine.addEntity()
   PlayerFlagHoldTime.create(entity, { playerId: key, seconds: 0 })
-  syncEntity(entity, [PlayerFlagHoldTime.componentId], getHoldTimeEntityEnumId(key))
+  // Let the SDK auto-allocate the network id (no explicit enum id). An enum id
+  // makes the network identity (networkId:0, entityId:enumId) — GLOBAL and shared
+  // — so a per-address hash id collides (and throws "id already in use") both
+  // across two players who hash alike AND when the same player reconnects before
+  // their previous entity is cleaned up. Auto-allocation instead uses
+  // (networkId:<this server>, entityId:<unique local entity>), which is unique by
+  // construction. Player identity lives in the `playerId` field, which is how
+  // every reader (client systems + reconcileHoldTimeEntities) already matches.
+  syncEntity(entity, [PlayerFlagHoldTime.componentId])
   holdTimeEntities.set(key, entity)
   knownPlayers.add(key)
   console.log('[Server] Created hold-time entity for', key.slice(0, 8))
@@ -110,9 +139,13 @@ export function getOrCreateHoldTimeEntity(userKey: string): Entity {
 export function flushHoldTimeAccum(): void {
   if (holdTimeAccum > 0 && holdTimeCarrierKey) {
     const entity = getOrCreateHoldTimeEntity(holdTimeCarrierKey)
-    const mutable = PlayerFlagHoldTime.getMutable(entity)
-    mutable.seconds += holdTimeAccum
-    console.log('[Server] Flushed', holdTimeAccum.toFixed(2), 's hold time to', holdTimeCarrierKey.slice(0, 8), '(total:', mutable.seconds.toFixed(1), 's)')
+    // Defensive: getMutableOrNull never throws, so a transient stale entity can
+    // only skip one flush instead of crashing the whole system loop.
+    const mutable = PlayerFlagHoldTime.getMutableOrNull(entity)
+    if (mutable) {
+      mutable.seconds += holdTimeAccum
+      console.log('[Server] Flushed', holdTimeAccum.toFixed(2), 's hold time to', holdTimeCarrierKey.slice(0, 8), '(total:', mutable.seconds.toFixed(1), 's)')
+    }
   }
   holdTimeAccum = 0
   holdTimeCarrierKey = ''
@@ -445,9 +478,13 @@ export function holdTimeServerSystem(dt: number): void {
   if (holdTimeAccum < HOLD_TIME_SYNC_INTERVAL) return
 
   const entity = getOrCreateHoldTimeEntity(carrierKey)
-  const mutable = PlayerFlagHoldTime.getMutable(entity)
-  mutable.seconds += holdTimeAccum
-  holdTimeAccum = 0
+  // Defensive: getMutableOrNull never throws, so a transient stale entity can
+  // only skip one tick's accumulation instead of erroring on every frame.
+  const mutable = PlayerFlagHoldTime.getMutableOrNull(entity)
+  if (mutable) {
+    mutable.seconds += holdTimeAccum
+    holdTimeAccum = 0
+  }
 }
 
 // ── Message handler registration ──
