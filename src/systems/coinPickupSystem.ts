@@ -146,6 +146,13 @@ function releaseHeadBounceRig(rig: HeadBounceRig): void {
 }
 
 function spawnHeadBounceCoin(playerId: string): void {
+  // Don't create the pooled coin rigs until the one-shot scene scanners have run:
+  // coinBobSpinSystem (@3s) and setupCoins (@>=4s, which then sets setupDone) both scan
+  // for GltfContainers whose src matches 'coin_01'/'doubloon' — which the pool coins' model
+  // also matches. Creating the pool earlier would let those scanners capture the 6 permanent
+  // pool entities as if they were real scene coins (breaking bob/spin + coin tracking).
+  // Skipping a head-bounce for a remote pickup in the first few seconds is imperceptible.
+  if (!setupDone) return
   initHeadBouncePool()
 
   // Acquire a free rig, or steal the one that will free soonest (a burst of >6 simultaneous
