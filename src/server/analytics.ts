@@ -106,7 +106,7 @@ export async function checkVisitorDailyReset(): Promise<boolean> {
     console.log('[Server] Daily visitor reset at midnight UTC for new day:', currentDay)
     setLastVisitorResetDay(currentDay)
     visitorSessions.clear()
-    await persistVisitorDataToStorage()
+    await persistVisitorDataToStorage(true)
     console.log('[Server] Visitor data reset completed')
     return true
   }
@@ -116,7 +116,19 @@ export async function checkVisitorDailyReset(): Promise<boolean> {
 
 // ── Persist visitor data to Storage (no CRDT sync) ──
 
-async function persistVisitorDataToStorage(): Promise<void> {
+// Persist throttling: the 10s system tick used to write visitor stats UNCONDITIONALLY
+// (~4 storage writes every 10s around the clock, even with zero players). Now a write
+// only happens when the payload actually changed (idle server → zero writes) and at
+// most once per minute while players are online (their totals tick every call).
+// `force` bypasses both (daily/monthly resets must land immediately). Trade-off: a
+// server crash can lose up to a minute of visitor-stat accumulation — stats only.
+const VISITOR_PERSIST_MIN_INTERVAL_MS = 60_000
+let lastPersistedVisitorJson: string | null = null
+let lastVisitorPersistMs = 0
+let lastPersistedMonthlyJson: string | null = null
+let lastMonthlyPersistMs = 0
+
+async function persistVisitorDataToStorage(force = false): Promise<void> {
   const now = Date.now()
   const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
     const isOnline = data.sessionStartMs > 0
@@ -136,12 +148,21 @@ async function persistVisitorDataToStorage(): Promise<void> {
   })
   .slice(0, 100)
 
-  await persistVisitorData(JSON.stringify(visitorData))
+  const json = JSON.stringify(visitorData)
+  if (!force) {
+    if (json === lastPersistedVisitorJson) return
+    if (now - lastVisitorPersistMs < VISITOR_PERSIST_MIN_INTERVAL_MS) return
+  }
+  lastPersistedVisitorJson = json
+  lastVisitorPersistMs = now
+  await persistVisitorData(json)
 }
 
 // ── Persist monthly visitor data to Storage (no CRDT sync) ──
 
-async function persistMonthlyVisitorDataToStorage(): Promise<void> {
+let lastWrittenMonthlyResetMonth: string | null = null
+
+async function persistMonthlyVisitorDataToStorage(force = false): Promise<void> {
   const currentMonth = getCurrentMonthString()
   const now = Date.now()
   const visitorData = Array.from(monthlyVisitorSessions.entries()).map(([userId, data]) => {
@@ -162,8 +183,19 @@ async function persistMonthlyVisitorDataToStorage(): Promise<void> {
   })
   .slice(0, 100)
 
-  await storageSet('monthlyVisitorData', JSON.stringify(visitorData))
-  await storageSet('monthlyVisitorResetMonth', currentMonth)
+  const json = JSON.stringify(visitorData)
+  if (!force) {
+    if (json === lastPersistedMonthlyJson) return
+    if (now - lastMonthlyPersistMs < VISITOR_PERSIST_MIN_INTERVAL_MS) return
+  }
+  lastPersistedMonthlyJson = json
+  lastMonthlyPersistMs = now
+  await storageSet('monthlyVisitorData', json)
+  // The reset month only changes once a month — don't rewrite it on every flush.
+  if (lastWrittenMonthlyResetMonth !== currentMonth) {
+    await storageSet('monthlyVisitorResetMonth', currentMonth)
+    lastWrittenMonthlyResetMonth = currentMonth
+  }
 }
 
 // ── Monthly visitor reset ──
@@ -174,7 +206,7 @@ export async function checkMonthlyVisitorReset(): Promise<void> {
     console.log('[Server] Monthly visitor reset for new month:', currentMonth)
     monthlyVisitorSessions.clear()
     setLastMonthlyVisitorResetMonth(currentMonth)
-    await persistMonthlyVisitorDataToStorage()
+    await persistMonthlyVisitorDataToStorage(true)
     console.log('[Server] Monthly visitor data reset completed')
   }
 }

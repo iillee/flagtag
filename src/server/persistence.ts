@@ -74,9 +74,15 @@ export async function loadPlayerNames(): Promise<void> {
   }
 }
 
+let lastWrittenVisitorResetDay: string | null = null
+
 export async function persistVisitorData(visitorDataJson: string): Promise<void> {
   await storageSet('visitorData', visitorDataJson)
-  await storageSet('lastVisitorResetDay', lastVisitorResetDay)
+  // The reset day only changes once a day — don't rewrite it on every flush.
+  if (lastVisitorResetDay !== lastWrittenVisitorResetDay) {
+    await storageSet('lastVisitorResetDay', lastVisitorResetDay)
+    lastWrittenVisitorResetDay = lastVisitorResetDay
+  }
 }
 
 export async function loadVisitorData(): Promise<void> {

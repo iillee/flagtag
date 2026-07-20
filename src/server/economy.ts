@@ -122,6 +122,9 @@ export function clearPlayerEconomyState(walletAddress: string): void {
     })
   }
   coinPickupTimes.delete(key)
+  // Land any debounced balance write immediately — the player may not come back.
+  flushPendingBalance(key, true)
+  lastBalancePersistMs.delete(key)
 }
 
 // ── Coin balance helpers ──
@@ -143,17 +146,45 @@ export async function loadPlayerCoinBalance(walletAddress: string): Promise<numb
   return balance
 }
 
+// ── Debounced balance persistence ──
+// Coin pickups used to hit Storage on EVERY pickup (one set per coin — the single
+// biggest storage-write source during play). The in-memory cache is authoritative
+// for the session, so persist at most once per interval per player: the trailing
+// write always carries the LATEST cached value, and disconnect force-flushes.
+// Trade-off: a server crash can lose up to the interval's worth of pickups.
+const COIN_PERSIST_MIN_INTERVAL_MS = 5000
+const pendingBalancePersists = new Map<string, number>()
+// One in-flight write per player — prevents an older write landing after a newer one.
+const balancePersistInFlight = new Set<string>()
+const lastBalancePersistMs = new Map<string, number>()
+
+function flushPendingBalance(key: string, force: boolean): void {
+  if (balancePersistInFlight.has(key)) return
+  const amount = pendingBalancePersists.get(key)
+  if (amount === undefined) return
+  const now = Date.now()
+  if (!force && now - (lastBalancePersistMs.get(key) ?? 0) < COIN_PERSIST_MIN_INTERVAL_MS) return
+  pendingBalancePersists.delete(key)
+  balancePersistInFlight.add(key)
+  lastBalancePersistMs.set(key, now)
+  storageSet(`coins:${key}`, String(amount))
+    .catch(err => console.error('[Coins] Failed to persist balance for', key.slice(0, 8), err))
+    .then(() => { balancePersistInFlight.delete(key) })
+}
+
+/** Flush debounced balance writes that are due — called every tick from coinServerSystem. */
+function flushDueBalancePersists(): void {
+  if (pendingBalancePersists.size === 0) return
+  for (const key of pendingBalancePersists.keys()) flushPendingBalance(key, false)
+}
+
 export async function setPlayerCoinBalance(walletAddress: string, amount: number): Promise<void> {
   const key = walletAddress.toLowerCase()
   playerCoinBalances.set(key, amount)
-
-  try {
-    // Cache above is authoritative for the session; a failed persist self-heals on
-    // the next balance write.
-    await storageSet(`coins:${key}`, String(amount))
-  } catch (err) {
-    console.error('[Coins] Failed to persist balance for', key.slice(0, 8), err)
-  }
+  // Debounced persist: writes immediately if the interval has passed, otherwise the
+  // latest value lands within COIN_PERSIST_MIN_INTERVAL_MS via coinServerSystem.
+  pendingBalancePersists.set(key, amount)
+  flushPendingBalance(key, false)
 }
 
 export async function addPlayerCoins(walletAddress: string, amount: number): Promise<number> {
@@ -196,6 +227,15 @@ export async function savePlayerUpgrades(walletAddress: string, data: UpgradeDat
 }
 
 
+// Short-lived cache of the full all-time leaderboard JSON — the largest object in
+// Storage (500+ entries) — which the lifetime-wins reconciliation used to re-read on
+// EVERY new player's first load. Slightly stale data is fine here: the reconciliation
+// takes the max of the two sources anyway, and fresh wins go through
+// addPlayerLifetimeWin directly.
+const ALL_TIME_LB_CACHE_MS = 60_000
+let allTimeLbCacheJson: string | null = null
+let allTimeLbCacheAtMs = 0
+
 /**
  * STRICT load (see loadPlayerCoinBalance): rejects on read failure so
  * addPlayerLifetimeWin can never persist `fallback0 + 1` over a real total.
@@ -210,7 +250,11 @@ export async function loadPlayerLifetimeWins(walletAddress: string): Promise<num
 
   // Reconcile with all-time leaderboard (full format in Storage) — always take the higher value
   try {
-    const atFull = await storageGet<string>('allTimeLeaderboard')
+    if (allTimeLbCacheJson === null || Date.now() - allTimeLbCacheAtMs > ALL_TIME_LB_CACHE_MS) {
+      allTimeLbCacheJson = (await storageGet<string>('allTimeLeaderboard')) ?? ''
+      allTimeLbCacheAtMs = Date.now()
+    }
+    const atFull = allTimeLbCacheJson
     if (atFull) {
       const atEntries: { userId: string; roundsWon: number }[] = JSON.parse(atFull)
       const entry = atEntries.find(e => e.userId.toLowerCase() === key)
@@ -430,6 +474,9 @@ function updateCoinStateCRDT(): void {
 // ── Coin server system ──
 
 export function coinServerSystem(dt: number): void {
+  // Land any debounced balance writes that are due (independent of coin respawns).
+  flushDueBalancePersists()
+
   if (coinCooldowns.size === 0) return
 
   coinRespawnTimer += dt
