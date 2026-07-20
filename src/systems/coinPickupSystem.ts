@@ -167,7 +167,12 @@ function spawnHeadBounceCoin(playerId: string): void {
 const trackedCoins: TrackedCoin[] = []
 let setupDone = false
 let waitTimer = 0
-let localPickupCooldowns = new Set<string>() // prevent spamming requests
+// Client-side spam guard: coinId -> timestamp (ms) when we sent requestCoinPickup.
+// Cleared on coinPickedUp/coinRespawned. An entry older than LOCAL_PICKUP_TIMEOUT_MS
+// is treated as expired so a lost request/silent rejection can't make a coin
+// permanently unpickable for this client.
+const localPickupCooldowns = new Map<string, number>()
+const LOCAL_PICKUP_TIMEOUT_MS = 5000
 let walletBalance = 0
 let balanceRequested = false
 let balanceReceived = false
@@ -391,8 +396,17 @@ export function coinPickupSystem(dt: number): void {
       restoreBobSpin(coin)
     }
 
-    // Skip proximity check if on cooldown, animating, or we already sent a request
-    if (onCooldown || coin.hidden || localPickupCooldowns.has(coin.coinId)) continue
+    // Skip proximity check if on cooldown or animating
+    if (onCooldown || coin.hidden) continue
+
+    // Skip if we sent a pickup request recently. A stale entry (older than
+    // LOCAL_PICKUP_TIMEOUT_MS) means the request or its server response was lost,
+    // so drop it and allow a re-request instead of the coin being stuck forever.
+    const requestedAt = localPickupCooldowns.get(coin.coinId)
+    if (requestedAt !== undefined) {
+      if (Date.now() - requestedAt < LOCAL_PICKUP_TIMEOUT_MS) continue
+      localPickupCooldowns.delete(coin.coinId)
+    }
 
     // Check proximity
     const dx = playerPos.x - coin.position.x
@@ -402,7 +416,7 @@ export function coinPickupSystem(dt: number): void {
 
     if (distSq <= COIN_PICKUP_RADIUS * COIN_PICKUP_RADIUS) {
       // Request pickup from server
-      localPickupCooldowns.add(coin.coinId)
+      localPickupCooldowns.set(coin.coinId, Date.now())
       room.send('requestCoinPickup', { coinId: coin.coinId })
       console.log('[CoinPickup] Requesting pickup:', coin.coinId)
     }

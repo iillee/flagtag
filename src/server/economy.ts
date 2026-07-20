@@ -6,7 +6,7 @@ import { Storage } from '@dcl/sdk/server'
 import {
   playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache, playerLifetimeHoldTimeCache,
   playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
-  coinStateEntity
+  coinStateEntity, getPlayerPosition
 } from './serverState'
 import {
   CoinState, COIN_RESPAWN_INTERVAL_SEC,
@@ -24,6 +24,40 @@ import type { BoomerangColor } from '../gameState/boomerangColor'
 const coinCooldowns = new Set<string>()
 /** Timer tracking seconds until next random coin respawn */
 let coinRespawnTimer = 0
+
+// ── Per-player balance serialization ──
+// Every coin balance read-modify-write for a given player must run through this chain,
+// or two handlers that both read the old balance before either writes will double-spend
+// (buy three 150-coin items with 300 coins, claim the blessing twice, etc). Tasks for the
+// same player run strictly one-after-another; a task that throws does not block the next.
+const balanceChains = new Map<string, Promise<unknown>>()
+function serializePerPlayer<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const prev = balanceChains.get(key) ?? Promise.resolve()
+  const next = prev.then(() => task(), () => task())
+  balanceChains.set(key, next.then(() => {}, () => {}))
+  return next
+}
+
+// ── Coin pickup anti-abuse ──
+// Only deterministic position-hash ids are legitimate (coinIdFromPosition on the client).
+const COIN_ID_RE = /^coin_-?\d{1,7}_-?\d{1,7}_-?\d{1,7}$/
+// Hard ceiling on the synced cooldown set so a flood of ids can never bloat the CRDT
+// string (the buffer-saturation failure class behind the historical scoreboard/boomerang bugs).
+const MAX_COIN_COOLDOWNS = 512
+const COIN_PICKUP_WINDOW_MS = 3000
+// ~6.7 pickups/sec: generous headroom for a boosted player sprinting through a dense coin
+// cluster (avoids silently rejecting legit pickups), while still bounding a spammer. The
+// real anti-abuse guards are the finite coin count and the MAX_COIN_COOLDOWNS eviction cap.
+// Worth confirming against actual in-scene coin density during playtest.
+const COIN_PICKUP_MAX_IN_WINDOW = 20
+const coinPickupTimes = new Map<string, number[]>()
+
+/** Drop per-player economy state on disconnect (called from playerTrackingSystem). */
+export function clearPlayerEconomyState(walletAddress: string): void {
+  const key = walletAddress.toLowerCase()
+  balanceChains.delete(key)
+  coinPickupTimes.delete(key)
+}
 
 // ── Coin balance helpers ──
 
@@ -362,7 +396,7 @@ export async function awardRoundCoins(players: { userId: string; seconds: number
     }
 
     if (coins > 0) {
-      const newBalance = await addPlayerCoins(p.userId, coins)
+      const newBalance = await serializePerPlayer(p.userId, () => addPlayerCoins(p.userId, coins))
       room.send('walletBalance', { playerId: p.userId, coins: newBalance }, { to: [p.userId] })
       const holdTimeCoins = Math.floor(p.seconds * COINS_PER_HOLD_SECOND)
       const placementBonus = (i < ROUND_PLACEMENT_BONUS.length && p.seconds > 0) ? ROUND_PLACEMENT_BONUS[i] : 0
@@ -390,15 +424,42 @@ export function registerEconomyHandlers(): void {
     const from = context.from.toLowerCase()
     const coinId = data.coinId
 
+    // Reject malformed ids — only deterministic position-hash ids are real coins.
+    // Blocks arbitrary-string spam that would otherwise bloat the synced cooldown JSON.
+    if (!COIN_ID_RE.test(coinId)) return
+
     if (coinCooldowns.has(coinId)) {
       console.log('[Coins] Pickup rejected — coin already picked up:', coinId)
       return
     }
 
+    // Require a replicated server position — a bot spamming before its avatar syncs is rejected.
+    if (!getPlayerPosition(from)) return
+
+    // Per-player sliding-window rate limit: a walking player picks up well under this,
+    // but it caps both coin farming speed and CRDT write volume from a hostile client.
+    const nowMs = Date.now()
+    let times = coinPickupTimes.get(from)
+    if (!times) { times = []; coinPickupTimes.set(from, times) }
+    while (times.length > 0 && nowMs - times[0] > COIN_PICKUP_WINDOW_MS) times.shift()
+    if (times.length >= COIN_PICKUP_MAX_IN_WINDOW) return
+
+    // Cap the cooldown set so its synced JSON can never grow unbounded. When full, evict the
+    // OLDEST entry (respawning that coin early) rather than rejecting — a plain rejection would
+    // let one client spamming ids jam pickups for EVERYONE, since the set drains only ~1/30s.
+    if (coinCooldowns.size >= MAX_COIN_COOLDOWNS) {
+      const oldest = coinCooldowns.values().next().value
+      if (oldest !== undefined) {
+        coinCooldowns.delete(oldest)
+        room.send('coinRespawned', { coinId: oldest })
+      }
+    }
+
+    times.push(nowMs)
     coinCooldowns.add(coinId)
     updateCoinStateCRDT()
 
-    addPlayerCoins(from, 1).then(newBalance => {
+    serializePerPlayer(from, () => addPlayerCoins(from, 1)).then(newBalance => {
       room.send('coinPickedUp', { coinId, playerId: from, newBalance })
       console.log('[Coins] Coin picked up:', coinId, 'by', from.slice(0, 8), 'balance:', newBalance)
     }).catch(err => console.error('[Coins] Error awarding coin:', err))
@@ -431,7 +492,7 @@ export function registerEconomyHandlers(): void {
     if (!context || !data.color) return
     const from = context.from.toLowerCase()
     try {
-      await handleBuyBoomerang(from, data.color)
+      await serializePerPlayer(from, () => handleBuyBoomerang(from, data.color))
     } catch (err) {
       console.error('[Store] buyBoomerang error:', err)
     }
@@ -441,7 +502,7 @@ export function registerEconomyHandlers(): void {
     if (!context || !data.tapeId) return
     const from = context.from.toLowerCase()
     try {
-      await handleBuyTape(from, data.tapeId)
+      await serializePerPlayer(from, () => handleBuyTape(from, data.tapeId))
     } catch (err) {
       console.error('[Store] buyTape error:', err)
     }
@@ -451,7 +512,7 @@ export function registerEconomyHandlers(): void {
     if (!context || !data.trapId) return
     const from = context.from.toLowerCase()
     try {
-      await handleBuyTrap(from, data.trapId)
+      await serializePerPlayer(from, () => handleBuyTrap(from, data.trapId))
     } catch (err) {
       console.error('[Store] buyTrap error:', err)
     }
@@ -500,13 +561,16 @@ export function registerEconomyHandlers(): void {
       deathPenaltyCooldowns.set(from, now)
       sessionDeaths.set(from, (sessionDeaths.get(from) ?? 0) + 1)
 
-      const current = await loadPlayerCoinBalance(from)
-      const penalty = Math.min(DEATH_PENALTY_COINS, current)
-      const newBalance = current - penalty
-      await setPlayerCoinBalance(from, newBalance)
+      const { penalty, newBalance } = await serializePerPlayer(from, async () => {
+        const current = await loadPlayerCoinBalance(from)
+        const pen = Math.min(DEATH_PENALTY_COINS, current)
+        const bal = current - pen
+        await setPlayerCoinBalance(from, bal)
+        return { penalty: pen, newBalance: bal }
+      })
       room.send('walletBalance', { playerId: from, coins: newBalance }, { to: [from] })
       room.send('deathPenaltyApplied', { playerId: from, penalty, newBalance }, { to: [from] })
-      console.log(`[Server] 💀 Death penalty: ${from.slice(0, 8)} lost ${penalty} coins (${current} → ${newBalance})`)
+      console.log(`[Server] 💀 Death penalty: ${from.slice(0, 8)} lost ${penalty} coins (new balance: ${newBalance})`)
     } catch (err) { console.error('[Server] ❌ deathPenalty handler error:', err) }
   })
 
@@ -537,19 +601,23 @@ export function registerEconomyHandlers(): void {
       if (!context) return
       const from = context.from.toLowerCase()
 
-      const today = new Date().toISOString().slice(0, 10)
-      const lastBlessing = await Storage.get<string>(`blessing:${from}`)
-      if (lastBlessing === today) {
+      // Serialize so two concurrent claims can't both read yesterday's date and
+      // double-award the daily blessing before either Storage.set lands.
+      const outcome = await serializePerPlayer(from, async () => {
+        const today = new Date().toISOString().slice(0, 10)
+        const lastBlessing = await Storage.get<string>(`blessing:${from}`)
+        if (lastBlessing === today) return { alreadyBlessed: true, newBalance: 0 }
+        const bal = await addPlayerCoins(from, BLESSING_COINS)
+        await Storage.set(`blessing:${from}`, today)
+        return { alreadyBlessed: false, newBalance: bal }
+      })
+      if (outcome.alreadyBlessed) {
         room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })
         return
       }
-
-      // Award coins
-      const newBalance = await addPlayerCoins(from, BLESSING_COINS)
-      await Storage.set(`blessing:${from}`, today)
-      room.send('walletBalance', { playerId: from, coins: newBalance }, { to: [from] })
-      room.send('blessingResult', { success: true, reason: '', newBalance }, { to: [from] })
-      console.log(`[Server] 🙏 Blessing: ${from.slice(0, 8)} received ${BLESSING_COINS} coins (balance: ${newBalance})`)
+      room.send('walletBalance', { playerId: from, coins: outcome.newBalance }, { to: [from] })
+      room.send('blessingResult', { success: true, reason: '', newBalance: outcome.newBalance }, { to: [from] })
+      console.log(`[Server] 🙏 Blessing: ${from.slice(0, 8)} received ${BLESSING_COINS} coins (balance: ${outcome.newBalance})`)
     } catch (err) {
       console.error('[Server] ❌ requestBlessing handler error:', err)
     }

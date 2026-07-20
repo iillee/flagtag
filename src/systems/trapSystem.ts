@@ -597,6 +597,9 @@ function updateMsgTrapVisuals(dt: number): void {
 
 /** Drop a trap from the UI (mobile tap). Same logic as F key press. */
 export function triggerTrapFromUI(): void {
+  // Match the F-key path's guards so mobile can't drop during the round-end
+  // cinematic or while spectating.
+  if (isCinematicActive() || isSpectatorMode()) return
   if (isDrownRespawning()) return
   if (!isWinsLoaded() && isServerConnected()) return  // Block traps until profile loaded (skip if no server)
   const now = Date.now()

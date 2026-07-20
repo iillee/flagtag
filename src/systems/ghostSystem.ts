@@ -129,19 +129,36 @@ room.onMessage('ghostTouching', (data) => {
 // ── Death VFX from server ──
 const pendingDeathPositions: Vector3[] = []
 
+// Max distance (squared) to associate a ghostKilled message with a live client ghost.
+const GHOST_KILL_MATCH_DIST_SQ = 4.0 * 4.0
+
 room.onMessage('ghostKilled', (data) => {
   pendingDeathPositions.push(Vector3.create(data.x, data.y, data.z))
 
-  // Immediately start sinking all active ghost visuals to prevent desync.
-  // On slow clients (especially mobile), the CRDT entity removal may arrive late,
-  // causing the old ghost to linger while a new one spawns (double ghost bug).
+  // Sink ONLY the ghost that was actually killed. The server sends just the kill
+  // position, so match it to the nearest live client ghost within a small
+  // threshold and sink that one — all other ghosts keep updating normally.
+  // (Sinking every ghost froze non-killed ones mid-air until the server despawned
+  // them, since sink progress only advances once a ghost leaves the CRDT.)
+  let nearest: Entity | null = null
+  let nearestDistSq = GHOST_KILL_MATCH_DIST_SQ
   for (const [entity, cz] of clientGhosts) {
-    if (!cz.sinking) {
-      cz.sinking = true
-      cz.sinkTimer = 0
-      killedGhostEntities.add(entity)
-      console.log('[Ghost] Immediate sink triggered via ghostKilled message')
+    if (cz.sinking) continue
+    const dx = cz.lastServerPos.x - data.x
+    const dy = cz.lastServerPos.y - data.y
+    const dz = cz.lastServerPos.z - data.z
+    const distSq = dx * dx + dy * dy + dz * dz
+    if (distSq < nearestDistSq) {
+      nearestDistSq = distSq
+      nearest = entity
     }
+  }
+  if (nearest !== null) {
+    const cz = clientGhosts.get(nearest)!
+    cz.sinking = true
+    cz.sinkTimer = 0
+    killedGhostEntities.add(nearest)
+    console.log('[Ghost] Immediate sink triggered via ghostKilled message')
   }
 })
 

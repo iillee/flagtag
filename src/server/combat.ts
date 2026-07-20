@@ -18,6 +18,7 @@ import {
   flagEntity, getPlayerPosition, wasWithinRadius, FLAG_GRAVITY,
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   sessionBananasDropped, sessionBoomerangsFired, lastStealTime, STEAL_IMMUNITY_MS,
+  playerBoomerangColors,
 } from './serverState'
 import { handleDrop } from './flagLogic'
 
@@ -302,7 +303,22 @@ const lastOrbitTime = new Map<string, number>()
 
 // ── Trap logic ──
 
+// Synchronous in-flight guard. Without it, a burst of requestBanana messages in one tick
+// all suspend at the loadPlayerUpgrades await below, then all read the same pre-update
+// cooldown + active-count and each drops a trap — bypassing both the cooldown and TRAP_MAX_ACTIVE.
+const trapDropInFlight = new Set<string>()
+
 async function handleTrapDrop(playerId: string): Promise<void> {
+  if (trapDropInFlight.has(playerId)) return
+  trapDropInFlight.add(playerId)
+  try {
+    await handleTrapDropInner(playerId)
+  } finally {
+    trapDropInFlight.delete(playerId)
+  }
+}
+
+async function handleTrapDropInner(playerId: string): Promise<void> {
   const now = Date.now()
 
   // Check equipped trap type first so we use the right cooldown
@@ -597,7 +613,10 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   }
 
   const len = Math.sqrt(dirX * dirX + dirZ * dirZ)
-  if (len < 0.01) {
+  // Reject non-finite direction explicitly: `NaN < 0.01` is false, so a NaN/Infinity dir
+  // would slip past the magnitude check and produce a NaN spawn position + rotation that
+  // gets broadcast to every client.
+  if (!Number.isFinite(dirX) || !Number.isFinite(dirZ) || len < 0.01) {
     console.log('[Server] Projectile denied: invalid direction')
     return
   }
@@ -960,11 +979,18 @@ export function registerCombatHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      const chargeSpeed = typeof data.chargeSpeed === 'number' ? Math.max(PROJECTILE_SPEED, Math.min(60, data.chargeSpeed)) : PROJECTILE_SPEED
-      const chargeRange = typeof data.chargeRange === 'number' ? Math.max(20, Math.min(PROJECTILE_MAX_RANGE, data.chargeRange)) : 20
-      const chargeScale = typeof data.chargeScale === 'number' ? Math.max(1, Math.min(3, data.chargeScale)) : 1
+      // Authoritative equipped color — never trust data.color, or a client could claim
+      // 'y' for 5x fire rate + double shot, or 'b' charge params, without owning either.
+      const color = playerBoomerangColors.get(from) || 'r'
+      // Charge params only apply to the Charge boomerang ('b'); ignore them otherwise.
+      const canCharge = color === 'b'
+      // Number.isFinite (not typeof === 'number') so NaN/Infinity fall back to defaults —
+      // Math.max/min propagate NaN, so an unchecked NaN would become the actual param.
+      const chargeSpeed = canCharge && Number.isFinite(data.chargeSpeed) ? Math.max(PROJECTILE_SPEED, Math.min(60, data.chargeSpeed)) : PROJECTILE_SPEED
+      const chargeRange = canCharge && Number.isFinite(data.chargeRange) ? Math.max(20, Math.min(PROJECTILE_MAX_RANGE, data.chargeRange)) : 20
+      const chargeScale = canCharge && Number.isFinite(data.chargeScale) ? Math.max(1, Math.min(3, data.chargeScale)) : 1
       sessionBoomerangsFired.set(from, (sessionBoomerangsFired.get(from) ?? 0) + 1)
-      handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r', chargeSpeed, chargeRange, chargeScale)
+      handleProjectileFire(from, data.dirX, data.dirZ, color, chargeSpeed, chargeRange, chargeScale)
     } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
   room.onMessage('reportShellWallDist', (data, context) => {

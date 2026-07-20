@@ -17,8 +17,9 @@ import {
 import { persistPlayerNames } from './persistence'
 import { updatePlayerName } from './leaderboard'
 import { getOrCreateHoldTimeEntity } from './flagLogic'
-import { loadPlayerCoinBalance, loadPlayerLifetimeHoldTime } from './economy'
+import { loadPlayerCoinBalance, loadPlayerLifetimeHoldTime, clearPlayerEconomyState } from './economy'
 import { clearCombatCooldowns } from './combat'
+import { clearPlayerMushroomState } from './mushroomSystem'
 import { schedulePlayerJoinDiscord } from './analytics'
 import { capture, identify } from './posthog'
 
@@ -143,6 +144,8 @@ export function playerTrackingSystem(): void {
       sessionBananasDropped.delete(userKey)
       sessionBoomerangsFired.delete(userKey)
       clearPositionHistory(userKey)
+      clearPlayerEconomyState(userKey)
+      clearPlayerMushroomState(userKey)
 
       changed = true
     }

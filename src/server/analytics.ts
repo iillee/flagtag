@@ -33,8 +33,14 @@ export async function loadDiscordWebhookUrl(): Promise<void> {
     console.log('[Server] ⚠️ Could not detect realm info:', err)
   }
 
-  DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1519451487242031277/N7-eJgllAUTrDPCP1Zy6ga_Sdjp0ilgJXPpWvH5ome4kYHCWYbf1yveS98nowGgFbH9b'
-  console.log('[Server] ✅ Discord player-join webhook set')
+  // Secret must come from the environment only. Never hardcode a webhook token: scene
+  // bundles are publicly downloadable, so a committed token is a compromised token.
+  DISCORD_WEBHOOK_URL = (await EnvVar.get('DISCORD_PLAYER_JOIN_WEBHOOK')) || ''
+  if (DISCORD_WEBHOOK_URL) {
+    console.log('[Server] ✅ Discord player-join webhook loaded from env')
+  } else {
+    console.log('[Server] ℹ️ No DISCORD_PLAYER_JOIN_WEBHOOK set — join notifications disabled')
+  }
 }
 
 // ── Player join Discord notification ──
@@ -50,6 +56,10 @@ const JOIN_NOTIFY_DELAY_MS = 5000
 const JOIN_NOTIFY_MAX_WAIT_MS = 15000 // Max time to wait for name resolution before dropping
 
 export function schedulePlayerJoinDiscord(playerName: string, address: string, onlineCount: number): void {
+  // Don't accumulate pending entries the flush will never drain: when no webhook is
+  // configured (the default now that the hardcoded fallback is gone), flush early-returns
+  // and would otherwise leak one entry per unique joiner for the life of the server.
+  if (!DISCORD_WEBHOOK_URL || isPreview) return
   const userKey = address.toLowerCase()
   if (JOIN_NOTIFY_BLOCKED.has(userKey)) return
   pendingJoinNotifications.set(userKey, { address, onlineCount, scheduledAt: Date.now() })
@@ -61,17 +71,19 @@ export function flushPendingJoinNotifications(): void {
   const now = Date.now()
   for (const [userKey, pending] of pendingJoinNotifications) {
     if (now - pending.scheduledAt < JOIN_NOTIFY_DELAY_MS) continue
-    pendingJoinNotifications.delete(userKey)
 
     // Use the best name available now (name resolver should have run by this point)
     const knownName = playerNames.get(userKey)
     if (!knownName || !isRealName(knownName)) {
-      // Not resolved yet — keep waiting up to max wait, then drop (likely a bot)
-      if (now - pending.scheduledAt < JOIN_NOTIFY_MAX_WAIT_MS) continue
-      pendingJoinNotifications.delete(userKey)
+      // Not resolved yet — keep waiting up to max wait, then drop (likely a bot). Only
+      // remove the pending entry once we've actually given up, so the retry window is real.
+      if (now - pending.scheduledAt >= JOIN_NOTIFY_MAX_WAIT_MS) {
+        pendingJoinNotifications.delete(userKey)
+      }
       continue
     }
 
+    pendingJoinNotifications.delete(userKey)
     const resolvedName = knownName
     const content = `👋 **${resolvedName}** joined Flag Tag (${pending.address.slice(0, 6)}…${pending.address.slice(-4)}) — **${pending.onlineCount}** online`
     fetch(DISCORD_WEBHOOK_URL, {

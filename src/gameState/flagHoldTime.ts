@@ -115,6 +115,20 @@ export function nameResolverSystem(dt: number): void {
       console.log('[FlagHoldTime] Reconciliation: removed stale player', key.slice(0, 8), 'from playersInScene')
     }
   }
+
+  // Re-add: any player present in PlayerIdentityData but missing from playersInScene.
+  // addPlayer() rejects a joiner whose PlayerIdentityData entity hasn't arrived yet,
+  // so under CRDT congestion such a joiner would otherwise be absent from the
+  // scoreboard/spectator list all session. Mirror addPlayer with a resolved name
+  // (or the address as placeholder — UI resolves the real name at render time).
+  for (const key of presentPlayers) {
+    if (playersInScene.has(key)) continue
+    // Placeholder must be the short id, not the full 42-char address: the render fallback
+    // is `getKnownPlayerName() || name || slice(0,8)`, so a truthy full-address `name` would
+    // display the whole 0x… string on the scoreboard until the real name resolves.
+    playersInScene.set(key, getKnownPlayerName(key) ?? key.slice(0, 8))
+    console.log('[FlagHoldTime] Reconciliation: re-added present player', key.slice(0, 8), 'to playersInScene')
+  }
 }
 
 /** For UI: list of players with hold times from synced component. */
@@ -124,6 +138,10 @@ export function nameResolverSystem(dt: number): void {
 let lastCarrierId = ''
 let lastCarrierSyncedSeconds = 0
 let interpolationStartTime = 0
+// Last value actually DISPLAYED for the current carrier. Used to clamp the
+// scoreboard so it never counts backwards (e.g. 15 → 13) after a CRDT stall or
+// steal chain. Reset on carrier change and on round reset.
+let lastDisplayedForCarrier = 0
 
 // Server-confirmed carrier — used as fallback when CRDT Flag state is stale.
 // Set by flagSystem when pickupConfirmed arrives, cleared when CRDT catches up or drop confirmed.
@@ -148,12 +166,15 @@ export function clearConfirmedCarrier(): void {
  * Also detects round resets (all scores drop to 0) to prevent stale interpolation.
  */
 export function updateHoldTimeInterpolation(): void {
+  // Scan ALL Flag entities and pick the carried one's carrier (mirrors
+  // getCurrentFlagCarrierUserId). An orphaned/duplicate Flag entity ordered
+  // first must not make us see "no carrier".
   let currentCarrierId = ''
   for (const [, flag] of engine.getEntitiesWith(Flag)) {
     if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
       currentCarrierId = flag.carrierPlayerId.toLowerCase()
+      break
     }
-    break
   }
 
   // If CRDT doesn't show a carrier but the server confirmed one recently (< 3s ago),
@@ -173,6 +194,7 @@ export function updateHoldTimeInterpolation(): void {
     lastCarrierId = currentCarrierId
     lastCarrierSyncedSeconds = 0
     interpolationStartTime = Date.now()
+    lastDisplayedForCarrier = 0
   }
 
   if (currentCarrierId) {
@@ -188,6 +210,9 @@ export function updateHoldTimeInterpolation(): void {
     if (maxSynced < lastCarrierSyncedSeconds) {
       lastCarrierSyncedSeconds = maxSynced
       interpolationStartTime = Date.now()
+      // Round reset (seconds dropped to ~0) — clear the displayed clamp so the
+      // scoreboard can count down to the new lower value.
+      lastDisplayedForCarrier = 0
     }
     // When server sends a new value, re-anchor our interpolation
     if (maxSynced > lastCarrierSyncedSeconds) {
@@ -278,7 +303,11 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     const interpolated = lastCarrierSyncedSeconds + elapsedSec
     // Only apply if we haven't been reset to 0 by the server mid-round
     if (carrierSynced > 0 || lastCarrierSyncedSeconds === 0) {
-      synced.set(lastCarrierId, Math.max(carrierSynced, interpolated))
+      // Clamp to the last displayed value so a re-anchor after a CRDT stall or
+      // steal chain never makes the visible count go backwards.
+      const displayed = Math.max(lastDisplayedForCarrier, carrierSynced, interpolated)
+      lastDisplayedForCarrier = displayed
+      synced.set(lastCarrierId, displayed)
     }
   }
 

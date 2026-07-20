@@ -222,6 +222,9 @@ room.onMessage('orbitEnded', (data) => {
 
 /** Fire a projectile from the UI (mobile tap). For blue: starts charging on press. */
 export function triggerProjectileFromUI(): void {
+  // Match the keyboard path's guards so mobile can't throw during the round-end
+  // cinematic or while spectating.
+  if (isCinematicActive() || isSpectatorMode()) return
   if (isDrownRespawning()) return
   if (!isWinsLoaded() && isServerConnected()) return  // Block firing until profile loaded (skip if no server)
   const now = Date.now()
@@ -236,6 +239,9 @@ export function triggerProjectileFromUI(): void {
   // Blue: start charging on press
   if (uiColor === 'b') {
     if (charge.isCharging) return
+    // Don't start a charge while staggered — starting/releasing a charge deletes
+    // the shared InputModifier mid-stun, letting the player escape the stun.
+    if (now < stagger.until) return
     if (Transform.has(engine.PlayerEntity)) {
       const playerY = Transform.get(engine.PlayerEntity).position.y
       if (Math.abs(playerY - charge.lastGroundY) > 0.15) {
@@ -476,6 +482,10 @@ export function projectileClientSystem(dt: number): void {
       console.log('[Projectile] 🎯 Instant throw (non-charge color)')
       return
     }
+
+    // Don't start a charge while staggered — starting/releasing a charge deletes
+    // the shared InputModifier mid-stun, letting the player escape the stun.
+    if (now < stagger.until) return
 
     // Blue: block charging while airborne
     if (Transform.has(engine.PlayerEntity)) {

@@ -89,6 +89,7 @@ const SMOKE_DRIFT_XZ       = 0.8   // horizontal drift while rising
 const SMOKE_GROW_RATE      = 2.0   // scale added over full rise
 const SMOKE_BASE_OFFSET    = 0     // height above chimney to spawn
 const FADE_START           = 0.98  // fade out in final 2% of rise
+const SMOKE_ALPHA_STEP     = 0.05  // quantize fade so material is only rewritten per visible step
 const HIDDEN_POS = Vector3.create(0, -200, 0)
 
 // Smoke emissive is halved on mobile to reduce brightness
@@ -116,7 +117,6 @@ function getSmokeMaterial() {
 
 // ── Physics lift configuration ──────────────────────────────
 const TRIGGER_RADIUS  = 2.5
-const TRIGGER_HEIGHT  = 30
 const UPDRAFT_FORCE   = Vector3.create(0, 140, 0)  // continuous lift — must overpower gravity strongly
 const UPDRAFT_KICK    = Vector3.create(0, 25, 0)   // snappy pop on entry
 
@@ -133,6 +133,7 @@ interface SmokePuff {
   startScale: number
   spawnTime: number
   slot: number
+  lastAlphaStep: number  // last quantized fade step written to the material (-1 = none yet)
 }
 
 interface UpdraftSlot {
@@ -170,30 +171,6 @@ let smokePoolIdx = 0
 
 let forceActive = false
 
-// ── Debug cylinders (visible trigger zone) ──────────────────
-const debugCylinders: (Entity | null)[] = [null, null]
-function ensureDebugCylinder(slot: number): Entity {
-  if (debugCylinders[slot] == null) {
-    debugCylinders[slot] = engine.addEntity()
-    Transform.create(debugCylinders[slot]!, { position: HIDDEN_POS, scale: Vector3.create(TRIGGER_RADIUS * 2, TRIGGER_HEIGHT, TRIGGER_RADIUS * 2) })
-  }
-  return debugCylinders[slot]!
-}
-function updateDebugCylinders(): void {
-  for (let s = 0; s < NUM_SLOTS; s++) {
-    const cyl = ensureDebugCylinder(s)
-    const sl = slots[s]
-    if (sl.activeLocationIndex < 0) {
-      Transform.getMutable(cyl).position = HIDDEN_POS
-      continue
-    }
-    const loc = CHIMNEY_LOCATIONS[sl.activeLocationIndex]
-    const t = Transform.getMutable(cyl)
-    t.position = Vector3.create(loc.x, loc.y + TRIGGER_HEIGHT / 2, loc.z)
-    t.scale = Vector3.create(TRIGGER_RADIUS * 2, TRIGGER_HEIGHT, TRIGGER_RADIUS * 2)
-  }
-}
-
 // ── Smoke pool ──────────────────────────────────────────────
 function initSmokePool(): void {
   for (let i = 0; i < SMOKE_POOL_SIZE; i++) {
@@ -226,7 +203,7 @@ function spawnSmokePuff(basePos: Vector3, slot: number): void {
   t.scale = Vector3.create(s, s, s)
   Material.setPbrMaterial(puff, getSmokeMaterial())
 
-  activeSmokePuffs.push({ entity: puff, startPos: jitteredPos, endPos, startScale: s, spawnTime: Date.now(), slot })
+  activeSmokePuffs.push({ entity: puff, startPos: jitteredPos, endPos, startScale: s, spawnTime: Date.now(), slot, lastAlphaStep: -1 })
 }
 
 function hideSmokePuff(entity: Entity): void {
@@ -285,7 +262,15 @@ function animateSmokePuffs(): void {
     }
 
     if (alpha < 1.0) {
-      Material.setPbrMaterial(sp.entity, { ...getSmokeMaterial(), albedoColor: Color4.create(1, 1, 1, alpha) })
+      // Quantize the fade to SMOKE_ALPHA_STEP so the material is only rewritten
+      // when it visibly changes. Calling Material.setPbrMaterial every frame across
+      // hundreds of puffs is the per-frame material-churn pattern that breaks the
+      // renderer.
+      const alphaStep = Math.round(alpha / SMOKE_ALPHA_STEP)
+      if (alphaStep !== sp.lastAlphaStep) {
+        sp.lastAlphaStep = alphaStep
+        Material.setPbrMaterial(sp.entity, { ...getSmokeMaterial(), albedoColor: Color4.create(1, 1, 1, alpha) })
+      }
     }
   }
 }
@@ -313,10 +298,17 @@ function activateForce(): void {
   if (forceActive) return
   forceActive = true
   playSwooshSound()
+  // Continuous lift is a *sustained* force, so it must be a persistent
+  // PhysicsCombinedForce component (there is no impulse-helper equivalent for a
+  // held force). It is cleared again in deactivateForce() via
+  // PhysicsCombinedForce.deleteFrom. Leave this direct write as-is — changing it to
+  // route through a Physics helper needs care (the helper models one-shot impulses,
+  // not a held force) and could reintroduce the knockback-throw described below.
   PhysicsCombinedForce.createOrReplace(engine.PlayerEntity, { vector: UPDRAFT_FORCE })
-  // Use SDK Physics helper so the eventId is coordinated with bomb knockback etc.
-  // Direct createOrReplace here caused Physics.applyKnockbackToPlayer to throw on
-  // subsequent bomb hits ("modified outside Physics helper").
+  // The one-shot entry kick DOES go through the SDK Physics helper so its eventId is
+  // coordinated with bomb knockback etc. A direct createOrReplace here previously
+  // caused Physics.applyKnockbackToPlayer to throw on later bomb hits
+  // ("modified outside Physics helper").
   Physics.applyImpulseToPlayer(UPDRAFT_KICK)
 }
 
@@ -427,7 +419,6 @@ export function updraftSystem(dt: number): void {
   computeOrbBounds()
   updateTransitions(dt)
   updateLift()
-  updateDebugCylinders()
 
   for (let s = 0; s < NUM_SLOTS; s++) {
     const sl = slots[s]

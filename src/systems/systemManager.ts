@@ -29,7 +29,12 @@ const removedThrottled = new Set<SystemFn>()
  * The function receives dt (seconds since last frame).
  */
 export function registerSystem(fn: SystemFn): void {
-  perFrameSystems.push(fn)
+  // Cancel any pending removal of this fn so a same-window re-register wins
+  // over a deferred removeSystem() call (fixes the removal race).
+  removedPerFrame.delete(fn)
+  // Dedup: the pending entry may still be in the array (removal is deferred), so pushing
+  // unconditionally here would leave a duplicate once the removal is cancelled above.
+  if (perFrameSystems.indexOf(fn) === -1) perFrameSystems.push(fn)
 }
 
 /**
@@ -37,7 +42,12 @@ export function registerSystem(fn: SystemFn): void {
  * The function receives accumulated dt since last invocation.
  */
 export function registerThrottled(fn: SystemFn, interval: number): void {
-  throttledSystems.push({ fn, interval, accum: 0 })
+  // Cancel any pending removal of this fn so a same-window re-register wins
+  // over a deferred removeSystem() call (fixes the removal race).
+  removedThrottled.delete(fn)
+  // Dedup: the pending entry may still be in the array (removal is deferred), so pushing
+  // unconditionally here would leave a duplicate once the removal is cancelled above.
+  if (!throttledSystems.some(t => t.fn === fn)) throttledSystems.push({ fn, interval, accum: 0 })
 }
 
 /**
@@ -65,9 +75,13 @@ export function initSystemManager(): void {
       }
       removedPerFrame.clear()
     }
-    // Tick all
+    // Tick all — isolate each system so one throw doesn't kill the rest this frame
     for (let i = 0; i < perFrameSystems.length; i++) {
-      perFrameSystems[i](dt)
+      try {
+        perFrameSystems[i](dt)
+      } catch (e) {
+        console.error('[systemManager] system error:', e)
+      }
     }
   })
 
@@ -82,12 +96,20 @@ export function initSystemManager(): void {
       }
       removedThrottled.clear()
     }
-    // Tick throttled
+    // Tick throttled — isolate each system so one throw doesn't kill the rest
     for (let i = 0; i < throttledSystems.length; i++) {
       const t = throttledSystems[i]
       t.accum += dt
       if (t.accum >= t.interval) {
-        t.fn(t.accum)
+        try {
+          t.fn(t.accum)
+        } catch (e) {
+          console.error('[systemManager] system error:', e)
+        }
+        // Reset to zero. fn() receives the FULL accumulated dt, so zeroing delivers
+        // exactly the real elapsed time (sum of delivered dt == wall-clock). Subtracting
+        // only one interval while still passing the full accum double-counts the leftover,
+        // making dt-integrating systems (boost timers, spawn accumulators) run fast.
         t.accum = 0
       }
     }

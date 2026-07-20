@@ -33,6 +33,7 @@ import { room } from '../shared/messages'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
 import { setConfirmedCarrier, clearConfirmedCarrier } from '../gameState/flagHoldTime'
+import { hasFlagImmunity } from '../gameState/flagImmunityState'
 
 // Visual clone system for smooth flag carrying
 //
@@ -320,6 +321,18 @@ room.onMessage('dropForced', (data) => {
 
 // ── Flag heartbeat: periodic server broadcast to fix stale CRDT visuals ──
 let heartbeatMismatchCount = 0
+// After the heartbeat corrects a stale-CRDT visual, it becomes the authority for a short
+// window. Without this, the per-frame safety nets below read CRDT directly and revert the
+// correction on the very next frame (the heartbeat's whole purpose is defeated — this is the
+// client half of the "flag clone stuck above head, survives round resets" bug). The authority
+// yields the instant CRDT moves away from the stale value it was correcting (i.e. CRDT is
+// fresh again — either it caught up, or a new legitimate pickup/drop happened).
+let heartbeatAuthorityUntil = 0
+let heartbeatAuthorityState: FlagState | null = null
+let heartbeatAuthorityCarrier = ''
+let heartbeatStaleState: FlagState | null = null
+let heartbeatStaleCarrier = ''
+const HEARTBEAT_AUTHORITY_MS = 6000 // slightly longer than the 5s heartbeat interval
 room.onMessage('flagHeartbeat', (data) => {
   const hbState = data.state as FlagState
   const hbCarrier = (data.carrierId || '').toLowerCase()
@@ -338,8 +351,12 @@ room.onMessage('flagHeartbeat', (data) => {
   const stateMatch = crdtState === hbState
   const carrierMatch = crdtCarrier === hbCarrier
   if (stateMatch && carrierMatch) {
-    // CRDT matches server — reset mismatch counter
+    // CRDT matches server — reset mismatch counter and drop any authority. Clearing it here
+    // is what lets a legitimate event that recreates the exact stale value recover: value-based
+    // yield can't distinguish "stuck at X" from "changed back to X", but a heartbeat that finds
+    // CRDT already correct proves the override is no longer needed.
     heartbeatMismatchCount = 0
+    heartbeatAuthorityState = null
     return
   }
 
@@ -358,6 +375,14 @@ room.onMessage('flagHeartbeat', (data) => {
   console.log('[Flag] 💓 Heartbeat correction (stale ' + heartbeatMismatchCount + 'x): CRDT says', crdtState, '/', crdtCarrier.slice(0, 8),
     '— server says', hbState, '/', hbCarrier.slice(0, 8))
   heartbeatMismatchCount = 0
+
+  // Become authoritative so the per-frame safety nets defer to the server value instead of
+  // reverting this correction. Remember the stale CRDT value so we can yield once CRDT moves.
+  heartbeatAuthorityUntil = Date.now() + HEARTBEAT_AUTHORITY_MS
+  heartbeatAuthorityState = hbState
+  heartbeatAuthorityCarrier = hbCarrier
+  heartbeatStaleState = crdtState
+  heartbeatStaleCarrier = crdtCarrier
 
   // Fix clone + flag visibility only — shield is driven by CRDT state changes
   if (hbState === FlagState.Carried && hbCarrier) {
@@ -578,8 +603,10 @@ export function flagClientSystem(dt: number): void {
       carrierIdForSteal = confirmedGraceCarrier
     }
 
-    if (!amCarrying && carrierIdForSteal && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS) {
-      // Find carrier position among players
+    if (!amCarrying && carrierIdForSteal && !hasFlagImmunity(carrierIdForSteal) && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS) {
+      // Find carrier position among players (skip if the carrier is still in their pickup/steal
+      // immunity window — the server would reject the steal and the failed attempt would apply
+      // a ~2.5s local lockout, which feels like "can't knock it loose").
       const myPos = Transform.get(engine.PlayerEntity).position
       for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
         if (identity.address.toLowerCase() === carrierIdForSteal) {
@@ -759,21 +786,36 @@ export function flagClientSystem(dt: number): void {
 
     // ── Safety nets (unconditional, run every frame) ──
 
+    // Prefer the heartbeat authority over raw CRDT while it's active. The authority yields
+    // the instant CRDT moves away from the stale value it was correcting — so a fresh
+    // pickup/drop (CRDT changes) immediately wins, but a *stuck* CRDT value can't keep
+    // re-showing an orphaned clone the heartbeat already cleared.
+    if (heartbeatAuthorityState !== null && Date.now() >= heartbeatAuthorityUntil) {
+      heartbeatAuthorityState = null
+    }
+    if (heartbeatAuthorityState !== null &&
+        (flag.state !== heartbeatStaleState || flag.carrierPlayerId !== heartbeatStaleCarrier)) {
+      // CRDT is no longer stuck at the stale value — it's fresh again, drop the authority.
+      heartbeatAuthorityState = null
+    }
+    const effState = heartbeatAuthorityState !== null ? heartbeatAuthorityState : flag.state
+    const effCarrier = heartbeatAuthorityState !== null ? heartbeatAuthorityCarrier : flag.carrierPlayerId
+
     // 1. Flag IS carried — ensure clone is showing for the correct carrier
-    if (flag.state === FlagState.Carried && !needsCloneCreate) {
-      const wrongOrMissing = !cloneVisible || carryCloneCarrierId !== flag.carrierPlayerId
+    if (effState === FlagState.Carried && effCarrier && !needsCloneCreate) {
+      const wrongOrMissing = !cloneVisible || carryCloneCarrierId !== effCarrier
       if (wrongOrMissing) {
         console.log(`[Flag] ⚠️ Safety net: showing clone for correct carrier`)
         if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-        showClone(flag.carrierPlayerId)
+        showClone(effCarrier)
       }
     }
-    
+
     // 2. Flag is NOT carried — hide any lingering clone + restore flag visual
     //    Guards with pendingPickupUntil AND confirmedGraceUntil to avoid flickering
     //    during the window between server confirmation and CRDT propagation.
     const inGracePeriod = Date.now() < confirmedGraceUntil
-    if (flag.state !== FlagState.Carried && pendingPickupUntil === 0 && !inGracePeriod) {
+    if (effState !== FlagState.Carried && pendingPickupUntil === 0 && !inGracePeriod) {
       if (cloneVisible) {
         console.log('[Flag] ⚠️ Safety net: hiding orphaned clone (flag not carried)')
         hideClone()

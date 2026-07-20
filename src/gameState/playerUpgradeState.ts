@@ -20,6 +20,10 @@ let winsRetryCount = 0
 const WINS_RETRY_INTERVAL = 3
 const WINS_MAX_RETRIES = 20
 let buyPending = false
+let buyPendingAt = 0
+// A single dropped buy*Result WS message must not brick the store for the whole
+// session. Treat buyPending as expired after this timeout so buys/UI recover.
+const BUY_PENDING_TIMEOUT_MS = 8000
 let lastBuyError = ''
 let lastBuyErrorTimer = 0
 let initialEquipApplied = false
@@ -55,9 +59,21 @@ export function isWinsLoaded(): boolean {
   return winsReceived
 }
 
-/** Whether a purchase is in progress */
+/** Whether a purchase is in progress and not yet timed out */
 export function isBuyPending(): boolean {
-  return buyPending
+  return buyPending && Date.now() - buyPendingAt < BUY_PENDING_TIMEOUT_MS
+}
+
+/** Mark a purchase request as in-flight (records timestamp for the timeout guard) */
+function markBuyPending(): void {
+  buyPending = true
+  buyPendingAt = Date.now()
+}
+
+/** Clear the in-flight purchase state (called when any buy result arrives) */
+function clearBuyPending(): void {
+  buyPending = false
+  buyPendingAt = 0
 }
 
 /** Get the last buy error message (clears after 3 seconds) */
@@ -72,8 +88,8 @@ export function refreshUpgradesFromServer(): void {
 
 /** Request purchase of a boomerang */
 export function requestBuyBoomerang(color: BoomerangColor): void {
-  if (buyPending) return
-  buyPending = true
+  if (isBuyPending()) return
+  markBuyPending()
   lastBuyError = ''
   room.send('buyBoomerang', { color })
   console.log('[Store] Requesting purchase of', color)
@@ -81,8 +97,8 @@ export function requestBuyBoomerang(color: BoomerangColor): void {
 
 /** Request purchase of a music tape */
 export function requestBuyTape(tapeId: string): void {
-  if (buyPending) return
-  buyPending = true
+  if (isBuyPending()) return
+  markBuyPending()
   lastBuyError = ''
   room.send('buyTape', { tapeId })
   console.log('[Store] Requesting tape purchase:', tapeId)
@@ -90,8 +106,8 @@ export function requestBuyTape(tapeId: string): void {
 
 /** Request purchase of a trap */
 export function requestBuyTrap(trapId: string): void {
-  if (buyPending) return
-  buyPending = true
+  if (isBuyPending()) return
+  markBuyPending()
   lastBuyError = ''
   room.send('buyTrap', { trapId })
   console.log('[Store] Requesting trap purchase:', trapId)
@@ -130,7 +146,7 @@ export function initUpgradeListeners(): void {
   })
 
   room.onMessage('buyTapeResult', (data) => {
-    buyPending = false
+    clearBuyPending()
     if (data.success) {
       const updated = parseUpgrades(data.upgradesJson)
       localUpgrades = updated
@@ -145,7 +161,7 @@ export function initUpgradeListeners(): void {
   })
 
   room.onMessage('buyTrapResult', (data) => {
-    buyPending = false
+    clearBuyPending()
     if (data.success) {
       const updated = parseUpgrades(data.upgradesJson)
       localUpgrades = updated
@@ -160,7 +176,7 @@ export function initUpgradeListeners(): void {
   })
 
   room.onMessage('buyResult', (data) => {
-    buyPending = false
+    clearBuyPending()
     if (data.success) {
       // Update local state
       const updated = parseUpgrades(data.upgradesJson)

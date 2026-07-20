@@ -20,6 +20,7 @@ import { room } from '../shared/messages'
 import { playSpatialSound } from '../utils/spatialAudio'
 import { triggerEmote } from '~system/RestrictedActions'
 import { isCinematicActive } from '../gameState/cinematicState'
+import { isSpectatorMode } from './spectatorSystem'
 import { triggerHitFlash } from '../gameState/hitFlashState'
 
 // ── VFX Constants ──
@@ -361,9 +362,11 @@ export function combatClientSystem(_dt: number): void {
   }
 
   // Stagger: end freeze
+  // Guard with !isSpectatorMode() (like the trap/bomb/projectile siblings) so we
+  // don't strip the InputModifier that spectator mode is holding.
   if (staggerFreezeUntil > 0 && now >= staggerFreezeUntil) {
     staggerFreezeUntil = 0
-    if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
+    if (!isSpectatorMode() && InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
   }
 
   // Stagger: received from server

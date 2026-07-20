@@ -44,7 +44,8 @@ export type PortalOptions = {
 import { PortalData, PortalLayer } from '../shared/components'
 import { registerSystem, registerThrottled, removeSystem } from './systemManager'
 
-let _parallaxActive = false
+let _parallaxActive = false     // true while at least one portal is open (parallax should run)
+let _parallaxRegistered = false // tracks whether portalParallaxSystem is currently scheduled
 // Rotate vector (vx, vy, vz) by the inverse (conjugate) of unit quaternion (qx, qy, qz, qw).
 // This transforms a world-space vector into the local space of an entity with that rotation.
 function rotateByInverseQuat(
@@ -71,6 +72,7 @@ function portalParallaxSystem(dt: number) {
   }
   if (!anyActive) {
     removeSystem(portalParallaxSystem)
+    _parallaxRegistered = false
     _parallaxActive = false
     return
   }
@@ -118,9 +120,15 @@ function portalParallaxSystem(dt: number) {
 }
 
 function activateParallax() {
-  if (_parallaxActive) return
-  registerThrottled(portalParallaxSystem, 0.05)
   _parallaxActive = true
+  // Ensure the system is actually scheduled. The _parallaxRegistered guard keeps
+  // us from queuing a duplicate in the steady state; if the flag ever got stuck
+  // active-but-unregistered, this re-registers it (registerThrottled cancels any
+  // still-pending removal thanks to the systemManager removal-race fix).
+  if (!_parallaxRegistered) {
+    registerThrottled(portalParallaxSystem, 0.05)
+    _parallaxRegistered = true
+  }
 }
 
 const LAYER_COUNT = 18
@@ -198,7 +206,8 @@ export class Portal {
       },
       (uid) => {
         const d = PortalData.getMutable(this.root)
-        d.ajarCount = d.ajarCount.filter(id => !id.startsWith(uid))
+        // Match the exact `${entity}-` segment so entity-number prefixes don't collide
+        d.ajarCount = d.ajarCount.filter(id => !id.startsWith(`${uid}-`))
         this.evaluatePortalState()
       },
     )
@@ -213,7 +222,8 @@ export class Portal {
       },
       (uid) => {
         const d = PortalData.getMutable(this.root)
-        d.openCount = d.openCount.filter(id => !id.startsWith(uid))
+        // Match the exact `${entity}-` segment so entity-number prefixes don't collide
+        d.openCount = d.openCount.filter(id => !id.startsWith(`${uid}-`))
         this.evaluatePortalState()
       },
     )
@@ -224,7 +234,8 @@ export class Portal {
       null,
       (uid) => {
         const d = PortalData.getMutable(this.root)
-        d.closeCount = d.closeCount.filter(id => !id.startsWith(uid))
+        // Match the exact `${entity}-` segment so entity-number prefixes don't collide
+        d.closeCount = d.closeCount.filter(id => !id.startsWith(`${uid}-`))
         this.evaluatePortalState()
       },
     )

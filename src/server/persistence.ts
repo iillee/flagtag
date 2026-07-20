@@ -12,7 +12,18 @@ import {
   lastVisitorResetDay, setLastVisitorResetDay,
 } from './serverState'
 
-export async function persistFlagState(): Promise<void> {
+// Serialize flag-state writes through a single chain. The many fire-and-forget callers
+// (pickup, drop, steal, gravity) can otherwise put two Storage.set('flagState') in flight
+// and land them out of order, persisting a stale state. Each queued write reads the LIVE
+// flag state when it runs, so the last write always reflects the current state.
+let flagPersistChain: Promise<void> = Promise.resolve()
+
+export function persistFlagState(): Promise<void> {
+  flagPersistChain = flagPersistChain.then(doPersistFlagState, doPersistFlagState)
+  return flagPersistChain
+}
+
+async function doPersistFlagState(): Promise<void> {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
   const pos = Transform.get(flagEntity).position

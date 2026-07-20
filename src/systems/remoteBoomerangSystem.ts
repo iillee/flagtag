@@ -29,7 +29,6 @@ const REMOTE_CHARGE_TIME_SEC = 1.5 // must match CHARGE_TIME_SEC in projectileSy
 const REMOTE_CHARGE_PROXIMITY = 16 // meters — only render VFX within this distance
 
 interface RemoteChargeState {
-  glow: Entity
   particles: Entity[]
   startTime: number  // Date.now() when charge started — cf computed client-side
   visible: boolean // proximity-based visibility
@@ -79,11 +78,17 @@ function ensureLeftHand(playerId: string, rb: RemoteBoomerang): void {
   // Show/hide based on yellow
   if (rb.leftModel && Transform.has(rb.leftModel)) {
     Transform.getMutable(rb.leftModel).scale = rb.color === 'y' ? Vector3.create(1, 1.5, 1) : Vector3.Zero()
-    GltfContainer.createOrReplace(rb.leftModel, {
-      src: `assets/models/boomerang.${rb.color}.glb`,
-      visibleMeshesCollisionMask: 0,
-      invisibleMeshesCollisionMask: 0
-    })
+    // Only reload the GLB when the color actually changed — every playerColorChanged
+    // message runs through here, so an unconditional createOrReplace reloads the model
+    // even when nothing changed (churn).
+    const leftSrc = `assets/models/boomerang.${rb.color}.glb`
+    if (GltfContainer.getOrNull(rb.leftModel)?.src !== leftSrc) {
+      GltfContainer.createOrReplace(rb.leftModel, {
+        src: leftSrc,
+        visibleMeshesCollisionMask: 0,
+        invisibleMeshesCollisionMask: 0
+      })
+    }
   }
 }
 
@@ -143,7 +148,6 @@ function removeRemoteBoomerang(playerId: string): void {
     releaseOrbitEntity(rb.orbit.entity)
   }
   if (rb.charge) {
-    engine.removeEntity(rb.charge.glow)
     releaseChargeParticles(rb.charge.particles)
   }
   if (rb.leftModel) engine.removeEntity(rb.leftModel)
@@ -217,7 +221,7 @@ function startRemoteCharge(playerId: string): void {
 
   const particles = acquireChargeParticles(REMOTE_ORBIT_PARTICLE_COUNT, rb.model)
 
-  rb.charge = { glow: engine.addEntity(), particles, startTime: Date.now(), visible: true }
+  rb.charge = { particles, startTime: Date.now(), visible: true }
 }
 
 // Track when charge was stopped to ignore stale chargeVfx messages
@@ -227,7 +231,6 @@ const CHARGE_STOP_COOLDOWN_MS = 500
 function stopRemoteCharge(playerId: string): void {
   const rb = remoteBoomerangs.get(playerId)
   if (!rb || !rb.charge) return
-  engine.removeEntity(rb.charge.glow)
   releaseChargeParticles(rb.charge.particles)
   rb.charge = undefined
   chargeStoppedAt.set(playerId, Date.now())
@@ -249,6 +252,12 @@ function remoteChargeAnimSystem(_dt: number): void {
 
   remoteBoomerangs.forEach((rb, playerId) => {
     if (!rb.charge) return
+    // Safety: force-stop a charge whose stop message was lost. Otherwise the
+    // pooled particles leak permanently and the VFX stays stuck on the player.
+    if (now - rb.charge.startTime > REMOTE_CHARGE_TIME_SEC * 1000 + 1000) {
+      stopRemoteCharge(playerId)
+      return
+    }
     const cf = Math.min(1, (now - rb.charge.startTime) / 1000 / REMOTE_CHARGE_TIME_SEC)
 
     // Proximity check — find remote player position
@@ -277,7 +286,9 @@ function remoteChargeAnimSystem(_dt: number): void {
 
     // Orbit particles — only update material when charge phase changes (reduces setPbrMaterial calls by ~99%)
     const speed = 2 * Math.PI * (1 + cf * 5)
-    const angle = (now / 1000) * speed
+    // Phase from charge-elapsed time so the growing `speed` doesn't cause chaotic
+    // jumps (Date.now()*speed makes the base term explode as speed increases).
+    const angle = ((now - rb.charge.startTime) / 1000) * speed
     const radius = REMOTE_ORBIT_RADIUS * (0.5 + cf * 0.5)
     const particleSize = 0.03 + cf * 0.04
     const chargePhase = cf > 0.75 ? 1 : 0  // 0 = blue, 1 = gold

@@ -21,6 +21,7 @@ const SUNRISE_TIME = 21600  // 6 AM
 
 let cachedWorldSeconds = 43200 // default to noon
 let lastFetchTime = 0
+let worldTimeErrorLogged = false
 const FETCH_INTERVAL_MS = 5000 // refresh every 5 seconds
 
 /**
@@ -33,7 +34,14 @@ export function updateWorldTime(_dt?: number, _applyToSkybox?: boolean): void {
   lastFetchTime = now
   getWorldTime({}).then((result) => {
     cachedWorldSeconds = result.seconds % 86400
-  }).catch(() => {})
+  }).catch((err) => {
+    // Log the first failure only. If this keeps rejecting, the clock stays stuck at noon
+    // forever and every night feature (ghosts, night lights, night UI) silently disappears.
+    if (!worldTimeErrorLogged) {
+      worldTimeErrorLogged = true
+      console.log('[DayNight] ⚠️ getWorldTime() failed — night features will not activate:', err)
+    }
+  })
 }
 
 /** Get the current world time (0–86400). */

@@ -149,9 +149,12 @@ async function loadFlagState() {
   if (savedFlag) {
     try {
       const d = JSON.parse(savedFlag)
-      if (d.state === FlagState.Dropped || d.state === FlagState.Carried) {
+      if ((d.state === FlagState.Dropped || d.state === FlagState.Carried)
+          && Number.isFinite(d.x) && Number.isFinite(d.y) && Number.isFinite(d.z)) {
         // Sanity check: if persisted position is far from the current base
         // (e.g. after a scene move), discard it and use fresh base coords.
+        // (Non-finite coords fall through to defaults — otherwise NaN > MAX_DIST is false
+        // and the flag would restore at a NaN position, unpickable until round end.)
         const dx = d.x - FLAG_BASE_POSITION.x
         const dz = d.z - FLAG_BASE_POSITION.z
         const distFromBase = Math.sqrt(dx * dx + dz * dz)
@@ -286,12 +289,12 @@ function registerSystems() {
 
 
 /** Register the registerName handler (only handler still in server.ts). */
-const MAILBOX_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1519451678448029706/SIYadqP_pFBDTOO6gn0o8-uiwZG57Mi9C9LiVHJqHixrOeycqxTfaFSbdlbdNdjqf33E'
-let mailboxWebhook = MAILBOX_WEBHOOK_FALLBACK
+// Secret comes from the environment only — never hardcode a webhook token (public bundles).
+let mailboxWebhook = ''
 
 async function loadMailboxWebhook(): Promise<void> {
-  mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || MAILBOX_WEBHOOK_FALLBACK
-  console.log('[Server] ✅ Mailbox webhook loaded')
+  mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || ''
+  console.log(mailboxWebhook ? '[Server] ✅ Mailbox webhook loaded from env' : '[Server] ℹ️ No DISCORD_MAILBOX_WEBHOOK set — feedback disabled')
 }
 const feedbackCooldowns = new Map<string, number>()
 
@@ -337,13 +340,29 @@ function registerFeedbackHandlers(): void {
   })
 }
 
+/**
+ * Clean a client-supplied display name before it reaches synced JSON, Storage and Discord.
+ * Strips control + markdown characters, collapses whitespace, and caps length so a hostile
+ * client can't inject markdown into webhooks or bloat CRDT/Storage with a megabyte-long name.
+ */
+function sanitizePlayerName(raw: string): string {
+  return raw
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/[*_`~|\\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24)
+}
+
 function registerHandlers(): void {
   room.onMessage('registerName', (data, context) => {
     try {
       if (!context || !data.name) return
       const from = context.from.toLowerCase()
-      if (updatePlayerName(from, data.name)) {
-        console.log('[Server] registerName: updated', from.slice(0, 8), '->', data.name)
+      const name = sanitizePlayerName(data.name)
+      if (!name) return
+      if (updatePlayerName(from, name)) {
+        console.log('[Server] registerName: updated', from.slice(0, 8), '->', name)
         persistPlayerNames().catch(e => console.error('[Server] persistPlayerNames error:', e))
       }
       for (const [playerId, color] of playerBoomerangColors) {

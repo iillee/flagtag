@@ -22,7 +22,7 @@ import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard } from 
 import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset } from './leaderboard'
 
 import { awardRoundCoins } from './economy'
-import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState, computeGravityTarget } from './flagLogic'
+import { flushHoldTimeAccum, clearHoldTimeAccum, getHoldTimeAccumFor, resetGravityState, computeGravityTarget, ensureFlagEntity } from './flagLogic'
 import { activeTraps, activeProjectiles, activeOrbits, activeBombs, removeTrap, removeProjectile, removeBomb, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime, loadPlayerUpgrades, loadPlayerLifetimeWins, loadPlayerLifetimeHoldTime } from './economy'
@@ -31,12 +31,12 @@ import { capture } from './posthog'
 import { EnvVar } from '@dcl/sdk/server'
 import { isPreview } from './analytics'
 
-const ROUND_WINNER_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1519451777831796736/HQjwWnNLW0ejguz5N5FcllRTkkl_DeD3xJ-ISFLDLrV5zlxLhvqFDTeNatjB6iZpxRYa'
-let ROUND_WINNER_WEBHOOK = ROUND_WINNER_WEBHOOK_FALLBACK
+// Secret comes from the environment only — never hardcode a webhook token (public bundles).
+let ROUND_WINNER_WEBHOOK = ''
 
 export async function loadRoundWinnerWebhook(): Promise<void> {
-  ROUND_WINNER_WEBHOOK = (await EnvVar.get('DISCORD_ROUND_WINNER_WEBHOOK')) || ROUND_WINNER_WEBHOOK_FALLBACK
-  console.log('[Server] ✅ Round winner webhook loaded')
+  ROUND_WINNER_WEBHOOK = (await EnvVar.get('DISCORD_ROUND_WINNER_WEBHOOK')) || ''
+  console.log(ROUND_WINNER_WEBHOOK ? '[Server] ✅ Round winner webhook loaded from env' : '[Server] ℹ️ No DISCORD_ROUND_WINNER_WEBHOOK set — round announcements disabled')
 }
 
 // ── Lightning state ──
@@ -271,6 +271,10 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   // FAST PATH: Read scores + send respawnPlayers ASAP, cleanup after.
   // ══════════════════════════════════════════════════════════════════════
 
+  // Guard against a recycled flag entity slot: this function calls Flag.getMutable
+  // unconditionally below, which would throw (and the emergency recovery also skips it).
+  ensureFlagEntity()
+
   // ── 0. Flush hold time so final scores are accurate ──
   flushHoldTimeAccum()
 
@@ -335,9 +339,13 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   const entitiesToRemove: string[] = []
   for (const [entity, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
     const key = data.playerId.toLowerCase()
-    if (connectedNow.has(key)) {
-      PlayerFlagHoldTime.getMutable(entity).seconds = 0
-    } else {
+    // Always zero the score on the entity handle we're iterating (safe: it currently
+    // carries the component). This includes reserved-range/phantom entities that the
+    // startup reconciler skips and the removal branch below can't reach — otherwise a
+    // frozen seconds=200 phantom would "win" every round forever after a mid-round restart.
+    const m = PlayerFlagHoldTime.getMutableOrNull(entity)
+    if (m) m.seconds = 0
+    if (!connectedNow.has(key)) {
       entitiesToRemove.push(key)
     }
   }

@@ -12,16 +12,16 @@ import { Vector3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import {
   Flag, FlagState, PlayerFlagHoldTime,
-  FLAG_BASE_POSITION, getRandomSpawnPoint, SyncIds
+  FLAG_BASE_POSITION, getRandomSpawnPoint
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { persistFlagState } from './persistence'
 import {
-  flagEntity,
+  flagEntity, setFlagEntity,
   holdTimeEntities, knownPlayers, playerNames,
   lastStealTime,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
-  FLAG_GRAVITY, FLAG_MIN_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
+  FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
   getPlayerPosition
 } from './serverState'
 
@@ -169,19 +169,68 @@ export function clearHoldTimeAccum(): void {
 
 // ── Flag pickup / drop / steal ──
 
+/**
+ * The flag's authoritative world position, read from the validated Flag fields
+ * rather than its Transform. The Transform is synced but has no validateBeforeChange
+ * (it is the built-in component), so a hostile client can write it — never trust it
+ * for server-side distance checks.
+ */
+function authoritativeFlagPos(flag: { state: FlagState; baseX: number; baseY: number; baseZ: number; dropAnchorX: number; dropAnchorY: number; dropAnchorZ: number }): Vector3 {
+  return flag.state === FlagState.AtBase
+    ? Vector3.create(flag.baseX, flag.baseY, flag.baseZ)
+    : Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ)
+}
+
+/**
+ * Watchdog: if the engine has recycled the flag's entity slot and dropped its Flag
+ * component (observed for hold-time entities on long-running servers — see
+ * getOrCreateHoldTimeEntity), every flag path silently no-ops and the flag appears
+ * stuck as Carried on clients forever. Recreate the entity at base so the game recovers.
+ * Returns true if it had to recreate.
+ */
+export function ensureFlagEntity(): boolean {
+  if (Flag.getOrNull(flagEntity) !== null) return false
+  console.error('[Server] 🚨 Flag component missing — recreating flag entity at base (entity slot recycled?)')
+  try { engine.removeEntity(flagEntity) } catch { /* already gone from the engine */ }
+  const spawn = getRandomSpawnPoint()
+  const e = engine.addEntity()
+  Transform.create(e, { position: Vector3.create(spawn.x, spawn.y, spawn.z) })
+  Flag.create(e, {
+    teamId: 0, state: FlagState.AtBase, carrierPlayerId: '',
+    baseX: spawn.x, baseY: spawn.y, baseZ: spawn.z,
+    dropAnchorX: spawn.x, dropAnchorY: spawn.y, dropAnchorZ: spawn.z
+  })
+  // Point everything at the new entity BEFORE syncing so that even if syncEntity throws we
+  // don't re-enter this branch and leak a fresh entity every frame.
+  setFlagEntity(e)
+  resetGravityState()
+  // Auto-allocate the network id (NO SyncIds.FLAG): engine.removeEntity intentionally
+  // preserves the old entity's NetworkEntity for the rest of the frame, so reusing the enum
+  // id here throws "id already in use" (the same hazard getOrCreateHoldTimeEntity documents).
+  // Clients find the flag via getEntitiesWith(Flag), not a fixed sync id, so this is fine.
+  try {
+    syncEntity(e, [Transform.componentId, Flag.componentId])
+  } catch (err) {
+    console.error('[Server] ❌ Flag re-sync failed (flag will still function locally):', err)
+  }
+  return true
+}
+
 export function handlePickup(playerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
   if (flag.state !== FlagState.AtBase && flag.state !== FlagState.Dropped) return
 
   const playerPos = getPlayerPosition(playerId)
-  if (playerPos) {
-    const flagPos = Transform.get(flagEntity).position
-    const dist = Vector3.distance(playerPos, flagPos)
-    if (dist > PICKUP_RADIUS) return
-  } else {
-    console.log('[Server] ⚠️ handlePickup: no position for', playerId.slice(0, 8), '— trusting client proximity')
+  if (!playerPos) {
+    // No authoritative position yet (avatar Transform not replicated) — reject rather
+    // than trust the client, or a hostile client could pick up from anywhere. Legitimate
+    // pickups self-heal once the position replicates a moment later.
+    console.log('[Server] ⚠️ handlePickup: no position for', playerId.slice(0, 8), '— rejecting')
+    return
   }
+  const dist = Vector3.distance(playerPos, authoritativeFlagPos(flag))
+  if (dist > PICKUP_RADIUS) return
 
   // Flush any leftover hold time from a previous carrier (safety)
   flushHoldTimeAccum()
@@ -303,6 +352,7 @@ let lastHeartbeatMs = 0
 // ── Server systems ──
 
 export function flagServerSystem(dt: number): void {
+  ensureFlagEntity()
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
 
@@ -419,13 +469,19 @@ export function flagServerSystem(dt: number): void {
     }
   }
 
-  // Server only writes Transform when the flag is falling (gravity updates)
-  if (flag.state !== FlagState.Carried && flagFalling) {
+  // Re-assert the authoritative Transform whenever the flag isn't carried. This drives
+  // gravity visuals AND overwrites any hostile client Transform write (Transform has no
+  // validateBeforeChange). Only writes when the value actually changed, to avoid dirtying
+  // the synced component every frame while the flag sits still at base.
+  if (flag.state !== FlagState.Carried) {
     const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
     const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
     const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
     const t = Transform.getMutable(flagEntity)
-    t.position = Vector3.create(restX, restY, restZ)
+    const p = t.position
+    if (p.x !== restX || p.y !== restY || p.z !== restZ) {
+      t.position = Vector3.create(restX, restY, restZ)
+    }
   }
 
   // Detect carrier disconnect
@@ -538,18 +594,21 @@ export function registerFlagHandlers(): void {
       const carrierStealTime = lastStealTime.get(victimId) ?? 0
       if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
 
-      // Validate proximity with generous radius (client has fresher positions)
+      // Validate proximity with generous radius (client has fresher positions).
       const attackerPos = getPlayerPosition(attackerId)
       const carrierPos = getPlayerPosition(victimId)
-      if (attackerPos && carrierPos) {
-        const dist = Vector3.distance(attackerPos, carrierPos)
-        // Use 1.5x radius as validation — client already checked at 1x, small slack for lag
-        if (dist > PROXIMITY_STEAL_RADIUS * 1.5) {
-          console.log('[Server] 🚩 requestSteal rejected: server dist', dist.toFixed(1), 'too far (1.5x radius check)')
-          return
-        }
+      if (!attackerPos || !carrierPos) {
+        // Missing authoritative position — reject rather than trust the client, or a
+        // hostile client could steal from across the map right after connecting. The
+        // server-side checkProximitySteal still catches legitimate steals once positions replicate.
+        return
       }
-      // If either position is missing, trust the client report
+      const dist = Vector3.distance(attackerPos, carrierPos)
+      // Use 1.5x radius as validation — client already checked at 1x, small slack for lag
+      if (dist > PROXIMITY_STEAL_RADIUS * 1.5) {
+        console.log('[Server] 🚩 requestSteal rejected: server dist', dist.toFixed(1), 'too far (1.5x radius check)')
+        return
+      }
 
       console.log('[Server] 🚩 Client-requested steal:', attackerId.slice(0, 8), '<-', victimId.slice(0, 8))
       handleFlagSteal(victimId, attackerId)
@@ -564,7 +623,11 @@ export function registerFlagHandlers(): void {
       const flag = Flag.getOrNull(flagEntity)
       if (!flag || flag.state !== FlagState.Dropped) return
 
-      const newTarget = Math.max(FLAG_MIN_Y, data.y + 0.5)
+      // Clamp the client-reported ground Y to the valid terrain band. Without an upper
+      // bound a hostile client could send y=1e6 and hang the flag in the sky, unreachable
+      // until round end. NaN/Infinity are rejected outright.
+      if (!Number.isFinite(data.y)) return
+      const newTarget = Math.min(FLAG_MAX_Y, Math.max(FLAG_MIN_Y, data.y + 0.5))
       flagGravityTargetY = newTarget
 
       const currentAnchorY = flag.dropAnchorY

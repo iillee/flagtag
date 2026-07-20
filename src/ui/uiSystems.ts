@@ -4,7 +4,7 @@
  * Keeps engine.addSystem() calls out of the render file.
  * Call `registerUiSystems()` once from main() or setupUi().
  */
-import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType } from '@dcl/sdk/ecs'
+import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType, Entity } from '@dcl/sdk/ecs'
 import { registerSystem } from '../systems/systemManager'
 import { Vector3 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
@@ -40,6 +40,32 @@ import {
 import { toggleMusic } from './screens/boomboxState'
 
 let _registered = false
+
+// ── Round-end coin "cha-ching" pool ──
+// Blessing/earnings play a rapid sequence of coin sounds. Creating a fresh
+// AudioSource entity per coin leaked ~30 live entities/round and drove the
+// engine toward its ~19k create/destroy renderer break. Instead reuse a small
+// fixed pool (round-robin, capped) via AudioSource.createOrReplace like uiSounds.
+const COIN_CHIME_POOL_SIZE = 4
+const coinChimeEntities: Entity[] = []
+let coinChimeIndex = 0
+
+function playCoinChime(): void {
+  if (coinChimeEntities.length < COIN_CHIME_POOL_SIZE) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: Vector3.Zero() })
+    coinChimeEntities.push(e)
+  }
+  const entity = coinChimeEntities[coinChimeIndex % coinChimeEntities.length]
+  coinChimeIndex = (coinChimeIndex + 1) % COIN_CHIME_POOL_SIZE
+  AudioSource.createOrReplace(entity, {
+    audioClipUrl: 'assets/sounds/coin.mp3',
+    playing: true,
+    volume: 0.7,
+    loop: false,
+    global: true,
+  })
+}
 
 export function registerUiSystems() {
   if (_registered) return
@@ -98,15 +124,7 @@ export function registerUiSystems() {
         const soundsDue = Math.min(BLESSING_COIN_COUNT, Math.floor(elapsed / BLESSING_COIN_SOUND_INTERVAL) + 1)
         if (blessingState.coinSoundsPlayed < soundsDue) {
           blessingState.coinSoundsPlayed = soundsDue
-          const snd = engine.addEntity()
-          Transform.create(snd, { position: Vector3.Zero() })
-          AudioSource.create(snd, {
-            audioClipUrl: 'assets/sounds/coin.mp3',
-            playing: true,
-            volume: 0.7,
-            loop: false,
-            global: true,
-          })
+          playCoinChime()
         }
 
         if (elapsed > 4) {
@@ -168,15 +186,7 @@ export function registerUiSystems() {
           if (earnedState.coinSoundsPlayed < totalCoins && earnedState.coinSoundTimer >= COIN_SOUND_INTERVAL) {
             earnedState.coinSoundTimer -= COIN_SOUND_INTERVAL
             earnedState.coinSoundsPlayed++
-            const snd = engine.addEntity()
-            Transform.create(snd, { position: Vector3.Zero() })
-            AudioSource.create(snd, {
-              audioClipUrl: 'assets/sounds/coin.mp3',
-              playing: true,
-              volume: 0.7,
-              loop: false,
-              global: true,
-            })
+            playCoinChime()
           }
           earnedState.coinsFlyProgress = Math.min(1, earnedState.timer / totalSoundDuration)
           if (earnedState.coinsFlyProgress >= 1) {

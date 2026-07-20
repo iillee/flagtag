@@ -3,9 +3,17 @@
 import { room } from '../shared/messages'
 import {
   MUSHROOM_CX, MUSHROOM_CZ, MUSHROOM_RADIUS, MUSHROOM_CANDIDATES,
+  getPlayerPosition,
 } from './serverState'
 
 const MUSHROOM_COUNT = 1
+const MUSHROOM_PICKUP_COOLDOWN_MS = 2000
+const lastMushroomPickup = new Map<string, number>()
+
+/** Drop per-player mushroom state on disconnect (called from playerTrackingSystem). */
+export function clearPlayerMushroomState(walletAddress: string): void {
+  lastMushroomPickup.delete(walletAddress.toLowerCase())
+}
 
 interface ServerMushroom {
   id: number
@@ -55,10 +63,12 @@ export function spawnMushrooms(): void {
 
 export function registerMushroomHandlers(): void {
   // ── Mushroom position request (client asks on connect) ──
-  room.onMessage('requestMushroomPositions', (_data, _context) => {
+  room.onMessage('requestMushroomPositions', (_data, context) => {
     try {
       const remaining = activeMushrooms.filter(m => !m.pickedUp).map(mushroomToPayload)
-      room.send('mushroomPositions', { mushroomsJson: JSON.stringify(remaining) })
+      // Reply only to the requester, not the whole room.
+      const to = context ? [context.from] : undefined
+      room.send('mushroomPositions', { mushroomsJson: JSON.stringify(remaining) }, to ? { to } : undefined)
     } catch (err) { console.error('[Server] ❌ requestMushroomPositions handler error:', err) }
   })
 
@@ -67,9 +77,16 @@ export function registerMushroomHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
+      // Require a replicated server position and rate-limit, so a bot can't claim every
+      // mushroom the instant it spawns from anywhere on the map. (The exact position is
+      // resolved client-side from candidates, so precise proximity isn't checkable here.)
+      if (!getPlayerPosition(from)) return
+      const now = Date.now()
+      if (now - (lastMushroomPickup.get(from) ?? 0) < MUSHROOM_PICKUP_COOLDOWN_MS) return
       const mid = (data as any).id as number
       const mushroom = activeMushrooms.find(m => m.id === mid)
       if (!mushroom || mushroom.pickedUp) return
+      lastMushroomPickup.set(from, now)
       mushroom.pickedUp = true
       console.log('[Server] 🍄 Mushroom', mid, 'picked up by', from.slice(0, 8))
       room.send('mushroomPickedUp', { id: mid, playerId: from })
