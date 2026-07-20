@@ -135,6 +135,11 @@ let lastMonthlyPersistMs = 0
 let visitorDataDirty = false
 export function markVisitorDataDirty(): void {
   visitorDataDirty = true
+  // Also flush right now — teardown can follow the last disconnect at any moment,
+  // beating the 10s tick. If these writes fail, the dirty flag makes the next tick
+  // force-retry (persist markers are only recorded on success).
+  persistVisitorDataToStorage(true).catch(e => console.error('[Server] immediate visitor flush error:', e))
+  persistMonthlyVisitorDataToStorage(true).catch(e => console.error('[Server] immediate monthly visitor flush error:', e))
 }
 
 async function persistVisitorDataToStorage(force = false): Promise<void> {
@@ -162,9 +167,12 @@ async function persistVisitorDataToStorage(force = false): Promise<void> {
     if (json === lastPersistedVisitorJson) return
     if (now - lastVisitorPersistMs < VISITOR_PERSIST_MIN_INTERVAL_MS) return
   }
+  // Record the markers only AFTER the write lands. Recording before would cache a
+  // failed/timed-out write as "persisted": once everyone has left, the payload never
+  // changes again, so the final session totals would never be retried.
+  await persistVisitorData(json)
   lastPersistedVisitorJson = json
   lastVisitorPersistMs = now
-  await persistVisitorData(json)
 }
 
 // ── Persist monthly visitor data to Storage (no CRDT sync) ──
@@ -197,9 +205,10 @@ async function persistMonthlyVisitorDataToStorage(force = false): Promise<void> 
     if (json === lastPersistedMonthlyJson) return
     if (now - lastMonthlyPersistMs < VISITOR_PERSIST_MIN_INTERVAL_MS) return
   }
+  // Markers only after a successful write — see persistVisitorDataToStorage.
+  await storageSet('monthlyVisitorData', json)
   lastPersistedMonthlyJson = json
   lastMonthlyPersistMs = now
-  await storageSet('monthlyVisitorData', json)
   // The reset month only changes once a month — don't rewrite it on every flush.
   if (lastWrittenMonthlyResetMonth !== currentMonth) {
     await storageSet('monthlyVisitorResetMonth', currentMonth)

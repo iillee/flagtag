@@ -3,7 +3,7 @@
  */
 import { engine, InputModifier } from '@dcl/sdk/ecs'
 import {
-  charge, CHARGE_TIME_SEC, CHARGE_MIN_SPEED, CHARGE_MAX_SPEED,
+  charge, stagger, CHARGE_TIME_SEC, CHARGE_MIN_SPEED, CHARGE_MAX_SPEED,
   CHARGE_MIN_RANGE, CHARGE_MAX_RANGE
 } from './state'
 
@@ -37,6 +37,11 @@ export function applyChargeSlow(): void {
 }
 
 export function removeChargeSlow(): void {
+  // Never strip the InputModifier while a stagger stun is holding it: the charge slow
+  // and the stun share the single player InputModifier, so releasing a charge mid-stun
+  // would cancel the stun and let the player escape. The stagger-expiry path deletes
+  // the modifier itself once the stun is over.
+  if (Date.now() < stagger.until) return
   if (InputModifier.has(engine.PlayerEntity)) {
     InputModifier.deleteFrom(engine.PlayerEntity)
   }

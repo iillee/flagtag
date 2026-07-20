@@ -304,10 +304,14 @@ const lastOrbitTime = new Map<string, number>()
 // ── Action position resolution ──
 
 // How far a client-reported action position may diverge from the server's replicated
-// view (or its ~500ms position history) before we distrust it. Matches the coin-pickup
-// tolerance: generous enough for replication lag, tight enough that a hostile client
-// can't act from across the map.
-const ACTION_POS_TOLERANCE = 16
+// view (or its ~500ms position history) before we distrust it. Two tiers:
+// - FIRE (projectiles): the position is just the spawn origin — the projectile flies a
+//   client-chosen direction anyway, so a generous 16m adds little abuse surface.
+// - DROP (traps/bombs): the position IS the placement. 16m would let a hostile client
+//   pin an explosive directly onto a nearby victim, so drops get half the slack —
+//   beyond it the item falls back to the server-view position (the old behavior).
+const ACTION_POS_TOLERANCE_FIRE = 16
+const ACTION_POS_TOLERANCE_DROP = 8
 
 /**
  * The position an item action (fire/drop) should happen at. The server's replicated
@@ -319,15 +323,15 @@ const ACTION_POS_TOLERANCE = 16
  * Returns null only when the player has no replicated position at all (kept as a
  * bot/pre-sync rejection, same as before).
  */
-function resolveActionPosition(playerId: string, cx: number | undefined, cy: number | undefined, cz: number | undefined): Vector3 | null {
+function resolveActionPosition(playerId: string, cx: number | undefined, cy: number | undefined, cz: number | undefined, tolerance: number): Vector3 | null {
   const serverPos = getPlayerPosition(playerId)
   if (!serverPos) return null
   if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(cz)) return serverPos
   // (0,0,0) is the schema default for a client that had no Transform yet — treat as absent.
   if (cx === 0 && cy === 0 && cz === 0) return serverPos
   const clientPos = Vector3.create(cx as number, cy as number, cz as number)
-  if (Vector3.distance(clientPos, serverPos) <= ACTION_POS_TOLERANCE ||
-      wasWithinRadius(playerId, clientPos, ACTION_POS_TOLERANCE, 1000)) {
+  if (Vector3.distance(clientPos, serverPos) <= tolerance ||
+      wasWithinRadius(playerId, clientPos, tolerance, 1000)) {
     return clientPos
   }
   console.log('[Server] ⚠️ Client action position rejected (too far from server view) for', playerId.slice(0, 8))
@@ -374,7 +378,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     return
   }
 
-  const playerPos = resolveActionPosition(playerId, cx, cy, cz)
+  const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_DROP)
   if (!playerPos) {
     console.log('[Server] Trap denied: player position not found')
     room.send('bananaDenied', { reason: 'no_position' }, { to: [playerId] })
@@ -403,6 +407,14 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     bt.position = dropPos
     bt.scale = Vector3.create(1, 1, 1)
 
+    // Impact-explosion height is computed from the SERVER-replicated Y (with 1m jitter
+    // slack), not the client-reported one: the client position is trusted within the
+    // drop tolerance sphere, so a client at ground level could otherwise claim +8m of
+    // altitude and turn every bomb into an instant impact explosion, bypassing the
+    // fuse (the victim's counterplay window).
+    const serverView = getPlayerPosition(playerId)
+    const impactDropY = Math.min(dropPos.y, (serverView?.y ?? dropPos.y) + 1)
+
     activeBombs.push({
       entity: bombEntity,
       bombId,
@@ -410,12 +422,14 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
       droppedAtMs: now,
       falling: true,
       fallVelocity: 0,
-      // Fallback landing height is the scene FLOOR, not 0: if the client ground-raycast
-      // reply is lost (or misses and reports 0), a targetY of 0 sends the bomb ~50m
-      // under the lifted map and the huge fall distance fakes an "impact explosion".
-      targetY: SCENE_FLOOR_Y,
+      // Fallback landing height: just under the drop point (players usually drop from
+      // ground level), floored at the scene floor. A lost/missed ground-raycast reply
+      // then leaves the bomb roughly where it was dropped instead of sinking it ~50m
+      // under the lifted map — where the huge fall distance also faked an "impact
+      // explosion". The raycast reply refines this to the true ground within ~300ms.
+      targetY: Math.max(SCENE_FLOOR_Y, dropPos.y - 2),
       groundResolved: false,
-      dropY: dropPos.y,
+      dropY: impactDropY,
       exploded: false,
     })
     lastTrapDropTime.set(playerId, now)
@@ -451,9 +465,10 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     droppedAtMs: now,
     falling: true,
     fallVelocity: 0,
-    // Scene floor fallback (see the bomb equivalent) — a lost/missed ground reply must
-    // not sink the trap ~50m under the lifted map where nobody can ever trigger it.
-    targetY: SCENE_FLOOR_Y,
+    // Fallback landing height just under the drop point (see the bomb equivalent) — a
+    // lost/missed ground reply must not sink the trap under the map (or, on elevated
+    // terrain, below the walkable surface) where nobody can ever trigger it.
+    targetY: Math.max(SCENE_FLOOR_Y, dropPos.y - 2),
     groundResolved: false,
   })
   lastTrapDropTime.set(playerId, now)
@@ -652,7 +667,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     return
   }
 
-  const playerPos = resolveActionPosition(playerId, cx, cy, cz)
+  const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_FIRE)
   if (!playerPos) {
     console.log('[Server] Projectile denied: player position not found')
     return

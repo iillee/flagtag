@@ -393,15 +393,17 @@ export function coinPickupSystem(dt: number): void {
 
 
 
-  if (trackedCoins.length === 0) return
-
   // Park head-bounce rigs whose animation has finished (spatial sounds are round-robin,
-  // so they need no per-frame cleanup). No entity create/destroy happens here anymore.
+  // so they need no per-frame cleanup). MUST run before the trackedCoins early-return:
+  // with zero coins found (slow composite load) remote pickups can still mark rigs busy,
+  // and an unreachable parking loop would leave looping YOYO coins stuck over avatars.
   for (const rig of headBouncePool) {
     if (!rig.busy) continue
     rig.timer -= dt
     if (rig.timer <= 0) releaseHeadBounceRig(rig)
   }
+
+  if (trackedCoins.length === 0) return
 
   // Read synced coin state to determine which coins are on cooldown
   const cooldowns = getCooldownMap()

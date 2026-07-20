@@ -349,16 +349,21 @@ let heartbeatAuthorityState: FlagState | null = null
 let heartbeatAuthorityCarrier = ''
 let heartbeatStaleState: FlagState | null = null
 let heartbeatStaleCarrier = ''
-const HEARTBEAT_AUTHORITY_MS = 6000 // slightly longer than the 5s heartbeat interval
+// Must outlast TWO heartbeat intervals, not one: a re-correction needs 2 consecutive
+// mismatched heartbeats (10s), so a shorter authority window leaves a gap where the
+// safety nets revert to the stale CRDT and the orphaned clone flickers back.
+const HEARTBEAT_AUTHORITY_MS = 11000
 room.onMessage('flagHeartbeat', (data) => {
   const hbState = data.state as FlagState
   const hbCarrier = (data.carrierId || '').toLowerCase()
 
   // Authoritative hold total rides the heartbeat (WS) — feed the scoreboard so it can
-  // re-anchor even when PlayerFlagHoldTime CRDT updates are stalled. Guarded so an
-  // older server without the field is harmless.
-  if (hbCarrier && typeof data.carrierHoldSeconds === 'number') {
-    applyServerHoldTime(hbCarrier, data.carrierHoldSeconds)
+  // re-anchor even when PlayerFlagHoldTime CRDT updates are stalled. Reported on EVERY
+  // heartbeat (empty carrier = "nobody carries") so a stale CRDT Carried entity can't
+  // keep inflating the ex-carrier's interpolated row. Guarded so an older server
+  // without the field is harmless.
+  if (typeof data.carrierHoldSeconds === 'number') {
+    applyServerHoldTime(hbState === FlagState.Carried ? hbCarrier : '', data.carrierHoldSeconds)
   }
 
   // Read current CRDT state through getEffectiveFlag (prefers a carried entity — the one
@@ -533,6 +538,14 @@ function ensureFlagModel(): void {
       visibleMeshesCollisionMask: 0,
       invisibleMeshesCollisionMask: 0
     })
+    // Initialize visibility from the CURRENT state: after a mid-carry re-attach
+    // (server-side flag recreation) there is no Carried state-change edge to hide the
+    // banner, and safety net #1 only fixes the clone — without this the banner would
+    // render at the anchor alongside the carrier's clone until the next drop.
+    const eff = getEffectiveFlag()
+    if (eff && eff.state === FlagState.Carried && eff.carrierPlayerId) {
+      VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+    }
     flagSyncedEntity = entity
     flagModelAttached = true
     console.log('[Flag] 🚩 Created local visual child with bob/spin')

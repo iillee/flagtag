@@ -66,6 +66,11 @@ let knownCoinPositions: Map<string, { x: number; y: number; z: number }> | null 
 // tick, and permanently caching a mid-load partial scan would reject every later-loading
 // coin as "unknown id" for the life of the server.
 let lastCoinScanCount = -1
+// When lastCoinScanCount was FIRST observed. Two scans in the same tick (burst of
+// pickup requests) would trivially "agree" on a partial mid-load count — require the
+// count to have been stable for a real time window before trusting it.
+let lastCoinScanCountSinceMs = 0
+const COIN_SCAN_CONFIRM_MS = 5000
 let emptyCoinScanLogged = false
 
 // Generous slack over the client's 2.5m pickup radius: server-replicated positions lag the
@@ -99,9 +104,15 @@ function getKnownCoinPositions(): Map<string, { x: number; y: number; z: number 
   }
   if (found.size !== lastCoinScanCount) {
     // First scan at this count — don't cache yet (see lastCoinScanCount comment). This
-    // request degrades to shape-validation; the next one confirms the count and caches.
-    console.log('[Coins] Server coin scan found', found.size, 'coins — awaiting a second matching scan before caching')
+    // request degrades to shape-validation; a later one confirms the count and caches.
+    console.log('[Coins] Server coin scan found', found.size, 'coins — awaiting a stable confirming scan before caching')
     lastCoinScanCount = found.size
+    lastCoinScanCountSinceMs = Date.now()
+    return null
+  }
+  if (Date.now() - lastCoinScanCountSinceMs < COIN_SCAN_CONFIRM_MS) {
+    // Same count, but not stable for long enough — same-tick request bursts must not
+    // confirm each other while the composite may still be instantiating.
     return null
   }
   knownCoinPositions = found
@@ -122,15 +133,23 @@ export function clearPlayerEconomyState(walletAddress: string): void {
     })
   }
   coinPickupTimes.delete(key)
-  // Land any debounced balance write immediately — the server may be torn down at
-  // any moment (no shutdown signal) once the world empties.
+  // Land any debounced balance write and failed upgrade persist immediately — the
+  // server may be torn down at any moment (no shutdown signal) once the world empties.
   if (pendingBalancePersists.has(key)) queueBalancePersist(key)
+  if (pendingUpgradePersists.has(key)) queueUpgradePersist(key)
   lastBalancePersistMs.delete(key)
-  // Drop the persist chain once settled (same rejoin-safe pattern as balanceChains).
+  lastUpgradePersistMs.delete(key)
+  // Drop the persist chains once settled (same rejoin-safe pattern as balanceChains).
   const persistChain = balancePersistChains.get(key)
   if (persistChain) {
     persistChain.then(() => {
       if (balancePersistChains.get(key) === persistChain) balancePersistChains.delete(key)
+    })
+  }
+  const upgradeChain = upgradePersistChains.get(key)
+  if (upgradeChain) {
+    upgradeChain.then(() => {
+      if (upgradePersistChains.get(key) === upgradeChain) upgradePersistChains.delete(key)
     })
   }
 }
@@ -185,13 +204,16 @@ function queueBalancePersist(key: string): Promise<void> {
   const doWrite = async (): Promise<void> => {
     const amount = pendingBalancePersists.get(key)
     if (amount === undefined) return // an earlier chained write already carried the latest value
-    pendingBalancePersists.delete(key)
     try {
       await storageSet(`coins:${key}`, String(amount))
+      // Clear the pending entry only AFTER the write lands (and only if nothing newer
+      // arrived): loadPlayerCoinBalance consults this map on cache miss, so clearing
+      // before completion would let a quick-rejoin read a stale Storage balance and
+      // cache it, permanently losing the in-flight coins.
+      if (pendingBalancePersists.get(key) === amount) pendingBalancePersists.delete(key)
     } catch (err) {
       console.error('[Coins] Failed to persist balance for', key.slice(0, 8), err)
-      // Re-mark as pending (unless something newer arrived) so the periodic flusher retries.
-      if (!pendingBalancePersists.has(key)) pendingBalancePersists.set(key, amount)
+      // Entry stays pending; the periodic flusher retries with the latest value.
     }
   }
   const prev = balancePersistChains.get(key) ?? Promise.resolve()
@@ -254,15 +276,49 @@ export async function loadPlayerUpgrades(walletAddress: string): Promise<Upgrade
   return data
 }
 
+// Upgrade persists get the same pending/chain treatment as balances: a buy deducts
+// coins (retried until it lands) — if the upgrades write then times out and is never
+// retried, the player paid for an item that vanishes on their next session. The chain
+// also stops a retried older write from landing after a newer buy/equip write.
+const pendingUpgradePersists = new Map<string, string>() // latest unpersisted serialized upgrades
+const lastUpgradePersistMs = new Map<string, number>()
+const upgradePersistChains = new Map<string, Promise<void>>()
+
+function queueUpgradePersist(key: string): Promise<void> {
+  lastUpgradePersistMs.set(key, Date.now())
+  const doWrite = async (): Promise<void> => {
+    const json = pendingUpgradePersists.get(key)
+    if (json === undefined) return
+    try {
+      await storageSet(`upgrades:${key}`, json)
+      if (pendingUpgradePersists.get(key) === json) pendingUpgradePersists.delete(key)
+    } catch (err) {
+      console.error('[Upgrades] Failed to persist for', key.slice(0, 8), err)
+      // Entry stays pending; retried from coinServerSystem.
+    }
+  }
+  const prev = upgradePersistChains.get(key) ?? Promise.resolve()
+  const next = prev.then(doWrite, doWrite)
+  upgradePersistChains.set(key, next)
+  return next
+}
+
+/** Retry failed upgrade persists that are due — every coinServerSystem tick. */
+function retryDueUpgradePersists(): void {
+  if (pendingUpgradePersists.size === 0) return
+  const now = Date.now()
+  for (const key of pendingUpgradePersists.keys()) {
+    if (now - (lastUpgradePersistMs.get(key) ?? 0) >= COIN_PERSIST_MIN_INTERVAL_MS) {
+      queueUpgradePersist(key)
+    }
+  }
+}
+
 export async function savePlayerUpgrades(walletAddress: string, data: UpgradeData): Promise<void> {
   const key = walletAddress.toLowerCase()
   playerUpgradeData.set(key, data)
-
-  try {
-    await storageSet(`upgrades:${key}`, serializeUpgrades(data))
-  } catch (err) {
-    console.error('[Upgrades] Failed to persist for', key.slice(0, 8), err)
-  }
+  pendingUpgradePersists.set(key, serializeUpgrades(data))
+  await queueUpgradePersist(key)
 }
 
 
@@ -513,8 +569,10 @@ function updateCoinStateCRDT(): void {
 // ── Coin server system ──
 
 export function coinServerSystem(dt: number): void {
-  // Land any debounced balance writes that are due (independent of coin respawns).
+  // Land any debounced balance writes and failed upgrade persists that are due
+  // (independent of coin respawns).
   flushDueBalancePersists()
+  retryDueUpgradePersists()
 
   if (coinCooldowns.size === 0) return
 
@@ -720,16 +778,21 @@ export function registerEconomyHandlers(): void {
     if (!context || !data.trapId) return
     const from = context.from.toLowerCase()
     try {
-      // Strict load: abort on read failure rather than equip-and-save over unknown data.
-      const upgrades = await loadPlayerUpgrades(from)
-      if (!upgrades.traps.includes(data.trapId)) {
-        console.log('[Store] equipTrap rejected — not owned:', data.trapId, 'by', from.slice(0, 8))
-        return
-      }
+      // Serialized with buys (same per-player chain): a concurrent buy + equip during
+      // an upgrades cache miss would otherwise load two separate UpgradeData objects
+      // and the last save would silently drop the other's mutation.
+      await serializePerPlayer(from, async () => {
+        // Strict load: abort on read failure rather than equip-and-save over unknown data.
+        const upgrades = await loadPlayerUpgrades(from)
+        if (!upgrades.traps.includes(data.trapId)) {
+          console.log('[Store] equipTrap rejected — not owned:', data.trapId, 'by', from.slice(0, 8))
+          return
+        }
 
-      upgrades.equippedTrap = data.trapId
-      await savePlayerUpgrades(from, upgrades)
-      console.log('[Store] Player', from.slice(0, 8), 'equipped trap', data.trapId)
+        upgrades.equippedTrap = data.trapId
+        await savePlayerUpgrades(from, upgrades)
+        console.log('[Store] Player', from.slice(0, 8), 'equipped trap', data.trapId)
+      })
     } catch (err) {
       console.error('[Store] equipTrap error:', err)
     }
@@ -740,18 +803,21 @@ export function registerEconomyHandlers(): void {
     const from = context.from.toLowerCase()
     const color = data.color as BoomerangColor
     try {
-      // Strict load: abort on read failure rather than equip-and-save over unknown data.
-      const upgrades = await loadPlayerUpgrades(from)
-      if (!upgrades.boomerangs.includes(color)) {
-        console.log('[Store] equipBoomerang rejected — not owned:', color, 'by', from.slice(0, 8))
-        return
-      }
+      // Serialized with buys — see equipTrap.
+      await serializePerPlayer(from, async () => {
+        // Strict load: abort on read failure rather than equip-and-save over unknown data.
+        const upgrades = await loadPlayerUpgrades(from)
+        if (!upgrades.boomerangs.includes(color)) {
+          console.log('[Store] equipBoomerang rejected — not owned:', color, 'by', from.slice(0, 8))
+          return
+        }
 
-      upgrades.equipped = color
-      await savePlayerUpgrades(from, upgrades)
-      playerBoomerangColors.set(from, color)
-      room.send('playerColorChanged', { playerId: from, color })
-      console.log('[Store] Player', from.slice(0, 8), 'equipped', color)
+        upgrades.equipped = color
+        await savePlayerUpgrades(from, upgrades)
+        playerBoomerangColors.set(from, color)
+        room.send('playerColorChanged', { playerId: from, color })
+        console.log('[Store] Player', from.slice(0, 8), 'equipped', color)
+      })
     } catch (err) {
       console.error('[Store] equipBoomerang error:', err)
     }

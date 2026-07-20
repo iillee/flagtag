@@ -62,6 +62,15 @@ import { initPostHog, capture } from './posthog'
 export async function setupServer(): Promise<void> {
   console.log('[Server] Starting Flag Tag server...')
 
+  // Register the storage timeout ticker BEFORE the first storage call: the engine keeps
+  // ticking frames while setup awaits, so this protects the boot-time loads below too.
+  // Registered later (inside registerSystems) it would leave the entire setup path with
+  // zero timeout coverage — a wedged storage connection would hang the server at boot,
+  // the exact failure safeStorage exists to convert into a rejection.
+  engine.addSystem((dt: number) => {
+    try { safeStorageSystem(dt) } catch (err) { console.error('[Server] ❌ safeStorageSystem error:', err) }
+  })
+
   await loadDiscordWebhookUrl()
   await loadRoundWinnerWebhook()
   await loadMailboxWebhook()
@@ -239,8 +248,8 @@ function registerSystems() {
   const safe = (name: string, fn: (dt: number) => void) => (dt: number) => {
     try { fn(dt) } catch (err) { console.error(`[Server] ❌ ${name} error:`, err) }
   }
-  // Storage timeout ticker FIRST — it must run even if a later system misbehaves.
-  engine.addSystem(safe('safeStorageSystem', safeStorageSystem))
+  // (safeStorageSystem is registered at the very start of setupServer, before the
+  // boot-time storage loads.)
   engine.addSystem(safe('flagServerSystem', flagServerSystem))
   engine.addSystem(safe('holdTimeServerSystem', holdTimeServerSystem))
   engine.addSystem(safe('lightningServerSystem', lightningServerSystem))

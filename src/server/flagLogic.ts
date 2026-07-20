@@ -660,9 +660,14 @@ export function registerFlagHandlers(): void {
 
       // Clamp the client-reported ground Y to the valid terrain band. Without an upper
       // bound a hostile client could send y=1e6 and hang the flag in the sky, unreachable
-      // until round end. NaN/Infinity are rejected outright.
+      // until round end. NaN/Infinity are rejected outright. A ground report may RAISE
+      // the flag by at most a few meters (its legit purpose is un-burying a flag dropped
+      // inside terrain): FLAG_MAX_Y alone still sits ~60m above the highest walkable
+      // ground, so an uncapped raise would let the dropper hang the flag out of
+      // PICKUP_RADIUS reach for the rest of the round.
       if (!Number.isFinite(data.y)) return
-      const newTarget = Math.min(FLAG_MAX_Y, Math.max(FLAG_MIN_Y, data.y + 0.5))
+      const maxRaise = flag.dropAnchorY + 5
+      const newTarget = Math.min(FLAG_MAX_Y, maxRaise, Math.max(FLAG_MIN_Y, data.y + 0.5))
       flagGravityTargetY = newTarget
 
       const currentAnchorY = flag.dropAnchorY

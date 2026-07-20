@@ -21,7 +21,7 @@ import {
 import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard } from './persistence'
 import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset } from './leaderboard'
 
-import { awardRoundCoins } from './economy'
+import { awardRoundCoins, clearPlayerEconomyState } from './economy'
 import { flushHoldTimeAccum, clearHoldTimeAccum, clearHoldTimeTotals, getHoldTimeAccumFor, resetGravityState, computeGravityTarget, ensureFlagEntity } from './flagLogic'
 import { activeTraps, activeProjectiles, activeOrbits, activeBombs, removeTrap, removeProjectile, removeBomb, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
@@ -420,6 +420,12 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
 
   // ── 5b. Award coins ──
   await awardRoundCoins(players)
+  // Awards re-create per-player economy state (balance chains, pending persists) for
+  // players who disconnected mid-round; clean it up or those maps leak an entry per
+  // departed player. Also force-flushes their awarded balance.
+  for (const p of players) {
+    if (!connectedNow.has(p.userId.toLowerCase())) clearPlayerEconomyState(p.userId)
+  }
 
   // Steps 6–7d are isolated per step (and per player where it matters): storage reads
   // are strict and can reject on a timeout — one failed step must not skip the rest of
