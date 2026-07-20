@@ -20,7 +20,7 @@ import { getOrCreateHoldTimeEntity } from './flagLogic'
 import { loadPlayerCoinBalance, loadPlayerLifetimeHoldTime, clearPlayerEconomyState } from './economy'
 import { clearCombatCooldowns } from './combat'
 import { clearPlayerMushroomState } from './mushroomSystem'
-import { schedulePlayerJoinDiscord } from './analytics'
+import { schedulePlayerJoinDiscord, markVisitorDataDirty } from './analytics'
 import { capture, identify } from './posthog'
 
 // ── Player join/leave detection ──
@@ -130,6 +130,10 @@ export function playerTrackingSystem(): void {
         monthlyVisitor.totalSecondsMonth += sessionSeconds
         monthlyVisitor.sessionStartMs = 0
       }
+
+      // Session totals were just finalized — force the next visitor-stat flush past
+      // the throttle (the server can be torn down without warning once the world empties).
+      markVisitorDataDirty()
 
       // Clean up per-player maps to prevent unbounded growth
       playerLifetimeHoldTimeCache.delete(userKey)

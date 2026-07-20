@@ -128,6 +128,15 @@ let lastVisitorPersistMs = 0
 let lastPersistedMonthlyJson: string | null = null
 let lastMonthlyPersistMs = 0
 
+// Set when a visitor session ENDS (their accumulated time was just finalized). The
+// next 10s tick then persists unconditionally: the server can be torn down with NO
+// shutdown signal once the world empties, so a session's final total must not sit
+// unwritten behind the min-interval throttle for up to a minute.
+let visitorDataDirty = false
+export function markVisitorDataDirty(): void {
+  visitorDataDirty = true
+}
+
 async function persistVisitorDataToStorage(force = false): Promise<void> {
   const now = Date.now()
   const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
@@ -224,8 +233,11 @@ export function visitorTrackingServerSystem(dt: number): void {
     flushPendingJoinNotifications()
     checkVisitorDailyReset().catch(e => console.error('[Server] checkVisitorDailyReset error:', e))
     checkMonthlyVisitorReset().catch(e => console.error('[Server] checkMonthlyVisitorReset error:', e))
-    persistVisitorDataToStorage().catch(e => console.error('[Server] persistVisitorData error:', e))
-    persistMonthlyVisitorDataToStorage().catch(e => console.error('[Server] persistMonthlyVisitorData error:', e))
+    // A just-ended session forces the write through the throttle (see markVisitorDataDirty).
+    const force = visitorDataDirty
+    visitorDataDirty = false
+    persistVisitorDataToStorage(force).catch(e => console.error('[Server] persistVisitorData error:', e))
+    persistMonthlyVisitorDataToStorage(force).catch(e => console.error('[Server] persistMonthlyVisitorData error:', e))
   }
 }
 

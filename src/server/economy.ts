@@ -122,9 +122,17 @@ export function clearPlayerEconomyState(walletAddress: string): void {
     })
   }
   coinPickupTimes.delete(key)
-  // Land any debounced balance write immediately — the player may not come back.
-  flushPendingBalance(key, true)
+  // Land any debounced balance write immediately — the server may be torn down at
+  // any moment (no shutdown signal) once the world empties.
+  if (pendingBalancePersists.has(key)) queueBalancePersist(key)
   lastBalancePersistMs.delete(key)
+  // Drop the persist chain once settled (same rejoin-safe pattern as balanceChains).
+  const persistChain = balancePersistChains.get(key)
+  if (persistChain) {
+    persistChain.then(() => {
+      if (balancePersistChains.get(key) === persistChain) balancePersistChains.delete(key)
+    })
+  }
 }
 
 // ── Coin balance helpers ──
@@ -140,57 +148,88 @@ export async function loadPlayerCoinBalance(walletAddress: string): Promise<numb
   const cached = playerCoinBalances.get(key)
   if (cached !== undefined) return cached
 
+  // A debounced write may still be pending from a just-disconnected session (the
+  // disconnect cleanup deletes the cache) — it's newer than whatever Storage holds.
+  const pending = pendingBalancePersists.get(key)
+  if (pending !== undefined) {
+    playerCoinBalances.set(key, pending)
+    return pending
+  }
+
   const saved = await storageGet<string>(`coins:${key}`)
   const balance = saved ? parseInt(saved, 10) : 0
   playerCoinBalances.set(key, balance)
   return balance
 }
 
-// ── Debounced balance persistence ──
-// Coin pickups used to hit Storage on EVERY pickup (one set per coin — the single
-// biggest storage-write source during play). The in-memory cache is authoritative
-// for the session, so persist at most once per interval per player: the trailing
-// write always carries the LATEST cached value, and disconnect force-flushes.
-// Trade-off: a server crash can lose up to the interval's worth of pickups.
+// ── Balance persistence (tiered durability) ──
+// The runtime can tear the server down at ANY moment with no shutdown signal (e.g.
+// once the world empties), so durability is tiered by value:
+// - TRANSACTIONAL changes (buys, blessings, death penalties, round awards) persist
+//   immediately and are AWAITED, preserving callers' write-ordering guarantees
+//   (e.g. the blessing-used marker must land after the awarded balance).
+// - Only the high-frequency +1 coin-pickup path is debounced (trailing write within
+//   COIN_PERSIST_MIN_INTERVAL_MS), bounding worst-case teardown loss to a few
+//   seconds of pickups while eliminating the biggest storage-write source.
+// All writes for a player go through one chain so a debounced write can never land
+// after (and clobber) a newer immediate one — a timed-out storage call can complete
+// late. The pending map holds the value itself (never read back from the cache at
+// write time): playerTracking deletes the cache on disconnect before the final flush.
 const COIN_PERSIST_MIN_INTERVAL_MS = 5000
-const pendingBalancePersists = new Map<string, number>()
-// One in-flight write per player — prevents an older write landing after a newer one.
-const balancePersistInFlight = new Set<string>()
+const pendingBalancePersists = new Map<string, number>() // latest unpersisted value
 const lastBalancePersistMs = new Map<string, number>()
+const balancePersistChains = new Map<string, Promise<void>>()
 
-function flushPendingBalance(key: string, force: boolean): void {
-  if (balancePersistInFlight.has(key)) return
-  const amount = pendingBalancePersists.get(key)
-  if (amount === undefined) return
-  const now = Date.now()
-  if (!force && now - (lastBalancePersistMs.get(key) ?? 0) < COIN_PERSIST_MIN_INTERVAL_MS) return
-  pendingBalancePersists.delete(key)
-  balancePersistInFlight.add(key)
-  lastBalancePersistMs.set(key, now)
-  storageSet(`coins:${key}`, String(amount))
-    .catch(err => console.error('[Coins] Failed to persist balance for', key.slice(0, 8), err))
-    .then(() => { balancePersistInFlight.delete(key) })
+function queueBalancePersist(key: string): Promise<void> {
+  lastBalancePersistMs.set(key, Date.now())
+  const doWrite = async (): Promise<void> => {
+    const amount = pendingBalancePersists.get(key)
+    if (amount === undefined) return // an earlier chained write already carried the latest value
+    pendingBalancePersists.delete(key)
+    try {
+      await storageSet(`coins:${key}`, String(amount))
+    } catch (err) {
+      console.error('[Coins] Failed to persist balance for', key.slice(0, 8), err)
+      // Re-mark as pending (unless something newer arrived) so the periodic flusher retries.
+      if (!pendingBalancePersists.has(key)) pendingBalancePersists.set(key, amount)
+    }
+  }
+  const prev = balancePersistChains.get(key) ?? Promise.resolve()
+  const next = prev.then(doWrite, doWrite)
+  balancePersistChains.set(key, next)
+  return next
 }
 
-/** Flush debounced balance writes that are due — called every tick from coinServerSystem. */
+/** Queue writes for debounced balances whose interval elapsed — every coinServerSystem tick. */
 function flushDueBalancePersists(): void {
   if (pendingBalancePersists.size === 0) return
-  for (const key of pendingBalancePersists.keys()) flushPendingBalance(key, false)
+  const now = Date.now()
+  for (const key of pendingBalancePersists.keys()) {
+    if (now - (lastBalancePersistMs.get(key) ?? 0) >= COIN_PERSIST_MIN_INTERVAL_MS) {
+      queueBalancePersist(key)
+    }
+  }
 }
 
-export async function setPlayerCoinBalance(walletAddress: string, amount: number): Promise<void> {
+export async function setPlayerCoinBalance(walletAddress: string, amount: number, immediatePersist = true): Promise<void> {
   const key = walletAddress.toLowerCase()
   playerCoinBalances.set(key, amount)
-  // Debounced persist: writes immediately if the interval has passed, otherwise the
-  // latest value lands within COIN_PERSIST_MIN_INTERVAL_MS via coinServerSystem.
   pendingBalancePersists.set(key, amount)
-  flushPendingBalance(key, false)
+  if (immediatePersist) {
+    await queueBalancePersist(key)
+    return
+  }
+  // Debounced (coin pickups): write now if the interval already passed, otherwise
+  // coinServerSystem lands the trailing value within the interval.
+  if (Date.now() - (lastBalancePersistMs.get(key) ?? 0) >= COIN_PERSIST_MIN_INTERVAL_MS) {
+    queueBalancePersist(key)
+  }
 }
 
-export async function addPlayerCoins(walletAddress: string, amount: number): Promise<number> {
+export async function addPlayerCoins(walletAddress: string, amount: number, immediatePersist = true): Promise<number> {
   const current = await loadPlayerCoinBalance(walletAddress)
   const newBalance = Math.min(current + amount, MAX_COINS)
-  await setPlayerCoinBalance(walletAddress, newBalance)
+  await setPlayerCoinBalance(walletAddress, newBalance, immediatePersist)
   return newBalance
 }
 
@@ -606,7 +645,9 @@ export function registerEconomyHandlers(): void {
     coinCooldowns.add(coinId)
     updateCoinStateCRDT()
 
-    serializePerPlayer(from, () => addPlayerCoins(from, 1)).then(newBalance => {
+    // Debounced persist (immediatePersist: false) — the only balance path allowed to
+    // ride the debounce; worst case an abrupt teardown loses a few seconds of pickups.
+    serializePerPlayer(from, () => addPlayerCoins(from, 1, false)).then(newBalance => {
       room.send('coinPickedUp', { coinId, playerId: from, newBalance })
       console.log('[Coins] Coin picked up:', coinId, 'by', from.slice(0, 8), 'balance:', newBalance)
     }).catch(err => console.error('[Coins] Error awarding coin:', err))
