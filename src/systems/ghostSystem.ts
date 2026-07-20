@@ -37,6 +37,7 @@ interface ClientGhost {
   spawnTimer: number     // counts up from 0 to SPAWN_RISE_DURATION
   sinkTimer: number      // counts up from 0 to SPAWN_SINK_DURATION (0 = not sinking)
   sinking: boolean       // true when death sink is active
+  messageSunkAt: number  // Date.now() when a ghostKilled message set sinking (0 = not message-sunk)
 }
 
 const clientGhosts = new Map<Entity, ClientGhost>()
@@ -131,6 +132,14 @@ const pendingDeathPositions: Vector3[] = []
 
 // Max distance (squared) to associate a ghostKilled message with a live client ghost.
 const GHOST_KILL_MATCH_DIST_SQ = 4.0 * 4.0
+// Fallback match cap: CRDT positions lag on slow clients, but never map-widths. Beyond
+// this the message can't plausibly refer to that ghost, so sink nothing and let the
+// CRDT removal drive the sink when it lands.
+const GHOST_KILL_FALLBACK_MAX_DIST_SQ = 12.0 * 12.0
+// If a message-sunk ghost is still alive in the CRDT after this long, the message matched
+// the wrong visual (or referred to one already gone) — resurrect it instead of leaving it
+// frozen mid-air until it happens to die for real.
+const GHOST_MESSAGE_SINK_GRACE_MS = 3000
 
 room.onMessage('ghostKilled', (data) => {
   pendingDeathPositions.push(Vector3.create(data.x, data.y, data.z))
@@ -142,6 +151,8 @@ room.onMessage('ghostKilled', (data) => {
   // them, since sink progress only advances once a ghost leaves the CRDT.)
   let nearest: Entity | null = null
   let nearestDistSq = GHOST_KILL_MATCH_DIST_SQ
+  let nearestAny: Entity | null = null
+  let nearestAnyDistSq = Infinity
   for (const [entity, cz] of clientGhosts) {
     if (cz.sinking) continue
     const dx = cz.lastServerPos.x - data.x
@@ -152,11 +163,22 @@ room.onMessage('ghostKilled', (data) => {
       nearestDistSq = distSq
       nearest = entity
     }
+    if (distSq < nearestAnyDistSq) {
+      nearestAnyDistSq = distSq
+      nearestAny = entity
+    }
   }
+  // Fallback: if no ghost is within the strict threshold (CRDT positions can lag several
+  // meters on slow clients — exactly where the lingering-ghost bug bites), sink the
+  // nearest live ghost within a generous cap. A wrong pick isn't self-correcting — the
+  // real removal sinks the REAL ghost's entity, not this one — so the cleanup loop's
+  // GHOST_MESSAGE_SINK_GRACE_MS resurrect is what un-freezes a mis-picked ghost.
+  if (nearest === null && nearestAnyDistSq <= GHOST_KILL_FALLBACK_MAX_DIST_SQ) nearest = nearestAny
   if (nearest !== null) {
     const cz = clientGhosts.get(nearest)!
     cz.sinking = true
     cz.sinkTimer = 0
+    cz.messageSunkAt = Date.now()
     killedGhostEntities.add(nearest)
     console.log('[Ghost] Immediate sink triggered via ghostKilled message')
   }
@@ -379,6 +401,16 @@ export function ghostClientSystem(dt: number): void {
     } else {
       // Entity still in CRDT — clear from killed set so it can be created fresh
       killedGhostEntities.delete(entity)
+      // Resurrect a message-sunk ghost the CRDT still considers alive: the ghostKilled
+      // fallback picked the wrong visual (or the message raced an already-processed
+      // removal). Without this the ghost stays frozen mid-air until it dies for real —
+      // sink progress only advances once the entity leaves the CRDT.
+      if (cz.sinking && cz.messageSunkAt > 0 && Date.now() - cz.messageSunkAt > GHOST_MESSAGE_SINK_GRACE_MS) {
+        cz.sinking = false
+        cz.sinkTimer = 0
+        cz.messageSunkAt = 0
+        console.log('[Ghost] Resurrecting message-sunk ghost still alive in CRDT (wrong fallback pick)')
+      }
     }
   }
 }
@@ -409,7 +441,8 @@ function createGhostVisual(serverEntity: Entity, pos: Vector3): ClientGhost {
     dead: false,
     spawnTimer: 0,
     sinkTimer: 0,
-    sinking: false
+    sinking: false,
+    messageSunkAt: 0
   }
 }
 

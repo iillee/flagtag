@@ -2,7 +2,8 @@
  * analytics.ts — Visitor tracking, Discord webhook (player join notifications).
  */
 
-import { Storage, EnvVar } from '@dcl/sdk/server'
+import { EnvVar } from '@dcl/sdk/server'
+import { storageGet, storageSet } from './safeStorage'
 import { getRealm } from '~system/Runtime'
 import {
   visitorSessions, monthlyVisitorSessions, playerNames, isRealName,
@@ -89,7 +90,9 @@ export function flushPendingJoinNotifications(): void {
     fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
+      // allowed_mentions: names are client-supplied — a player named "@everyone" must
+      // never ping the whole Discord server.
+      body: JSON.stringify({ content, allowed_mentions: { parse: [] } })
     }).then(() => {}, () => {})
   }
 }
@@ -159,8 +162,8 @@ async function persistMonthlyVisitorDataToStorage(): Promise<void> {
   })
   .slice(0, 100)
 
-  await Storage.set('monthlyVisitorData', JSON.stringify(visitorData))
-  await Storage.set('monthlyVisitorResetMonth', currentMonth)
+  await storageSet('monthlyVisitorData', JSON.stringify(visitorData))
+  await storageSet('monthlyVisitorResetMonth', currentMonth)
 }
 
 // ── Monthly visitor reset ──
@@ -200,8 +203,8 @@ export async function restoreMonthlyVisitorData(): Promise<void> {
   let savedMonthlyVisitorData: string | null = null
   let savedMonthlyVisitorMonth: string | null = null
   try {
-    savedMonthlyVisitorData = await Storage.get<string>('monthlyVisitorData')
-    savedMonthlyVisitorMonth = await Storage.get<string>('monthlyVisitorResetMonth')
+    savedMonthlyVisitorData = await storageGet<string>('monthlyVisitorData')
+    savedMonthlyVisitorMonth = await storageGet<string>('monthlyVisitorResetMonth')
   } catch (err) {
     console.error('[Server] Failed to load monthly visitor data:', err)
   }

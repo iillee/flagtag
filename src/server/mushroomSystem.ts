@@ -66,8 +66,9 @@ export function registerMushroomHandlers(): void {
   room.onMessage('requestMushroomPositions', (_data, context) => {
     try {
       const remaining = activeMushrooms.filter(m => !m.pickedUp).map(mushroomToPayload)
-      // Reply only to the requester, not the whole room.
-      const to = context ? [context.from] : undefined
+      // Reply only to the requester, not the whole room. Lowercase to match how every
+      // other targeted send addresses players (walletBalance, blessingResult, ...).
+      const to = context ? [context.from.toLowerCase()] : undefined
       room.send('mushroomPositions', { mushroomsJson: JSON.stringify(remaining) }, to ? { to } : undefined)
     } catch (err) { console.error('[Server] ❌ requestMushroomPositions handler error:', err) }
   })

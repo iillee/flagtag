@@ -8,9 +8,14 @@ export const Messages = {
   requestDrop: Schemas.Map({ t: Schemas.Int }),
   requestSteal: Schemas.Map({ victimId: Schemas.String }),  // Client-side proximity steal prediction
   reportGroundY: Schemas.Map({ y: Schemas.Float }),
-  requestBanana: Schemas.Map({ t: Schemas.Int }),
+  // x/y/z: the sender's own position at action time. The server's replicated avatar
+  // transform can lag several meters under load, so items spawned/dropped at the server
+  // view landed where the player USED to be (hitting bystanders "regardless of aim").
+  // The server validates this against its own view before trusting it (resolveActionPosition).
+  requestBanana: Schemas.Map({ t: Schemas.Int, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   reportBananaGroundY: Schemas.Map({ bananaX: Schemas.Float, bananaZ: Schemas.Float, groundY: Schemas.Float }),
-  requestShell: Schemas.Map({ dirX: Schemas.Float, dirZ: Schemas.Float, color: Schemas.String, chargeSpeed: Schemas.Float, chargeRange: Schemas.Float, chargeScale: Schemas.Float }),
+  // x/y/z: sender position at fire time — see requestBanana comment.
+  requestShell: Schemas.Map({ dirX: Schemas.Float, dirZ: Schemas.Float, color: Schemas.String, chargeSpeed: Schemas.Float, chargeRange: Schemas.Float, chargeScale: Schemas.Float, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   reportShellWallDist: Schemas.Map({ shellId: Schemas.Float, maxDist: Schemas.Float }),
   reportShellGroundY: Schemas.Map({ shellX: Schemas.Float, shellZ: Schemas.Float, groundY: Schemas.Float }),
 
@@ -122,8 +127,10 @@ export const Messages = {
   requestBlessing: Schemas.Map({ t: Schemas.Int }),                                         // Client → Server (claim after ritual)
   blessingResult: Schemas.Map({ success: Schemas.Boolean, reason: Schemas.String, newBalance: Schemas.Int }),  // Server → Client
 
-  // Flag heartbeat (server → client, every 5s, read-only visual correction)
-  flagHeartbeat: Schemas.Map({ state: Schemas.String, carrierId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+  // Flag heartbeat (server → client, every 5s, read-only visual correction).
+  // carrierHoldSeconds: the carrier's authoritative hold total — lets the scoreboard
+  // re-anchor over WS when PlayerFlagHoldTime CRDT updates are stalled (0 when not carried).
+  flagHeartbeat: Schemas.Map({ state: Schemas.String, carrierId: Schemas.String, carrierHoldSeconds: Schemas.Float, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
 }
 
 export const room = registerMessages(Messages)

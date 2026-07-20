@@ -12,7 +12,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
-import { CoinState, COIN_PICKUP_RADIUS } from '../shared/coins'
+import { CoinState, COIN_PICKUP_RADIUS, coinIdFromPosition } from '../shared/coins'
 import { room } from '../shared/messages'
 import { setPendingRoundEarnings } from '../gameState/roundEarnings'
 import { registerDeferredBalanceApplier } from '../shared/clientState'
@@ -245,12 +245,6 @@ export function applyDeferredBalance(newBalance: number): void {
 
 // Register so UI can call via shared/clientState (avoids circular import)
 registerDeferredBalanceApplier(applyDeferredBalance)
-
-/** Generate a deterministic coin ID from position */
-function coinIdFromPosition(x: number, y: number, z: number): string {
-  // Round to 1 decimal to handle floating point, gives unique ID per placed coin
-  return `coin_${Math.round(x * 10)}_${Math.round(y * 10)}_${Math.round(z * 10)}`
-}
 
 // ── Setup: find coins after composites load ──
 

@@ -70,8 +70,14 @@ export const BOMB_COOLDOWN_SEC = 10
 export const BOMB_EXPLOSION_RADIUS = 6
 /** Bomb stagger duration (ms) — longer than banana. */
 export const BOMB_STAGGER_MS = 3000
-/** Minimum drop height to trigger impact explosion (meters). */
-export const BOMB_IMPACT_HEIGHT = 2
+/**
+ * Minimum drop height to trigger impact explosion (meters).
+ * Must clear the highest reachable jump: with the mushroom boost (1.5x jump) a normal
+ * jump peaks well above 2m, so at 2 every mid-jump bomb drop skipped the fuse and
+ * exploded on landing (reported as "bombs firing immediately with no fuse"). 6m means
+ * only deliberate high drops (updraft/ledge dives) impact-explode.
+ */
+export const BOMB_IMPACT_HEIGHT = 6
 
 // ── Ghost ──
 

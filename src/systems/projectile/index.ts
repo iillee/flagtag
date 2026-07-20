@@ -82,6 +82,18 @@ room.onMessage('shellDropped', (data) => {
   }
 })
 
+/**
+ * The sender's own position, attached to requestShell so the server spawns the
+ * projectile where the shooter actually IS — its replicated view can lag several
+ * meters under load, making boomerangs fly from the shooter's OLD position.
+ * (0,0,0) when the Transform isn't ready; the server treats that as absent.
+ */
+function myFirePositionPayload(): { x: number; y: number; z: number } {
+  if (!Transform.has(engine.PlayerEntity)) return { x: 0, y: 0, z: 0 }
+  const p = Transform.get(engine.PlayerEntity).position
+  return { x: p.x, y: p.y, z: p.z }
+}
+
 room.onMessage('shellTriggered', (data) => {
   const pos = Vector3.create(data.x, data.y, data.z)
   removeMsgProjectileVisualByThrower(data.firedBy || '', data.x, data.y, data.z, !!data.peak, data.shellId || 0)
@@ -288,7 +300,7 @@ export function triggerProjectileFromUI(): void {
     localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
     updateHandBoomerangVisibility()
     const uiRange = uiColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
-    room.send('requestShell', { dirX, dirZ, color: uiColor, chargeSpeed: CHARGE_MIN_SPEED, chargeRange: uiRange, chargeScale: 1 })
+    room.send('requestShell', { dirX, dirZ, color: uiColor, chargeSpeed: CHARGE_MIN_SPEED, chargeRange: uiRange, chargeScale: 1 , ...myFirePositionPayload() })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
@@ -328,7 +340,7 @@ export function triggerProjectileReleaseFromUI(): void {
   if (serverUp) {
     localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
     updateHandBoomerangVisibility()
-    room.send('requestShell', { dirX, dirZ, color: 'b', chargeSpeed, chargeRange, chargeScale: 1 })
+    room.send('requestShell', { dirX, dirZ, color: 'b', chargeSpeed, chargeRange, chargeScale: 1 , ...myFirePositionPayload() })
     if (Transform.has(engine.PlayerEntity)) {
       const playerPos = Transform.get(engine.PlayerEntity).position
       const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
@@ -403,7 +415,7 @@ export function projectileClientSystem(dt: number): void {
   if (yellow.secondThrowAt > 0 && now >= yellow.secondThrowAt) {
     yellow.secondThrowAt = 0
     if (serverUp) {
-      room.send('requestShell', { dirX: yellow.secondThrowDir.dirX, dirZ: yellow.secondThrowDir.dirZ, color: 'y', chargeSpeed: CHARGE_MIN_SPEED, chargeRange: CHARGE_MIN_RANGE, chargeScale: 1 })
+      room.send('requestShell', { dirX: yellow.secondThrowDir.dirX, dirZ: yellow.secondThrowDir.dirZ, color: 'y', chargeSpeed: CHARGE_MIN_SPEED, chargeRange: CHARGE_MIN_RANGE, chargeScale: 1 , ...myFirePositionPayload() })
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position
         const spawnPos = Vector3.create(playerPos.x + yellow.secondThrowDir.dirX * 1.0, playerPos.y + 0.8, playerPos.z + yellow.secondThrowDir.dirZ * 1.0)
@@ -464,7 +476,7 @@ export function projectileClientSystem(dt: number): void {
       if (serverUp) {
         localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
         updateHandBoomerangVisibility()
-        room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: speed, chargeRange: range, chargeScale: 1 })
+        room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed: speed, chargeRange: range, chargeScale: 1 , ...myFirePositionPayload() })
         if (Transform.has(engine.PlayerEntity)) {
           const playerPos = Transform.get(engine.PlayerEntity).position
           const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)
@@ -567,7 +579,7 @@ export function projectileClientSystem(dt: number): void {
     if (serverUp) {
       localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
       updateHandBoomerangVisibility()
-      room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed, chargeRange, chargeScale })
+      room.send('requestShell', { dirX, dirZ, color: currentColor, chargeSpeed, chargeRange, chargeScale , ...myFirePositionPayload() })
       if (Transform.has(engine.PlayerEntity)) {
         const playerPos = Transform.get(engine.PlayerEntity).position
         const spawnPos = Vector3.create(playerPos.x + dirX * 1.0, playerPos.y + 0.8, playerPos.z + dirZ * 1.0)

@@ -83,6 +83,19 @@ export function resetGravityState(): void {
 
 // ── Hold-time helpers ──
 
+// Shadow copy of each player's hold-time total this round, updated on every write to
+// the synced component. The synced entity can be silently wiped by entity-slot
+// recycling (getOrCreateHoldTimeEntity recreates it), and recreating at seconds:0
+// erased the player's whole round — the round leader would vanish from the round-end
+// podium/announcement. Recreated entities are seeded from here instead.
+// Cleared at round end by roundManager (via clearHoldTimeTotals).
+const holdTimeShadowTotals = new Map<string, number>()
+
+/** Reset the shadow totals for a new round (called from handleRoundEnd). */
+export function clearHoldTimeTotals(): void {
+  holdTimeShadowTotals.clear()
+}
+
 /**
  * Single entry point for creating/retrieving a PlayerFlagHoldTime entity.
  * Prevents the race condition where both playerTrackingSystem and
@@ -115,7 +128,13 @@ export function getOrCreateHoldTimeEntity(userKey: string): Entity {
   }
 
   const entity = engine.addEntity()
-  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: 0 })
+  // Seed from the shadow total — recreating at 0 would erase the player's whole round
+  // whenever their entity slot gets recycled mid-round.
+  const seededSeconds = holdTimeShadowTotals.get(key) ?? 0
+  if (seededSeconds > 0) {
+    console.log('[Server] Recreated hold-time entity for', key.slice(0, 8), 'seeded with', seededSeconds.toFixed(1), 's from shadow total')
+  }
+  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: seededSeconds })
   // Let the SDK auto-allocate the network id (no explicit enum id). An enum id
   // makes the network identity (networkId:0, entityId:enumId) — GLOBAL and shared
   // — so a per-address hash id collides (and throws "id already in use") both
@@ -144,6 +163,7 @@ export function flushHoldTimeAccum(): void {
     const mutable = PlayerFlagHoldTime.getMutableOrNull(entity)
     if (mutable) {
       mutable.seconds += holdTimeAccum
+      holdTimeShadowTotals.set(holdTimeCarrierKey, mutable.seconds)
       console.log('[Server] Flushed', holdTimeAccum.toFixed(2), 's hold time to', holdTimeCarrierKey.slice(0, 8), '(total:', mutable.seconds.toFixed(1), 's)')
     }
   }
@@ -361,9 +381,23 @@ export function flagServerSystem(dt: number): void {
   if (nowForHb - lastHeartbeatMs >= FLAG_HEARTBEAT_INTERVAL_MS) {
     lastHeartbeatMs = nowForHb
     const pos = Transform.get(flagEntity).position
+    // Piggyback the carrier's authoritative hold total (synced component + unflushed
+    // accumulator). PlayerFlagHoldTime rides the CRDT, which historically stalls under
+    // load — this WS copy lets clients re-anchor the live scoreboard even when the
+    // CRDT value is frozen (the "score resets to 0 on steal/drop" report).
+    let carrierHoldSeconds = 0
+    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+      const carrierKey = flag.carrierPlayerId.toLowerCase()
+      const holdEntity = holdTimeEntities.get(carrierKey)
+      const syncedSeconds = holdEntity !== undefined
+        ? (PlayerFlagHoldTime.getOrNull(holdEntity)?.seconds ?? 0)
+        : 0
+      carrierHoldSeconds = syncedSeconds + getHoldTimeAccumFor(carrierKey)
+    }
     room.send('flagHeartbeat', {
       state: flag.state as string,
       carrierId: flag.carrierPlayerId || '',
+      carrierHoldSeconds,
       x: pos.x,
       y: pos.y,
       z: pos.z
@@ -539,6 +573,7 @@ export function holdTimeServerSystem(dt: number): void {
   const mutable = PlayerFlagHoldTime.getMutableOrNull(entity)
   if (mutable) {
     mutable.seconds += holdTimeAccum
+    holdTimeShadowTotals.set(carrierKey, mutable.seconds)
     holdTimeAccum = 0
   }
 }

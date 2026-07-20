@@ -10,7 +10,7 @@ import {
   lastLeaderboardResetDay, setLastLeaderboardResetDay
 } from './serverState'
 import { persistLeaderboard, persistAllTimeLeaderboard } from './persistence'
-import { Storage } from '@dcl/sdk/server'
+import { storageGet, storageSet } from './safeStorage'
 import {
   LeaderboardState, AllTimeLeaderboardState
 } from '../shared/components'
@@ -102,7 +102,7 @@ export async function checkLeaderboardDailyReset(
 
   // Load last reset day from storage if not set
   if (lastLeaderboardResetDay === '') {
-    const savedResetDay = await Storage.get<string>('lastLeaderboardResetDay')
+    const savedResetDay = await storageGet<string>('lastLeaderboardResetDay')
     setLastLeaderboardResetDay(savedResetDay || currentDay)
   }
 
@@ -125,7 +125,7 @@ export async function checkLeaderboardDailyReset(
     await persistLeaderboard('[]')
 
     // Persist the reset day
-    await Storage.set('lastLeaderboardResetDay', currentDay)
+    await storageSet('lastLeaderboardResetDay', currentDay)
 
     console.log('[Server] Leaderboard reset completed')
     return true
@@ -183,7 +183,7 @@ export function updatePlayerName(userId: string, name: string): boolean {
   }
 
   // Update all-time leaderboard (compact {n,w} synced, full format in Storage)
-  Storage.get<string>('allTimeLeaderboard').then(full => {
+  storageGet<string>('allTimeLeaderboard').then(full => {
     if (!full) return
     const entries = parseLeaderboardJson(full)
     if (patchLeaderboardNames(entries, userId, name)) {

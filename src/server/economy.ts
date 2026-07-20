@@ -1,8 +1,8 @@
 /**
  * economy.ts — Coins, wallets, upgrades, store purchases, and coin respawn system.
  */
-import { engine, type Entity } from '@dcl/sdk/ecs'
-import { Storage } from '@dcl/sdk/server'
+import { engine, GltfContainer, Transform, type Entity } from '@dcl/sdk/ecs'
+import { storageGet, storageSet } from './safeStorage'
 import {
   playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache, playerLifetimeHoldTimeCache,
   playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
@@ -11,6 +11,7 @@ import {
 import {
   CoinState, COIN_RESPAWN_INTERVAL_SEC,
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
+  coinIdFromPosition,
 } from '../shared/coins'
 import {
   parseUpgrades, serializeUpgrades, BOOMERANG_STORE, MUSIC_STORE, TRAP_STORE,
@@ -52,29 +53,94 @@ const COIN_PICKUP_WINDOW_MS = 3000
 const COIN_PICKUP_MAX_IN_WINDOW = 20
 const coinPickupTimes = new Map<string, number[]>()
 
+// ── Known coin registry ──
+// The authoritative server runs the same scene runtime and loads the same static composite
+// as clients, so the real coin entities exist in the server engine too. Scan them once
+// (lazily — composite entities load async) and validate pickup ids against the real set:
+// a fabricated id (arbitrary position hash) can then never mint coins, evict real
+// cooldowns, or bloat the synced JSON. If the scan finds nothing (composite not loaded
+// yet), fall back to shape-validation only so a slow load can't brick pickups.
+let knownCoinPositions: Map<string, { x: number; y: number; z: number }> | null = null
+// Coin count seen by the previous scan (-1 = never scanned). The registry is only cached
+// once two consecutive scans agree: composite entities may instantiate over more than one
+// tick, and permanently caching a mid-load partial scan would reject every later-loading
+// coin as "unknown id" for the life of the server.
+let lastCoinScanCount = -1
+let emptyCoinScanLogged = false
+
+// Generous slack over the client's 2.5m pickup radius: server-replicated positions lag the
+// client's (a boosted player covers several meters before their transform syncs). A false
+// rejection self-heals — the client re-requests after its 5s local timeout — but feels bad,
+// so err large. The registry check above is the real gate; this only stops a parked bot
+// from claiming coins across the map.
+const COIN_SERVER_PICKUP_RADIUS = 16
+
+function getKnownCoinPositions(): Map<string, { x: number; y: number; z: number }> | null {
+  if (knownCoinPositions) return knownCoinPositions
+  const found = new Map<string, { x: number; y: number; z: number }>()
+  for (const [entity] of engine.getEntitiesWith(GltfContainer, Transform)) {
+    const src = GltfContainer.get(entity).src.toLowerCase()
+    if (!src.includes('coin_01') && !src.includes('doubloon')) continue
+    // Composite coins are unparented (parent: 0), so their own Transform position IS the
+    // world position — the same value the client hashes in coinIdFromPosition. The server
+    // never re-parents them (coinBobSpinSystem is client-only), so no parent walk needed.
+    const p = Transform.get(entity).position
+    found.set(coinIdFromPosition(p.x, p.y, p.z), { x: p.x, y: p.y, z: p.z })
+  }
+  if (found.size === 0) {
+    // Composite not loaded (yet?) — retry on the next request. Log once so a server
+    // runtime that never instantiates the composite doesn't silently lose this guard.
+    if (!emptyCoinScanLogged) {
+      emptyCoinScanLogged = true
+      console.log('[Coins] ⚠️ Server coin scan found 0 coins — falling back to shape-validation until the composite loads')
+    }
+    lastCoinScanCount = 0
+    return null
+  }
+  if (found.size !== lastCoinScanCount) {
+    // First scan at this count — don't cache yet (see lastCoinScanCount comment). This
+    // request degrades to shape-validation; the next one confirms the count and caches.
+    console.log('[Coins] Server coin scan found', found.size, 'coins — awaiting a second matching scan before caching')
+    lastCoinScanCount = found.size
+    return null
+  }
+  knownCoinPositions = found
+  console.log('[Coins] Server coin registry built:', found.size, 'coins')
+  return found
+}
+
 /** Drop per-player economy state on disconnect (called from playerTrackingSystem). */
 export function clearPlayerEconomyState(walletAddress: string): void {
   const key = walletAddress.toLowerCase()
-  balanceChains.delete(key)
+  // Delete the balance chain only once it has settled, and only if no new task was queued
+  // since (a quick rejoin queues onto the same chain). Deleting a still-pending chain would
+  // let a rejoin start a parallel chain and race the in-flight balance write.
+  const chain = balanceChains.get(key)
+  if (chain) {
+    chain.then(() => {
+      if (balanceChains.get(key) === chain) balanceChains.delete(key)
+    })
+  }
   coinPickupTimes.delete(key)
 }
 
 // ── Coin balance helpers ──
 
+/**
+ * STRICT load: a failed/timed-out read REJECTS instead of returning 0. Returning a
+ * fallback 0 here is a wallet-wipe hazard — addPlayerCoins would compute `0 + N` and
+ * persist it over the player's real stored balance. Mutating callers must let the
+ * rejection abort the operation; display callers catch and degrade.
+ */
 export async function loadPlayerCoinBalance(walletAddress: string): Promise<number> {
   const key = walletAddress.toLowerCase()
   const cached = playerCoinBalances.get(key)
   if (cached !== undefined) return cached
 
-  try {
-    const saved = await Storage.get<string>(`coins:${key}`)
-    const balance = saved ? parseInt(saved, 10) : 0
-    playerCoinBalances.set(key, balance)
-    return balance
-  } catch (err) {
-    console.error('[Coins] Failed to load balance for', key.slice(0, 8), err)
-    return 0
-  }
+  const saved = await storageGet<string>(`coins:${key}`)
+  const balance = saved ? parseInt(saved, 10) : 0
+  playerCoinBalances.set(key, balance)
+  return balance
 }
 
 export async function setPlayerCoinBalance(walletAddress: string, amount: number): Promise<void> {
@@ -82,7 +148,9 @@ export async function setPlayerCoinBalance(walletAddress: string, amount: number
   playerCoinBalances.set(key, amount)
 
   try {
-    await Storage.set(`coins:${key}`, String(amount))
+    // Cache above is authoritative for the session; a failed persist self-heals on
+    // the next balance write.
+    await storageSet(`coins:${key}`, String(amount))
   } catch (err) {
     console.error('[Coins] Failed to persist balance for', key.slice(0, 8), err)
   }
@@ -98,20 +166,22 @@ export async function addPlayerCoins(walletAddress: string, amount: number): Pro
 
 // ── Upgrade / progression helpers ──
 
+/**
+ * STRICT load: a failed/timed-out read REJECTS instead of returning empty defaults.
+ * A silent `{}` fallback is a wipe hazard on read-modify-write paths — a buy/equip
+ * would savePlayerUpgrades over the player's real owned items. Mutating callers must
+ * abort on rejection; read-only callers (trap type, upgrade display) catch and
+ * degrade to defaults at the call site.
+ */
 export async function loadPlayerUpgrades(walletAddress: string): Promise<UpgradeData> {
   const key = walletAddress.toLowerCase()
   const cached = playerUpgradeData.get(key)
   if (cached) return cached
 
-  try {
-    const saved = await Storage.get<string>(`upgrades:${key}`)
-    const data = saved ? parseUpgrades(saved) : parseUpgrades('{}')
-    playerUpgradeData.set(key, data)
-    return data
-  } catch (err) {
-    console.error('[Upgrades] Failed to load for', key.slice(0, 8), err)
-    return parseUpgrades('{}')
-  }
+  const saved = await storageGet<string>(`upgrades:${key}`)
+  const data = saved ? parseUpgrades(saved) : parseUpgrades('{}')
+  playerUpgradeData.set(key, data)
+  return data
 }
 
 export async function savePlayerUpgrades(walletAddress: string, data: UpgradeData): Promise<void> {
@@ -119,42 +189,41 @@ export async function savePlayerUpgrades(walletAddress: string, data: UpgradeDat
   playerUpgradeData.set(key, data)
 
   try {
-    await Storage.set(`upgrades:${key}`, serializeUpgrades(data))
+    await storageSet(`upgrades:${key}`, serializeUpgrades(data))
   } catch (err) {
     console.error('[Upgrades] Failed to persist for', key.slice(0, 8), err)
   }
 }
 
 
+/**
+ * STRICT load (see loadPlayerCoinBalance): rejects on read failure so
+ * addPlayerLifetimeWin can never persist `fallback0 + 1` over a real total.
+ */
 export async function loadPlayerLifetimeWins(walletAddress: string): Promise<number> {
   const key = walletAddress.toLowerCase()
   const cached = playerLifetimeWinsCache.get(key)
   if (cached !== undefined) return cached
 
+  const saved = await storageGet<string>(`lifetimeWins:${key}`)
+  let wins = saved ? parseInt(saved, 10) : 0
+
+  // Reconcile with all-time leaderboard (full format in Storage) — always take the higher value
   try {
-    const saved = await Storage.get<string>(`lifetimeWins:${key}`)
-    let wins = saved ? parseInt(saved, 10) : 0
-
-    // Reconcile with all-time leaderboard (full format in Storage) — always take the higher value
-    try {
-      const atFull = await Storage.get<string>('allTimeLeaderboard')
-      if (atFull) {
-        const atEntries: { userId: string; roundsWon: number }[] = JSON.parse(atFull)
-        const entry = atEntries.find(e => e.userId.toLowerCase() === key)
-        if (entry && entry.roundsWon > wins) {
-          console.log('[LifetimeWins] Reconciled', key.slice(0, 8), 'from', wins, 'to', entry.roundsWon, '(all-time leaderboard)')
-          wins = entry.roundsWon
-          await Storage.set(`lifetimeWins:${key}`, String(wins))
-        }
+    const atFull = await storageGet<string>('allTimeLeaderboard')
+    if (atFull) {
+      const atEntries: { userId: string; roundsWon: number }[] = JSON.parse(atFull)
+      const entry = atEntries.find(e => e.userId.toLowerCase() === key)
+      if (entry && entry.roundsWon > wins) {
+        console.log('[LifetimeWins] Reconciled', key.slice(0, 8), 'from', wins, 'to', entry.roundsWon, '(all-time leaderboard)')
+        wins = entry.roundsWon
+        await storageSet(`lifetimeWins:${key}`, String(wins))
       }
-    } catch { /* reconciliation is best-effort */ }
+    }
+  } catch { /* reconciliation is best-effort */ }
 
-    playerLifetimeWinsCache.set(key, wins)
-    return wins
-  } catch (err) {
-    console.error('[LifetimeWins] Failed to load for', key.slice(0, 8), err)
-    return 0
-  }
+  playerLifetimeWinsCache.set(key, wins)
+  return wins
 }
 
 export async function addPlayerLifetimeWin(walletAddress: string): Promise<number> {
@@ -164,7 +233,7 @@ export async function addPlayerLifetimeWin(walletAddress: string): Promise<numbe
   playerLifetimeWinsCache.set(key, newWins)
 
   try {
-    await Storage.set(`lifetimeWins:${key}`, String(newWins))
+    await storageSet(`lifetimeWins:${key}`, String(newWins))
   } catch (err) {
     console.error('[LifetimeWins] Failed to persist for', key.slice(0, 8), err)
   }
@@ -175,20 +244,19 @@ export async function addPlayerLifetimeWin(walletAddress: string): Promise<numbe
 
 // ── Lifetime flag hold time ──
 
+/**
+ * STRICT load (see loadPlayerCoinBalance): rejects on read failure so
+ * addPlayerLifetimeHoldTime can never persist a fallback-derived total.
+ */
 export async function loadPlayerLifetimeHoldTime(walletAddress: string): Promise<number> {
   const key = walletAddress.toLowerCase()
   const cached = playerLifetimeHoldTimeCache.get(key)
   if (cached !== undefined) return cached
 
-  try {
-    const saved = await Storage.get<string>(`lifetimeHoldTime:${key}`)
-    const seconds = saved ? parseFloat(saved) : 0
-    playerLifetimeHoldTimeCache.set(key, seconds)
-    return seconds
-  } catch (err) {
-    console.error('[LifetimeHoldTime] Failed to load for', key.slice(0, 8), err)
-    return 0
-  }
+  const saved = await storageGet<string>(`lifetimeHoldTime:${key}`)
+  const seconds = saved ? parseFloat(saved) : 0
+  playerLifetimeHoldTimeCache.set(key, seconds)
+  return seconds
 }
 
 export async function addPlayerLifetimeHoldTime(walletAddress: string, additionalSeconds: number): Promise<number> {
@@ -198,7 +266,7 @@ export async function addPlayerLifetimeHoldTime(walletAddress: string, additiona
   playerLifetimeHoldTimeCache.set(key, newTotal)
 
   try {
-    await Storage.set(`lifetimeHoldTime:${key}`, String(newTotal))
+    await storageSet(`lifetimeHoldTime:${key}`, String(newTotal))
   } catch (err) {
     console.error('[LifetimeHoldTime] Failed to persist for', key.slice(0, 8), err)
   }
@@ -396,7 +464,15 @@ export async function awardRoundCoins(players: { userId: string; seconds: number
     }
 
     if (coins > 0) {
-      const newBalance = await serializePerPlayer(p.userId, () => addPlayerCoins(p.userId, coins))
+      // Isolate per player: one player's failed balance read (strict load rejects on
+      // storage failure) must not abort awards for everyone after them in the loop.
+      let newBalance: number
+      try {
+        newBalance = await serializePerPlayer(p.userId, () => addPlayerCoins(p.userId, coins))
+      } catch (err) {
+        console.error('[Coins] Round award failed for', p.userId.slice(0, 8), err)
+        continue
+      }
       room.send('walletBalance', { playerId: p.userId, coins: newBalance }, { to: [p.userId] })
       const holdTimeCoins = Math.floor(p.seconds * COINS_PER_HOLD_SECOND)
       const placementBonus = (i < ROUND_PLACEMENT_BONUS.length && p.seconds > 0) ? ROUND_PLACEMENT_BONUS[i] : 0
@@ -434,15 +510,40 @@ export function registerEconomyHandlers(): void {
     }
 
     // Require a replicated server position — a bot spamming before its avatar syncs is rejected.
-    if (!getPlayerPosition(from)) return
+    const playerPos = getPlayerPosition(from)
+    if (!playerPos) return
 
     // Per-player sliding-window rate limit: a walking player picks up well under this,
     // but it caps both coin farming speed and CRDT write volume from a hostile client.
+    // Checked BEFORE the registry lookup so a spammer can't trigger repeated full-engine
+    // scans while the registry is still unbuilt, and every attempt that reaches here
+    // consumes budget (not just accepted pickups) so rejected-id spam is bounded too.
+    // A legit retry after a false rejection is one request per 5s — negligible.
     const nowMs = Date.now()
     let times = coinPickupTimes.get(from)
     if (!times) { times = []; coinPickupTimes.set(from, times) }
     while (times.length > 0 && nowMs - times[0] > COIN_PICKUP_WINDOW_MS) times.shift()
     if (times.length >= COIN_PICKUP_MAX_IN_WINDOW) return
+    times.push(nowMs)
+
+    // Validate against the real placed coins + require rough proximity. See the registry
+    // comment above: this closes fabricated-id farming entirely when the registry is
+    // available, and degrades to shape-validation while the composite is still loading.
+    const registry = getKnownCoinPositions()
+    if (registry) {
+      const coinPos = registry.get(coinId)
+      if (!coinPos) {
+        console.log('[Coins] Pickup rejected — unknown coin id:', coinId, 'from', from.slice(0, 8))
+        return
+      }
+      const dx = playerPos.x - coinPos.x
+      const dy = playerPos.y - coinPos.y
+      const dz = playerPos.z - coinPos.z
+      if (dx * dx + dy * dy + dz * dz > COIN_SERVER_PICKUP_RADIUS * COIN_SERVER_PICKUP_RADIUS) {
+        console.log('[Coins] Pickup rejected — too far from coin:', coinId, 'from', from.slice(0, 8))
+        return
+      }
+    }
 
     // Cap the cooldown set so its synced JSON can never grow unbounded. When full, evict the
     // OLDEST entry (respawning that coin early) rather than rejecting — a plain rejection would
@@ -455,7 +556,6 @@ export function registerEconomyHandlers(): void {
       }
     }
 
-    times.push(nowMs)
     coinCooldowns.add(coinId)
     updateCoinStateCRDT()
 
@@ -468,17 +568,27 @@ export function registerEconomyHandlers(): void {
   room.onMessage('requestWalletBalance', async (_data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
-    const balance = await loadPlayerCoinBalance(from)
-    room.send('walletBalance', { playerId: from, coins: balance }, { to: [from] })
-    console.log('[Coins] Sent wallet balance to', from.slice(0, 8), ':', balance)
+    try {
+      const balance = await loadPlayerCoinBalance(from)
+      room.send('walletBalance', { playerId: from, coins: balance }, { to: [from] })
+      console.log('[Coins] Sent wallet balance to', from.slice(0, 8), ':', balance)
+    } catch (err) {
+      // Send nothing on a failed read — a fallback 0 would display a wiped wallet.
+      // The client retries the request on its own timer until a balance arrives.
+      console.error('[Coins] requestWalletBalance failed for', from.slice(0, 8), err)
+    }
   })
 
   room.onMessage('requestUpgrades', async (_data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
-    const upgrades = await loadPlayerUpgrades(from)
-    const wins = await loadPlayerLifetimeWins(from)
-    const holdTime = await loadPlayerLifetimeHoldTime(from)
+    // Lenient per-field fallbacks: this is a display path, and the client gates
+    // combat on receiving SOME response (isWinsLoaded) — degrading to defaults keeps
+    // the player playable through a storage outage. Loads are strict for mutation
+    // paths only; the fallbacks here are never written back.
+    const upgrades = await loadPlayerUpgrades(from).catch(() => parseUpgrades('{}'))
+    const wins = await loadPlayerLifetimeWins(from).catch(() => 0)
+    const holdTime = await loadPlayerLifetimeHoldTime(from).catch(() => 0)
     room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins, lifetimeHoldTime: holdTime }, { to: [from] })
     console.log('[Store] Sent upgrades to', from.slice(0, 8), '- owned:', upgrades.boomerangs.join(','), 'wins:', wins, 'holdTime:', holdTime.toFixed(1))
 
@@ -521,34 +631,42 @@ export function registerEconomyHandlers(): void {
   room.onMessage('equipTrap', async (data, context) => {
     if (!context || !data.trapId) return
     const from = context.from.toLowerCase()
+    try {
+      // Strict load: abort on read failure rather than equip-and-save over unknown data.
+      const upgrades = await loadPlayerUpgrades(from)
+      if (!upgrades.traps.includes(data.trapId)) {
+        console.log('[Store] equipTrap rejected — not owned:', data.trapId, 'by', from.slice(0, 8))
+        return
+      }
 
-    const upgrades = await loadPlayerUpgrades(from)
-    if (!upgrades.traps.includes(data.trapId)) {
-      console.log('[Store] equipTrap rejected — not owned:', data.trapId, 'by', from.slice(0, 8))
-      return
+      upgrades.equippedTrap = data.trapId
+      await savePlayerUpgrades(from, upgrades)
+      console.log('[Store] Player', from.slice(0, 8), 'equipped trap', data.trapId)
+    } catch (err) {
+      console.error('[Store] equipTrap error:', err)
     }
-
-    upgrades.equippedTrap = data.trapId
-    await savePlayerUpgrades(from, upgrades)
-    console.log('[Store] Player', from.slice(0, 8), 'equipped trap', data.trapId)
   })
 
   room.onMessage('equipBoomerang', async (data, context) => {
     if (!context || !data.color) return
     const from = context.from.toLowerCase()
     const color = data.color as BoomerangColor
+    try {
+      // Strict load: abort on read failure rather than equip-and-save over unknown data.
+      const upgrades = await loadPlayerUpgrades(from)
+      if (!upgrades.boomerangs.includes(color)) {
+        console.log('[Store] equipBoomerang rejected — not owned:', color, 'by', from.slice(0, 8))
+        return
+      }
 
-    const upgrades = await loadPlayerUpgrades(from)
-    if (!upgrades.boomerangs.includes(color)) {
-      console.log('[Store] equipBoomerang rejected — not owned:', color, 'by', from.slice(0, 8))
-      return
+      upgrades.equipped = color
+      await savePlayerUpgrades(from, upgrades)
+      playerBoomerangColors.set(from, color)
+      room.send('playerColorChanged', { playerId: from, color })
+      console.log('[Store] Player', from.slice(0, 8), 'equipped', color)
+    } catch (err) {
+      console.error('[Store] equipBoomerang error:', err)
     }
-
-    upgrades.equipped = color
-    await savePlayerUpgrades(from, upgrades)
-    playerBoomerangColors.set(from, color)
-    room.send('playerColorChanged', { playerId: from, color })
-    console.log('[Store] Player', from.slice(0, 8), 'equipped', color)
   })
 
   room.onMessage('deathPenalty', async (data, context) => {
@@ -583,7 +701,7 @@ export function registerEconomyHandlers(): void {
       if (!context) return
       const from = context.from.toLowerCase()
       const today = new Date().toISOString().slice(0, 10)
-      const lastBlessing = await Storage.get<string>(`blessing:${from}`)
+      const lastBlessing = await storageGet<string>(`blessing:${from}`)
       console.log(`[Server] 🙏 checkBlessing: ${from.slice(0, 8)} | today=${today} | lastBlessing=${lastBlessing}`)
       if (lastBlessing === today) {
         room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })
@@ -605,10 +723,12 @@ export function registerEconomyHandlers(): void {
       // double-award the daily blessing before either Storage.set lands.
       const outcome = await serializePerPlayer(from, async () => {
         const today = new Date().toISOString().slice(0, 10)
-        const lastBlessing = await Storage.get<string>(`blessing:${from}`)
+        // Strict reads throughout: a timeout/failure anywhere here aborts the claim
+        // BEFORE the blessing is marked used, so the player can simply retry.
+        const lastBlessing = await storageGet<string>(`blessing:${from}`)
         if (lastBlessing === today) return { alreadyBlessed: true, newBalance: 0 }
         const bal = await addPlayerCoins(from, BLESSING_COINS)
-        await Storage.set(`blessing:${from}`, today)
+        await storageSet(`blessing:${from}`, today)
         return { alreadyBlessed: false, newBalance: bal }
       })
       if (outcome.alreadyBlessed) {

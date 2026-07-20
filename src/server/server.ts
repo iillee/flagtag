@@ -39,7 +39,8 @@ import {
 import { patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName } from './leaderboard'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
-import { Storage, EnvVar } from '@dcl/sdk/server'
+import { EnvVar } from '@dcl/sdk/server'
+import { storageGet, safeStorageSystem } from './safeStorage'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer,
   LeaderboardState, AllTimeLeaderboardState,
@@ -139,7 +140,7 @@ export async function setupServer(): Promise<void> {
 /** Load persisted flag state from Storage. Returns defaults if missing/corrupt. */
 async function loadFlagState() {
   let savedFlag: string | null = null
-  try { savedFlag = await Storage.get<string>('flagState') }
+  try { savedFlag = (await storageGet<string>('flagState')) ?? null }
   catch (err) { console.error('[Server] Failed to load flag state:', err) }
 
   let state = FlagState.AtBase
@@ -178,7 +179,7 @@ async function loadFlagState() {
 /** Create and sync all three leaderboard entities from Storage. */
 async function initLeaderboards() {
   const load = async (key: string) => {
-    try { return await Storage.get<string>(key) } catch { return null }
+    try { return await storageGet<string>(key) } catch { return null }
   }
 
   // Daily
@@ -238,6 +239,8 @@ function registerSystems() {
   const safe = (name: string, fn: (dt: number) => void) => (dt: number) => {
     try { fn(dt) } catch (err) { console.error(`[Server] ❌ ${name} error:`, err) }
   }
+  // Storage timeout ticker FIRST — it must run even if a later system misbehaves.
+  engine.addSystem(safe('safeStorageSystem', safeStorageSystem))
   engine.addSystem(safe('flagServerSystem', flagServerSystem))
   engine.addSystem(safe('holdTimeServerSystem', holdTimeServerSystem))
   engine.addSystem(safe('lightningServerSystem', lightningServerSystem))
@@ -342,13 +345,14 @@ function registerFeedbackHandlers(): void {
 
 /**
  * Clean a client-supplied display name before it reaches synced JSON, Storage and Discord.
- * Strips control + markdown characters, collapses whitespace, and caps length so a hostile
- * client can't inject markdown into webhooks or bloat CRDT/Storage with a megabyte-long name.
+ * Strips control + markdown + mention characters, collapses whitespace, and caps length so a
+ * hostile client can't inject markdown or @everyone/@here pings into webhooks, or bloat
+ * CRDT/Storage with a megabyte-long name.
  */
 function sanitizePlayerName(raw: string): string {
   return raw
     .replace(/[\u0000-\u001F\u007F]/g, '')
-    .replace(/[*_`~|\\]/g, '')
+    .replace(/[*_`~|\\@]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 24)

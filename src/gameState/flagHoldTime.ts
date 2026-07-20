@@ -138,10 +138,32 @@ export function nameResolverSystem(dt: number): void {
 let lastCarrierId = ''
 let lastCarrierSyncedSeconds = 0
 let interpolationStartTime = 0
-// Last value actually DISPLAYED for the current carrier. Used to clamp the
-// scoreboard so it never counts backwards (e.g. 15 → 13) after a CRDT stall or
-// steal chain. Reset on carrier change and on round reset.
-let lastDisplayedForCarrier = 0
+// Highest value shown for EACH player this round. Hold time only accumulates within a
+// round, so displayed rows must be monotonic until the round ends: when
+// PlayerFlagHoldTime CRDT updates stall (the documented saturation class), the raw
+// synced value can sit at 0 while interpolation was showing the real count — without
+// this clamp the row visibly resets to 0 the instant the carry ends (steal/drop/death).
+// Cleared ONLY on the WS round-end signal (cinematic snapshot), never on CRDT
+// zero-detection, which cannot distinguish "reset to 0" from "stalled at 0".
+const lastShownSeconds = new Map<string, number>()
+// When the flagHeartbeat last re-anchored interpolation with an authoritative total.
+// Guards the round-reset detection below from misreading a stalled CRDT (0) as a reset.
+let lastAuthoritativeAnchorMs = 0
+
+/**
+ * Called by flagSystem when a flagHeartbeat carries the carrier's authoritative hold
+ * total (WS path — works even when the PlayerFlagHoldTime CRDT is stalled).
+ */
+export function applyServerHoldTime(carrierId: string, seconds: number): void {
+  const key = (carrierId || '').toLowerCase()
+  if (!key || !Number.isFinite(seconds) || seconds < 0) return
+  if ((lastShownSeconds.get(key) ?? 0) < seconds) lastShownSeconds.set(key, seconds)
+  if (key === lastCarrierId && seconds > lastCarrierSyncedSeconds) {
+    lastCarrierSyncedSeconds = seconds
+    interpolationStartTime = Date.now()
+    lastAuthoritativeAnchorMs = Date.now()
+  }
+}
 
 // Server-confirmed carrier — used as fallback when CRDT Flag state is stale.
 // Set by flagSystem when pickupConfirmed arrives, cleared when CRDT catches up or drop confirmed.
@@ -190,11 +212,12 @@ export function updateHoldTimeInterpolation(): void {
   }
 
   if (currentCarrierId !== lastCarrierId) {
-    // Carrier changed — reset interpolation
+    // Carrier changed — reset interpolation. The per-player lastShownSeconds clamp is
+    // deliberately NOT touched here: it's what keeps the ex-carrier's row from
+    // collapsing to a stalled CRDT value.
     lastCarrierId = currentCarrierId
     lastCarrierSyncedSeconds = 0
     interpolationStartTime = Date.now()
-    lastDisplayedForCarrier = 0
   }
 
   if (currentCarrierId) {
@@ -207,12 +230,17 @@ export function updateHoldTimeInterpolation(): void {
     }
     // Detect round reset: if server synced value drops below our last known value,
     // the round was reset. Re-anchor interpolation to the new (lower) value.
-    if (maxSynced < lastCarrierSyncedSeconds) {
+    // Skip while a recent heartbeat anchor is active: with a stalled CRDT, maxSynced
+    // is 0 while the heartbeat anchored us to the real total — that's a stall, not a
+    // reset, and true round resets are handled by the WS respawnPlayers path anyway.
+    if (maxSynced < lastCarrierSyncedSeconds && Date.now() - lastAuthoritativeAnchorMs > 6000) {
       lastCarrierSyncedSeconds = maxSynced
       interpolationStartTime = Date.now()
-      // Round reset (seconds dropped to ~0) — clear the displayed clamp so the
-      // scoreboard can count down to the new lower value.
-      lastDisplayedForCarrier = 0
+      // A LOWER value actually arrived (CRDT is flowing, not stalled) with no recent
+      // heartbeat contradicting it — treat as a true reset: also drop the display
+      // clamp so rows can fall to the new server truth. Backstop for a client that
+      // missed the respawnPlayers round-end signal.
+      lastShownSeconds.clear()
     }
     // When server sends a new value, re-anchor our interpolation
     if (maxSynced > lastCarrierSyncedSeconds) {
@@ -230,6 +258,9 @@ export function snapshotScoresForCinematic(): void {
   // Force a fresh computation (bypass cache)
   _holdTimeCacheTime = 0
   _cinematicSnapshot = getPlayersWithHoldTimes().map(p => ({ ...p }))
+  // Round is over (WS respawnPlayers path) — the round-scoped display clamp resets
+  // AFTER the snapshot captured the best-known values, so next round starts from 0.
+  lastShownSeconds.clear()
   console.log('[FlagHoldTime] Cinematic snapshot:', _cinematicSnapshot.length, 'players')
 }
 
@@ -249,12 +280,16 @@ export function snapshotScoresFromWinners(winners: { userId: string; name: strin
       _cinematicSnapshot.push({ ...w })
     }
   }
+  // Round is over — reset the round-scoped display clamp (see snapshotScoresForCinematic).
+  lastShownSeconds.clear()
   console.log('[FlagHoldTime] Cinematic snapshot merged with server winners:', winners.length, 'updated')
 }
 
 /** Clear the cinematic snapshot (scores reset to live CRDT). */
 export function clearCinematicSnapshot(): void {
   _cinematicSnapshot = null
+  // Fresh round baseline — everything shown from here on belongs to the new round.
+  lastShownSeconds.clear()
 }
 
 /** Get frozen scores if in cinematic, null otherwise. */
@@ -303,12 +338,19 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     const interpolated = lastCarrierSyncedSeconds + elapsedSec
     // Only apply if we haven't been reset to 0 by the server mid-round
     if (carrierSynced > 0 || lastCarrierSyncedSeconds === 0) {
-      // Clamp to the last displayed value so a re-anchor after a CRDT stall or
-      // steal chain never makes the visible count go backwards.
-      const displayed = Math.max(lastDisplayedForCarrier, carrierSynced, interpolated)
-      lastDisplayedForCarrier = displayed
-      synced.set(lastCarrierId, displayed)
+      synced.set(lastCarrierId, Math.max(carrierSynced, interpolated))
     }
+  }
+
+  // Per-player monotonic clamp for the round (see lastShownSeconds): a row never
+  // shows less than we've already shown. This is what stops the "score resets to 0
+  // when the flag is stolen/dropped/carrier dies" artifact — the ex-carrier's row
+  // holds its interpolated value instead of collapsing to a stalled CRDT 0, and
+  // self-corrects upward when real values arrive (CRDT catch-up or heartbeat).
+  for (const [key, value] of synced) {
+    const shown = lastShownSeconds.get(key) ?? 0
+    if (value > shown) lastShownSeconds.set(key, value)
+    else if (shown > value) synced.set(key, shown)
   }
 
   // Build result ONLY from players currently in the scene.
