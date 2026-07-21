@@ -434,7 +434,8 @@ function createBombVisual(x: number, y: number, z: number, ownerId: string, bomb
   msgBombVisuals.push({
     entity, flameEntity, bombId, x, z, ownerId,
     createdAtMs: Date.now(),
-    falling: true, fallVelocity: 0, currentY: y, targetY: minY, minY,
+    // Fallback landing just under the drop point (raycast result overrides it)
+    falling: true, fallVelocity: 0, currentY: y, targetY: Math.max(minY, y - 2), minY,
     groundResolved: false, groundRayEntity,
     lastBlinkMs: Date.now(), blinkOn: false,
   })

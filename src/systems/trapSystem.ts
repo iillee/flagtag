@@ -495,7 +495,8 @@ function createMsgTrapVisual(x: number, y: number, z: number, ownerId: string = 
     entity: localEntity, x, z,
     ownerId,
     createdAtMs: Date.now(),
-    falling: true, fallVelocity: 0, currentY: y, targetY: minY, minY,
+    // Fallback landing just under the drop point (raycast result overrides it)
+    falling: true, fallVelocity: 0, currentY: y, targetY: Math.max(minY, y - 2), minY,
     groundResolved: false, groundRayEntity,
   })
   console.log('[Trap] 🪤 Created message-driven trap visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))

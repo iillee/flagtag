@@ -193,7 +193,7 @@ export interface ActiveTrap {
   falling: boolean
   fallVelocity: number
   targetY: number
-  minY: number  // floor clamp: SCENE_FLOOR_Y on main terrain, 0 on the interior level
+  dropY: number  // Y at drop time — reference for landing clamps (floor via dropFloorY, ceiling for ground reports)
   groundResolved: boolean
 }
 export const activeTraps: ActiveTrap[] = []
@@ -397,7 +397,8 @@ async function handleTrapDrop(playerId: string): Promise<void> {
       droppedAtMs: now,
       falling: true,
       fallVelocity: 0,
-      targetY: dropFloorY(dropPos.y),
+      // Fallback landing just under the drop point (see trap push below)
+      targetY: Math.max(dropFloorY(dropPos.y), dropPos.y - 2),
       groundResolved: false,
       dropY: dropPos.y,
       exploded: false,
@@ -435,8 +436,10 @@ async function handleTrapDrop(playerId: string): Promise<void> {
     droppedAtMs: now,
     falling: true,
     fallVelocity: 0,
-    targetY: dropFloorY(dropPos.y),
-    minY: dropFloorY(dropPos.y),
+    // Fallback landing just under the drop point (not the scene floor) so a lost
+    // ground report on elevated terrain doesn't sink the trap far below the player.
+    targetY: Math.max(dropFloorY(dropPos.y), dropPos.y - 2),
+    dropY: dropPos.y,
     groundResolved: false,
   })
   lastTrapDropTime.set(playerId, now)
@@ -1082,8 +1085,12 @@ export function registerCombatHandlers(): void {
           closest = trap
         }
       }
+      // Finite-check the client float — a NaN targetY would poison the fall loop
+      if (!Number.isFinite(data.groundY)) return
       if (closest && !closest.groundResolved) {
-        closest.targetY = Math.max(closest.minY, data.groundY)
+        // Floor: interior-aware scene floor. Ceiling: a report can't raise the
+        // trap above where it was dropped (blocks sky-parking via spoofed reports).
+        closest.targetY = Math.min(closest.dropY + 1, Math.max(dropFloorY(closest.dropY), data.groundY))
         closest.groundResolved = true
         const currentY = Transform.get(closest.entity).position.y
         if (currentY <= closest.targetY) {
@@ -1099,9 +1106,11 @@ export function registerCombatHandlers(): void {
     try {
       if (!context) return
       const bombId = data.bombId
+      if (!Number.isFinite(data.groundY)) return
       const bomb = activeBombs.find(b => b.bombId === bombId)
       if (bomb && !bomb.groundResolved) {
-        bomb.targetY = Math.max(dropFloorY(bomb.dropY), data.groundY)
+        // Floor + ceiling clamp — see reportBananaGroundY
+        bomb.targetY = Math.min(bomb.dropY + 1, Math.max(dropFloorY(bomb.dropY), data.groundY))
         bomb.groundResolved = true
         if (!bomb.exploded) {
           const currentY = Transform.get(bomb.entity).position.y
