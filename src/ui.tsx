@@ -228,7 +228,9 @@ function PlayerListUi() {
             <UiEntity uiTransform={{ width: mobile ? 420 : S(340), padding: { top: mobile ? 32 : S(24), bottom: mobile ? 32 : S(24), left: mobile ? 24 : S(20), right: mobile ? 24 : S(20) }, flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 20 : S(20) }}
               uiBackground={{ color: PANEL_BG }}
             >
-              {blessingState.alreadyUsed ? (
+              {blessingState.failedMessage ? (
+                <Label value={blessingState.failedMessage} fontSize={mobile ? 36 : S(24)} color={MUTED} font="sans-serif" />
+              ) : blessingState.alreadyUsed ? (
                 <Label value="You have already received the blessing today" fontSize={mobile ? 36 : S(24)} color={MUTED} font="sans-serif" />
               ) : (
                 <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center' }}>

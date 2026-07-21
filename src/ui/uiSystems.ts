@@ -94,10 +94,16 @@ export function registerUiSystems() {
     if (blessingState.active) {
       blessingState.timer -= dt
       if (blessingState.timer <= 0) {
-        markBlessingCompleted(true)
+        // Ritual finished — ask the server to grant it, but DON'T celebrate yet:
+        // the reward UI only plays once blessingResult confirms the award was
+        // durably committed (a failed/indeterminate transaction used to hide
+        // behind an already-played success animation). pedestalSystem owns the
+        // response and timeout handling for awaitingResult.
         blessingState.active = false
         blessingState.timer = 0
         blessingState.fadeOut = 1
+        blessingState.awaitingResult = true
+        blessingState.awaitingSince = Date.now()
         room.send('requestBlessing', { t: 0 })
       }
     }
@@ -112,9 +118,11 @@ export function registerUiSystems() {
     if (blessingState.completed) {
       const elapsed = (Date.now() - blessingState.completedAt) / 1000
 
-      if (blessingState.alreadyUsed) {
+      if (blessingState.alreadyUsed || blessingState.failedMessage) {
+        // Text-only popups (already used / ritual failed): no coin celebration.
         if (elapsed > 4) {
           blessingState.completed = false
+          blessingState.failedMessage = ''
           blessingState.coinProgress = 0
           blessingState.coinSoundsPlayed = 0
         }

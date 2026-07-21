@@ -64,6 +64,15 @@ export const blessingState = {
   fadeOut: 0,
   coinProgress: 0,
   coinSoundsPlayed: 0,
+  // Ritual finished, requestBlessing sent, waiting for blessingResult. The
+  // reward UI (chimes + flying coins) only plays once the server confirms the
+  // award durably committed — celebrating optimistically showed coins that a
+  // failed/indeterminate transaction never granted. pedestalSystem resolves
+  // this via the response or a timeout.
+  awaitingResult: false,
+  awaitingSince: 0,
+  // Non-empty = show this instead of the reward/already-used popup content.
+  failedMessage: '',
 }
 
 /** Set completed and auto-stamp completedAt when true */
