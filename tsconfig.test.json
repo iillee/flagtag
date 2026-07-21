@@ -8,6 +8,7 @@
     "src/server/actionValidation.ts",
     "src/server/coinClaimLifecycle.ts",
     "src/server/roundAccounting.ts",
+    "src/server/scoreRoundId.ts",
     "src/gameState/holdTimeScores.ts",
     "src/shared/coinIds.ts",
     "src/shared/coinLocations.ts",

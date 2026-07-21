@@ -16,7 +16,7 @@ import {
   holdTimeEntities, knownPlayers, playerNames,
   lastStealTime, playerLifetimeHoldTimeCache,
   SPLASH_DURATION_MS, roundParticipants,
-  currentScoreRoundId, setCurrentScoreRoundId,
+  currentScoreRoundId, scoreRoundSessionId, setCurrentScoreRoundId,
 } from './serverState'
 import { persistFlagState, persistLeaderboard } from './persistence'
 import {
@@ -36,6 +36,7 @@ import { EnvVar } from '@dcl/sdk/server'
 import { isPreview } from './analytics'
 import { buildRoundAwardPlayers } from './roundAccounting'
 import { mutateDailyLeaderboardAfterRecovery } from './leaderboardLifecycle'
+import { buildScoreRoundId } from './scoreRoundId'
 
 // Secret comes from the environment only — never hardcode a webhook token (public bundles).
 let ROUND_WINNER_WEBHOOK = ''
@@ -212,15 +213,16 @@ export function countdownServerSystem(): void {
     console.log('[Server] ⏰ Round end! Triggered at roundEndTimeMs:', new Date(timer.roundEndTimeMs).toISOString(), `(${msAfter}ms after)`)
     
     const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
+    const nextScoreRoundId = buildScoreRoundId(scoreRoundSessionId, nextBoundary)
     const mutable = CountdownTimer.getMutable(countdownEntity)
     mutable.roundEndTimeMs = nextBoundary
     
     console.log('[Server] Next round will end at:', new Date(nextBoundary).toISOString())
     
-    handleRoundEnd(timer.roundEndTimeMs, String(nextBoundary)).catch((err) => {
+    handleRoundEnd(timer.roundEndTimeMs, nextScoreRoundId).catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
       try {
-        setCurrentScoreRoundId(String(nextBoundary))
+        setCurrentScoreRoundId(nextScoreRoundId)
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried) {
           const mutable = Flag.getMutable(flagEntity)
