@@ -1,4 +1,8 @@
-import { mergeMonotonicHoldTimes } from '../src/gameState/holdTimeScores'
+import {
+  mergeMonotonicHoldTimes,
+  resolveInterpolationCarrier,
+  type InterpolationCarrierResolution
+} from '../src/gameState/holdTimeScores'
 
 describe('live scoreboard score merging', () => {
   describe('when an authoritative remote score has no replicated entity', () => {
@@ -58,6 +62,52 @@ describe('live scoreboard score merging', () => {
 
     it('should remember the newer replicated score', () => {
       expect(authoritative.get('player-a')).toBe(9)
+    })
+  })
+
+  describe('when CRDT still names the previous carrier after a steal', () => {
+    let resolution: InterpolationCarrierResolution
+    let nowMs: number
+
+    beforeEach(() => {
+      nowMs = 10_000
+      resolution = resolveInterpolationCarrier('previous-carrier', 'confirmed-carrier', 9_000, nowMs)
+    })
+
+    afterEach(() => {
+      resolution = { carrierId: '', confirmationExpired: false }
+      nowMs = 0
+    })
+
+    it('should use the recently confirmed carrier', () => {
+      expect(resolution.carrierId).toBe('confirmed-carrier')
+    })
+
+    it('should keep the confirmation active', () => {
+      expect(resolution.confirmationExpired).toBe(false)
+    })
+  })
+
+  describe('when the server confirmation has expired', () => {
+    let resolution: InterpolationCarrierResolution
+    let nowMs: number
+
+    beforeEach(() => {
+      nowMs = 20_000
+      resolution = resolveInterpolationCarrier('replicated-carrier', 'old-confirmed-carrier', 10_000, nowMs)
+    })
+
+    afterEach(() => {
+      resolution = { carrierId: '', confirmationExpired: false }
+      nowMs = 0
+    })
+
+    it('should return to the replicated carrier', () => {
+      expect(resolution.carrierId).toBe('replicated-carrier')
+    })
+
+    it('should mark the old confirmation as expired', () => {
+      expect(resolution.confirmationExpired).toBe(true)
     })
   })
 })

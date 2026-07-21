@@ -2,7 +2,7 @@ import { engine, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { PlayerFlagHoldTime, Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
-import { mergeMonotonicHoldTimes } from './holdTimeScores'
+import { mergeMonotonicHoldTimes, resolveInterpolationCarrier } from './holdTimeScores'
 
 /** Players in the scene (userId -> display name). Updated via onEnterScene / onLeaveScene. */
 const playersInScene = new Map<string, string>()
@@ -243,16 +243,19 @@ export function updateHoldTimeInterpolation(): void {
     break
   }
 
-  // If CRDT doesn't show a carrier but the server confirmed one recently (< 3s ago),
-  // trust the confirmation so interpolation doesn't reset during the CRDT gap.
-  if (!currentCarrierId && confirmedCarrierIdForInterpolation) {
-    if (Date.now() - confirmedCarrierTimestamp < 3000) {
-      currentCarrierId = confirmedCarrierIdForInterpolation
-    } else {
-      // Grace expired — clear stale confirmation
-      confirmedCarrierIdForInterpolation = ''
-      confirmedCarrierTimestamp = 0
-    }
+  // A recent server confirmation overrides CRDT even when CRDT still names a
+  // DIFFERENT carrier. This is the normal stale-replication shape during a steal;
+  // using confirmation only for an empty CRDT value keeps crediting the victim.
+  const carrierResolution = resolveInterpolationCarrier(
+    currentCarrierId,
+    confirmedCarrierIdForInterpolation,
+    confirmedCarrierTimestamp,
+    Date.now()
+  )
+  currentCarrierId = carrierResolution.carrierId
+  if (carrierResolution.confirmationExpired) {
+    confirmedCarrierIdForInterpolation = ''
+    confirmedCarrierTimestamp = 0
   }
 
   if (currentCarrierId !== lastCarrierId) {

@@ -390,7 +390,7 @@ room.onMessage('flagHeartbeat', (data) => {
   // Don't override during pending pickup or grace period
   if (pendingPickupUntil > 0 || Date.now() < confirmedGraceUntil) return
 
-  // Require 2 consecutive mismatches (10s) before correcting —
+  // Require 2 consecutive mismatches (about 2s) before correcting —
   // brief CRDT propagation delays are normal, don't fight them.
   heartbeatMismatchCount++
   if (heartbeatMismatchCount < 2) {
