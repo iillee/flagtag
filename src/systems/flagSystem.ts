@@ -350,9 +350,9 @@ let heartbeatAuthorityCarrier = ''
 let heartbeatStaleState: FlagState | null = null
 let heartbeatStaleCarrier = ''
 // Must outlast TWO heartbeat intervals, not one: a re-correction needs 2 consecutive
-// mismatched heartbeats (10s), so a shorter authority window leaves a gap where the
+// mismatched heartbeats (2s), so a shorter authority window leaves a gap where the
 // safety nets revert to the stale CRDT and the orphaned clone flickers back.
-const HEARTBEAT_AUTHORITY_MS = 11000
+const HEARTBEAT_AUTHORITY_MS = 2500
 room.onMessage('flagHeartbeat', (data) => {
   const hbState = data.state as FlagState
   const hbCarrier = (data.carrierId || '').toLowerCase()

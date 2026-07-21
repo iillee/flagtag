@@ -398,7 +398,9 @@ export function checkProximitySteal(): void {
 }
 
 // ── Flag heartbeat: periodic WS broadcast so clients can self-correct stale CRDT ──
-const FLAG_HEARTBEAT_INTERVAL_MS = 5000
+// This is also the live scoreboard's reliable transport when dynamic
+// PlayerFlagHoldTime entities stall. Match the displayed score cadence.
+const FLAG_HEARTBEAT_INTERVAL_MS = 1000
 let lastHeartbeatMs = 0
 
 // ── Server systems ──
@@ -408,7 +410,8 @@ export function flagServerSystem(dt: number): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
 
-  // Heartbeat: broadcast flag state every 5s so clients can fix stale visuals
+  // Heartbeat: broadcast flag state every second so clients can fix stale visuals
+  // and keep every player's live score authoritative.
   const nowForHb = Date.now()
   if (nowForHb - lastHeartbeatMs >= FLAG_HEARTBEAT_INTERVAL_MS) {
     lastHeartbeatMs = nowForHb

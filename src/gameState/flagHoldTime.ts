@@ -2,6 +2,7 @@ import { engine, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
 import { PlayerFlagHoldTime, Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
+import { mergeMonotonicHoldTimes } from './holdTimeScores'
 
 /** Players in the scene (userId -> display name). Updated via onEnterScene / onLeaveScene. */
 const playersInScene = new Map<string, string>()
@@ -156,6 +157,11 @@ let serverReportsNoCarrierUntil = 0
 // Edge detection for the synced countdown's round-end flag (round-end clamp backstop).
 let prevRoundEndTriggered = false
 
+// Server-confirmed carrier — used as fallback when CRDT Flag state is stale.
+// Refreshed by both pickupConfirmed and the authoritative heartbeat.
+let confirmedCarrierIdForInterpolation = ''
+let confirmedCarrierTimestamp = 0
+
 /**
  * Called by flagSystem on every flagHeartbeat with the server's authoritative view:
  * the carrier ('' when nobody carries) and their hold total (WS path — works even
@@ -167,22 +173,30 @@ export function applyServerHoldTime(carrierId: string, seconds: number): void {
     // Server says nobody is carrying: suppress interpolation for any stale
     // CRDT-derived carrier until the next heartbeat can say otherwise.
     serverReportsNoCarrierUntil = Date.now() + 6000
+    confirmedCarrierIdForInterpolation = ''
+    confirmedCarrierTimestamp = 0
+    lastCarrierId = ''
+    lastCarrierSyncedSeconds = 0
     return
   }
   serverReportsNoCarrierUntil = 0
   if (!Number.isFinite(seconds) || seconds < 0) return
+  const now = Date.now()
+  confirmedCarrierIdForInterpolation = key
+  confirmedCarrierTimestamp = now
   if ((lastShownSeconds.get(key) ?? 0) < seconds) lastShownSeconds.set(key, seconds)
-  if (key === lastCarrierId && seconds > lastCarrierSyncedSeconds) {
+  // Establish the carrier from the heartbeat even when the Flag CRDT entity is
+  // absent or stale. Otherwise remote players can count briefly after pickup and
+  // collapse to zero when the short pickup-confirmation fallback expires.
+  if (lastCarrierId !== key) {
+    lastCarrierId = key
     lastCarrierSyncedSeconds = seconds
-    interpolationStartTime = Date.now()
-    lastAuthoritativeAnchorMs = Date.now()
+  } else {
+    lastCarrierSyncedSeconds = Math.max(lastCarrierSyncedSeconds, seconds)
   }
+  interpolationStartTime = now
+  lastAuthoritativeAnchorMs = now
 }
-
-// Server-confirmed carrier — used as fallback when CRDT Flag state is stale.
-// Set by flagSystem when pickupConfirmed arrives, cleared when CRDT catches up or drop confirmed.
-let confirmedCarrierIdForInterpolation = ''
-let confirmedCarrierTimestamp = 0
 
 /** Called by flagSystem when pickupConfirmed message arrives. */
 export function setConfirmedCarrier(carrierId: string): void {
@@ -372,16 +386,10 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     }
   }
 
-  // Per-player monotonic clamp for the round (see lastShownSeconds): a row never
-  // shows less than we've already shown. This is what stops the "score resets to 0
-  // when the flag is stolen/dropped/carrier dies" artifact — the ex-carrier's row
-  // holds its interpolated value instead of collapsing to a stalled CRDT 0, and
-  // self-corrects upward when real values arrive (CRDT catch-up or heartbeat).
-  for (const [key, value] of synced) {
-    const shown = lastShownSeconds.get(key) ?? 0
-    if (value > shown) lastShownSeconds.set(key, value)
-    else if (shown > value) synced.set(key, shown)
-  }
+  // Per-player monotonic clamp for the round (see lastShownSeconds). A heartbeat
+  // must also introduce a MISSING synced entry: under load a remote player's
+  // dynamic CRDT entity can be absent entirely, not merely stuck at zero.
+  mergeMonotonicHoldTimes(synced, lastShownSeconds)
 
   // Build result ONLY from players currently in the scene.
   // We no longer include "synced-but-not-in-scene" players because the server
