@@ -81,9 +81,17 @@ export const CARRIER_NO_POSITION_TIMEOUT_MS = 5000
 
 // ── Mushroom constants ──
 
-export const MUSHROOM_CX = 250.75
-export const MUSHROOM_CZ = 255.5
-export const MUSHROOM_RADIUS = 128
+// Center of the mushroom spawn disc. Aligned with the playable boundary
+// (see boundaryWalls.ts: BOUNDARY_CX=372.75, BOUNDARY_CZ=349.5, RADIUS=128).
+// The previous values (250.75, 255.5) predated commit b65794c which moved the
+// scene to the center of the 50x50 world — they left the mushroom spawn disc
+// mostly OUTSIDE the terrain, so ~all raycast candidates hit water/nothing and
+// the mushroom was silently rejected every spawn.
+export const MUSHROOM_CX = 372.75
+export const MUSHROOM_CZ = 349.5
+// Slightly smaller than the boundary radius so candidates stay well inside the
+// playable area (avoids landing right against the wall or on the boundary rim).
+export const MUSHROOM_RADIUS = 100
 export const MUSHROOM_CANDIDATES = 10
 
 // ── Leaderboard reset tracking ──
