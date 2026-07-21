@@ -62,7 +62,7 @@ export const FLAG_GRAVITY = 15
 export const FLAG_MIN_Y = 49.5
 // Y of the invisible collider plane below the lifted scene (players can walk on it).
 // Flag sinks to this Y when it lands in water, instead of falling to Y=0.
-export const SCENE_FLOOR_Y = 48
+export { SCENE_FLOOR_Y } from '../shared/constants'
 export const CARRIER_Y_WINDOW_SEC = 2.0
 export const CARRIER_NO_POSITION_TIMEOUT_MS = 5000
 

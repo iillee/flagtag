@@ -12,6 +12,7 @@ import {
   BOMB_FUSE_SEC, BOMB_COOLDOWN_SEC, BOMB_EXPLOSION_RADIUS, BOMB_STAGGER_MS, BOMB_IMPACT_HEIGHT,
   recycleGhostSyncId,
 } from '../shared/components'
+import { dropFloorY } from '../shared/constants'
 import { loadPlayerUpgrades } from './economy'
 import { room } from '../shared/messages'
 import {
@@ -32,6 +33,17 @@ function isFlagImmune(playerId: string): boolean {
   if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return false
   const t = lastStealTime.get(playerId) ?? 0
   return Date.now() - t < STEAL_IMMUNITY_MS
+}
+
+// Force-drop the flag from a combat victim, isolated so a flag-logic error can't
+// abort the calling combat system mid-loop (which would freeze every active
+// projectile/trap/bomb for the rest of the frame — and repeat every frame).
+function safeForceDrop(addr: string): void {
+  try {
+    handleDrop(addr, true)
+  } catch (err) {
+    console.error('[Server] ❌ forced flag drop failed for', addr.slice(0, 8), err)
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -63,16 +75,29 @@ function acquireTrapEntity(): Entity | null {
   initTrapEntityPool()
   // Find entity not currently in use (check against activeTraps)
   const inUse = new Set(activeTraps.map(t => t.entity))
-  for (const e of trapEntityPool) {
-    if (!inUse.has(e)) return e
+  for (let idx = 0; idx < trapEntityPool.length; idx++) {
+    let e = trapEntityPool[idx]
+    if (inUse.has(e)) continue
+    // Self-heal: a pooled entity can lose its Transform when the engine recycles
+    // its slot (same stale-entity class as the ghost-trap/hold-time bugs).
+    // Handing it out would make Transform.getMutable throw — replace it instead.
+    if (!Transform.has(e)) {
+      e = engine.addEntity()
+      Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+      trapEntityPool[idx] = e
+      console.log('[Server] 🪤⚠️ Replaced dead trap pool entity at slot', idx)
+    }
+    return e
   }
   console.error('[Server] 🪤 Trap entity pool exhausted!')
   return null
 }
 
 function releaseTrapEntity(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = SERVER_HIDDEN_POS
+  // getMutableOrNull: the entity may have died while active (stale slot) —
+  // a throw here would leave the item stuck in its active list forever.
+  const t = Transform.getMutableOrNull(entity)
+  if (t) t.position = SERVER_HIDDEN_POS
 }
 
 // ── Projectile entity pool ──
@@ -94,16 +119,25 @@ function initProjectileEntityPool(): void {
 function acquireProjectileEntity(): Entity | null {
   initProjectileEntityPool()
   const inUse = new Set(activeProjectiles.map(p => p.entity))
-  for (const e of projectileEntityPool) {
-    if (!inUse.has(e)) return e
+  for (let idx = 0; idx < projectileEntityPool.length; idx++) {
+    let e = projectileEntityPool[idx]
+    if (inUse.has(e)) continue
+    // Self-heal dead pool slots (see acquireTrapEntity)
+    if (!Transform.has(e)) {
+      e = engine.addEntity()
+      Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+      projectileEntityPool[idx] = e
+      console.log('[Server] 🎯⚠️ Replaced dead projectile pool entity at slot', idx)
+    }
+    return e
   }
   console.error('[Server] 🎯 Projectile entity pool exhausted!')
   return null
 }
 
 function releaseProjectileEntity(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = SERVER_HIDDEN_POS
+  const t = Transform.getMutableOrNull(entity)
+  if (t) t.position = SERVER_HIDDEN_POS
 }
 
 // ── Bomb entity pool ──
@@ -125,16 +159,25 @@ function initBombEntityPool(): void {
 function acquireBombEntity(): Entity | null {
   initBombEntityPool()
   const inUse = new Set(activeBombs.map(b => b.entity))
-  for (const e of bombEntityPool) {
-    if (!inUse.has(e)) return e
+  for (let idx = 0; idx < bombEntityPool.length; idx++) {
+    let e = bombEntityPool[idx]
+    if (inUse.has(e)) continue
+    // Self-heal dead pool slots (see acquireTrapEntity)
+    if (!Transform.has(e)) {
+      e = engine.addEntity()
+      Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+      bombEntityPool[idx] = e
+      console.log('[Server] 💣⚠️ Replaced dead bomb pool entity at slot', idx)
+    }
+    return e
   }
   console.error('[Server] 💣 Bomb entity pool exhausted!')
   return null
 }
 
 function releaseBombEntity(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = SERVER_HIDDEN_POS
+  const t = Transform.getMutableOrNull(entity)
+  if (t) t.position = SERVER_HIDDEN_POS
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -150,6 +193,7 @@ export interface ActiveTrap {
   falling: boolean
   fallVelocity: number
   targetY: number
+  minY: number  // floor clamp: SCENE_FLOOR_Y on main terrain, 0 on the interior level
   groundResolved: boolean
 }
 export const activeTraps: ActiveTrap[] = []
@@ -205,7 +249,7 @@ function explodeBomb(bomb: ActiveBomb): void {
       const flag = Flag.getOrNull(flagEntity)
       if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
         console.log('[Server] 💣 Bomb victim was carrying flag — forcing drop!')
-        handleDrop(addr, true)
+        safeForceDrop(addr)
       }
     }
   }
@@ -353,7 +397,7 @@ async function handleTrapDrop(playerId: string): Promise<void> {
       droppedAtMs: now,
       falling: true,
       fallVelocity: 0,
-      targetY: 0,
+      targetY: dropFloorY(dropPos.y),
       groundResolved: false,
       dropY: dropPos.y,
       exploded: false,
@@ -391,7 +435,8 @@ async function handleTrapDrop(playerId: string): Promise<void> {
     droppedAtMs: now,
     falling: true,
     fallVelocity: 0,
-    targetY: 0,
+    targetY: dropFloorY(dropPos.y),
+    minY: dropFloorY(dropPos.y),
     groundResolved: false,
   })
   lastTrapDropTime.set(playerId, now)
@@ -487,7 +532,7 @@ export function bananaServerSystem(dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🪤 Victim was carrying flag — forcing drop!')
-          handleDrop(addr, true)
+          safeForceDrop(addr)
         }
 
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
@@ -578,6 +623,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   const effectiveCd = color === 'y' ? 0.2 : PROJECTILE_COOLDOWN_SEC
   if (now - lastFire < effectiveCd * 1000) {
     console.log('[Server] Projectile denied: cooldown active')
+    room.send('shellDenied', { reason: 'cooldown' }, { to: [playerId] })
     return
   }
 
@@ -587,18 +633,21 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     const detail = playerId.slice(0, 8) + ' ' + color + ' ' + playerProjectiles.map(p => 'id=' + p.shellId + ' age=' + ((Date.now() - p.firedAtMs) / 1000).toFixed(1) + 's ret=' + p.returning).join(',')
     console.log('[Server] ⚠️ Projectile denied: max active reached (' + playerProjectiles.length + '/' + maxActive + ') —', detail)
     if (typeof (globalThis as any).__diagShellDenied === 'function') (globalThis as any).__diagShellDenied(detail)
+    room.send('shellDenied', { reason: 'max_active' }, { to: [playerId] })
     return
   }
 
   const playerPos = getPlayerPosition(playerId)
   if (!playerPos) {
     console.log('[Server] Projectile denied: player position not found')
+    room.send('shellDenied', { reason: 'no_position' }, { to: [playerId] })
     return
   }
 
   const len = Math.sqrt(dirX * dirX + dirZ * dirZ)
   if (len < 0.01) {
     console.log('[Server] Projectile denied: invalid direction')
+    room.send('shellDenied', { reason: 'invalid_direction' }, { to: [playerId] })
     return
   }
   const nDirX = dirX / len
@@ -613,6 +662,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   const projectileEntity = acquireProjectileEntity()
   if (!projectileEntity) {
     console.log('[Server] Projectile denied: pool exhausted')
+    room.send('shellDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
     return
   }
   const pt = Transform.getMutable(projectileEntity)
@@ -658,6 +708,17 @@ export function shellServerSystem(dt: number): void {
 
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const projectile = activeProjectiles[i]
+
+    // Ghost-projectile guard (same class as ghost traps/bombs): if the pooled
+    // entity lost its Transform, every Transform.get below would throw — which
+    // aborts this whole system every frame, so NO projectile ever expires or
+    // returns, and with PROJECTILE_MAX_ACTIVE=1 the shooter can never fire again.
+    if (!Transform.has(projectile.entity)) {
+      console.log('[Server] 🎯⚠️ Ghost projectile detected (no Transform) — cleaning up. firedBy:', projectile.firedBy.slice(0, 8))
+      room.send('shellReturned', { firedBy: projectile.firedBy, shellId: projectile.shellId })
+      activeProjectiles.splice(i, 1)
+      continue
+    }
 
     // Safety expiry
     if (now - projectile.firedAtMs > PROJECTILE_LIFETIME_SEC * 1000) {
@@ -760,7 +821,7 @@ export function shellServerSystem(dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🎯 Victim was carrying flag — forcing drop!')
-          handleDrop(addr, true)
+          safeForceDrop(addr)
         }
 
         room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr, firedBy: projectile.firedBy, shellId: projectile.shellId })
@@ -915,7 +976,7 @@ export function orbitServerSystem(_dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🌀 Orbit victim was carrying flag — forcing drop!')
-          handleDrop(addr, true)
+          safeForceDrop(addr)
         }
 
         room.send('orbitHit', { x: victimPos.x, y: victimPos.y, z: victimPos.z, victimId: addr, attackerId: orbit.playerId })
@@ -953,7 +1014,10 @@ export function registerCombatHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      handleTrapDrop(from)
+      console.log('[Server] 🪤 requestBanana received from', from.slice(0, 8))
+      // handleTrapDrop is async — without .catch, a rejection is silently swallowed
+      // (no drop, no denial, client cooldown stuck) and never reaches this try/catch.
+      handleTrapDrop(from).catch(err => console.error('[Server] ❌ handleTrapDrop error:', err))
     } catch (err) { console.error('[Server] ❌ requestBanana handler error:', err) }
   })
   room.onMessage('requestShell', (data, context) => {
@@ -1019,7 +1083,7 @@ export function registerCombatHandlers(): void {
         }
       }
       if (closest && !closest.groundResolved) {
-        closest.targetY = Math.max(0, data.groundY)
+        closest.targetY = Math.max(closest.minY, data.groundY)
         closest.groundResolved = true
         const currentY = Transform.get(closest.entity).position.y
         if (currentY <= closest.targetY) {
@@ -1037,7 +1101,7 @@ export function registerCombatHandlers(): void {
       const bombId = data.bombId
       const bomb = activeBombs.find(b => b.bombId === bombId)
       if (bomb && !bomb.groundResolved) {
-        bomb.targetY = Math.max(0, data.groundY)
+        bomb.targetY = Math.max(dropFloorY(bomb.dropY), data.groundY)
         bomb.groundResolved = true
         if (!bomb.exploded) {
           const currentY = Transform.get(bomb.entity).position.y
