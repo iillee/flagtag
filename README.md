@@ -57,6 +57,8 @@ src/
 
 Clients send **requests** (e.g. `requestPickup`, `requestShell`); the server validates and broadcasts results. All synced components use `validateBeforeChange()` to reject unauthorized writes.
 
+Server persistence (player wallets, upgrades, leaderboards, flag state) is memory-authoritative with write-behind flushing to Decentraland's Server-Side Storage — see [docs/STORAGE.md](docs/STORAGE.md) for the architecture, the failure modes it defends against, and the one-way `player:{addr}` doc migration (**do not roll back past it**).
+
 ## Development
 
 ### Prerequisites
