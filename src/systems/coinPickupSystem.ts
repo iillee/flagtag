@@ -13,6 +13,7 @@ import {
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { CoinState, COIN_PICKUP_RADIUS, coinIdFromPosition } from '../shared/coins'
+import { coinBasePositions } from './coinBobSpinSystem'
 import { room } from '../shared/messages'
 import { setPendingRoundEarnings } from '../gameState/roundEarnings'
 import { registerDeferredBalanceApplier } from '../shared/clientState'
@@ -271,11 +272,17 @@ function setupCoins(): void {
 
     // After coinBobSpinSystem runs, the coin is parented to a bobParent.
     // The bobParent has the world position. The coin entity is at local (0,0,0).
-    // We need the bobParent's position for proximity checks.
     const parent = t.parent
     if (parent && Transform.has(parent)) {
+      // By the time this scan runs the bobParent is already mid-bob, so hashing its
+      // live Transform bakes the animation offset into the id — which the server
+      // (hashing the static composite position) then rejects as an unknown coin.
+      // Hash the base position coinBobSpinSystem recorded before starting the tween.
+      const base = coinBasePositions.get(entity)
       const parentT = Transform.get(parent)
-      const pos = { x: parentT.position.x, y: parentT.position.y, z: parentT.position.z }
+      const pos = base
+        ? { x: base.x, y: base.y, z: base.z }
+        : { x: parentT.position.x, y: parentT.position.y, z: parentT.position.z }
       const coinId = coinIdFromPosition(pos.x, pos.y, pos.z)
 
       trackedCoins.push({
