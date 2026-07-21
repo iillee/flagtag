@@ -3,7 +3,7 @@
  *
  * When clicked: triggers kneeling emote, emits a beam of light from the player,
  * and plays rolling credits. If the player stays for the full duration, they
- * receive 5 coins (once per day).
+ * receive 6 coins (once per day).
  */
 import {
   engine, pointerEventsSystem, InputAction, GltfContainer, ColliderLayer,
@@ -138,6 +138,7 @@ function startBlessing() {
   // Record starting position for movement detection
   const pos = Transform.get(engine.PlayerEntity).position
   blessingStartPos = Vector3.create(pos.x, pos.y, pos.z)
+  room.send('beginBlessing', { t: Date.now() })
 
   // Trigger emote, beam, and sound immediately on click
   void triggerEmote({ predefinedEmote: PRAY_EMOTE }).catch(() => {})
@@ -199,7 +200,7 @@ export function pedestalSystem(dt: number) {
         // Delay marking as used so the coin reward UI isn't replaced by the
         // "already blessed" dismissal mid-animation
         delayedMarkUsed = true
-      } else if (!data.success && (data.reason === 'storage_error' || data.reason === 'storage_uncertain')) {
+      } else if (!data.success && (data.reason === 'storage_error' || data.reason === 'storage_uncertain' || data.reason === 'ritual_invalid')) {
         // The claim failed (or its outcome is uncertain) — tell the player
         // instead of celebrating coins that never persisted. alreadyUsed stays
         // false, so the pedestal remains clickable for a retry; the server's
@@ -207,7 +208,9 @@ export function pedestalSystem(dt: number) {
         blessingState.awaitingResult = false
         blessingState.failedMessage = data.reason === 'storage_uncertain'
           ? 'The gods are silent — your blessing may yet arrive. Check your coins shortly.'
-          : 'The ritual fizzled — the blessing was not granted. Try again in a moment.'
+          : data.reason === 'ritual_invalid'
+            ? 'The ritual was interrupted or could not be verified. Stay at the pedestal and try again.'
+            : 'The ritual fizzled — the blessing was not granted. Try again in a moment.'
         markBlessingCompleted(true)  // reuse the popup shell to show the message
       }
     })

@@ -7,16 +7,25 @@
     "start:server": "npx @dcl/hammurabi-server@next",
     "deploy": "sdk-commands deploy",
     "build": "sdk-commands build",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "test:dependencies": "node scripts/sdk-dependency-smoke.cjs",
+    "test:cli": "npm run test:dependencies && npm run build && sdk-commands start --help && sdk-commands deploy --help",
     "upgrade-sdk": "npm install --save-dev @dcl/sdk@auth-server",
-    "upgrade-sdk:next": "npm install --save-dev @dcl/sdk@auth-server",
+    "upgrade-sdk:next": "npm install --save-dev @dcl/sdk@next",
     "server-logs": "sdk-commands sdk-server-logs"
   },
   "devDependencies": {
-    "@dcl/sdk": "^7.24.2-27769863035.commit-2ed854e"
+    "@dcl/sdk": "7.24.6-29505165911.commit-d270434",
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0",
+    "jest-util": "^29.7.0",
+    "ts-jest": "^29.4.0"
   },
   "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=6.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   },
   "prettier": {
     "semi": false,
@@ -24,8 +33,22 @@
     "printWidth": 120,
     "trailingComma": "none"
   },
+  "overrides": {
+    "@dcl/sdk-commands": {
+      "esbuild": "0.25.12",
+      "undici": "6.27.0",
+      "uuid": "11.1.1"
+    },
+    "@dcl/inspector": {
+      "ts-deepmerge": "8.0.0"
+    },
+    "dcl-catalyst-client": {
+      "cookie": "0.7.2"
+    },
+    "protobufjs": "7.6.5"
+  },
   "dependencies": {
-    "@dcl/js-runtime": "7.24.2-27769863035.commit-2ed854e",
+    "@dcl/js-runtime": "7.24.6-29505165911.commit-d270434",
     "sharp": "^0.34.5"
   }
 }

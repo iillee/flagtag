@@ -40,6 +40,8 @@ export const playerLifetimeWinsCache = new Map<string, number>()
 
 export const deathPenaltyCooldowns = new Map<string, number>()
 export const lastStealTime = new Map<string, number>()
+export const nameChangeCooldowns = new Map<string, number>()
+export const feedbackCooldowns = new Map<string, number>()
 
 // ── Per-session analytics counters ──
 export const sessionDeaths = new Map<string, number>()
@@ -51,6 +53,8 @@ export const sessionBoomerangsFired = new Map<string, number>()
 export const visitorSessions = new Map<string, { name: string; sessionStartMs: number; totalSecondsToday: number }>()
 export const monthlyVisitorSessions = new Map<string, { name: string; sessionStartMs: number; totalSecondsMonth: number }>()
 export const currentlyConnected = new Set<string>()
+/** Everyone connected at any point during the current round, including later disconnects. */
+export const roundParticipants = new Set<string>()
 
 // ── Constants ──
 

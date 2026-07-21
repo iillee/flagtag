@@ -10,6 +10,7 @@
  */
 import { engine, Schemas } from '@dcl/sdk/ecs'
 import { AUTH_SERVER_PEER_ID } from '@dcl/sdk/network/message-bus-sync'
+export { coinIdFromPosition } from './coinIds'
 
 // ── Constants ──
 
@@ -30,16 +31,6 @@ export const MAX_COINS = 10000
 
 /** Coins per second of flag hold time (fractional, floored at round end) */
 export const COINS_PER_HOLD_SECOND = 0.1
-
-/**
- * Deterministic coin id from a coin's placed position. Shared by the client (pickup
- * requests) and the server (validating requested ids against the real placed coins) —
- * both scan the same composite entities, so the ids match exactly.
- */
-export function coinIdFromPosition(x: number, y: number, z: number): string {
-  // Round to 1 decimal to handle floating point, gives unique ID per placed coin
-  return `coin_${Math.round(x * 10)}_${Math.round(y * 10)}_${Math.round(z * 10)}`
-}
 
 // ── Coin State (server-synced, single entity for all coins) ──
 

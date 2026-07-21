@@ -627,25 +627,6 @@ export function registerFlagHandlers(): void {
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
 
-  room.onMessage('requestReloadRespawn', (_data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const flag = Flag.getOrNull(flagEntity)
-      if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== from) return
-      const spawn = getRandomSpawnPoint()
-      const mutable = Flag.getMutable(flagEntity)
-      mutable.state = FlagState.AtBase
-      mutable.carrierPlayerId = ''
-      mutable.baseX = spawn.x
-      mutable.baseY = spawn.y
-      mutable.baseZ = spawn.z
-      const t = Transform.getMutable(flagEntity)
-      t.position = Vector3.create(spawn.x, spawn.y, spawn.z)
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-    } catch (err) { console.error('[Server] ❌ requestReloadRespawn handler error:', err) }
-  })
-
   room.onMessage('requestSteal', (data, context) => {
     try {
       if (!context) return

@@ -75,12 +75,11 @@ export const Messages = {
   playerChargeStart: Schemas.Map({ playerId: Schemas.String, t: Schemas.Int }),
   playerChargeStop: Schemas.Map({ playerId: Schemas.String, t: Schemas.Int }),
 
-  // Lightning (carrier client → all clients)
+  // Lightning (server → all clients)
   lightningWarning: Schemas.Map({ t: Schemas.Int }),
   lightningStrike: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
 
   // Round end respawn
-  requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
   respawnPlayers: Schemas.Map({ t: Schemas.Int, winnersJson: Schemas.String }),
 
   // Coin messages
@@ -124,6 +123,7 @@ export const Messages = {
 
   // Blessing (pedestal daily reward)
   checkBlessing: Schemas.Map({ t: Schemas.Int }),                                           // Client → Server (pre-check)
+  beginBlessing: Schemas.Map({ t: Schemas.Int }),                                           // Client → Server (server records ritual start)
   requestBlessing: Schemas.Map({ t: Schemas.Int }),                                         // Client → Server (claim after ritual)
   blessingResult: Schemas.Map({ success: Schemas.Boolean, reason: Schemas.String, newBalance: Schemas.Int }),  // Server → Client
 

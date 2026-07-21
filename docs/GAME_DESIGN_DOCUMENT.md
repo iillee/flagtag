@@ -25,7 +25,7 @@ The scene uses Decentraland's **authoritative server** architecture (`authoritat
 
 ### 2.2 State Synchronization
 
-- **CRDT Components** (synced via `syncEntity`): `Flag`, `PlayerFlagHoldTime`, `CountdownTimer`, `LeaderboardState`, `AllTimeLeaderboardState`, `MonthlyLeaderboardState`, `VisitorAnalytics`, `MonthlyVisitorAnalytics`, `Trap`, `Projectile`, `Ghost`, `CoinState`, `PlayerWallet`, `PlayerUpgrades`, `PlayerLifetimeWins`, `PlayerLifetimeHoldTime`
+- **CRDT Components** (synced via `syncEntity`): `Flag`, `PlayerFlagHoldTime`, `CountdownTimer`, `LeaderboardState`, `AllTimeLeaderboardState`, `Ghost`, and `CoinState`. High-churn combat visuals use messages rather than synced trap/projectile entities to avoid CRDT saturation.
 - **Message Bus** (`registerMessages`): Used for ephemeral events — sound triggers, VFX, lightning, mushroom spawns, boomerang color changes, charge sync, orbit mechanics, ghost touching, respawn commands, coin pickups, speed boosts, death penalties, blessings, feedback
 - **Persistence** (`Storage` API): Flag state, leaderboards (daily + monthly + all-time), player names, visitor data (daily + monthly), Discord report tracking, coin wallets, player upgrades, blessing timestamps survive server restarts
 
@@ -39,7 +39,7 @@ The server code is split into focused domain modules:
 | `server/serverState.ts` | Shared mutable state, entity references, constants |
 | `server/persistence.ts` | Storage get/set wrappers |
 | `server/leaderboard.ts` | Leaderboard types, helpers, daily/monthly resets |
-| `server/analytics.ts` | Visitor tracking, Discord webhooks, daily reports |
+| `server/analytics.ts` | Visitor tracking and player-join Discord notifications |
 | `server/economy.ts` | Coin wallets, round-end earnings, store/upgrades |
 | `server/flagLogic.ts` | Flag pickup/drop/steal, gravity, hold-time accumulation |
 | `server/combat.ts` | Traps, projectiles, orbits |
@@ -137,7 +137,7 @@ The server code is split into focused domain modules:
 - **Steal Immunity:** 3 seconds of immunity after picking up/stealing (prevents instant re-steal)
 - **Drop:** Press `3` to voluntarily drop; also forced by boomerang hit, banana stun, lightning strike, ghost death, or drowning
 - **Gravity:** Dropped flag falls with acceleration (15 m/s²) until it reaches the ground (Y estimated from carrier position history + client raycasts)
-- **Water Respawn:** If flag falls below Y=1.58 (water level), it respawns at a random spawn point
+- **Water Respawn:** If the flag reaches the lifted moat surface around Y=49.58, it sinks and respawns at a random spawn point
 - **Spawn Points:** 3 predefined locations on the map; randomly selected at round start and water respawn
 - **Visual:** Client-side bob animation (0.25m amplitude), slow spin, gold particle trail, gold vertical beacon (110m tall)
 - **Carry Visual:** Flag floats above carrier's head using a 3-layer entity hierarchy: `Anchor (AvatarAttach AAPT_NAME_TAG)` → `Offset (static, never mutated)` → `Visual (bob + spin)`. The static intermediate entity prevents a Bevy race condition where per-frame Transform writes on a direct AvatarAttach child cause the entity to detach and freeze in world space.
@@ -145,17 +145,17 @@ The server code is split into focused domain modules:
 ### 3.2 Round Timer & Scoring
 
 - **Round Length:** 5 minutes, aligned to UTC 5-minute boundaries (e.g., :00, :05, :10...)
-- **Scoring:** Server accumulates hold time (synced every 0.5s via CRDT); client interpolates between syncs for smooth scoreboard counting
+- **Scoring:** Server accumulates hold time (synced every 2s via CRDT, with a 5s WebSocket heartbeat fallback); client interpolates between updates for smooth scoreboard counting
 - **Winner:** Player with the most cumulative hold time at round end
 - **Round End Sequence (Server):**
   1. Flush hold time accumulator (ensures final scores are accurate)
-  2. Reset flag to AtBase at random spawn point (synchronous, before any `await`)
-  3. Read final scores, then reset ALL `PlayerFlagHoldTime` entities to 0
+  2. Read final authoritative scores
+  3. Reset the flag and ALL `PlayerFlagHoldTime` entities synchronously before any `await`
   4. Clear accumulators defensively
   5. Clean up traps, projectiles, orbits, cooldowns, lightning, mushrooms
   6. Calculate and distribute coin earnings (participation + hold time + placement bonuses)
   7. Broadcast `respawnPlayers` with top 3 player data
-  8. (async) Update all three leaderboards, persist to Storage, send Discord/PostHog reports
+  8. (async) Update the daily and all-time leaderboards, persist to Storage, send Discord/PostHog reports
 - **Round End Sequence (Client):**
   1. Receive `respawnPlayers` → freeze movement, fade to black (1.5s)
   2. Top 3 players teleported to podium cubes (1st=red, 2nd=gold, 3rd=blue)
@@ -177,7 +177,7 @@ The server code is split into focused domain modules:
 - **Spending Coins:** Used to purchase boomerang variants from the store (via chest interaction)
 - **Death Penalty:** Dying (drown, lightning, ghost) deducts 10 coins
 - **Max Balance:** 10,000 coins
-- **Wallet Sync:** `PlayerWallet` CRDT component per player; balance sent on join and updated on transactions
+- **Wallet Sync:** Targeted server messages send balances on join and after transactions; durable state lives in the consolidated per-player Storage document.
 
 ### 3.4 Upgrade / Store System
 
@@ -246,7 +246,7 @@ The **Chest** is the universal shop with 4 tabbed categories. Each tab shows 4 i
 
 ### 3.8 Water / Drowning
 
-- **Water Level:** Y = 1.58 across the entire 512×512m scene (moat surrounding the castle)
+- **Water Level:** Y ≈ 49.58 after the scene's +48m vertical lift (moat surrounding the castle)
 - **Movement Penalty:** Running and jumping disabled in water (walk only)
 - **Air Timer:** 5 seconds of air; recharges in 5 seconds on land
 - **Drowning:** When air depletes, player sees "You Drowned!" death overlay, coin penalty applied, then teleported to spawn point
@@ -301,7 +301,7 @@ The **Chest** is the universal shop with 4 tabbed categories. Each tab shows 4 i
 
 ### 4.1 Layout
 - **Castle:** Large medieval structure centered around (250, y, 255) — placed as composite GLB models via Creator Hub
-- **Moat:** Water plane covering the entire scene at Y=1.58, with lilypads and flowers bobbing
+- **Moat:** Water plane covering the entire scene around Y=49.58 after the vertical scene lift, with lilypads and flowers bobbing
 - **Boundary:** Cylindrical invisible wall (radius 128m from center, 48 segments, 200m tall) with faceted plane segments that fade in when the player approaches (gradient texture, red emissive glow). Stacked 10m collider segments for reliable physics.
 - **Spawn Point:** Elevated platform at approximately (263, 47.5, 298) — players arrive on the castle ramparts
 
@@ -317,7 +317,7 @@ The **Chest** is the universal shop with 4 tabbed categories. Each tab shows 4 i
 - **Boombox:** Clickable — toggles music mute/unmute. Animated gold rings when playing. Tooltip shows "♪ Music". Tapes are purchased and equipped in the Chest.
 - **Gravestone:** Clickable — displays information popup
 - **Terminal:** Clickable — opens metrics/analytics panel
-- **Ritual Pedestal:** "Blessing of the Gods" — click to kneel, beam of light activates, rolling credits play. If player stays for full 32-second duration, earns 5 coins (once per day per player).
+- **Ritual Pedestal:** "Blessing of the Gods" — click to kneel, beam of light activates, rolling credits play. If the authoritative server position stays near the pedestal for the full 32-second duration, the player earns 6 coins (once per day).
 - **Podium Cubes:** 4 invisible marker entities (red, gold, blue, green) used for round-end cinematic positioning. Hidden at runtime via `VisibilityComponent`.
 - **In-World Leaderboard:** 3D text display with clickable "Daily Wins" / "Top 10" tabs at the Artwork Info board location.
 
@@ -409,9 +409,6 @@ Simple popup showing player inventory (coins, flags), equipped items (projectile
 | `lastVisitorResetDay` | Date string for daily reset detection |
 | `lastLeaderboardResetDay` | Date string for daily leaderboard reset |
 | `monthlyVisitorResetMonth` | Month string for monthly visitor reset |
-| `concurrentData` | Hourly peak concurrent users + daily peak |
-| `dailyReportSentForDay` | Date string tracking pre-midnight Discord report |
-| `pendingReport` | Deferred Discord report snapshot |
 | `wallet:<userId>` | Per-player coin balance |
 | `upgrades:<userId>` | Per-player purchased boomerangs + equipped |
 | `blessing:<userId>` | Last blessing claim timestamp |
@@ -419,8 +416,8 @@ Simple popup showing player inventory (coins, flags), equipped items (projectile
 | `lifetime_hold_time:<userId>` | Per-player lifetime flag hold time |
 
 ### 6.2 Daily Resets (Midnight UTC)
-- **Leaderboard:** Resets daily. Before clearing, snapshots data for Discord report.
-- **Visitor Data:** Resets daily; pre-midnight report sent at 23:00 UTC hour.
+- **Leaderboard:** Resets daily. Before clearing, it validates or recovers the persisted board; malformed/unavailable data fails closed without an overwrite, and CRDT/in-memory reset state is published only after both durable reset writes succeed.
+- **Visitor Data:** Resets daily at midnight UTC.
 - **Monthly Leaderboard:** Resets on first day of each new month.
 - **Monthly Visitor Data:** Resets on first day of each new month.
 - **All-Time Leaderboard:** Never resets.
@@ -428,14 +425,14 @@ Simple popup showing player inventory (coins, flags), equipped items (projectile
 ### 6.3 Name Resolution
 - Both server and client periodically scan `AvatarBase.name` and `PlayerIdentityData` to resolve player display names (server every 3s, client every 2-5s with retry)
 - Names persist in the `playerNames` Storage key
-- Client sends `registerName` message; server propagates to all three leaderboards, visitor sessions, and persists
+- Client sends `registerName`; the server sanitizes and rate-limits changes across reconnects, then updates the daily/all-time leaderboards, visitor sessions, and persisted name directory
 - Leaderboard names patched from persisted directory on server startup
 
-### 6.4 Discord Daily Report
-- **Pre-midnight Report:** Sent automatically during UTC hour 23
-- **Deferred Report:** If missed, data snapshotted to `pendingReport` before reset. Sent on next server startup.
-- **Report Content:** Scene name, date, unique users, total playtime, peak concurrent, per-user breakdown
-- **Delivery:** Multipart form-data POST to Discord webhook with summary text + JSON file attachment
+### 6.4 Discord Notifications
+- **Player joins:** Delayed briefly for name resolution, then sent through `DISCORD_PLAYER_JOIN_WEBHOOK` when configured.
+- **Round winners:** Sent through `DISCORD_ROUND_WINNER_WEBHOOK` when configured.
+- **Feedback:** Mailbox submissions are sent through `DISCORD_MAILBOX_WEBHOOK` when configured.
+- **Preview mode:** Player-join and round-winner notifications are suppressed during local preview.
 
 ### 6.5 PostHog Analytics
 - Integrated via `server/posthog.ts` for server-side event tracking
@@ -505,7 +502,7 @@ This reduces the number of actual `engine.addSystem()` calls to 2 (one per-frame
 - **UI Sorting:** Two-slot LRU cache for sorted visitor/leaderboard entries.
 
 ### 9.3 Server-Side Optimizations
-- Hold time sync at 0.5s (not every frame)
+- Hold time CRDT sync at 2s, plus a 5s WebSocket heartbeat (not every frame)
 - Projectile CRDT sync at 10Hz
 - Projectile Transform NOT synced — clients compute position from component data
 - Flag bob/spin is client-only
@@ -591,7 +588,7 @@ This reduces the number of actual `engine.addSystem()` calls to 2 (one per-frame
 | Coins Per Hold Second | 0.1 |
 | Participation Bonus | 1 coin |
 | Placement Bonus | 5/3/1 coins |
-| Blessing Reward | 5 coins (daily) |
+| Blessing Reward | 6 coins (daily) |
 | Blessing Duration | 32s |
 | Yellow Boomerang Cost | 50 coins + 1 win |
 | Green Boomerang Cost | 150 coins + 5 wins |
@@ -619,5 +616,5 @@ If recreating this game from scratch, implement in this order:
 14. **Leaderboards:** Daily + monthly + all-time with persistence + in-world 3D display
 15. **Environment:** Boundary walls, teleport orbs, updraft stacks, ladders, portal, boombox, pedestal, gravestone, terminal
 16. **Polish:** Proximity lights, water bob, spectator cam, mobile UI, sound preloading
-17. **Analytics:** Visitor tracking (daily + monthly), Discord daily reporting, PostHog integration
+17. **Analytics:** Visitor tracking (daily + monthly), Discord event notifications, PostHog integration
 18. **Performance:** System manager with throttled tiers, CRDT caching, entity pools, sync ID recycling

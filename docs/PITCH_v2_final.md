@@ -14,7 +14,7 @@ FlagTag is a live, server-authoritative multiplayer keep-away game running 24/7 
 - Coin economy + in-game store with unlockable variants and wearables
 - Daily / monthly / all-time leaderboards with persistence
 - Separate mobile and desktop UI branches (React-ECS)
-- PostHog + Discord analytics for visitor tracking and daily reports
+- PostHog visitor analytics plus Discord player-join and round-winner notifications
 - Weekly hosted live events, already measurably boosting engagement
 
 FlagTag has proven strong core gameplay and regularly attracts users for multiplayer events, but the game has a big problem: when users (especially new users) join and there is no one in the scene, they have nothing to do and usually leave immediately. This V2 proposal introduces a series of strategies and experiments that aim to reduce/solve the empty scene problem and lift D7 retention above 20%.

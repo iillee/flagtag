@@ -15,10 +15,21 @@ const MUSHROOM_PICKUP_COOLDOWN_MS = 2000
 // server-replicated positions lag a boosted player by several meters.
 const MUSHROOM_CLAIM_RADIUS = 16
 const lastMushroomPickup = new Map<string, number>()
+const pendingBoostReports = new Map<string, number>()
+const BOOST_REPORT_WINDOW_MS = 5000
+
+/** Consume the one boost relay authorized by a recent authoritative pickup. */
+export function consumePendingMushroomBoost(playerId: string): boolean {
+  const key = playerId.toLowerCase()
+  const pickedAt = pendingBoostReports.get(key)
+  pendingBoostReports.delete(key)
+  return pickedAt !== undefined && Date.now() - pickedAt <= BOOST_REPORT_WINDOW_MS
+}
 
 /** Drop per-player mushroom state on disconnect (called from playerTrackingSystem). */
 export function clearPlayerMushroomState(walletAddress: string): void {
   lastMushroomPickup.delete(walletAddress.toLowerCase())
+  pendingBoostReports.delete(walletAddress.toLowerCase())
 }
 
 interface ServerMushroom {
@@ -109,6 +120,7 @@ export function registerMushroomHandlers(): void {
       }
       lastMushroomPickup.set(from, now)
       mushroom.pickedUp = true
+      pendingBoostReports.set(from, now)
       console.log('[Server] 🍄 Mushroom', mid, 'picked up by', from.slice(0, 8))
       room.send('mushroomPickedUp', { id: mid, playerId: from })
       // Spawn a replacement mushroom

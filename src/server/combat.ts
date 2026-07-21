@@ -21,6 +21,8 @@ import {
   playerBoomerangColors,
 } from './serverState'
 import { handleDrop } from './flagLogic'
+import { consumePendingMushroomBoost } from './mushroomSystem'
+import { canUseBoomerangAbility } from './combatValidation'
 
 // Full combat immunity while the carrier's pickup/steal shield is active.
 // Matches STEAL_IMMUNITY_MS so shield visual = actual protection.
@@ -301,6 +303,10 @@ export interface ActiveOrbit {
 }
 export const activeOrbits: ActiveOrbit[] = []
 const lastOrbitTime = new Map<string, number>()
+const chargingPlayers = new Set<string>()
+const lastChargeRelayTime = new Map<string, number>()
+const lastChargeStopTime = new Map<string, number>()
+const CHARGE_RELAY_MIN_INTERVAL_MS = 100
 
 // ── Action position resolution ──
 
@@ -927,6 +933,12 @@ export function shellServerSystem(dt: number): void {
 function handleOrbitRequest(playerId: string, startAngle: number = 0): void {
   const now = Date.now()
 
+  if (!canUseBoomerangAbility(playerBoomerangColors.get(playerId), 'g')) {
+    console.log('[Server] Orbit denied: green boomerang not equipped')
+    return
+  }
+  if (!Number.isFinite(startAngle)) startAngle = 0
+
   const lastOrb = lastOrbitTime.get(playerId) ?? 0
   if (now - lastOrb < ORBIT_COOLDOWN_SEC * 1000) {
     console.log('[Server] Orbit denied: cooldown active')
@@ -1019,6 +1031,9 @@ export function clearCombatCooldowns(playerId: string): void {
   lastTrapDropTime.delete(playerId)
   lastProjectileFireTime.delete(playerId)
   lastOrbitTime.delete(playerId)
+  chargingPlayers.delete(playerId)
+  lastChargeRelayTime.delete(playerId)
+  lastChargeStopTime.delete(playerId)
 }
 
 /** Clear all combat cooldown maps (called at round end). */
@@ -1026,6 +1041,9 @@ export function clearAllCombatCooldowns(): void {
   lastTrapDropTime.clear()
   lastProjectileFireTime.clear()
   lastOrbitTime.clear()
+  chargingPlayers.clear()
+  lastChargeRelayTime.clear()
+  lastChargeStopTime.clear()
 }
 
 // ── Message handler registration ──
@@ -1215,21 +1233,38 @@ export function registerCombatHandlers(): void {
   })
   room.onMessage('chargeBurnout', (data, context) => {
     if (!context) return
-    room.send('hitVfx', { x: data.x || 0, y: data.y || 0, z: data.z || 0 })
+    const from = context.from.toLowerCase()
+    if (!canUseBoomerangAbility(playerBoomerangColors.get(from), 'b') || Date.now() - (lastChargeStopTime.get(from) ?? 0) > 1000) return
+    lastChargeStopTime.delete(from)
+    if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.z)) return
+    const playerPos = getPlayerPosition(from)
+    if (!playerPos || Vector3.distance(playerPos, Vector3.create(data.x, data.y, data.z)) > 10) return
+    room.send('hitVfx', { x: data.x, y: data.y, z: data.z })
   })
-  room.onMessage('reportBoost', (data, context) => {
+  room.onMessage('reportBoost', (_data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
-    room.send('playerBoosted', { playerId: from, tier: data.tier || 'coin', duration: data.duration || 3 })
+    if (!consumePendingMushroomBoost(from)) return
+    room.send('playerBoosted', { playerId: from, tier: 'mushroom', duration: 20 })
   })
   room.onMessage('chargeStart', (data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
+    const now = Date.now()
+    if (!canUseBoomerangAbility(playerBoomerangColors.get(from), 'b') || chargingPlayers.has(from)) return
+    if (now - (lastChargeRelayTime.get(from) ?? 0) < CHARGE_RELAY_MIN_INTERVAL_MS) return
+    chargingPlayers.add(from)
+    lastChargeRelayTime.set(from, now)
     room.send('playerChargeStart', { playerId: from, t: data.t || 0 })
   })
   room.onMessage('chargeStop', (data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
+    const now = Date.now()
+    if (!chargingPlayers.has(from)) return
+    chargingPlayers.delete(from)
+    lastChargeRelayTime.set(from, now)
+    lastChargeStopTime.set(from, now)
     room.send('playerChargeStop', { playerId: from, t: data.t || 0 })
   })
 }
