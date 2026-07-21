@@ -19,7 +19,7 @@ import {
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { BOOMERANG_STORE, MUSIC_STORE, TRAP_STORE, type StoreCategory, type StoreItem, type MusicStoreItem } from '../../shared/upgrades'
 import type { BoomerangColor } from '../../gameState/boomerangColor'
-import { getEquippedTape, setEquippedTape, getAllTapes } from './boomboxState'
+import { getEquippedTape, setEquippedTape, getAllTapes, resetMusicPosition } from './boomboxState'
 import { AudioSource } from '@dcl/sdk/ecs'
 import { musicEntity } from '../../systems/musicSetup'
 
@@ -88,6 +88,9 @@ function handleEquip(tab: StoreCategory, itemId: string): void {
     const tape = getAllTapes().find(t => t.id === itemId)
     if (tape) {
       setEquippedTape(tape.id)
+      // Fresh tape → reset the pause-position tracker so the next pause starts
+      // counting from 0 of the new track, not the accumulated time of the old one.
+      resetMusicPosition()
       try {
         const audio = AudioSource.getMutable(musicEntity)
         audio.audioClipUrl = tape.audioSrc

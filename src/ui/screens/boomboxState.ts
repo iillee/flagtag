@@ -39,31 +39,63 @@ export function setEquippedTape(id: string | null): void {
   equippedTapeId = id
 }
 
+/**
+ * Reset the pause-position tracker to 0. Call when swapping to a different tape
+ * (fresh track → fresh position). Toggle pause/resume within the SAME tape does
+ * NOT reset — that's the whole point of the tracker.
+ */
+export function resetMusicPosition(): void {
+  pausedPositionSec = 0
+  playStartMs = Date.now()
+}
+
 export function getLastTapeId(): string {
   return lastTapeId
 }
 
-// ── Toggle (single source of truth for mute/unmute) ──
+// ── Toggle (single source of truth for pause/resume) ──
 
-/** Toggle music on/off. Call from boombox click, key press, or UI button. */
+// Playback position tracking. AudioSource.currentTime is WRITE-ONLY from the
+// scene's side — the DCL client uses it as a seek target but never syncs the
+// true playback cursor back into the CRDT. Reading `audio.currentTime` always
+// returns whatever we last wrote (default 0), so the previous attempt to
+// read-and-restore always resumed at 0 (restart, same symptom as before).
+//
+// Instead we track the position ourselves in wall-clock time:
+//   - playStartMs = Date.now() when the CURRENT playing period started
+//   - pausedPositionSec = cumulative seconds played before this current period
+// The whole scheme runs only inside toggleMusic() — zero per-frame cost, zero
+// added CRDT/network traffic.
+let playStartMs: number = Date.now()
+let pausedPositionSec: number = 0
+
+/** Toggle music pause/resume. Call from boombox click, key press, or UI button. */
 export function toggleMusic(): void {
   if (equippedTapeId !== null) {
-    // Mute — just zero volume, keep playing so position is preserved
+    // Pause — add elapsed play time to accumulator, then stop
     setEquippedTape(null)
     try {
+      pausedPositionSec += (Date.now() - playStartMs) / 1000
       const audio = AudioSource.getMutable(musicEntity)
-      audio.volume = 0
-    } catch (e) { console.error('[Music] Failed to mute:', e) }
+      audio.playing = false
+    } catch (e) { console.error('[Music] Failed to pause:', e) }
   } else {
-    // Unmute — resume last tape (don't re-set audioClipUrl or it restarts)
+    // Resume — seek back to accumulated position, restart the clock, then play
     const tape = MUSIC_STORE.find(t => t.id === lastTapeId)
     if (tape) {
       setEquippedTape(tape.id)
       try {
-        const audio = AudioSource.getMutable(musicEntity)
+        const audio = AudioSource.getMutable(musicEntity) as {
+          volume: number; playing: boolean; currentTime?: number
+        }
         audio.volume = 0.1
+        // Seek BEFORE setting playing=true. The SDK reads currentTime at the
+        // playing=false → true transition; setting it after has no effect until
+        // the next such transition.
+        audio.currentTime = pausedPositionSec
         audio.playing = true
-      } catch (e) { console.error('[Music] Failed to unmute:', e) }
+        playStartMs = Date.now()
+      } catch (e) { console.error('[Music] Failed to resume:', e) }
     }
   }
 }
