@@ -199,6 +199,20 @@ room.onMessage('shellReturned', (data) => {
   }
 })
 
+room.onMessage('shellDenied', (data) => {
+  console.log('[Projectile] ⚠️ Server denied throw:', data.reason)
+  // The server did not spawn a projectile — recover the local throw state so
+  // the player isn't stuck behind a phantom in-flight boomerang.
+  localThrow.active = false
+  localThrow.sawVisual = false
+  localThrow.startMs = 0
+  if (data.reason !== 'cooldown') {
+    cooldown.lastFireTime = 0
+    cooldown.extraCooldown = 0
+  }
+  updateHandBoomerangVisibility()
+})
+
 room.onMessage('orbitStarted', (data) => {
   const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
   const playerId = data.playerId?.toLowerCase() || ''

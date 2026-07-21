@@ -12,6 +12,7 @@ import {
   BOMB_FUSE_SEC, BOMB_COOLDOWN_SEC, BOMB_EXPLOSION_RADIUS, BOMB_STAGGER_MS, BOMB_IMPACT_HEIGHT,
   recycleGhostSyncId,
 } from '../shared/components'
+import { dropFloorY } from '../shared/constants'
 import { loadPlayerUpgrades } from './economy'
 import { room } from '../shared/messages'
 import {
@@ -33,6 +34,17 @@ function isFlagImmune(playerId: string): boolean {
   if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return false
   const t = lastStealTime.get(playerId) ?? 0
   return Date.now() - t < STEAL_IMMUNITY_MS
+}
+
+// Force-drop the flag from a combat victim, isolated so a flag-logic error can't
+// abort the calling combat system mid-loop (which would freeze every active
+// projectile/trap/bomb for the rest of the frame — and repeat every frame).
+function safeForceDrop(addr: string): void {
+  try {
+    handleDrop(addr, true)
+  } catch (err) {
+    console.error('[Server] ❌ forced flag drop failed for', addr.slice(0, 8), err)
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -64,16 +76,29 @@ function acquireTrapEntity(): Entity | null {
   initTrapEntityPool()
   // Find entity not currently in use (check against activeTraps)
   const inUse = new Set(activeTraps.map(t => t.entity))
-  for (const e of trapEntityPool) {
-    if (!inUse.has(e)) return e
+  for (let idx = 0; idx < trapEntityPool.length; idx++) {
+    let e = trapEntityPool[idx]
+    if (inUse.has(e)) continue
+    // Self-heal: a pooled entity can lose its Transform when the engine recycles
+    // its slot (same stale-entity class as the ghost-trap/hold-time bugs).
+    // Handing it out would make Transform.getMutable throw — replace it instead.
+    if (!Transform.has(e)) {
+      e = engine.addEntity()
+      Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+      trapEntityPool[idx] = e
+      console.log('[Server] 🪤⚠️ Replaced dead trap pool entity at slot', idx)
+    }
+    return e
   }
   console.error('[Server] 🪤 Trap entity pool exhausted!')
   return null
 }
 
 function releaseTrapEntity(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = SERVER_HIDDEN_POS
+  // getMutableOrNull: the entity may have died while active (stale slot) —
+  // a throw here would leave the item stuck in its active list forever.
+  const t = Transform.getMutableOrNull(entity)
+  if (t) t.position = SERVER_HIDDEN_POS
 }
 
 // ── Projectile entity pool ──
@@ -95,16 +120,25 @@ function initProjectileEntityPool(): void {
 function acquireProjectileEntity(): Entity | null {
   initProjectileEntityPool()
   const inUse = new Set(activeProjectiles.map(p => p.entity))
-  for (const e of projectileEntityPool) {
-    if (!inUse.has(e)) return e
+  for (let idx = 0; idx < projectileEntityPool.length; idx++) {
+    let e = projectileEntityPool[idx]
+    if (inUse.has(e)) continue
+    // Self-heal dead pool slots (see acquireTrapEntity)
+    if (!Transform.has(e)) {
+      e = engine.addEntity()
+      Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+      projectileEntityPool[idx] = e
+      console.log('[Server] 🎯⚠️ Replaced dead projectile pool entity at slot', idx)
+    }
+    return e
   }
   console.error('[Server] 🎯 Projectile entity pool exhausted!')
   return null
 }
 
 function releaseProjectileEntity(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = SERVER_HIDDEN_POS
+  const t = Transform.getMutableOrNull(entity)
+  if (t) t.position = SERVER_HIDDEN_POS
 }
 
 // ── Bomb entity pool ──
@@ -126,16 +160,25 @@ function initBombEntityPool(): void {
 function acquireBombEntity(): Entity | null {
   initBombEntityPool()
   const inUse = new Set(activeBombs.map(b => b.entity))
-  for (const e of bombEntityPool) {
-    if (!inUse.has(e)) return e
+  for (let idx = 0; idx < bombEntityPool.length; idx++) {
+    let e = bombEntityPool[idx]
+    if (inUse.has(e)) continue
+    // Self-heal dead pool slots (see acquireTrapEntity)
+    if (!Transform.has(e)) {
+      e = engine.addEntity()
+      Transform.create(e, { position: SERVER_HIDDEN_POS, scale: Vector3.create(1, 1, 1) })
+      bombEntityPool[idx] = e
+      console.log('[Server] 💣⚠️ Replaced dead bomb pool entity at slot', idx)
+    }
+    return e
   }
   console.error('[Server] 💣 Bomb entity pool exhausted!')
   return null
 }
 
 function releaseBombEntity(entity: Entity): void {
-  const t = Transform.getMutable(entity)
-  t.position = SERVER_HIDDEN_POS
+  const t = Transform.getMutableOrNull(entity)
+  if (t) t.position = SERVER_HIDDEN_POS
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -152,7 +195,7 @@ export interface ActiveTrap {
   fallVelocity: number
   targetY: number
   groundResolved: boolean
-  dropY: number  // Y at drop time — upper bound for ground reports (ground can't be above the drop)
+  dropY: number  // Y at drop time — reference for landing clamps (floor via dropFloorY, ceiling for ground reports)
 }
 export const activeTraps: ActiveTrap[] = []
 
@@ -207,7 +250,7 @@ function explodeBomb(bomb: ActiveBomb): void {
       const flag = Flag.getOrNull(flagEntity)
       if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
         console.log('[Server] 💣 Bomb victim was carrying flag — forcing drop!')
-        handleDrop(addr, true)
+        safeForceDrop(addr)
       }
     }
   }
@@ -424,11 +467,12 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
       falling: true,
       fallVelocity: 0,
       // Fallback landing height: just under the drop point (players usually drop from
-      // ground level), floored at the scene floor. A lost/missed ground-raycast reply
+      // ground level), floored via dropFloorY so interior-room drops (Y<48) land at
+      // Y=0 and main-terrain drops land at Y=48. A lost/missed ground-raycast reply
       // then leaves the bomb roughly where it was dropped instead of sinking it ~50m
       // under the lifted map — where the huge fall distance also faked an "impact
       // explosion". The raycast reply refines this to the true ground within ~300ms.
-      targetY: Math.max(SCENE_FLOOR_Y, dropPos.y - 2),
+      targetY: Math.max(dropFloorY(dropPos.y), dropPos.y - 2),
       groundResolved: false,
       dropY: impactDropY,
       exploded: false,
@@ -469,7 +513,8 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     // Fallback landing height just under the drop point (see the bomb equivalent) — a
     // lost/missed ground reply must not sink the trap under the map (or, on elevated
     // terrain, below the walkable surface) where nobody can ever trigger it.
-    targetY: Math.max(SCENE_FLOOR_Y, dropPos.y - 2),
+    // Uses dropFloorY so interior drops land at Y=0 and main terrain at Y=48.
+    targetY: Math.max(dropFloorY(dropPos.y), dropPos.y - 2),
     groundResolved: false,
     dropY: dropPos.y,
   })
@@ -566,7 +611,7 @@ export function bananaServerSystem(dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🪤 Victim was carrying flag — forcing drop!')
-          handleDrop(addr, true)
+          safeForceDrop(addr)
         }
 
         room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: addr })
@@ -657,6 +702,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   const effectiveCd = color === 'y' ? 0.2 : PROJECTILE_COOLDOWN_SEC
   if (now - lastFire < effectiveCd * 1000) {
     console.log('[Server] Projectile denied: cooldown active')
+    room.send('shellDenied', { reason: 'cooldown' }, { to: [playerId] })
     return
   }
 
@@ -666,12 +712,14 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     const detail = playerId.slice(0, 8) + ' ' + color + ' ' + playerProjectiles.map(p => 'id=' + p.shellId + ' age=' + ((Date.now() - p.firedAtMs) / 1000).toFixed(1) + 's ret=' + p.returning).join(',')
     console.log('[Server] ⚠️ Projectile denied: max active reached (' + playerProjectiles.length + '/' + maxActive + ') —', detail)
     if (typeof (globalThis as any).__diagShellDenied === 'function') (globalThis as any).__diagShellDenied(detail)
+    room.send('shellDenied', { reason: 'max_active' }, { to: [playerId] })
     return
   }
 
   const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_FIRE)
   if (!playerPos) {
     console.log('[Server] Projectile denied: player position not found')
+    room.send('shellDenied', { reason: 'no_position' }, { to: [playerId] })
     return
   }
 
@@ -681,6 +729,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   // gets broadcast to every client.
   if (!Number.isFinite(dirX) || !Number.isFinite(dirZ) || len < 0.01) {
     console.log('[Server] Projectile denied: invalid direction')
+    room.send('shellDenied', { reason: 'invalid_direction' }, { to: [playerId] })
     return
   }
   const nDirX = dirX / len
@@ -695,6 +744,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   const projectileEntity = acquireProjectileEntity()
   if (!projectileEntity) {
     console.log('[Server] Projectile denied: pool exhausted')
+    room.send('shellDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
     return
   }
   const pt = Transform.getMutable(projectileEntity)
@@ -740,6 +790,17 @@ export function shellServerSystem(dt: number): void {
 
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const projectile = activeProjectiles[i]
+
+    // Ghost-projectile guard (same class as ghost traps/bombs): if the pooled
+    // entity lost its Transform, every Transform.get below would throw — which
+    // aborts this whole system every frame, so NO projectile ever expires or
+    // returns, and with PROJECTILE_MAX_ACTIVE=1 the shooter can never fire again.
+    if (!Transform.has(projectile.entity)) {
+      console.log('[Server] 🎯⚠️ Ghost projectile detected (no Transform) — cleaning up. firedBy:', projectile.firedBy.slice(0, 8))
+      room.send('shellReturned', { firedBy: projectile.firedBy, shellId: projectile.shellId })
+      activeProjectiles.splice(i, 1)
+      continue
+    }
 
     // Safety expiry
     if (now - projectile.firedAtMs > PROJECTILE_LIFETIME_SEC * 1000) {
@@ -842,7 +903,7 @@ export function shellServerSystem(dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🎯 Victim was carrying flag — forcing drop!')
-          handleDrop(addr, true)
+          safeForceDrop(addr)
         }
 
         room.send('shellTriggered', { x: projectilePos.x, y: projectilePos.y, z: projectilePos.z, victimId: addr, firedBy: projectile.firedBy, shellId: projectile.shellId })
@@ -997,7 +1058,7 @@ export function orbitServerSystem(_dt: number): void {
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
           console.log('[Server] 🌀 Orbit victim was carrying flag — forcing drop!')
-          handleDrop(addr, true)
+          safeForceDrop(addr)
         }
 
         room.send('orbitHit', { x: victimPos.x, y: victimPos.y, z: victimPos.z, victimId: addr, attackerId: orbit.playerId })
@@ -1038,6 +1099,8 @@ export function registerCombatHandlers(): void {
       // Entry log: during the "traps silently never drop" incident there was no way to
       // tell from logs whether the request even reached the server. Keep this line.
       console.log('[Server] 🪤 requestBanana from', from.slice(0, 8))
+      // handleTrapDrop is async — without .catch, a rejection is silently swallowed
+      // (no drop, no denial, client cooldown stuck) and never reaches this try/catch.
       handleTrapDrop(from, data.x, data.y, data.z).catch(err => {
         // Always answer — bananaDenied resets the client's local cooldown so the
         // player can retry instead of staring at a dead hotbar.
@@ -1137,12 +1200,15 @@ export function registerCombatHandlers(): void {
           closest = trap
         }
       }
+      // Finite-check the client float — a NaN targetY would poison the fall loop
+      if (!Number.isFinite(data.groundY)) return
       if (closest && !closest.groundResolved) {
-        // Clamp BOTH ways: floor at the scene floor (a missed client raycast reports
-        // groundY=0, ~50m under the lifted map), and cap the raise just above the
+        // Clamp BOTH ways: floor via dropFloorY (interior-aware — a missed client
+        // raycast reports groundY=0, which is ~50m under the lifted main-terrain map
+        // but valid for interior-room drops), and cap the raise just above the
         // drop point — ground can't legitimately be above where the trap was dropped,
         // and an uncapped raise would park the trap unreachable in the sky.
-        closest.targetY = Math.min(closest.dropY + 1, Math.max(SCENE_FLOOR_Y, data.groundY))
+        closest.targetY = Math.min(closest.dropY + 1, Math.max(dropFloorY(closest.dropY), data.groundY))
         closest.groundResolved = true
         const currentY = Transform.get(closest.entity).position.y
         if (currentY <= closest.targetY) {
@@ -1161,16 +1227,17 @@ export function registerCombatHandlers(): void {
       if (!Number.isFinite(data.groundY)) return
       const from = context.from.toLowerCase()
       const bombId = data.bombId
+      if (!Number.isFinite(data.groundY)) return
       const bomb = activeBombs.find(b => b.bombId === bombId)
       if (bomb && !bomb.groundResolved) {
         // Owner-only: bomb ids are broadcast, and groundResolved is first-report-wins.
         if (bomb.droppedBy !== from) return
-        // Clamp BOTH ways: floor at the scene floor (a missed client raycast reports
-        // groundY=0, which both sinks the bomb under the map AND fakes a 50m "impact
-        // explosion" drop), and cap the raise just above the drop point (ground can't
-        // be above the drop; an uncapped raise parks the bomb in the sky and
-        // suppresses its impact explosion).
-        bomb.targetY = Math.min(bomb.dropY + 1, Math.max(SCENE_FLOOR_Y, data.groundY))
+        // Clamp BOTH ways: floor via dropFloorY (interior-aware — a missed client
+        // raycast reports groundY=0, which for main-terrain drops both sinks the bomb
+        // under the map AND fakes a 50m "impact explosion" drop), and cap the raise
+        // just above the drop point (ground can't be above the drop; an uncapped
+        // raise parks the bomb in the sky and suppresses its impact explosion).
+        bomb.targetY = Math.min(bomb.dropY + 1, Math.max(dropFloorY(bomb.dropY), data.groundY))
         bomb.groundResolved = true
         if (!bomb.exploded) {
           const currentY = Transform.get(bomb.entity).position.y

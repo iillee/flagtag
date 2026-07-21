@@ -21,6 +21,7 @@ import {
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { TRAP_COOLDOWN_SEC, BOMB_COOLDOWN_SEC, TRAP_LIFETIME_SEC, TRAP_TRIGGER_RADIUS } from '../shared/components'
+import { dropFloorY } from '../shared/constants'
 
 import { room } from '../shared/messages'
 import { playErrorSound, isServerConnected } from './clientUtils'
@@ -478,6 +479,7 @@ interface MsgTrapVisual {
   fallVelocity: number
   currentY: number
   targetY: number
+  minY: number  // floor clamp: SCENE_FLOOR_Y on main terrain, 0 on the interior level
   groundResolved: boolean
   groundRayEntity: Entity | null
 }
@@ -499,11 +501,13 @@ function createMsgTrapVisual(x: number, y: number, z: number, ownerId: string = 
     maxDistance: 200, queryType: RaycastQueryType.RQT_HIT_FIRST, continuous: false
   })
 
+  const minY = dropFloorY(y)
   msgTrapVisuals.push({
     entity: localEntity, x, z,
     ownerId,
     createdAtMs: Date.now(),
-    falling: true, fallVelocity: 0, currentY: y, targetY: 0,
+    // Fallback landing just under the drop point (raycast result overrides it)
+    falling: true, fallVelocity: 0, currentY: y, targetY: Math.max(minY, y - 2), minY,
     groundResolved: false, groundRayEntity,
   })
   console.log('[Trap] 🪤 Created message-driven trap visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))
@@ -546,7 +550,7 @@ function updateMsgTrapVisuals(dt: number): void {
     if (vis.groundRayEntity !== null) {
       const result = RaycastResult.getOrNull(vis.groundRayEntity)
       if (result) {
-        if (result.hits.length > 0) vis.targetY = Math.max(0, result.hits[0].position!.y)
+        if (result.hits.length > 0) vis.targetY = Math.max(vis.minY, result.hits[0].position!.y)
         vis.groundResolved = true
         engine.removeEntity(vis.groundRayEntity)
         vis.groundRayEntity = null

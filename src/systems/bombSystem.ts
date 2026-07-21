@@ -30,6 +30,7 @@ import { triggerEmote } from '~system/RestrictedActions'
 
 import { room } from '../shared/messages'
 import { BOMB_FUSE_SEC, BOMB_EXPLOSION_RADIUS } from '../shared/components'
+import { dropFloorY } from '../shared/constants'
 
 const BOMB_STAGGER_MS = 1000 // match regular hit stun duration
 import { triggerHitFlash } from '../gameState/hitFlashState'
@@ -332,6 +333,7 @@ interface MsgBombVisual {
   fallVelocity: number
   currentY: number
   targetY: number
+  minY: number  // floor clamp: SCENE_FLOOR_Y on main terrain, 0 on the interior level
   groundResolved: boolean
   groundRayEntity: Entity | null
   lastBlinkMs: number
@@ -450,10 +452,12 @@ function createBombVisual(x: number, y: number, z: number, ownerId: string, bomb
     ft.scale = Vector3.create(0.15, 0.2, 0.15)
   }
 
+  const minY = dropFloorY(y)
   msgBombVisuals.push({
     entity, flameEntity, bombId, x, z, ownerId,
     createdAtMs: Date.now(),
-    falling: true, fallVelocity: 0, currentY: y, targetY: 0,
+    // Fallback landing just under the drop point (raycast result overrides it)
+    falling: true, fallVelocity: 0, currentY: y, targetY: Math.max(minY, y - 2), minY,
     groundResolved: false, groundRayEntity,
     lastBlinkMs: Date.now(), blinkOn: false,
   })
@@ -504,7 +508,7 @@ export function bombClientSystem(dt: number): void {
     if (vis.groundRayEntity !== null) {
       const result = RaycastResult.getOrNull(vis.groundRayEntity)
       if (result) {
-        if (result.hits.length > 0) vis.targetY = Math.max(0, result.hits[0].position!.y)
+        if (result.hits.length > 0) vis.targetY = Math.max(vis.minY, result.hits[0].position!.y)
         vis.groundResolved = true
         engine.removeEntity(vis.groundRayEntity)
         vis.groundRayEntity = null

@@ -34,6 +34,19 @@ export const PROXIMITY_STEAL_RADIUS = 1.8
 /** Immunity duration after stealing/picking up flag (ms). */
 export const STEAL_IMMUNITY_MS = 3000
 
+// ── Scene floor ──
+
+/** Y of the invisible collider plane below the lifted scene (players can walk on it).
+ * The main terrain sits above this; the interior room level is at Y=0. */
+export const SCENE_FLOOR_Y = 48
+
+/** Minimum landing Y for a dropped item (trap/bomb) based on its drop height.
+ * Guards against a failed/unreported ground raycast sinking items to Y=0 under the
+ * lifted terrain, while still allowing drops on the interior room level at Y=0. */
+export function dropFloorY(dropY: number): number {
+  return dropY > SCENE_FLOOR_Y ? SCENE_FLOOR_Y : 0
+}
+
 // ── Trap (banana) ──
 
 /** How long a trap stays on the ground before despawning (seconds). */
