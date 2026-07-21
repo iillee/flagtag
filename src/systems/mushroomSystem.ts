@@ -7,6 +7,7 @@ import {
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
 import { Flag } from '../shared/components'
+import { SCENE_FLOOR_Y } from '../shared/constants'
 import { getPlayer } from '@dcl/sdk/players'
 import { registerSystem } from './systemManager'
 
@@ -29,8 +30,12 @@ const MUSHROOM_Y_OFFSET = 0.0   // Raise mushroom above ground so it's not burie
 
 
 
-const RAY_START_Y = 100  // Cast from high above
-const WATER_Y = 1.577    // Y level of water planes
+// Derived from SCENE_FLOOR_Y so the constants track any future scene lift/shift.
+// Pre-lift (SCENE_FLOOR_Y=0) these were 100 and 1.577. Post +48m lift the raw
+// literals left mushrooms failing the water-rejection check (every surface is
+// now Y>=48 >> 1.677) and spawning on the water plane instead of being retried.
+const RAY_START_Y = SCENE_FLOOR_Y + 100  // cast from ~100m above the scene floor
+const WATER_Y = SCENE_FLOOR_Y + 1.577    // water plane sits ~1.6m above the floor
 
 // ── Helpers ──
 function isServerConnected(): boolean {

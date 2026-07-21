@@ -218,7 +218,32 @@ export function countdownServerSystem(): void {
     mutable.roundEndTimeMs = nextBoundary
     
     console.log('[Server] Next round will end at:', new Date(nextBoundary).toISOString())
-    
+
+    // ── SYNC FLAG RESET (must happen before handleRoundEnd's first await) ──
+    // Clients start their end-of-round pre-fade + audience teleport as soon as their
+    // LOCAL countdown reads 0, without waiting for the server. If the flag is still
+    // Carried at that moment, the carrier's teleport to the audience area can trigger
+    // proximity-based drops/steals and holdTimeServerSystem keeps crediting time
+    // during the black-screen gap — that's the "score creep + flag changes hands
+    // during the fade" artifact. Resetting to AtBase HERE (synchronously, before we
+    // even schedule the async handler) closes the window: CRDT propagates the flag
+    // reset to every client at essentially the same instant their pre-fade fires.
+    // flushHoldTimeAccum() inside handleRoundEnd still credits the last carrier for
+    // time up to this moment (holdTimeCarrierKey is tracked separately from
+    // flag.carrierPlayerId).
+    resetGravityState()
+    const roundEndSpawnPoint = getRandomSpawnPoint()
+    const flagPre = Flag.getMutable(flagEntity)
+    flagPre.state = FlagState.AtBase
+    flagPre.carrierPlayerId = ''
+    flagPre.baseX = roundEndSpawnPoint.x
+    flagPre.baseY = roundEndSpawnPoint.y
+    flagPre.baseZ = roundEndSpawnPoint.z
+    Transform.getMutable(flagEntity).position = Vector3.create(
+      roundEndSpawnPoint.x, roundEndSpawnPoint.y, roundEndSpawnPoint.z
+    )
+    console.log('[Server] Round-end: flag reset SYNC before handler schedule')
+
     handleRoundEnd(timer.roundEndTimeMs, nextScoreRoundId).catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
       try {
@@ -347,26 +372,16 @@ async function handleRoundEnd(endedRoundEndMs: number, nextScoreRoundId: string)
   // id only after final scores are captured, then stamp every reset entity below.
   setCurrentScoreRoundId(nextScoreRoundId)
 
-  // ── 2a. Reset flag BEFORE sending respawnPlayers ──
-  // Flag must be at base before clients receive the message, so the CRDT
-  // update is queued in the same tick and clients never see the old state.
-  resetGravityState()
-  const spawnPoint = getRandomSpawnPoint()
-  console.log('[Server] Round ended, flag respawning at random location')
-  
-  const flagMutable = Flag.getMutable(flagEntity)
-  flagMutable.state = FlagState.AtBase
-  flagMutable.carrierPlayerId = ''
-  flagMutable.baseX = spawnPoint.x
-  flagMutable.baseY = spawnPoint.y
-  flagMutable.baseZ = spawnPoint.z
-  
-  const flagT = Transform.getMutable(flagEntity)
-  flagT.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
+  // ── 2a. Flag reset already happened SYNC in countdownServerSystem before this
+  //        handler was scheduled. See the comment there for why it moved. The read
+  //        of scores above is still authoritative because we snapshotted before
+  //        the sync reset (flag was still Carried when countdownServerSystem read
+  //        the accumulator via flushHoldTimeAccum — which credits the ex-carrier
+  //        via holdTimeCarrierKey, not flag.carrierPlayerId).
 
-  // ── 2b. Send respawnPlayers AFTER flag reset ──
+  // ── 2b. Send respawnPlayers (flag already at base from countdownServerSystem) ──
   room.send('respawnPlayers', { t: 0, winnersJson })
-  console.log('[Server] 📍 Respawning all players (flag already reset)')
+  console.log('[Server] 📍 Respawning all players (flag already reset SYNC upstream)')
 
   // ══════════════════════════════════════════════════════════════════════
   // CLEANUP: Everything below runs during the cinematic (players frozen)
