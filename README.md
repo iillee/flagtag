@@ -62,7 +62,7 @@ Server persistence (player wallets, upgrades, leaderboards, flag state) is memor
 ## Development
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 24+
 
 ### Setup & Run
 ```bash
