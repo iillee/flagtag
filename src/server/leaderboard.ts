@@ -19,6 +19,24 @@ import {
 
 export type LeaderboardEntry = { userId: string; name: string; roundsWon: number }
 
+// ── Daily leaderboard load state ──
+// False until the daily board has been successfully seeded from Storage. While false,
+// the round-end daily update must not persist: the synced state was seeded with a
+// false-empty '[]' after a failed boot read, and persisting increments computed from
+// it would wipe the stored board — the exact hazard the strict reads exist to prevent.
+// roundManager attempts a strict recovery read before each daily update until one
+// succeeds. (updatePlayerName is already safe while false: an empty board has no
+// entries to patch, so it never persists.)
+let dailyLeaderboardLoaded = false
+
+export function markDailyLeaderboardLoaded(): void {
+  dailyLeaderboardLoaded = true
+}
+
+export function isDailyLeaderboardLoaded(): boolean {
+  return dailyLeaderboardLoaded
+}
+
 // ── Pure helpers ──
 
 /** Parse a leaderboard JSON string into entries (safe — returns [] on error). */

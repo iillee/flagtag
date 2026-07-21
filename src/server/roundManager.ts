@@ -19,10 +19,13 @@ import {
   SPLASH_DURATION_MS,
 } from './serverState'
 import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard } from './persistence'
-import { parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset } from './leaderboard'
+import {
+  parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset,
+  isDailyLeaderboardLoaded, markDailyLeaderboardLoaded, patchAllLeaderboardNames,
+} from './leaderboard'
 
 import { awardRoundCoins, clearPlayerEconomyState } from './economy'
-import { flushHoldTimeAccum, clearHoldTimeAccum, clearHoldTimeTotals, getHoldTimeAccumFor, resetGravityState, computeGravityTarget, ensureFlagEntity } from './flagLogic'
+import { flushHoldTimeAccum, clearHoldTimeAccum, clearHoldTimeTotals, getHoldTimeAccumFor, resetGravityState, computeGravityTarget, clearLastDropper, ensureFlagEntity } from './flagLogic'
 import { activeTraps, activeProjectiles, activeOrbits, activeBombs, removeTrap, removeProjectile, removeBomb, clearAllCombatCooldowns } from './combat'
 import { spawnMushrooms } from './mushroomSystem'
 import { addPlayerLifetimeWin, addPlayerLifetimeHoldTime, loadPlayerUpgrades, loadPlayerLifetimeWins, loadPlayerLifetimeHoldTime } from './economy'
@@ -139,6 +142,11 @@ export function lightningServerSystem(dt: number): void {
         mutable.dropAnchorZ = strikePos.z
         const t = Transform.getMutable(flagEntity)
         t.position = Vector3.create(strikePos.x, strikePos.y, strikePos.z)
+        // Server-initiated drop: without this, whoever dropped the flag BEFORE the
+        // struck carrier picked it up would keep ground-report authority (with a
+        // fresh one-shot re-armed by computeGravityTarget) anchored at the strike
+        // height — lightning strikes high-value carriers, often airborne in updrafts.
+        clearLastDropper()
         computeGravityTarget(strikePos.y)
         persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       }
@@ -279,14 +287,25 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   flushHoldTimeAccum()
 
   // ── 1. Read scores BEFORE resetting ──
+  // Aggregate by normalized player id, taking the MAX score per player: after a
+  // mid-round restart, a CRDT-replayed phantom entity (reserved range — the boot
+  // reconciler deliberately leaves those untouched) can coexist with the player's
+  // live entity. Counting both would double every award downstream: coins,
+  // daily/all-time wins, lifetime totals, and the podium. Max, not sum — the two
+  // entities may reflect the same accumulation, so summing would double-count.
   let maxSeconds = 0
-  const players: { userId: string; seconds: number }[] = []
-
+  const secondsByPlayer = new Map<string, number>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
     if (data.seconds > 0) {
-      players.push({ userId: data.playerId, seconds: data.seconds })
+      const key = data.playerId.toLowerCase()
+      const prev = secondsByPlayer.get(key) ?? 0
+      if (data.seconds > prev) secondsByPlayer.set(key, data.seconds)
       if (data.seconds > maxSeconds) maxSeconds = data.seconds
     }
+  }
+  const players: { userId: string; seconds: number }[] = []
+  for (const [userId, seconds] of secondsByPlayer) {
+    players.push({ userId, seconds })
   }
 
   // ── 2. Compute top 3 ──
@@ -432,21 +451,48 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   // round-end (webhook, flag persist), and one player's failure must not skip the others.
 
   // ── 6. Check for daily/monthly leaderboard reset ──
+  // Track the outcome: if the check fails at a midnight-crossing round end, the
+  // synced board may still hold YESTERDAY's entries — updating it would mix days
+  // and persist the mixture. Skip only the daily update in that case; the all-time
+  // update below is independent of the daily calendar.
+  let leaderboardResetOk = true
   try {
     await checkLeaderboardDailyReset()
-  } catch (err) { console.error('[Server] ❌ Leaderboard daily reset check failed:', err) }
+  } catch (err) {
+    leaderboardResetOk = false
+    console.error('[Server] ❌ Leaderboard daily reset check failed — skipping the daily update this round:', err)
+  }
 
-  // ── 7. Update all three leaderboards ──
-  if (maxSeconds > 0) {
+  // ── 7. Update the daily leaderboard ──
+  if (maxSeconds > 0 && leaderboardResetOk) {
     try {
+      // If the boot-time seed failed, the synced board is a false-empty '[]' —
+      // recover the real stored board first. The strict read throws on failure,
+      // skipping this round's daily update entirely rather than persisting
+      // increments computed from the empty board (which would wipe stored data).
+      if (!isDailyLeaderboardLoaded()) {
+        const storedDaily = patchAllLeaderboardNames((await storageGet<string>('leaderboard')) || '[]', 'leaderboard')
+        LeaderboardState.getMutable(leaderboardEntity).json = storedDaily
+        markDailyLeaderboardLoaded()
+        console.log('[Server] ✅ Daily leaderboard recovered from Storage after failed boot seed')
+      }
       const dailyEntries = parseLeaderboardJson(LeaderboardState.getOrNull(leaderboardEntity)?.json)
       incrementLeaderboardWins(dailyEntries, players, maxSeconds)
       const dailyJson = JSON.stringify(dailyEntries)
       LeaderboardState.getMutable(leaderboardEntity).json = dailyJson
       await persistLeaderboard(dailyJson)
+    } catch (err) { console.error('[Server] ❌ Daily leaderboard update failed:', err) }
+  }
 
-      // All-time: read full data from Storage, update, persist full, sync compact
-      const atFullJson = (await (async () => { try { return await storageGet<string>('allTimeLeaderboard') } catch { return null } })()) || '[]'
+  // ── 7a. Update the all-time leaderboard (independent of the daily board) ──
+  if (maxSeconds > 0) {
+    try {
+      // All-time: read full data from Storage, update, persist full, sync compact.
+      // Strict read-modify-write: a failed read REJECTS (aborting the whole
+      // all-time update via the catch below) rather than substituting '[]' —
+      // persisting an empty fallback here would wipe the entire history. null
+      // means storage definitively has no such key yet (first ever round).
+      const atFullJson = (await storageGet<string>('allTimeLeaderboard')) ?? '[]'
       const atEntries = parseLeaderboardJson(atFullJson)
       incrementLeaderboardWins(atEntries, players, maxSeconds)
       await persistAllTimeLeaderboard(JSON.stringify(atEntries))
@@ -454,39 +500,34 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
       atEntries.sort((a, b) => b.roundsWon - a.roundsWon)
       const atCompact = atEntries.slice(0, 500).map(e => ({ n: e.name, w: e.roundsWon }))
       AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = JSON.stringify(atCompact)
-    } catch (err) { console.error('[Server] ❌ Leaderboard update failed:', err) }
+    } catch (err) { console.error('[Server] ❌ All-time leaderboard update failed:', err) }
   }
 
-  // ── 7b. Award lifetime wins ──
-  if (maxSeconds > 0) {
-    const winners = players.filter(p => p.seconds >= maxSeconds)
-    for (const w of winners) {
+  // ── 7b. Lifetime stats: wins + hold time + fresh stats push ──
+  // One pipeline per player, all players CONCURRENT: the old sequential loops cost
+  // a ~2s storage round trip per departed player per step, stretching round end
+  // linearly with player count (safeStorage caps the fan-out). Order INSIDE a
+  // pipeline still matters — the stats push must read post-update values.
+  await Promise.all(players.map(async (p) => {
+    if (maxSeconds > 0 && p.seconds >= maxSeconds) {
       try {
-        const newWins = await addPlayerLifetimeWin(w.userId)
-        console.log('[LifetimeWins] Player', w.userId.slice(0, 8), 'now has', newWins, 'lifetime wins')
-      } catch (err) { console.error('[LifetimeWins] Failed for', w.userId.slice(0, 8), err) }
+        const newWins = await addPlayerLifetimeWin(p.userId)
+        console.log('[LifetimeWins] Player', p.userId.slice(0, 8), 'now has', newWins, 'lifetime wins')
+      } catch (err) { console.error('[LifetimeWins] Failed for', p.userId.slice(0, 8), err) }
     }
-  }
-
-  // ── 7c. Accumulate lifetime flag hold time ──
-  for (const p of players) {
     if (p.seconds > 0) {
       try {
         const newTotal = await addPlayerLifetimeHoldTime(p.userId, p.seconds)
         console.log('[LifetimeHoldTime] Player', p.userId.slice(0, 8), '+', p.seconds.toFixed(1), 's -> total:', newTotal.toFixed(1), 's')
       } catch (err) { console.error('[LifetimeHoldTime] Failed for', p.userId.slice(0, 8), err) }
     }
-  }
-
-  // ── 7d. Send updated lifetime stats to each player via WebSocket ──
-  for (const p of players) {
     try {
       const upgrades = await loadPlayerUpgrades(p.userId)
       const wins = await loadPlayerLifetimeWins(p.userId)
       const holdTime = await loadPlayerLifetimeHoldTime(p.userId)
       room.send('upgradesResponse', { upgradesJson: serializeUpgrades(upgrades), wins, lifetimeHoldTime: holdTime }, { to: [p.userId] })
     } catch (err) { console.error('[Server] Round-end stats send failed for', p.userId.slice(0, 8), err) }
-  }
+  }))
 
   // ── 8. Persist flag state ──
   try {

@@ -31,7 +31,22 @@ let flagFalling = false
 let flagFallVelocity = 0
 let flagGravityTargetY = FLAG_MIN_Y
 const carrierYSamples: { y: number; time: number }[] = []
-let lastDropperId = ''  // Who dropped the flag — only accept reportGroundY from them
+let lastDropperId = ''  // Who dropped the flag — '' means server-initiated (no trusted dropper)
+// Ground-report guards (reset by computeGravityTarget at every drop):
+// - dropBaselineY is the anchor Y at the moment of the drop, IMMUTABLE for that
+//   drop. The +5m raise cap is computed from it — capping from the live anchor
+//   would let repeated reports ratchet the flag up 5m at a time to FLAG_MAX_Y.
+// - groundReportUsed makes dropper ground resolution one-shot per drop; its legit
+//   purpose (un-burying a flag dropped inside terrain) needs exactly one report.
+// - groundLowerReportsLeft bounds the anyone-may-LOWER path used for drops with no
+//   trusted dropper (see the reportGroundY handler): honest resolution needs one or
+//   two reports, and the budget stops report spam from flooding persistFlagState.
+//   Initialized non-zero so a restart-restored dropped flag (which never goes
+//   through computeGravityTarget) gets a budget too.
+let dropBaselineY = 0
+let groundReportUsed = false
+const GROUND_LOWER_REPORT_BUDGET = 8
+let groundLowerReportsLeft = GROUND_LOWER_REPORT_BUDGET
 let lastKnownCarrierPos: Vector3 | null = null
 let lastCarrierPositionMs = 0
 
@@ -58,6 +73,11 @@ function resetCarrierTracking(): void {
  * above that level (e.g. mid-jump), gravity pulls it down to the estimated ground.
  */
 export function computeGravityTarget(dropY: number): void {
+  // Called at every drop site — record the immutable baseline for this drop and
+  // re-arm the one-shot ground report and the lower-only report budget.
+  dropBaselineY = dropY
+  groundReportUsed = false
+  groundLowerReportsLeft = GROUND_LOWER_REPORT_BUDGET
   let minY = Infinity
   for (const s of carrierYSamples) {
     if (s.y < minY) minY = s.y
@@ -79,6 +99,18 @@ export function resetGravityState(): void {
   flagFallVelocity = 0
   carrierYSamples.length = 0
   resetCarrierTracking()
+}
+
+/**
+ * Mark the current drop as server-initiated: reportGroundY then trusts no client
+ * for raises and only accepts LOWER-only reports (see registerFlagHandlers). The
+ * force-drop paths inside flagServerSystem clear the dropper inline; this export
+ * exists for drops performed outside this module (lightning strike in
+ * roundManager) — without it a lightning drop would leave the PREVIOUS dropper
+ * armed with a fresh one-shot raise anchored at the strike height.
+ */
+export function clearLastDropper(): void {
+  lastDropperId = ''
 }
 
 // ── Hold-time helpers ──
@@ -654,20 +686,46 @@ export function registerFlagHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      if (lastDropperId && from !== lastDropperId) return
       const flag = Flag.getOrNull(flagEntity)
       if (!flag || flag.state !== FlagState.Dropped) return
-
-      // Clamp the client-reported ground Y to the valid terrain band. Without an upper
-      // bound a hostile client could send y=1e6 and hang the flag in the sky, unreachable
-      // until round end. NaN/Infinity are rejected outright. A ground report may RAISE
-      // the flag by at most a few meters (its legit purpose is un-burying a flag dropped
-      // inside terrain): FLAG_MAX_Y alone still sits ~60m above the highest walkable
-      // ground, so an uncapped raise would let the dropper hang the flag out of
-      // PICKUP_RADIUS reach for the rest of the round.
+      // NaN/Infinity are rejected outright (before consuming any one-shot/budget).
       if (!Number.isFinite(data.y)) return
-      const maxRaise = flag.dropAnchorY + 5
-      const newTarget = Math.min(FLAG_MAX_Y, maxRaise, Math.max(FLAG_MIN_Y, data.y + 0.5))
+
+      let newTarget: number
+      if (lastDropperId) {
+        // Dropper-authoritative path: only the recorded dropper's report is trusted,
+        // and only ONCE per drop — the legit flow sends a single raycast result, and
+        // repeat reports would otherwise retry the raise cap.
+        if (from !== lastDropperId) return
+        if (groundReportUsed) return
+        groundReportUsed = true
+        // Clamp the client-reported ground Y to the valid terrain band. Without an
+        // upper bound a hostile client could send y=1e6 and hang the flag in the sky,
+        // unreachable until round end. A report may RAISE the flag by at most a few
+        // meters (its legit purpose is un-burying a flag dropped inside terrain):
+        // FLAG_MAX_Y alone still sits ~60m above the highest walkable ground, so an
+        // uncapped raise would let the dropper hang the flag out of PICKUP_RADIUS
+        // reach for the rest of the round. The cap is computed from the IMMUTABLE
+        // per-drop baseline, never the live anchor a successful report moves.
+        // Accepted residual: a mid-air dropper (updraft) can still hang the flag at
+        // their drop height +5 until water sink / round end — capping below the drop
+        // point would break the legit un-bury case.
+        newTarget = Math.min(FLAG_MAX_Y, dropBaselineY + 5, Math.max(FLAG_MIN_Y, data.y + 0.5))
+      } else {
+        // Server-initiated drop (carrier disconnect, stale carrier, lightning) or a
+        // restart-restored dropped flag: no dropper to trust — but these drops also
+        // have no carrier ground samples, so the flag can be left hanging at the
+        // vanished carrier's mid-air Y. Accept LOWER-only reports from ANY client so
+        // an honest raycast can settle it to real ground. Raising is never allowed,
+        // so the worst a hostile client gets is sinking the flag to FLAG_MIN_Y —
+        // below the water line, i.e. a water respawn back to base. Mild, bounded,
+        // and better than a flag hanging unreachable for the rest of the round.
+        // Budgeted per drop so spammed ε-lower reports can't flood persistFlagState.
+        if (groundLowerReportsLeft <= 0) return
+        newTarget = Math.max(FLAG_MIN_Y, data.y + 0.5)
+        if (newTarget >= flagGravityTargetY) return
+        groundLowerReportsLeft--
+      }
       flagGravityTargetY = newTarget
 
       const currentAnchorY = flag.dropAnchorY

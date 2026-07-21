@@ -152,6 +152,7 @@ export interface ActiveTrap {
   fallVelocity: number
   targetY: number
   groundResolved: boolean
+  dropY: number  // Y at drop time — upper bound for ground reports (ground can't be above the drop)
 }
 export const activeTraps: ActiveTrap[] = []
 
@@ -470,6 +471,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     // terrain, below the walkable surface) where nobody can ever trigger it.
     targetY: Math.max(SCENE_FLOOR_Y, dropPos.y - 2),
     groundResolved: false,
+    dropY: dropPos.y,
   })
   lastTrapDropTime.set(playerId, now)
 
@@ -1065,11 +1067,14 @@ export function registerCombatHandlers(): void {
   room.onMessage('reportShellWallDist', (data, context) => {
     try {
       if (!context) return
+      // Math.min propagates NaN — an unchecked NaN maxDist would make the shell's
+      // travel-distance termination check permanently false.
+      if (!Number.isFinite(data.maxDist)) return
       const from = context.from.toLowerCase()
       for (const projectile of activeProjectiles) {
         if (projectile.firedBy === from && !projectile.wallDistReported) {
           const oldMax = projectile.maxDistance
-          projectile.maxDistance = Math.min(projectile.maxDistance, data.maxDist)
+          projectile.maxDistance = Math.min(projectile.maxDistance, Math.max(0, data.maxDist))
           if (projectile.maxDistance < oldMax) projectile.hitWall = true
           projectile.wallDistReported = true
           console.log('[Server] 🎯 Projectile wall distance updated:', data.maxDist.toFixed(1), 'm')
@@ -1081,9 +1086,17 @@ export function registerCombatHandlers(): void {
   room.onMessage('reportShellGroundY', (data, context) => {
     try {
       if (!context) return
+      // Finite-check every client float: Math.max propagates NaN, and a NaN groundY
+      // makes the landing comparison permanently false — the shell would never land.
+      if (!Number.isFinite(data.shellX) || !Number.isFinite(data.shellZ) || !Number.isFinite(data.groundY)) return
+      const from = context.from.toLowerCase()
       let closest: ActiveProjectile | null = null
       let closestDist = 5
       for (const projectile of activeProjectiles) {
+        // Owner-only: every client raycasts the broadcast shells, but accepting
+        // whichever report arrives first would let a hostile client poison other
+        // players' shells. The owner's client always reports its own.
+        if (projectile.firedBy !== from) continue
         const pos = Transform.get(projectile.entity).position
         const dx = pos.x - data.shellX
         const dz = pos.z - data.shellZ
@@ -1094,16 +1107,27 @@ export function registerCombatHandlers(): void {
         }
       }
       if (closest) {
-        closest.groundY = Math.max(0, data.groundY)
+        // The client raycasts DOWNWARD from the shell, so the ground can't be above
+        // it — cap the raise or a hostile report could park the shell in the sky.
+        const shellY = Transform.get(closest.entity).position.y
+        closest.groundY = Math.min(shellY + 1, Math.max(0, data.groundY))
       }
     } catch (err) { console.error('[Server] ❌ reportShellGroundY handler error:', err) }
   })
   room.onMessage('reportBananaGroundY', (data, context) => {
     try {
       if (!context) return
+      // Finite-check every client float — a NaN targetY poisons the fall loop's
+      // comparison (never true) and the trap falls forever, neutralized.
+      if (!Number.isFinite(data.bananaX) || !Number.isFinite(data.bananaZ) || !Number.isFinite(data.groundY)) return
+      const from = context.from.toLowerCase()
       let closest: ActiveTrap | null = null
       let closestDist = 3
       for (const trap of activeTraps) {
+        // Owner-only (see reportShellGroundY): groundResolved is first-report-wins,
+        // so without this any client could poison another player's trap before the
+        // honest reports land. The owner's client always reports its own drops.
+        if (trap.droppedBy !== from) continue
         const pos = Transform.get(trap.entity).position
         const dx = pos.x - data.bananaX
         const dz = pos.z - data.bananaZ
@@ -1114,9 +1138,11 @@ export function registerCombatHandlers(): void {
         }
       }
       if (closest && !closest.groundResolved) {
-        // Clamp to the scene floor — a missed client raycast reports groundY=0,
-        // which is ~50m under the lifted map.
-        closest.targetY = Math.max(SCENE_FLOOR_Y, data.groundY)
+        // Clamp BOTH ways: floor at the scene floor (a missed client raycast reports
+        // groundY=0, ~50m under the lifted map), and cap the raise just above the
+        // drop point — ground can't legitimately be above where the trap was dropped,
+        // and an uncapped raise would park the trap unreachable in the sky.
+        closest.targetY = Math.min(closest.dropY + 1, Math.max(SCENE_FLOOR_Y, data.groundY))
         closest.groundResolved = true
         const currentY = Transform.get(closest.entity).position.y
         if (currentY <= closest.targetY) {
@@ -1131,12 +1157,20 @@ export function registerCombatHandlers(): void {
   room.onMessage('reportBombGroundY', (data, context) => {
     try {
       if (!context) return
+      // Finite-check the client float (see reportBananaGroundY).
+      if (!Number.isFinite(data.groundY)) return
+      const from = context.from.toLowerCase()
       const bombId = data.bombId
       const bomb = activeBombs.find(b => b.bombId === bombId)
       if (bomb && !bomb.groundResolved) {
-        // Clamp to the scene floor — a missed client raycast reports groundY=0, which
-        // both sinks the bomb under the map AND fakes a 50m "impact explosion" drop.
-        bomb.targetY = Math.max(SCENE_FLOOR_Y, data.groundY)
+        // Owner-only: bomb ids are broadcast, and groundResolved is first-report-wins.
+        if (bomb.droppedBy !== from) return
+        // Clamp BOTH ways: floor at the scene floor (a missed client raycast reports
+        // groundY=0, which both sinks the bomb under the map AND fakes a 50m "impact
+        // explosion" drop), and cap the raise just above the drop point (ground can't
+        // be above the drop; an uncapped raise parks the bomb in the sky and
+        // suppresses its impact explosion).
+        bomb.targetY = Math.min(bomb.dropY + 1, Math.max(SCENE_FLOOR_Y, data.groundY))
         bomb.groundResolved = true
         if (!bomb.exploded) {
           const currentY = Transform.get(bomb.entity).position.y
