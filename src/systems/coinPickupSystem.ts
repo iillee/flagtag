@@ -249,21 +249,9 @@ registerDeferredBalanceApplier(applyDeferredBalance)
 
 // ── Setup: find coins after composites load ──
 
-// Coin-model entities that are NOT pickable coins (e.g. the interior room's
-// decorative treasure — same glb as the real coins, but client-only, so the
-// server's coin registry can never validate them and every request would be
-// rejected). Registered by their creators; src alone can't distinguish them.
-const excludedCoinEntities = new Set<Entity>()
-
-/** Mark a coin-model entity as decoration so setupCoins never tracks it. */
-export function excludeFromCoinPickup(entity: Entity): void {
-  excludedCoinEntities.add(entity)
-}
-
 function setupCoins(): void {
   let count = 0
   for (const [entity] of engine.getEntitiesWith(GltfContainer, Transform)) {
-    if (excludedCoinEntities.has(entity)) continue
     const gltf = GltfContainer.get(entity)
     const src = gltf.src.toLowerCase()
     if (!src.includes('coin_01') && !src.includes('doubloon')) continue

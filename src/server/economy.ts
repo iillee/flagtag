@@ -17,16 +17,35 @@ import {
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
   coinIdFromPosition,
 } from '../shared/coins'
+import { INTERIOR_COIN_LOCATIONS } from '../shared/coinLocations'
+import {
+  coinRespawnTimerAfterRollback,
+  completeCoinClaim,
+  getRespawnableCoinIds,
+  releaseCoinForRespawn,
+  reserveCoinClaim,
+  rollbackCoinClaim,
+} from './coinClaimLifecycle'
 import {
   parseUpgrades, serializeUpgrades, BOOMERANG_STORE, MUSIC_STORE, TRAP_STORE,
   type UpgradeData
 } from '../shared/upgrades'
 import { room } from '../shared/messages'
 import type { BoomerangColor } from '../gameState/boomerangColor'
+import {
+  beginTrackedRitual,
+  consumeTrackedRitualClaim,
+  invalidateRitualsOutsideAllowedArea,
+  isWithinDistance,
+  type Point3,
+} from './actionValidation'
 
 // ── Coin cooldown state (module-local) ──
 /** Set of coinIds currently picked up (empty spots waiting for random respawn) */
 const coinCooldowns = new Set<string>()
+/** Coins hidden while their +1 wallet mutation is still in flight. */
+const pendingCoinClaims = new Map<string, number>()
+let nextCoinClaimToken = 0
 /** Timer tracking seconds until next random coin respawn */
 let coinRespawnTimer = 0
 
@@ -36,6 +55,28 @@ let coinRespawnTimer = 0
 // (buy three 150-coin items with 300 coins, claim the blessing twice, etc). Tasks for the
 // same player run strictly one-after-another; a task that throws does not block the next.
 const balanceChains = new Map<string, Promise<unknown>>()
+const blessingRitualStarts = new Map<string, number>()
+let blessingPedestalPosition: Point3 | null = null
+
+function getBlessingPedestalPosition(): Point3 | null {
+  if (blessingPedestalPosition) return blessingPedestalPosition
+  for (const [entity, gltf, transform] of engine.getEntitiesWith(GltfContainer, Transform)) {
+    if (!gltf.src.includes('ritual_pedestal') && !gltf.src.includes('Pedestal_01')) continue
+    blessingPedestalPosition = {
+      x: transform.position.x,
+      y: transform.position.y,
+      z: transform.position.z,
+    }
+    return blessingPedestalPosition
+  }
+  return null
+}
+
+function isPlayerNearBlessingPedestal(playerId: string): boolean {
+  const playerPos = getPlayerPosition(playerId)
+  const pedestalPos = getBlessingPedestalPosition()
+  return !!playerPos && !!pedestalPos && isWithinDistance(playerPos, pedestalPos, 8)
+}
 function serializePerPlayer<T>(key: string, task: () => Promise<T>): Promise<T> {
   const prev = balanceChains.get(key) ?? Promise.resolve()
   const next = prev.then(() => task(), () => task())
@@ -95,6 +136,7 @@ const COIN_SERVER_PICKUP_RADIUS = 16
 function getKnownCoinPositions(): Map<string, { x: number; y: number; z: number }> | null {
   if (knownCoinPositions) return knownCoinPositions
   const found = new Map<string, { x: number; y: number; z: number }>()
+  let compositeCoinCount = 0
   for (const [entity] of engine.getEntitiesWith(GltfContainer, Transform)) {
     const src = GltfContainer.get(entity).src.toLowerCase()
     if (!src.includes('coin_01') && !src.includes('doubloon')) continue
@@ -103,8 +145,14 @@ function getKnownCoinPositions(): Map<string, { x: number; y: number; z: number 
     // never re-parents them (coinBobSpinSystem is client-only), so no parent walk needed.
     const p = Transform.get(entity).position
     found.set(coinIdFromPosition(p.x, p.y, p.z), { x: p.x, y: p.y, z: p.z })
+    compositeCoinCount++
   }
-  if (found.size === 0) {
+  // The room is built only by the client runtime. Register its shared positions
+  // explicitly so the server can validate the same deterministic ids.
+  for (const p of INTERIOR_COIN_LOCATIONS) {
+    found.set(coinIdFromPosition(p.x, p.y, p.z), { x: p.x, y: p.y, z: p.z })
+  }
+  if (compositeCoinCount === 0) {
     // Composite not loaded (yet?) — retry on the next scan. Log once so a server
     // runtime that never instantiates the composite is visible: pickups fail closed
     // (all rejected) for as long as this holds, which a playtest catches immediately.
@@ -129,7 +177,7 @@ function getKnownCoinPositions(): Map<string, { x: number; y: number; z: number 
     return null
   }
   knownCoinPositions = found
-  console.log('[Coins] Server coin registry built:', found.size, 'coins')
+  console.log('[Coins] Server coin registry built:', found.size, 'coins (including', INTERIOR_COIN_LOCATIONS.length, 'interior)')
   return found
 }
 
@@ -147,6 +195,7 @@ export function clearPlayerEconomyState(walletAddress: string): void {
   }
   coinPickupTimes.delete(key)
   winsReconciledPlayers.delete(key)
+  blessingRitualStarts.delete(key)
   // Land any pending doc flush immediately and drop the flush chain once settled —
   // the server may be torn down at any moment (no shutdown signal) once the world empties.
   clearPlayerDocState(key)
@@ -501,6 +550,16 @@ function updateCoinStateCRDT(): void {
 // ── Coin server system ──
 
 export function coinServerSystem(dt: number): void {
+  // Ritual authority is continuous, not just a start/end snapshot. A modified
+  // client cannot begin here, leave for 31 seconds, then return to claim.
+  const invalidatedRituals = invalidateRitualsOutsideAllowedArea(
+    blessingRitualStarts,
+    isPlayerNearBlessingPedestal
+  )
+  if (invalidatedRituals > 0) {
+    console.log('[Server] 🙏 Invalidated', invalidatedRituals, 'blessing ritual(s) after leaving the pedestal')
+  }
+
   // Land any debounced player-doc writes and retry failed ones that are due
   // (independent of coin respawns).
   flushDuePlayerDocs()
@@ -518,13 +577,14 @@ export function coinServerSystem(dt: number): void {
 
   coinRespawnTimer += dt
   if (coinRespawnTimer < COIN_RESPAWN_INTERVAL_SEC) return
-  coinRespawnTimer = 0
 
-  const cooldownArray = Array.from(coinCooldowns)
+  const cooldownArray = getRespawnableCoinIds(coinCooldowns, pendingCoinClaims)
+  if (cooldownArray.length === 0) return
+  coinRespawnTimer = 0
   const idx = Math.floor(Math.random() * cooldownArray.length)
   const coinId = cooldownArray[idx]
 
-  coinCooldowns.delete(coinId)
+  if (!releaseCoinForRespawn(coinCooldowns, pendingCoinClaims, coinId)) return
   room.send('coinRespawned', { coinId })
   updateCoinStateCRDT()
   console.log('[Coins] Coin respawned (random):', coinId, '| remaining empty:', coinCooldowns.size)
@@ -639,22 +699,32 @@ export function registerEconomyHandlers(): void {
     // OLDEST entry (respawning that coin early) rather than rejecting — a plain rejection would
     // let one client spamming ids jam pickups for EVERYONE, since the set drains only ~1/30s.
     if (coinCooldowns.size >= MAX_COIN_COOLDOWNS) {
-      const oldest = coinCooldowns.values().next().value
+      const oldest = getRespawnableCoinIds(coinCooldowns, pendingCoinClaims)[0]
       if (oldest !== undefined) {
-        coinCooldowns.delete(oldest)
+        releaseCoinForRespawn(coinCooldowns, pendingCoinClaims, oldest)
         room.send('coinRespawned', { coinId: oldest })
-      }
+      } else return
     }
 
-    coinCooldowns.add(coinId)
+    const claimToken = ++nextCoinClaimToken
+    reserveCoinClaim(coinCooldowns, pendingCoinClaims, coinId, claimToken)
     updateCoinStateCRDT()
 
     // Debounced persist (immediatePersist: false) — the only balance path allowed to
     // ride the debounce; worst case an abrupt teardown loses a few seconds of pickups.
     serializePerPlayer(from, () => addPlayerCoins(from, 1, false)).then(newBalance => {
+      if (!completeCoinClaim(pendingCoinClaims, coinId, claimToken)) return
       room.send('coinPickedUp', { coinId, playerId: from, newBalance })
       console.log('[Coins] Coin picked up:', coinId, 'by', from.slice(0, 8), 'balance:', newBalance)
-    }).catch(err => console.error('[Coins] Error awarding coin:', err))
+    }).catch(err => {
+      console.error('[Coins] Error awarding coin:', err)
+      if (rollbackCoinClaim(coinCooldowns, pendingCoinClaims, coinId, claimToken)) {
+        coinRespawnTimer = coinRespawnTimerAfterRollback(coinRespawnTimer, coinCooldowns)
+        updateCoinStateCRDT()
+        room.send('coinRespawned', { coinId })
+        console.log('[Coins] Restored coin after failed wallet award:', coinId)
+      }
+    })
   })
 
   room.onMessage('requestWalletBalance', async (_data, context) => {
@@ -836,6 +906,28 @@ export function registerEconomyHandlers(): void {
     }
   })
 
+  // Begin: server records the start so a later claim proves the ritual elapsed.
+  room.onMessage('beginBlessing', async (_data, context) => {
+    if (!context) return
+    const from = context.from.toLowerCase()
+    const beganAt = Date.now()
+    try {
+      await beginTrackedRitual({
+        ritualStarts: blessingRitualStarts,
+        playerId: from,
+        beganAtMs: beganAt,
+        isPlayerAllowed: () => isPlayerNearBlessingPedestal(from),
+        validateEligibility: () => serializePerPlayer(from, async () => {
+          await ensurePlayerHydrated(from)
+          const today = new Date().toISOString().slice(0, 10)
+          return getPlayerBlessingDate(from) !== today && isPlayerNearBlessingPedestal(from)
+        }),
+      })
+    } catch (err) {
+      console.error('[Server] ❌ beginBlessing handler error:', err)
+    }
+  })
+
   // Claim: client sends after completing the full ritual
   room.onMessage('requestBlessing', async (_data, context) => {
     if (!context) return
@@ -848,7 +940,15 @@ export function registerEconomyHandlers(): void {
         // Strict hydration: a failure aborts the claim BEFORE anything is marked
         // used, so the player can simply retry.
         await ensurePlayerHydrated(from)
-        if (getPlayerBlessingDate(from) === today) return { alreadyBlessed: true, newBalance: 0 }
+        if (getPlayerBlessingDate(from) === today) return { alreadyBlessed: true, ritualInvalid: false, newBalance: 0 }
+        if (!consumeTrackedRitualClaim(
+          blessingRitualStarts,
+          from,
+          Date.now(),
+          () => isPlayerNearBlessingPedestal(from)
+        )) {
+          return { alreadyBlessed: false, ritualInvalid: true, newBalance: 0 }
+        }
         const current = playerCoinBalances.get(from) ?? 0
         const bal = Math.min(current + BLESSING_COINS, MAX_COINS)
         // Transactional: award + used-marker are snapshotted together and land in
@@ -860,10 +960,14 @@ export function registerEconomyHandlers(): void {
           playerCoinBalances.set(from, bal)
           setPlayerBlessingDate(from, today)
         })
-        return { alreadyBlessed: false, newBalance: bal }
+        return { alreadyBlessed: false, ritualInvalid: false, newBalance: bal }
       })
       if (outcome.alreadyBlessed) {
         room.send('blessingResult', { success: false, reason: 'already_blessed', newBalance: 0 }, { to: [from] })
+        return
+      }
+      if (outcome.ritualInvalid) {
+        room.send('blessingResult', { success: false, reason: 'ritual_invalid', newBalance: 0 }, { to: [from] })
         return
       }
       room.send('walletBalance', { playerId: from, coins: outcome.newBalance }, { to: [from] })

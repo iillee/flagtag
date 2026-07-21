@@ -350,9 +350,9 @@ let heartbeatAuthorityCarrier = ''
 let heartbeatStaleState: FlagState | null = null
 let heartbeatStaleCarrier = ''
 // Must outlast TWO heartbeat intervals, not one: a re-correction needs 2 consecutive
-// mismatched heartbeats (10s), so a shorter authority window leaves a gap where the
+// mismatched heartbeats (2s), so a shorter authority window leaves a gap where the
 // safety nets revert to the stale CRDT and the orphaned clone flickers back.
-const HEARTBEAT_AUTHORITY_MS = 11000
+const HEARTBEAT_AUTHORITY_MS = 2500
 room.onMessage('flagHeartbeat', (data) => {
   const hbState = data.state as FlagState
   const hbCarrier = (data.carrierId || '').toLowerCase()
@@ -363,7 +363,7 @@ room.onMessage('flagHeartbeat', (data) => {
   // keep inflating the ex-carrier's interpolated row. Guarded so an older server
   // without the field is harmless.
   if (typeof data.carrierHoldSeconds === 'number') {
-    applyServerHoldTime(hbState === FlagState.Carried ? hbCarrier : '', data.carrierHoldSeconds)
+    applyServerHoldTime(hbState === FlagState.Carried ? hbCarrier : '', data.carrierHoldSeconds, data.roundId)
   }
 
   // Read current CRDT state through getEffectiveFlag (prefers a carried entity — the one
@@ -390,7 +390,7 @@ room.onMessage('flagHeartbeat', (data) => {
   // Don't override during pending pickup or grace period
   if (pendingPickupUntil > 0 || Date.now() < confirmedGraceUntil) return
 
-  // Require 2 consecutive mismatches (10s) before correcting —
+  // Require 2 consecutive mismatches (about 2s) before correcting —
   // brief CRDT propagation delays are normal, don't fight them.
   heartbeatMismatchCount++
   if (heartbeatMismatchCount < 2) {

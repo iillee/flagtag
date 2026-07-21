@@ -12,7 +12,8 @@ import {
   playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
   playerLifetimeHoldTimeCache, lastStealTime, deathPenaltyCooldowns,
   sessionDeaths, sessionBananasDropped, sessionBoomerangsFired,
-  isRealName, clearPositionHistory
+  isRealName, clearPositionHistory, roundParticipants,
+  nameChangeCooldowns, feedbackCooldowns,
 } from './serverState'
 import { persistPlayerNames } from './persistence'
 import { updatePlayerName } from './leaderboard'
@@ -23,10 +24,25 @@ import { clearCombatCooldowns } from './combat'
 import { clearPlayerMushroomState } from './mushroomSystem'
 import { schedulePlayerJoinDiscord, markVisitorDataDirty } from './analytics'
 import { capture, identify } from './posthog'
+import {
+  FEEDBACK_COOLDOWN_MS,
+  NAME_CHANGE_COOLDOWN_MS,
+  pruneExpiredTimestamps,
+} from './cooldownValidation'
 
 // ── Player join/leave detection ──
 
+const COOLDOWN_PRUNE_INTERVAL_MS = 10_000
+let nextCooldownPruneMs = 0
+
 export function playerTrackingSystem(): void {
+  const now = Date.now()
+  if (now >= nextCooldownPruneMs) {
+    nextCooldownPruneMs = now + COOLDOWN_PRUNE_INTERVAL_MS
+    pruneExpiredTimestamps(nameChangeCooldowns, now, NAME_CHANGE_COOLDOWN_MS)
+    pruneExpiredTimestamps(feedbackCooldowns, now, FEEDBACK_COOLDOWN_MS)
+  }
+
   // Build set of currently connected players (normalized to lowercase)
   const nowConnected = new Set<string>()
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
@@ -40,6 +56,7 @@ export function playerTrackingSystem(): void {
     if (!currentlyConnected.has(userKey)) {
       // Player just connected (or reconnected)
       currentlyConnected.add(userKey)
+      roundParticipants.add(userKey)
 
       // Create synced hold time entity if this is a new player
       getOrCreateHoldTimeEntity(userKey)
@@ -150,6 +167,8 @@ export function playerTrackingSystem(): void {
       clearPositionHistory(userKey)
       clearPlayerEconomyState(userKey)
       clearPlayerMushroomState(userKey)
+      // Abuse cooldowns intentionally survive reconnects and expire through the
+      // periodic timestamp pruning above.
 
       changed = true
     }

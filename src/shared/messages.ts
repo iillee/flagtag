@@ -76,12 +76,11 @@ export const Messages = {
   playerChargeStart: Schemas.Map({ playerId: Schemas.String, t: Schemas.Int }),
   playerChargeStop: Schemas.Map({ playerId: Schemas.String, t: Schemas.Int }),
 
-  // Lightning (carrier client → all clients)
+  // Lightning (server → all clients)
   lightningWarning: Schemas.Map({ t: Schemas.Int }),
   lightningStrike: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
 
   // Round end respawn
-  requestReloadRespawn: Schemas.Map({ t: Schemas.Int }),
   respawnPlayers: Schemas.Map({ t: Schemas.Int, winnersJson: Schemas.String }),
 
   // Coin messages
@@ -125,13 +124,15 @@ export const Messages = {
 
   // Blessing (pedestal daily reward)
   checkBlessing: Schemas.Map({ t: Schemas.Int }),                                           // Client → Server (pre-check)
+  beginBlessing: Schemas.Map({ t: Schemas.Int }),                                           // Client → Server (server records ritual start)
   requestBlessing: Schemas.Map({ t: Schemas.Int }),                                         // Client → Server (claim after ritual)
   blessingResult: Schemas.Map({ success: Schemas.Boolean, reason: Schemas.String, newBalance: Schemas.Int }),  // Server → Client
 
-  // Flag heartbeat (server → client, every 5s, read-only visual correction).
+  // Flag heartbeat (server → client, every second, read-only visual correction).
   // carrierHoldSeconds: the carrier's authoritative hold total — lets the scoreboard
   // re-anchor over WS when PlayerFlagHoldTime CRDT updates are stalled (0 when not carried).
-  flagHeartbeat: Schemas.Map({ state: Schemas.String, carrierId: Schemas.String, carrierHoldSeconds: Schemas.Float, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+  // roundId prevents delayed CRDT values from a completed round being adopted by the next one.
+  flagHeartbeat: Schemas.Map({ state: Schemas.String, carrierId: Schemas.String, carrierHoldSeconds: Schemas.Float, roundId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
 }
 
 export const room = registerMessages(Messages)

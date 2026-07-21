@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["jest", "node"]
+  },
+  "include": [
+    "src/server/leaderboardData.ts",
+    "src/server/actionValidation.ts",
+    "src/server/coinClaimLifecycle.ts",
+    "src/server/roundAccounting.ts",
+    "src/server/scoreRoundId.ts",
+    "src/gameState/holdTimeScores.ts",
+    "src/shared/coinIds.ts",
+    "src/shared/coinLocations.ts",
+    "src/shared/interiorGeometry.ts",
+    "test/**/*.ts"
+  ]
+}

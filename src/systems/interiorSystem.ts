@@ -20,7 +20,12 @@ import { setInteriorBypass, setWaterSurfaceY } from './waterSystem'
 import { room } from '../shared/messages'
 import { Flag, FlagState } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
-import { excludeFromCoinPickup } from './coinPickupSystem'
+import { INTERIOR_COIN_LOCATIONS } from '../shared/coinLocations'
+import {
+  INTERIOR_CENTER,
+  INTERIOR_ROTATION_DEG,
+  rotateAroundInteriorCenter,
+} from '../shared/interiorGeometry'
 
 // ── Config ──
 
@@ -29,22 +34,17 @@ const ENTRY_DOOR_POS = Vector3.create(352.56, 50.26, 353.49)
 const ENTRY_DOOR_INTERACT_DIST = 6
 
 /** Interior room center — dedicated interior level at Y=0, with plenty of room for many interiors */
-const ROOM_CENTER = Vector3.create(378, 0, 422)
+const ROOM_CENTER = Vector3.create(INTERIOR_CENTER.x, INTERIOR_CENTER.y, INTERIOR_CENTER.z)
 const ROOM_SIZE = 10       // meters square
 const ROOM_WALL_H = 4      // wall height
 const ROOM_FLOOR_Y = ROOM_CENTER.y - 0.05
 
 /** Room rotation in degrees (clockwise positive) */
-const ROOM_ROT_DEG = 20
-const ROOM_ROT_RAD = (ROOM_ROT_DEG * Math.PI) / 180
-const COS_R = Math.cos(-ROOM_ROT_RAD)
-const SIN_R = Math.sin(-ROOM_ROT_RAD)
+const ROOM_ROT_DEG = INTERIOR_ROTATION_DEG
 
 /** Rotate a world position around ROOM_CENTER on the XZ plane */
 function rotPos(x: number, y: number, z: number): { x: number; y: number; z: number } {
-  const dx = x - ROOM_CENTER.x
-  const dz = z - ROOM_CENTER.z
-  return { x: ROOM_CENTER.x + dx * COS_R - dz * SIN_R, y, z: ROOM_CENTER.z + dx * SIN_R + dz * COS_R }
+  return rotateAroundInteriorCenter(x, y, z)
 }
 
 /** Y-axis rotation quaternion for the room angle */
@@ -233,32 +233,17 @@ function buildRoom(): void {
 
   // ── Treasure coins ──
   const COIN_SRC = 'assets/asset-packs/doubloon/Coin_01/Coin_01.glb'
-  const coinPositions = [
-    // Scattered around the room — avoid center path and vestibule
-    Vector3.create(cx + 3.5, cy + 0.8, cz + 3.5),
-    Vector3.create(cx + 3.5, cy + 0.8, cz - 3.5),
-    Vector3.create(cx - 1,   cy + 0.8, cz + 3.5),
-    Vector3.create(cx - 1,   cy + 0.8, cz - 3.5),
-    Vector3.create(cx - 3,   cy + 0.8, cz + 1.5),
-    Vector3.create(cx - 3,   cy + 0.8, cz - 1.5),
-  ]
-
-  for (const pos of coinPositions) {
+  for (const pos of INTERIOR_COIN_LOCATIONS) {
     const coin = engine.addEntity()
-    const rp = rotPos(pos.x, pos.y, pos.z)
     Transform.create(coin, {
-      position: Vector3.create(rp.x, rp.y, rp.z),
+      position: Vector3.create(pos.x, pos.y, pos.z),
       scale: Vector3.create(10, 10, 10),
       rotation: combineRot(Quaternion.fromEulerDegrees(90, 0, 0)),
     })
     GltfContainer.create(coin, { src: COIN_SRC })
-    // Decoration only: these exist client-side only, so the server's coin registry
-    // can never validate them — without this, a coin scan that catches the room
-    // built early would produce pickup requests the server always rejects.
-    excludeFromCoinPickup(coin)
     roomEntities.push(coin)
   }
-  console.log('[Interior] Spawned', coinPositions.length, 'treasure coins')
+  console.log('[Interior] Spawned', INTERIOR_COIN_LOCATIONS.length, 'treasure coins')
 
   // ── Lever (placed at room center, code-managed) ──
   const leverEntity = engine.addEntity()

@@ -19,6 +19,7 @@ import { persistFlagState } from './persistence'
 import {
   flagEntity, setFlagEntity,
   holdTimeEntities, knownPlayers, playerNames,
+  currentScoreRoundId,
   lastStealTime,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
@@ -144,8 +145,19 @@ export function getOrCreateHoldTimeEntity(userKey: string): Entity {
   // entity id. Reusing it blindly makes every later getMutable() throw
   // "[mutable] Component ctf-player-flag-hold-time for <id> not found" on every
   // frame (and also breaks handleRoundEnd). Validate, and recreate if stale.
-  if (cached !== undefined && PlayerFlagHoldTime.getOrNull(cached) !== null) {
-    return cached
+  if (cached !== undefined) {
+    const cachedData = PlayerFlagHoldTime.getOrNull(cached)
+    if (cachedData !== null) {
+      // A failed/emergency round transition can leave a live entity carrying the
+      // previous round id. Never accumulate new-round time into that stale value.
+      if (cachedData.roundId !== currentScoreRoundId) {
+        const mutable = PlayerFlagHoldTime.getMutable(cached)
+        mutable.seconds = 0
+        mutable.roundId = currentScoreRoundId
+        holdTimeShadowTotals.set(key, 0)
+      }
+      return cached
+    }
   }
   if (cached !== undefined) {
     // Drop the stale reference and release the dead entity (best-effort) so its
@@ -166,7 +178,7 @@ export function getOrCreateHoldTimeEntity(userKey: string): Entity {
   if (seededSeconds > 0) {
     console.log('[Server] Recreated hold-time entity for', key.slice(0, 8), 'seeded with', seededSeconds.toFixed(1), 's from shadow total')
   }
-  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: seededSeconds })
+  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: seededSeconds, roundId: currentScoreRoundId })
   // Let the SDK auto-allocate the network id (no explicit enum id). An enum id
   // makes the network identity (networkId:0, entityId:enumId) — GLOBAL and shared
   // — so a per-address hash id collides (and throws "id already in use") both
@@ -398,7 +410,9 @@ export function checkProximitySteal(): void {
 }
 
 // ── Flag heartbeat: periodic WS broadcast so clients can self-correct stale CRDT ──
-const FLAG_HEARTBEAT_INTERVAL_MS = 5000
+// This is also the live scoreboard's reliable transport when dynamic
+// PlayerFlagHoldTime entities stall. Match the displayed score cadence.
+const FLAG_HEARTBEAT_INTERVAL_MS = 1000
 let lastHeartbeatMs = 0
 
 // ── Server systems ──
@@ -408,7 +422,8 @@ export function flagServerSystem(dt: number): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
 
-  // Heartbeat: broadcast flag state every 5s so clients can fix stale visuals
+  // Heartbeat: broadcast flag state every second so clients can fix stale visuals
+  // and keep every player's live score authoritative.
   const nowForHb = Date.now()
   if (nowForHb - lastHeartbeatMs >= FLAG_HEARTBEAT_INTERVAL_MS) {
     lastHeartbeatMs = nowForHb
@@ -430,6 +445,7 @@ export function flagServerSystem(dt: number): void {
       state: flag.state as string,
       carrierId: flag.carrierPlayerId || '',
       carrierHoldSeconds,
+      roundId: currentScoreRoundId,
       x: pos.x,
       y: pos.y,
       z: pos.z
@@ -625,25 +641,6 @@ export function registerFlagHandlers(): void {
       if (!context) return
       handleDrop(context.from.toLowerCase())
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
-  })
-
-  room.onMessage('requestReloadRespawn', (_data, context) => {
-    try {
-      if (!context) return
-      const from = context.from.toLowerCase()
-      const flag = Flag.getOrNull(flagEntity)
-      if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== from) return
-      const spawn = getRandomSpawnPoint()
-      const mutable = Flag.getMutable(flagEntity)
-      mutable.state = FlagState.AtBase
-      mutable.carrierPlayerId = ''
-      mutable.baseX = spawn.x
-      mutable.baseY = spawn.y
-      mutable.baseZ = spawn.z
-      const t = Transform.getMutable(flagEntity)
-      t.position = Vector3.create(spawn.x, spawn.y, spawn.z)
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
-    } catch (err) { console.error('[Server] ❌ requestReloadRespawn handler error:', err) }
   })
 
   room.onMessage('requestSteal', (data, context) => {

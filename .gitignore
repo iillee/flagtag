@@ -4,10 +4,10 @@ bin/
 
 # Dependencies
 node_modules/
-package-lock.json
 
 # Decentraland build artifacts
 .dclignore
+dclcontext/
 
 # Environment variables
 .env

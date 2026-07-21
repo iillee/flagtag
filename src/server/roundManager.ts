@@ -5,23 +5,24 @@
 
 import { engine, Transform, PlayerIdentityData } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { storageGet } from './safeStorage'
 import {
-  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState, AllTimeLeaderboardState,
+  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer, LeaderboardState,
   getRandomSpawnPoint, SyncIds
 } from '../shared/components'
 import { room } from '../shared/messages'
 import {
   flagEntity, countdownEntity,
-  leaderboardEntity, allTimeLeaderboardEntity,
+  leaderboardEntity,
   holdTimeEntities, knownPlayers, playerNames,
   lastStealTime, playerLifetimeHoldTimeCache,
-  SPLASH_DURATION_MS,
+  SPLASH_DURATION_MS, roundParticipants,
+  currentScoreRoundId, scoreRoundSessionId, setCurrentScoreRoundId,
 } from './serverState'
-import { persistFlagState, persistLeaderboard, persistAllTimeLeaderboard } from './persistence'
+import { persistFlagState, persistLeaderboard } from './persistence'
 import {
   parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset,
-  isDailyLeaderboardLoaded, markDailyLeaderboardLoaded, patchAllLeaderboardNames,
+  isDailyLeaderboardLoaded, recoverDailyLeaderboard,
+  incrementAllTimeLeaderboardWins,
 } from './leaderboard'
 
 import { awardRoundCoins, clearPlayerEconomyState } from './economy'
@@ -33,6 +34,9 @@ import { serializeUpgrades } from '../shared/upgrades'
 import { capture } from './posthog'
 import { EnvVar } from '@dcl/sdk/server'
 import { isPreview } from './analytics'
+import { buildRoundAwardPlayers } from './roundAccounting'
+import { mutateDailyLeaderboardAfterRecovery } from './leaderboardLifecycle'
+import { buildScoreRoundId } from './scoreRoundId'
 
 // Secret comes from the environment only — never hardcode a webhook token (public bundles).
 let ROUND_WINNER_WEBHOOK = ''
@@ -209,21 +213,31 @@ export function countdownServerSystem(): void {
     console.log('[Server] ⏰ Round end! Triggered at roundEndTimeMs:', new Date(timer.roundEndTimeMs).toISOString(), `(${msAfter}ms after)`)
     
     const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
-    
+    const nextScoreRoundId = buildScoreRoundId(scoreRoundSessionId, nextBoundary)
     const mutable = CountdownTimer.getMutable(countdownEntity)
     mutable.roundEndTimeMs = nextBoundary
     
     console.log('[Server] Next round will end at:', new Date(nextBoundary).toISOString())
     
-    handleRoundEnd(timer.roundEndTimeMs).catch((err) => {
+    handleRoundEnd(timer.roundEndTimeMs, nextScoreRoundId).catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
       try {
+        setCurrentScoreRoundId(nextScoreRoundId)
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried) {
           const mutable = Flag.getMutable(flagEntity)
           mutable.state = FlagState.AtBase
           mutable.carrierPlayerId = ''
         }
+        for (const [entity] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+          const holdTime = PlayerFlagHoldTime.getMutableOrNull(entity)
+          if (holdTime) {
+            holdTime.seconds = 0
+            holdTime.roundId = currentScoreRoundId
+          }
+        }
+        clearHoldTimeAccum()
+        clearHoldTimeTotals()
         lightningRollTimer = 0
         lightningStrikeScheduled = false
         lightningWarningTimer = 0
@@ -263,9 +277,10 @@ function computeMatchId(roundEndMs: number): string {
   return `${YYYY}${MM}${DD}-${HH}-${NN}`
 }
 
-async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
+async function handleRoundEnd(endedRoundEndMs: number, nextScoreRoundId: string): Promise<void> {
   const now = Date.now()
   const matchId = computeMatchId(endedRoundEndMs)
+  const endedScoreRoundId = currentScoreRoundId
   console.log('[Server] Match ID:', matchId)
 
   // ══════════════════════════════════════════════════════════════════════
@@ -296,6 +311,7 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   let maxSeconds = 0
   const secondsByPlayer = new Map<string, number>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+    if (data.roundId !== endedScoreRoundId) continue
     if (data.seconds > 0) {
       const key = data.playerId.toLowerCase()
       const prev = secondsByPlayer.get(key) ?? 0
@@ -307,6 +323,9 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   for (const [userId, seconds] of secondsByPlayer) {
     players.push({ userId, seconds })
   }
+  // Participation is independent of scoring: players who joined the round but never
+  // held the flag still receive the documented participation coin.
+  const awardPlayers = buildRoundAwardPlayers(roundParticipants, secondsByPlayer)
 
   // ── 2. Compute top 3 ──
   const topPlayers = [...players]
@@ -323,6 +342,10 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
       }
     })
   const winnersJson = JSON.stringify(topPlayers)
+
+  // Everything read above belongs to the ending round. Switch the authoritative
+  // id only after final scores are captured, then stamp every reset entity below.
+  setCurrentScoreRoundId(nextScoreRoundId)
 
   // ── 2a. Reset flag BEFORE sending respawnPlayers ──
   // Flag must be at base before clients receive the message, so the CRDT
@@ -354,6 +377,8 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
     connectedNow.add(identity.address.toLowerCase())
   }
+  roundParticipants.clear()
+  for (const userId of connectedNow) roundParticipants.add(userId)
 
   const entitiesToRemove: string[] = []
   for (const [entity, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
@@ -363,7 +388,10 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
     // startup reconciler skips and the removal branch below can't reach — otherwise a
     // frozen seconds=200 phantom would "win" every round forever after a mid-round restart.
     const m = PlayerFlagHoldTime.getMutableOrNull(entity)
-    if (m) m.seconds = 0
+    if (m) {
+      m.seconds = 0
+      m.roundId = currentScoreRoundId
+    }
     if (!connectedNow.has(key)) {
       entitiesToRemove.push(key)
     }
@@ -438,11 +466,11 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
 
   // ── 5b. Award coins ──
-  await awardRoundCoins(players)
+  await awardRoundCoins(awardPlayers)
   // Awards re-create per-player economy state (balance chains, pending persists) for
   // players who disconnected mid-round; clean it up or those maps leak an entry per
   // departed player. Also force-flushes their awarded balance.
-  for (const p of players) {
+  for (const p of awardPlayers) {
     if (!connectedNow.has(p.userId.toLowerCase())) clearPlayerEconomyState(p.userId)
   }
 
@@ -450,56 +478,35 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   // are strict and can reject on a timeout — one failed step must not skip the rest of
   // round-end (webhook, flag persist), and one player's failure must not skip the others.
 
-  // ── 6. Check for daily/monthly leaderboard reset ──
-  // Track the outcome: if the check fails at a midnight-crossing round end, the
-  // synced board may still hold YESTERDAY's entries — updating it would mix days
-  // and persist the mixture. Skip only the daily update in that case; the all-time
-  // update below is independent of the daily calendar.
-  let leaderboardResetOk = true
+  // ── 6–7. Recover/reset/update the daily leaderboard as one guarded transition ──
+  // If recovery or reset fails at midnight, mutation never runs, so yesterday's
+  // entries cannot be mixed into the new day. All-time updates remain independent.
   try {
-    await checkLeaderboardDailyReset()
+    await mutateDailyLeaderboardAfterRecovery(
+      {
+        isLoaded: isDailyLeaderboardLoaded,
+        recover: recoverDailyLeaderboard,
+        reset: () => checkLeaderboardDailyReset(),
+      },
+      maxSeconds > 0
+        ? async () => {
+            const dailyEntries = parseLeaderboardJson(LeaderboardState.getOrNull(leaderboardEntity)?.json)
+            incrementLeaderboardWins(dailyEntries, players, maxSeconds)
+            const dailyJson = JSON.stringify(dailyEntries)
+            await persistLeaderboard(dailyJson)
+            LeaderboardState.getMutable(leaderboardEntity).json = dailyJson
+          }
+        : undefined
+    )
   } catch (err) {
-    leaderboardResetOk = false
-    console.error('[Server] ❌ Leaderboard daily reset check failed — skipping the daily update this round:', err)
-  }
-
-  // ── 7. Update the daily leaderboard ──
-  if (maxSeconds > 0 && leaderboardResetOk) {
-    try {
-      // If the boot-time seed failed, the synced board is a false-empty '[]' —
-      // recover the real stored board first. The strict read throws on failure,
-      // skipping this round's daily update entirely rather than persisting
-      // increments computed from the empty board (which would wipe stored data).
-      if (!isDailyLeaderboardLoaded()) {
-        const storedDaily = patchAllLeaderboardNames((await storageGet<string>('leaderboard')) || '[]', 'leaderboard')
-        LeaderboardState.getMutable(leaderboardEntity).json = storedDaily
-        markDailyLeaderboardLoaded()
-        console.log('[Server] ✅ Daily leaderboard recovered from Storage after failed boot seed')
-      }
-      const dailyEntries = parseLeaderboardJson(LeaderboardState.getOrNull(leaderboardEntity)?.json)
-      incrementLeaderboardWins(dailyEntries, players, maxSeconds)
-      const dailyJson = JSON.stringify(dailyEntries)
-      LeaderboardState.getMutable(leaderboardEntity).json = dailyJson
-      await persistLeaderboard(dailyJson)
-    } catch (err) { console.error('[Server] ❌ Daily leaderboard update failed:', err) }
+    console.error('[Server] ❌ Daily leaderboard transition failed — skipping the daily update this round:', err)
   }
 
   // ── 7a. Update the all-time leaderboard (independent of the daily board) ──
   if (maxSeconds > 0) {
     try {
-      // All-time: read full data from Storage, update, persist full, sync compact.
-      // Strict read-modify-write: a failed read REJECTS (aborting the whole
-      // all-time update via the catch below) rather than substituting '[]' —
-      // persisting an empty fallback here would wipe the entire history. null
-      // means storage definitively has no such key yet (first ever round).
-      const atFullJson = (await storageGet<string>('allTimeLeaderboard')) ?? '[]'
-      const atEntries = parseLeaderboardJson(atFullJson)
-      incrementLeaderboardWins(atEntries, players, maxSeconds)
-      await persistAllTimeLeaderboard(JSON.stringify(atEntries))
-      // Compact format for CRDT sync
-      atEntries.sort((a, b) => b.roundsWon - a.roundsWon)
-      const atCompact = atEntries.slice(0, 500).map(e => ({ n: e.name, w: e.roundsWon }))
-      AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = JSON.stringify(atCompact)
+      // Serialized with name patches so neither read-modify-write can overwrite the other.
+      await incrementAllTimeLeaderboardWins(players, maxSeconds)
     } catch (err) { console.error('[Server] ❌ All-time leaderboard update failed:', err) }
   }
 
@@ -577,8 +584,6 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
 }
 
 // ── Message handlers ──
-const ADMIN_ADDRESSES = ['0x1e93e534c5e26b01ed242410b43ae23dd0faa52b']
-
 export function registerRoundHandlers(): void {
   room.onMessage('requestUpdraftLocation', (_data, _context) => {
     try {

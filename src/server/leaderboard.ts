@@ -14,18 +14,25 @@ import { storageGet, storageSet } from './safeStorage'
 import {
   LeaderboardState, AllTimeLeaderboardState
 } from '../shared/components'
+import {
+  type LeaderboardEntry,
+  parseLeaderboardJsonSafe,
+  parseLeaderboardJsonStrict,
+} from './leaderboardData'
+import { AsyncSerialQueue } from './asyncSerialQueue'
+import { commitDailyLeaderboardReset } from './leaderboardLifecycle'
 
 // ── Types ──
 
-export type LeaderboardEntry = { userId: string; name: string; roundsWon: number }
+export type { LeaderboardEntry } from './leaderboardData'
 
 // ── Daily leaderboard load state ──
 // False until the daily board has been successfully seeded from Storage. While false,
 // the round-end daily update must not persist: the synced state was seeded with a
 // false-empty '[]' after a failed boot read, and persisting increments computed from
 // it would wipe the stored board — the exact hazard the strict reads exist to prevent.
-// roundManager attempts a strict recovery read before each daily update until one
-// succeeds. (updatePlayerName is already safe while false: an empty board has no
+// Boot and round reset paths attempt a strict recovery before any reset/update until
+// one succeeds. (updatePlayerName is already safe while false: an empty board has no
 // entries to patch, so it never persists.)
 let dailyLeaderboardLoaded = false
 
@@ -37,12 +44,58 @@ export function isDailyLeaderboardLoaded(): boolean {
   return dailyLeaderboardLoaded
 }
 
+/** Strictly recover the full daily board before any reset or round update may write it. */
+export async function recoverDailyLeaderboard(): Promise<void> {
+  if (dailyLeaderboardLoaded) return
+  const storedRaw = (await storageGet<string>('leaderboard')) ?? '[]'
+  parseLeaderboardJsonStrict(storedRaw)
+  const storedDaily = patchAllLeaderboardNames(storedRaw, 'leaderboard')
+  LeaderboardState.getMutable(leaderboardEntity).json = storedDaily
+  markDailyLeaderboardLoaded()
+  console.log('[Server] ✅ Daily leaderboard recovered and validated from Storage')
+}
+
 // ── Pure helpers ──
 
 /** Parse a leaderboard JSON string into entries (safe — returns [] on error). */
 export function parseLeaderboardJson(json: string | undefined | null): LeaderboardEntry[] {
-  if (!json) return []
-  try { return JSON.parse(json) } catch { return [] }
+  return parseLeaderboardJsonSafe(json)
+}
+
+// All full all-time leaderboard read-modify-writes share this queue. Name changes and
+// round wins used to race through independent Storage reads and the later stale write
+// could erase a win that had already landed.
+const allTimeMutationQueue = new AsyncSerialQueue()
+
+function syncAllTimeLeaderboard(entries: LeaderboardEntry[]): void {
+  const compact = [...entries]
+    .sort((a, b) => b.roundsWon - a.roundsWon)
+    .slice(0, 500)
+    .map(e => ({ n: e.name, w: e.roundsWon }))
+  AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = JSON.stringify(compact)
+}
+
+function mutateAllTimeLeaderboard(mutate: (entries: LeaderboardEntry[]) => boolean): Promise<void> {
+  const run = async () => {
+    const full = (await storageGet<string>('allTimeLeaderboard')) ?? '[]'
+    // Strict on mutation paths: malformed persisted data is preserved for diagnosis,
+    // never silently replaced with a valid-looking empty board.
+    const entries = parseLeaderboardJsonStrict(full)
+    if (!mutate(entries)) return
+    await persistAllTimeLeaderboard(JSON.stringify(entries))
+    syncAllTimeLeaderboard(entries)
+  }
+  return allTimeMutationQueue.run(run)
+}
+
+export function incrementAllTimeLeaderboardWins(
+  winners: { userId: string; seconds: number }[],
+  maxSeconds: number
+): Promise<void> {
+  return mutateAllTimeLeaderboard(entries => {
+    incrementLeaderboardWins(entries, winners, maxSeconds)
+    return true
+  })
 }
 
 /**
@@ -107,14 +160,11 @@ export function patchAllLeaderboardNames(json: string, label: string): string {
 
 // ── Reset logic ──
 
-/**
- * Check and perform daily leaderboard reset at midnight UTC.
- * Accepts a callback for snapshotting the report before clearing (analytics concern).
- * Returns true if a reset occurred.
- */
-export async function checkLeaderboardDailyReset(
-  onReset?: (leaderboardJson: string) => Promise<void>
-): Promise<boolean> {
+/** Check and perform the daily leaderboard reset at midnight UTC. */
+export async function checkLeaderboardDailyReset(): Promise<boolean> {
+  if (!dailyLeaderboardLoaded) {
+    throw new Error('Daily leaderboard is not loaded; refusing to reset persisted data')
+  }
   const now = new Date()
   const currentDay = now.toISOString().slice(0, 10) // YYYY-MM-DD format
 
@@ -128,22 +178,16 @@ export async function checkLeaderboardDailyReset(
   if (lastLeaderboardResetDay !== currentDay) {
     console.log('[Server] Daily leaderboard reset at midnight UTC for new day:', currentDay)
 
-    // Snapshot leaderboard wins into pendingReport before clearing
-    const lb = LeaderboardState.getOrNull(leaderboardEntity)
-    const leaderboardJson = (lb && lb.json) ? lb.json : '[]'
-    if (onReset) {
-      await onReset(leaderboardJson)
-    }
-
-    setLastLeaderboardResetDay(currentDay)
-
-    // Clear the leaderboard
-    const mutable = LeaderboardState.getMutable(leaderboardEntity)
-    mutable.json = '[]'
-    await persistLeaderboard('[]')
-
-    // Persist the reset day
-    await storageSet('lastLeaderboardResetDay', currentDay)
+    // Both Storage writes must land before the CRDT or in-memory reset marker is
+    // published. A partial failure remains retryable and blocks this round's update.
+    await commitDailyLeaderboardReset({
+      persistEmptyLeaderboard: () => persistLeaderboard('[]'),
+      persistResetDay: () => storageSet('lastLeaderboardResetDay', currentDay),
+      publishEmptyLeaderboard: () => {
+        LeaderboardState.getMutable(leaderboardEntity).json = '[]'
+      },
+      markResetDay: () => setLastLeaderboardResetDay(currentDay),
+    })
 
     console.log('[Server] Leaderboard reset completed')
     return true
@@ -181,13 +225,14 @@ export function updatePlayerName(userId: string, name: string): boolean {
     monthlyVisitor.name = name
   }
 
-  // Update daily + monthly leaderboards (full format)
+  // Update the in-memory daily leaderboard. The durable player-name directory is
+  // persisted by the caller and patches leaderboard names on boot, so writing the
+  // whole daily board here is unnecessary and could race a round-end win persist.
   const standardLbs: Array<{
     getState: () => { json?: string } | null
     getMutable: () => { json: string }
-    persist: (json: string) => Promise<void>
   }> = [
-    { getState: () => LeaderboardState.getOrNull(leaderboardEntity), getMutable: () => LeaderboardState.getMutable(leaderboardEntity), persist: persistLeaderboard },
+    { getState: () => LeaderboardState.getOrNull(leaderboardEntity), getMutable: () => LeaderboardState.getMutable(leaderboardEntity) },
   ]
   for (const lb of standardLbs) {
     const state = lb.getState()
@@ -196,22 +241,12 @@ export function updatePlayerName(userId: string, name: string): boolean {
     if (patchLeaderboardNames(entries, userId, name)) {
       const json = JSON.stringify(entries)
       lb.getMutable().json = json
-      lb.persist(json).catch(e => console.error('[Server] persist leaderboard error:', e))
     }
   }
 
   // Update all-time leaderboard (compact {n,w} synced, full format in Storage)
-  storageGet<string>('allTimeLeaderboard').then(full => {
-    if (!full) return
-    const entries = parseLeaderboardJson(full)
-    if (patchLeaderboardNames(entries, userId, name)) {
-      const fullJson = JSON.stringify(entries)
-      persistAllTimeLeaderboard(fullJson).catch(e => console.error('[Server] persist all-time error:', e))
-      entries.sort((a, b) => b.roundsWon - a.roundsWon)
-      const compact = entries.slice(0, 500).map(e => ({ n: e.name, w: e.roundsWon }))
-      AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = JSON.stringify(compact)
-    }
-  }).catch(e => console.error('[Server] all-time name patch error:', e))
+  mutateAllTimeLeaderboard(entries => patchLeaderboardNames(entries, userId, name))
+    .catch(e => console.error('[Server] all-time name patch error:', e))
 
   return true
 }

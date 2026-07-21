@@ -18,7 +18,7 @@ FlagTag is a live, server-authoritative multiplayer keep-away game running 24/7 
 - **Daily ritual pedestal** blessing reward loop
 - **Mobile + desktop UI layouts** (separate React-ECS branches)
 - **Environmental systems**: water/drowning, updraft, spectator cam, cinematic round-end podium
-- **Analytics**: PostHog + Discord webhooks for visitor tracking and daily reports
+- **Analytics**: PostHog visitor tracking plus Discord player-join and round-winner notifications
 - **Hosted live events**: 2–3 x 1hr sessions per week, already measurably boosting engagement
 
 **The gap v2 solves:** FlagTag has strong core gameplay and social peaks during events, but retention leaks between events when the scene is empty. v2 introduces a three-layer retention system built on top of existing infrastructure.

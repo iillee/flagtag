@@ -129,8 +129,7 @@ export async function loadVisitorData(): Promise<void> {
         }
         console.log('[Server] Restored visitor data for', currentDay, '- loaded', visitorRecords.length, 'visitors')
       } else {
-        console.log('[Server] Visitor data was from', lastVisitorResetDay, 'but today is', currentDay, '- clearing for new day (report handled via pendingReport snapshot)')
-        // Clear for the new day — the pending report snapshot was already saved during leaderboard reset
+        console.log('[Server] Visitor data was from', lastVisitorResetDay, 'but today is', currentDay, '- clearing for new day')
         visitorSessions.clear()
         setLastVisitorResetDay(currentDay)
       }

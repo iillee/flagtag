@@ -8,7 +8,7 @@
  *   serverState.ts    — shared mutable state, constants, helpers
  *   persistence.ts    — Storage get/set wrappers
  *   leaderboard.ts    — leaderboard types, helpers, resets
- *   analytics.ts      — visitor tracking, Discord webhooks, daily reports
+ *   analytics.ts      — visitor tracking and player-join Discord notifications
  *   economy.ts        — coins, wallets, upgrades, store
  *   flagLogic.ts      — flag pickup/drop/steal, gravity, hold-time
  *   combat.ts         — traps, projectiles, orbits
@@ -22,13 +22,15 @@ import { engine, Transform } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import {
   setFlagEntity, setCountdownEntity,
+  currentScoreRoundId, setCurrentScoreRoundId, setScoreRoundSessionId,
   setLeaderboardEntity, setAllTimeLeaderboardEntity,
   setCoinStateEntity,
   flagEntity, countdownEntity,
   leaderboardEntity, allTimeLeaderboardEntity,
   coinStateEntity,
   holdTimeEntities, knownPlayers, playerBoomerangColors,
-  recordPlayerPositions,
+  recordPlayerPositions, getPlayerPosition, isRealName,
+  nameChangeCooldowns, feedbackCooldowns,
 } from './serverState'
 import { persistPlayerNames, loadPlayerNames, loadVisitorData } from './persistence'
 import {
@@ -36,7 +38,13 @@ import {
   restoreMonthlyVisitorData,
   visitorTrackingServerSystem,
 } from './analytics'
-import { patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName, markDailyLeaderboardLoaded } from './leaderboard'
+import {
+  patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName,
+  markDailyLeaderboardLoaded, isDailyLeaderboardLoaded, recoverDailyLeaderboard,
+} from './leaderboard'
+import { isValidLeaderboardJson } from './leaderboardData'
+import { resetDailyLeaderboardAfterRecovery } from './leaderboardLifecycle'
+import { FEEDBACK_COOLDOWN_MS, NAME_CHANGE_COOLDOWN_MS, isRateLimited } from './cooldownValidation'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
 import { EnvVar } from '@dcl/sdk/server'
@@ -56,6 +64,7 @@ import { registerMushroomHandlers, spawnMushrooms } from './mushroomSystem'
 import { playerTrackingSystem, nameResolverServerSystem } from './playerTracking'
 import { countdownServerSystem, lightningServerSystem, updraftServerSystem, registerRoundHandlers, loadRoundWinnerWebhook } from './roundManager'
 import { initPostHog, capture } from './posthog'
+import { buildScoreRoundId, createScoreSessionId } from './scoreRoundId'
 
 // ── Setup ──
 
@@ -105,6 +114,9 @@ export async function setupServer(): Promise<void> {
   const now = Date.now()
   const intervalMs = 5 * 60 * 1000
   const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
+  const scoreSessionId = createScoreSessionId(now, Math.random())
+  setScoreRoundSessionId(scoreSessionId)
+  setCurrentScoreRoundId(buildScoreRoundId(scoreSessionId, nextBoundary))
   setCountdownEntity(engine.addEntity())
   CountdownTimer.create(countdownEntity, {
     roundEndTimeMs: nextBoundary, roundEndTriggered: false,
@@ -123,7 +135,11 @@ export async function setupServer(): Promise<void> {
       // running with NO handlers or systems registered. A skipped boot-time reset
       // self-heals — handleRoundEnd runs the same check at every round boundary.
       try {
-        await checkLeaderboardDailyReset()
+        await resetDailyLeaderboardAfterRecovery({
+          isLoaded: isDailyLeaderboardLoaded,
+          recover: recoverDailyLeaderboard,
+          reset: () => checkLeaderboardDailyReset(),
+        })
       } catch (err) {
         console.error('[Server] ❌ Boot-time leaderboard reset check failed — continuing; round-end retries it:', err)
       }
@@ -216,9 +232,11 @@ async function initLeaderboards() {
   const [daily, at] = await Promise.all([load('leaderboard'), load('allTimeLeaderboard')])
 
   // Daily
-  if (daily.ok) markDailyLeaderboardLoaded()
-  else console.error('[Server] ⚠️ Daily leaderboard unavailable — round-end daily persists disabled until a Storage read succeeds')
-  const dailyJson = patchAllLeaderboardNames(daily.json || '[]', 'leaderboard')
+  const dailyIsValid = daily.ok && isValidLeaderboardJson(daily.json)
+  if (dailyIsValid) markDailyLeaderboardLoaded()
+  else if (!daily.ok) console.error('[Server] ⚠️ Daily leaderboard unavailable — round-end daily persists disabled until a Storage read succeeds')
+  else console.error('[Server] ⚠️ Daily leaderboard has an invalid shape — displaying empty and refusing to overwrite Storage')
+  const dailyJson = patchAllLeaderboardNames(dailyIsValid ? (daily.json || '[]') : '[]', 'leaderboard')
   console.log('[Server] Daily leaderboard JSON size:', dailyJson.length, 'bytes')
   setLeaderboardEntity(engine.addEntity())
   LeaderboardState.create(leaderboardEntity, { json: dailyJson, date: '' })
@@ -227,7 +245,10 @@ async function initLeaderboards() {
   // All-time — compact format {n,w} for CRDT sync (full data stays in Storage). No
   // loaded-flag needed: the round-end update re-reads Storage strictly and aborts on
   // failure, so a false-empty seed here only affects the synced display until then.
-  const atJsonFull = patchAllLeaderboardNames(at.json || '[]', 'all-time leaderboard')
+  if (at.ok && !isValidLeaderboardJson(at.json)) {
+    console.error('[Server] ⚠️ All-time leaderboard has an invalid shape — displaying empty and refusing to overwrite Storage')
+  }
+  const atJsonFull = patchAllLeaderboardNames(at.ok && isValidLeaderboardJson(at.json) ? (at.json || '[]') : '[]', 'all-time leaderboard')
   let atJsonSync = '[]'
   try {
     const atEntries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(atJsonFull)
@@ -261,7 +282,9 @@ function reconcileHoldTimeEntities() {
     if (!holdTimeEntities.has(key)) {
       holdTimeEntities.set(key, entity)
       knownPlayers.add(key)
-      PlayerFlagHoldTime.getMutable(entity).seconds = 0
+      const mutable = PlayerFlagHoldTime.getMutable(entity)
+      mutable.seconds = 0
+      mutable.roundId = currentScoreRoundId
       count++
     } else {
       engine.removeEntity(entity)
@@ -336,8 +359,6 @@ async function loadMailboxWebhook(): Promise<void> {
   mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || ''
   console.log(mailboxWebhook ? '[Server] ✅ Mailbox webhook loaded from env' : '[Server] ℹ️ No DISCORD_MAILBOX_WEBHOOK set — feedback disabled')
 }
-const feedbackCooldowns = new Map<string, number>()
-
 function registerFeedbackHandlers(): void {
   room.onMessage('sendFeedback', async (data, context) => {
     if (!context) return
@@ -350,7 +371,7 @@ function registerFeedbackHandlers(): void {
     // Rate limit: 1 message per 60s per player
     const now = Date.now()
     const last = feedbackCooldowns.get(from) || 0
-    if (now - last < 60000) {
+    if (isRateLimited(last, now, FEEDBACK_COOLDOWN_MS)) {
       room.send('feedbackResult', { success: false, message: 'Please wait before sending another message.' }, { to: [context.from] })
       return
     }
@@ -402,7 +423,15 @@ function registerHandlers(): void {
       const from = context.from.toLowerCase()
       const name = sanitizePlayerName(data.name)
       if (!name) return
+      const now = Date.now()
+      const existing = playerNames.get(from) || ''
+      // Always allow the initial placeholder -> real-name upgrade. Once a real name is
+      // known, cap client-driven changes so one peer cannot hammer global Storage and
+      // all-time leaderboard read-modify-writes by alternating names.
+      if (isRealName(existing) && existing !== name
+        && isRateLimited(nameChangeCooldowns.get(from), now, NAME_CHANGE_COOLDOWN_MS)) return
       if (updatePlayerName(from, name)) {
+        nameChangeCooldowns.set(from, now)
         console.log('[Server] registerName: updated', from.slice(0, 8), '->', name)
         persistPlayerNames().catch(e => console.error('[Server] persistPlayerNames error:', e))
       }
@@ -422,8 +451,20 @@ function registerHandlers(): void {
     } catch (err) { console.error('[Server] ❌ requestAllColors handler error:', err) }
   })
 
-  // Relay water lever pull to all clients
-  room.onMessage('waterLeverPulled', (_data, _context) => {
+  // Relay water lever pulls only from players actually standing in the interior room.
+  // The full client cycle is 120s rise + 60s hold + 120s lower.
+  let lastWaterLeverPullMs = 0
+  const WATER_LEVER_COOLDOWN_MS = 300_000
+  const WATER_LEVER_RADIUS = 24
+  const WATER_LEVER_POS = Vector3.create(378, 0, 422)
+  room.onMessage('waterLeverPulled', (_data, context) => {
+    if (!context) return
+    const from = context.from.toLowerCase()
+    const now = Date.now()
+    if (now - lastWaterLeverPullMs < WATER_LEVER_COOLDOWN_MS) return
+    const playerPos = getPlayerPosition(from)
+    if (!playerPos || Vector3.distance(playerPos, WATER_LEVER_POS) > WATER_LEVER_RADIUS) return
+    lastWaterLeverPullMs = now
     room.send('waterLeverPulled', { t: Date.now() })
   })
 }
