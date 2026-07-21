@@ -45,3 +45,8 @@ export function resolveInterpolationCarrier(
     confirmationExpired: hasConfirmation && !confirmationIsFresh
   }
 }
+
+/** Until the first heartbeat arrives, accept boot-time CRDT data for compatibility. */
+export function isScoreFromActiveRound(scoreRoundId: string, activeRoundId: string): boolean {
+  return activeRoundId.length === 0 || scoreRoundId === activeRoundId
+}

@@ -22,6 +22,7 @@ import { engine, Transform } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import {
   setFlagEntity, setCountdownEntity,
+  setCurrentScoreRoundId,
   setLeaderboardEntity, setAllTimeLeaderboardEntity,
   setCoinStateEntity,
   flagEntity, countdownEntity,
@@ -112,6 +113,7 @@ export async function setupServer(): Promise<void> {
   const now = Date.now()
   const intervalMs = 5 * 60 * 1000
   const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
+  setCurrentScoreRoundId(String(nextBoundary))
   setCountdownEntity(engine.addEntity())
   CountdownTimer.create(countdownEntity, {
     roundEndTimeMs: nextBoundary, roundEndTriggered: false,
@@ -277,7 +279,9 @@ function reconcileHoldTimeEntities() {
     if (!holdTimeEntities.has(key)) {
       holdTimeEntities.set(key, entity)
       knownPlayers.add(key)
-      PlayerFlagHoldTime.getMutable(entity).seconds = 0
+      const mutable = PlayerFlagHoldTime.getMutable(entity)
+      mutable.seconds = 0
+      mutable.roundId = String(CountdownTimer.get(countdownEntity).roundEndTimeMs)
       count++
     } else {
       engine.removeEntity(entity)

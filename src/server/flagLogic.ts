@@ -19,6 +19,7 @@ import { persistFlagState } from './persistence'
 import {
   flagEntity, setFlagEntity,
   holdTimeEntities, knownPlayers, playerNames,
+  currentScoreRoundId,
   lastStealTime,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
@@ -144,8 +145,19 @@ export function getOrCreateHoldTimeEntity(userKey: string): Entity {
   // entity id. Reusing it blindly makes every later getMutable() throw
   // "[mutable] Component ctf-player-flag-hold-time for <id> not found" on every
   // frame (and also breaks handleRoundEnd). Validate, and recreate if stale.
-  if (cached !== undefined && PlayerFlagHoldTime.getOrNull(cached) !== null) {
-    return cached
+  if (cached !== undefined) {
+    const cachedData = PlayerFlagHoldTime.getOrNull(cached)
+    if (cachedData !== null) {
+      // A failed/emergency round transition can leave a live entity carrying the
+      // previous round id. Never accumulate new-round time into that stale value.
+      if (cachedData.roundId !== currentScoreRoundId) {
+        const mutable = PlayerFlagHoldTime.getMutable(cached)
+        mutable.seconds = 0
+        mutable.roundId = currentScoreRoundId
+        holdTimeShadowTotals.set(key, 0)
+      }
+      return cached
+    }
   }
   if (cached !== undefined) {
     // Drop the stale reference and release the dead entity (best-effort) so its
@@ -166,7 +178,7 @@ export function getOrCreateHoldTimeEntity(userKey: string): Entity {
   if (seededSeconds > 0) {
     console.log('[Server] Recreated hold-time entity for', key.slice(0, 8), 'seeded with', seededSeconds.toFixed(1), 's from shadow total')
   }
-  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: seededSeconds })
+  PlayerFlagHoldTime.create(entity, { playerId: key, seconds: seededSeconds, roundId: currentScoreRoundId })
   // Let the SDK auto-allocate the network id (no explicit enum id). An enum id
   // makes the network identity (networkId:0, entityId:enumId) — GLOBAL and shared
   // — so a per-address hash id collides (and throws "id already in use") both
@@ -433,6 +445,7 @@ export function flagServerSystem(dt: number): void {
       state: flag.state as string,
       carrierId: flag.carrierPlayerId || '',
       carrierHoldSeconds,
+      roundId: currentScoreRoundId,
       x: pos.x,
       y: pos.y,
       z: pos.z

@@ -16,6 +16,7 @@ import {
   holdTimeEntities, knownPlayers, playerNames,
   lastStealTime, playerLifetimeHoldTimeCache,
   SPLASH_DURATION_MS, roundParticipants,
+  currentScoreRoundId, setCurrentScoreRoundId,
 } from './serverState'
 import { persistFlagState, persistLeaderboard } from './persistence'
 import {
@@ -211,21 +212,30 @@ export function countdownServerSystem(): void {
     console.log('[Server] ⏰ Round end! Triggered at roundEndTimeMs:', new Date(timer.roundEndTimeMs).toISOString(), `(${msAfter}ms after)`)
     
     const nextBoundary = (Math.floor(now / intervalMs) + 1) * intervalMs
-    
     const mutable = CountdownTimer.getMutable(countdownEntity)
     mutable.roundEndTimeMs = nextBoundary
     
     console.log('[Server] Next round will end at:', new Date(nextBoundary).toISOString())
     
-    handleRoundEnd(timer.roundEndTimeMs).catch((err) => {
+    handleRoundEnd(timer.roundEndTimeMs, String(nextBoundary)).catch((err) => {
       console.error('[Server.ERROR] handleRoundEnd failed:', err)
       try {
+        setCurrentScoreRoundId(String(nextBoundary))
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried) {
           const mutable = Flag.getMutable(flagEntity)
           mutable.state = FlagState.AtBase
           mutable.carrierPlayerId = ''
         }
+        for (const [entity] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+          const holdTime = PlayerFlagHoldTime.getMutableOrNull(entity)
+          if (holdTime) {
+            holdTime.seconds = 0
+            holdTime.roundId = currentScoreRoundId
+          }
+        }
+        clearHoldTimeAccum()
+        clearHoldTimeTotals()
         lightningRollTimer = 0
         lightningStrikeScheduled = false
         lightningWarningTimer = 0
@@ -265,9 +275,10 @@ function computeMatchId(roundEndMs: number): string {
   return `${YYYY}${MM}${DD}-${HH}-${NN}`
 }
 
-async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
+async function handleRoundEnd(endedRoundEndMs: number, nextScoreRoundId: string): Promise<void> {
   const now = Date.now()
   const matchId = computeMatchId(endedRoundEndMs)
+  const endedScoreRoundId = currentScoreRoundId
   console.log('[Server] Match ID:', matchId)
 
   // ══════════════════════════════════════════════════════════════════════
@@ -298,6 +309,7 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
   let maxSeconds = 0
   const secondsByPlayer = new Map<string, number>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
+    if (data.roundId !== endedScoreRoundId) continue
     if (data.seconds > 0) {
       const key = data.playerId.toLowerCase()
       const prev = secondsByPlayer.get(key) ?? 0
@@ -328,6 +340,10 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
       }
     })
   const winnersJson = JSON.stringify(topPlayers)
+
+  // Everything read above belongs to the ending round. Switch the authoritative
+  // id only after final scores are captured, then stamp every reset entity below.
+  setCurrentScoreRoundId(nextScoreRoundId)
 
   // ── 2a. Reset flag BEFORE sending respawnPlayers ──
   // Flag must be at base before clients receive the message, so the CRDT
@@ -370,7 +386,10 @@ async function handleRoundEnd(endedRoundEndMs: number): Promise<void> {
     // startup reconciler skips and the removal branch below can't reach — otherwise a
     // frozen seconds=200 phantom would "win" every round forever after a mid-round restart.
     const m = PlayerFlagHoldTime.getMutableOrNull(entity)
-    if (m) m.seconds = 0
+    if (m) {
+      m.seconds = 0
+      m.roundId = currentScoreRoundId
+    }
     if (!connectedNow.has(key)) {
       entitiesToRemove.push(key)
     }

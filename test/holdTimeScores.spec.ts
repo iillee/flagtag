@@ -1,5 +1,6 @@
 import {
   mergeMonotonicHoldTimes,
+  isScoreFromActiveRound,
   resolveInterpolationCarrier,
   type InterpolationCarrierResolution
 } from '../src/gameState/holdTimeScores'
@@ -108,6 +109,54 @@ describe('live scoreboard score merging', () => {
 
     it('should mark the old confirmation as expired', () => {
       expect(resolution.confirmationExpired).toBe(true)
+    })
+  })
+
+  describe('when a delayed score belongs to the previous round', () => {
+    let accepted: boolean
+
+    beforeEach(() => {
+      accepted = isScoreFromActiveRound('round-previous', 'round-current')
+    })
+
+    afterEach(() => {
+      accepted = false
+    })
+
+    it('should reject the stale score', () => {
+      expect(accepted).toBe(false)
+    })
+  })
+
+  describe('when a score belongs to the active round', () => {
+    let accepted: boolean
+
+    beforeEach(() => {
+      accepted = isScoreFromActiveRound('round-current', 'round-current')
+    })
+
+    afterEach(() => {
+      accepted = false
+    })
+
+    it('should accept the current score', () => {
+      expect(accepted).toBe(true)
+    })
+  })
+
+  describe('when no authoritative round has arrived during startup', () => {
+    let accepted: boolean
+
+    beforeEach(() => {
+      accepted = isScoreFromActiveRound('boot-round', '')
+    })
+
+    afterEach(() => {
+      accepted = false
+    })
+
+    it('should accept the boot-time replicated score', () => {
+      expect(accepted).toBe(true)
     })
   })
 })

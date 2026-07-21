@@ -44,8 +44,9 @@ Flag.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID
 
 export const PlayerFlagHoldTime = engine.defineComponent('ctf-player-flag-hold-time', {
   playerId: Schemas.String,
-  seconds: Schemas.Float
-}, { playerId: '', seconds: 0 })
+  seconds: Schemas.Float,
+  roundId: Schemas.String
+}, { playerId: '', seconds: 0, roundId: '' })
 
 PlayerFlagHoldTime.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_ID)
 

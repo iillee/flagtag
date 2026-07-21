@@ -363,7 +363,7 @@ room.onMessage('flagHeartbeat', (data) => {
   // keep inflating the ex-carrier's interpolated row. Guarded so an older server
   // without the field is harmless.
   if (typeof data.carrierHoldSeconds === 'number') {
-    applyServerHoldTime(hbState === FlagState.Carried ? hbCarrier : '', data.carrierHoldSeconds)
+    applyServerHoldTime(hbState === FlagState.Carried ? hbCarrier : '', data.carrierHoldSeconds, data.roundId)
   }
 
   // Read current CRDT state through getEffectiveFlag (prefers a carried entity — the one

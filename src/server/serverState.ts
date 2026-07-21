@@ -14,6 +14,10 @@ export function setFlagEntity(e: Entity) { flagEntity = e }
 export let countdownEntity: Entity
 export function setCountdownEntity(e: Entity) { countdownEntity = e }
 
+/** Identifier shared by every hold-time value in the current round. */
+export let currentScoreRoundId = ''
+export function setCurrentScoreRoundId(id: string) { currentScoreRoundId = id }
+
 export let leaderboardEntity: Entity
 export function setLeaderboardEntity(e: Entity) { leaderboardEntity = e }
 
