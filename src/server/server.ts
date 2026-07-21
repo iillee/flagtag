@@ -36,7 +36,7 @@ import {
   restoreMonthlyVisitorData,
   visitorTrackingServerSystem,
 } from './analytics'
-import { patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName } from './leaderboard'
+import { patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName, markDailyLeaderboardLoaded } from './leaderboard'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
 import { EnvVar } from '@dcl/sdk/server'
@@ -71,13 +71,16 @@ export async function setupServer(): Promise<void> {
     try { safeStorageSystem(dt) } catch (err) { console.error('[Server] ❌ safeStorageSystem error:', err) }
   })
 
-  await loadDiscordWebhookUrl()
-  await loadRoundWinnerWebhook()
-  await loadMailboxWebhook()
-  await initPostHog()
+  // Boot loads run CONCURRENTLY wherever independent: at ~2s per storage round
+  // trip, the old strictly-sequential chain took ~10 calls x 2s to become ready.
+  // Order constraints that remain: player names must precede the leaderboards
+  // (patchAllLeaderboardNames) and the visitor restores (name backfill), and the
+  // reset check needs the leaderboard entities.
+  await Promise.all([loadDiscordWebhookUrl(), loadRoundWinnerWebhook(), loadMailboxWebhook(), initPostHog()])
 
-  // ── Restore flag ──
-  const { state: flagStartState, position: flagStartPos, anchor: dropAnchor } = await loadFlagState()
+  // ── Restore flag (+ names, needed by everything leaderboard/visitor below) ──
+  const [flagRestore] = await Promise.all([loadFlagState(), loadPlayerNames()])
+  const { state: flagStartState, position: flagStartPos, anchor: dropAnchor } = flagRestore
 
   setFlagEntity(engine.addEntity())
   Transform.create(flagEntity, {
@@ -110,16 +113,24 @@ export async function setupServer(): Promise<void> {
   syncEntity(countdownEntity, [CountdownTimer.componentId], SyncIds.COUNTDOWN)
   console.log('[Server] Timer initialized, next round ends at:', new Date(nextBoundary).toISOString())
 
-  // ── Leaderboards ──
-  await loadPlayerNames()
-  await initLeaderboards()
-
-  // ── Reports & resets ──
-  await checkLeaderboardDailyReset()
-
-  // ── Visitor tracking (server-side only, no CRDT sync) ──
-  await loadVisitorData()
-  await restoreMonthlyVisitorData()
+  // ── Leaderboards + reset check, visitor tracking — independent, so concurrent ──
+  await Promise.all([
+    (async () => {
+      await initLeaderboards()
+      // Never let the reset check abort boot: storageGet/storageSet are strict (they
+      // reject on any transient service error, not just a hang), and an uncaught
+      // rejection here would propagate out of setupServer and leave the server
+      // running with NO handlers or systems registered. A skipped boot-time reset
+      // self-heals — handleRoundEnd runs the same check at every round boundary.
+      try {
+        await checkLeaderboardDailyReset()
+      } catch (err) {
+        console.error('[Server] ❌ Boot-time leaderboard reset check failed — continuing; round-end retries it:', err)
+      }
+    })(),
+    loadVisitorData(),
+    restoreMonthlyVisitorData(),
+  ])
 
   // ── Reconcile stale CRDT hold-time entities ──
   reconcileHoldTimeEntities()
@@ -187,19 +198,36 @@ async function loadFlagState() {
 
 /** Create and sync all three leaderboard entities from Storage. */
 async function initLeaderboards() {
-  const load = async (key: string) => {
-    try { return await storageGet<string>(key) } catch { return null }
+  // Strict reads (storageGet retries transient failures internally): json is null
+  // only when the key definitively does not exist; ok is false when storage stayed
+  // unreachable. The daily seed loaded here is persisted back from the CRDT at
+  // round end, so booting with a false-empty '[]' could overwrite real data — on
+  // failure, boot with an empty board for display and report ok:false so the daily
+  // persist stays DISABLED (isDailyLeaderboardLoaded) until roundManager recovers
+  // the real board from Storage.
+  const load = async (key: string): Promise<{ ok: boolean; json: string | null }> => {
+    try { return { ok: true, json: await storageGet<string>(key) } } catch (err) {
+      console.error('[Server] ❌ Failed to load', key, '(after retries) — starting empty:', err)
+      return { ok: false, json: null }
+    }
   }
 
+  // Both boards concurrently — independent keys.
+  const [daily, at] = await Promise.all([load('leaderboard'), load('allTimeLeaderboard')])
+
   // Daily
-  const dailyJson = patchAllLeaderboardNames((await load('leaderboard')) || '[]', 'leaderboard')
+  if (daily.ok) markDailyLeaderboardLoaded()
+  else console.error('[Server] ⚠️ Daily leaderboard unavailable — round-end daily persists disabled until a Storage read succeeds')
+  const dailyJson = patchAllLeaderboardNames(daily.json || '[]', 'leaderboard')
   console.log('[Server] Daily leaderboard JSON size:', dailyJson.length, 'bytes')
   setLeaderboardEntity(engine.addEntity())
   LeaderboardState.create(leaderboardEntity, { json: dailyJson, date: '' })
   syncEntity(leaderboardEntity, [LeaderboardState.componentId], SyncIds.LEADERBOARD)
 
-  // All-time — compact format {n,w} for CRDT sync (full data stays in Storage)
-  const atJsonFull = patchAllLeaderboardNames((await load('allTimeLeaderboard')) || '[]', 'all-time leaderboard')
+  // All-time — compact format {n,w} for CRDT sync (full data stays in Storage). No
+  // loaded-flag needed: the round-end update re-reads Storage strictly and aborts on
+  // failure, so a false-empty seed here only affects the synced display until then.
+  const atJsonFull = patchAllLeaderboardNames(at.json || '[]', 'all-time leaderboard')
   let atJsonSync = '[]'
   try {
     const atEntries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(atJsonFull)
