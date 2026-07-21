@@ -5,9 +5,17 @@
  * plus a continuous spin (Y-axis rotation).
  */
 import {
-  engine, Transform, Tween, TweenSequence, EasingFunction, TweenLoop, GltfContainer
+  engine, Transform, Tween, TweenSequence, EasingFunction, TweenLoop, GltfContainer, type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
+
+/**
+ * Original composite position of every coin this system re-parented, keyed by the coin
+ * entity. Once the bob tween starts, the live Transform tree only holds the animated
+ * position — anything that must hash the coin's PLACED position (coin ids have to match
+ * the server registry, which reads never-re-parented entities) reads this instead.
+ */
+export const coinBasePositions = new Map<Entity, { x: number; y: number; z: number }>()
 
 const BOB_AMOUNT = 0.15    // meters up and down
 const BOB_DURATION = 1500  // ms for one direction
@@ -32,6 +40,8 @@ export function coinBobSpinSystem(dt: number) {
     const t = Transform.get(entity)
     const baseY = t.position.y
     const baseRot = t.rotation ?? Quaternion.Identity()
+
+    coinBasePositions.set(entity, { x: t.position.x, y: baseY, z: t.position.z })
 
     // We need a parent for bobbing and the coin itself for spinning,
     // because an entity can only have one Tween at a time.

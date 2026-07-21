@@ -64,90 +64,110 @@ function playBoostSound(): void {
   AudioSource.createOrReplace(boostSoundEntity, { audioClipUrl: 'assets/sounds/powerup.mp3', playing: true, loop: false, volume: 0.0625, global: true })
 }
 
-// ── Head bounce state ──
-interface HeadBounce {
-  entity: Entity
+// ── Mushroom pickup bounce VFX pool ──
+// A mushroom pops up over the picker's head then falls + shrinks. Pool a fixed set of rigs
+// and reuse them (AvatarAttach re-anchor + tween restart) instead of creating/destroying
+// ~3 entities per pickup — the same GLB-churn class as the coin bounce, which the renderer
+// eventually chokes on (see KNOWN_BUGS.md).
+const MUSHROOM_BOUNCE_POOL_SIZE = 4
+const MUSHROOM_BOUNCE_DURATION = 0.6 // matches the original 0.6s lifetime (see coin bounce)
+
+interface MushroomBounceRig {
+  anchor: Entity
+  shrinkParent: Entity
+  mushroom: Entity
   timer: number
+  busy: boolean
 }
-const activeMushroomBounces: HeadBounce[] = []
+const mushroomBouncePool: MushroomBounceRig[] = []
+let mushroomBouncePoolReady = false
+
+function initMushroomBouncePool(): void {
+  if (mushroomBouncePoolReady) return
+  mushroomBouncePoolReady = true
+  for (let i = 0; i < MUSHROOM_BOUNCE_POOL_SIZE; i++) {
+    const anchor = engine.addEntity()
+    Transform.create(anchor, { position: Vector3.Zero() })
+    const shrinkParent = engine.addEntity()
+    Transform.create(shrinkParent, { parent: anchor, position: Vector3.Zero(), scale: Vector3.Zero() }) // parked hidden
+    const mushroom = engine.addEntity()
+    Transform.create(mushroom, {
+      parent: shrinkParent,
+      position: Vector3.create(0, 0.5, 0),
+      scale: Vector3.create(0.5, 0.5, 0.5),
+    })
+    GltfContainer.create(mushroom, {
+      src: MUSHROOM_MODEL,
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0,
+    })
+    mushroomBouncePool.push({ anchor, shrinkParent, mushroom, timer: 0, busy: false })
+  }
+}
+
+/** Park a rig: stop its tweens, hide it, detach from the avatar. */
+function releaseMushroomBounceRig(rig: MushroomBounceRig): void {
+  rig.busy = false
+  rig.timer = 0
+  Tween.deleteFrom(rig.mushroom)
+  TweenSequence.deleteFrom(rig.mushroom)
+  Tween.deleteFrom(rig.shrinkParent)
+  TweenSequence.deleteFrom(rig.shrinkParent)
+  if (AvatarAttach.has(rig.anchor)) AvatarAttach.deleteFrom(rig.anchor)
+  Transform.getMutable(rig.shrinkParent).scale = Vector3.Zero()
+}
 
 function spawnHeadBounceMushroom(playerId: string): void {
-  const headAnchor = engine.addEntity()
-  AvatarAttach.create(headAnchor, {
+  initMushroomBouncePool()
+
+  // Acquire a free rig, or steal the one that will free soonest.
+  let rig = mushroomBouncePool.find(r => !r.busy)
+  if (!rig) {
+    rig = mushroomBouncePool[0]
+    for (const r of mushroomBouncePool) if (r.timer < rig.timer) rig = r
+  }
+
+  rig.busy = true
+  rig.timer = MUSHROOM_BOUNCE_DURATION
+
+  AvatarAttach.createOrReplace(rig.anchor, {
     avatarId: playerId,
     anchorPointId: AvatarAnchorPointType.AAPT_HEAD,
   })
 
-  const mushroomClone = engine.addEntity()
-  Transform.create(mushroomClone, {
-    parent: headAnchor,
-    position: Vector3.create(0, 0.5, 0),
-    scale: Vector3.create(0.5, 0.5, 0.5),
-  })
-  GltfContainer.create(mushroomClone, {
-    src: MUSHROOM_MODEL,
-    visibleMeshesCollisionMask: 0,
-    invisibleMeshesCollisionMask: 0,
-  })
+  // Reset transforms then restart the two-phase animation (pop up, then fall + shrink).
+  Transform.getMutable(rig.shrinkParent).scale = Vector3.One()
+  const mt = Transform.getMutable(rig.mushroom)
+  mt.position = Vector3.create(0, 0.5, 0)
+  mt.scale = Vector3.create(0.5, 0.5, 0.5)
 
-  // Pop up fast then fall + shrink away
-  Tween.create(mushroomClone, {
-    mode: Tween.Mode.Move({
-      start: Vector3.create(0, 0.5, 0),
-      end: Vector3.create(0, 2.0, 0),
-    }),
+  Tween.createOrReplace(rig.mushroom, {
+    mode: Tween.Mode.Move({ start: Vector3.create(0, 0.5, 0), end: Vector3.create(0, 2.0, 0) }),
     duration: 200,
     easingFunction: EasingFunction.EF_EASEOUTQUAD,
   })
-  TweenSequence.create(mushroomClone, {
-    sequence: [
-      {
-        mode: Tween.Mode.Move({
-          start: Vector3.create(0, 2.0, 0),
-          end: Vector3.create(0, 0.8, 0),
-        }),
-        duration: 350,
-        easingFunction: EasingFunction.EF_EASEINQUAD,
-      },
-    ],
+  TweenSequence.createOrReplace(rig.mushroom, {
+    sequence: [{
+      mode: Tween.Mode.Move({ start: Vector3.create(0, 2.0, 0), end: Vector3.create(0, 0.8, 0) }),
+      duration: 350,
+      easingFunction: EasingFunction.EF_EASEINQUAD,
+    }],
     loop: TweenLoop.TL_YOYO,
   })
 
-  // Shrink parent for simultaneous scale animation
-  const shrinkParent = engine.addEntity()
-  Transform.create(shrinkParent, {
-    parent: headAnchor,
-    position: Vector3.Zero(),
-    scale: Vector3.One(),
-  })
-  Transform.getMutable(mushroomClone).parent = shrinkParent
-
-  Tween.create(shrinkParent, {
-    mode: Tween.Mode.Scale({
-      start: Vector3.One(),
-      end: Vector3.One(),
-    }),
+  Tween.createOrReplace(rig.shrinkParent, {
+    mode: Tween.Mode.Scale({ start: Vector3.One(), end: Vector3.One() }),
     duration: 200,
     easingFunction: EasingFunction.EF_LINEAR,
   })
-  TweenSequence.create(shrinkParent, {
-    sequence: [
-      {
-        mode: Tween.Mode.Scale({
-          start: Vector3.One(),
-          end: Vector3.create(0, 0, 0),
-        }),
-        duration: 350,
-        easingFunction: EasingFunction.EF_EASEINQUAD,
-      },
-    ],
+  TweenSequence.createOrReplace(rig.shrinkParent, {
+    sequence: [{
+      mode: Tween.Mode.Scale({ start: Vector3.One(), end: Vector3.create(0, 0, 0) }),
+      duration: 350,
+      easingFunction: EasingFunction.EF_EASEINQUAD,
+    }],
     loop: TweenLoop.TL_YOYO,
   })
-
-  const totalDuration = 0.6
-  activeMushroomBounces.push({ entity: mushroomClone, timer: totalDuration })
-  activeMushroomBounces.push({ entity: shrinkParent, timer: totalDuration + 0.05 })
-  activeMushroomBounces.push({ entity: headAnchor, timer: 0.75 })
 }
 
 const mushrooms: MushroomVisual[] = []
@@ -358,13 +378,11 @@ export function mushroomClientSystem(dt: number): void {
     room.send('requestMushroomPositions', { t: 0 })
   }
 
-  // Tick head bounces — clean up expired
-  for (let i = activeMushroomBounces.length - 1; i >= 0; i--) {
-    activeMushroomBounces[i].timer -= dt
-    if (activeMushroomBounces[i].timer <= 0) {
-      engine.removeEntity(activeMushroomBounces[i].entity)
-      activeMushroomBounces.splice(i, 1)
-    }
+  // Park mushroom-bounce rigs whose animation has finished (no entity create/destroy here).
+  for (const rig of mushroomBouncePool) {
+    if (!rig.busy) continue
+    rig.timer -= dt
+    if (rig.timer <= 0) releaseMushroomBounceRig(rig)
   }
 
   processMushroomRaycasts()

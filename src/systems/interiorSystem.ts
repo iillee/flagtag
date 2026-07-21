@@ -20,6 +20,7 @@ import { setInteriorBypass, setWaterSurfaceY } from './waterSystem'
 import { room } from '../shared/messages'
 import { Flag, FlagState } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
+import { excludeFromCoinPickup } from './coinPickupSystem'
 
 // ── Config ──
 
@@ -251,6 +252,10 @@ function buildRoom(): void {
       rotation: combineRot(Quaternion.fromEulerDegrees(90, 0, 0)),
     })
     GltfContainer.create(coin, { src: COIN_SRC })
+    // Decoration only: these exist client-side only, so the server's coin registry
+    // can never validate them — without this, a coin scan that catches the room
+    // built early would produce pickup requests the server always rejects.
+    excludeFromCoinPickup(coin)
     roomEntities.push(coin)
   }
   console.log('[Interior] Spawned', coinPositions.length, 'treasure coins')

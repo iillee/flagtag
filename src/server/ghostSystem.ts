@@ -29,26 +29,9 @@ const GHOST_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
 
 // ── Message handlers ──
 export function registerGhostHandlers(): void {
-  room.onMessage('ghostHit', (data, sender) => {
-    // Validate: find the ghost entity, reduce HP
-    for (let i = activeGhosts.length - 1; i >= 0; i--) {
-      const z = activeGhosts[i]
-      // Match by entity ID sent as ghostId (we use entity number)
-      if ((z.entity as number) === data.ghostId) {
-        z.hp--
-        console.log('[Server] 🧟 Ghost hit! HP:', z.hp)
-        if (z.hp <= 0) {
-          // Kill ghost
-          console.log('[Server] 🧟 Ghost killed!')
-          room.send('ghostKilled', { x: z.posX, y: z.posY, z: z.posZ })
-          engine.removeEntity(z.entity); recycleGhostSyncId(z.syncId)
-          activeGhosts.splice(i, 1)
-          setGhostRespawnCooldown(GHOST_RESPAWN_COOLDOWN)
-        }
-        break
-      }
-    }
-  })
+  // (Removed the client-trusted `ghostHit` handler: no client ever sent it — ghost damage
+  // is resolved by authoritative server-side boomerang/ghost collision — and accepting it
+  // let any client kill any ghost from across the map by guessing entity ids.)
 }
 
 // ── Despawn all ghosts ──

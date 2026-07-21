@@ -42,64 +42,109 @@ interface PlayerShield {
   alphaMultiplier: number  // 0–1, used for fade-out
   lastMaterialAlpha: number    // last alpha written to material — skip update if unchanged
   lastMaterialEmissive: number // last emissiveIntensity written
+  playerId: string | null      // lowercased owner while in use, null when parked
 }
 
+// Pool of pre-created shield rigs (anchor + planes). Show/hide re-anchors and
+// toggles plane scale instead of engine.addEntity()×9 / removeEntity()×9 on every
+// pickup/steal/drop/rollback/immunity event, which produced thousands of
+// create/destroy cycles per session (the engine's rendering bug — see KNOWN_BUGS.md).
+const SHIELD_POOL_SIZE = 5
+const shieldPool: PlayerShield[] = []
+let shieldPoolReady = false
+
+// Keyed by lowercased playerId — only rigs currently in use.
 const activeShields = new Map<string, PlayerShield>()
 
-export function showShieldForPlayer(playerId: string): void {
-  if (activeShields.has(playerId)) return
+function initShieldPool(): void {
+  if (shieldPoolReady) return
+  shieldPoolReady = true
+  for (let r = 0; r < SHIELD_POOL_SIZE; r++) {
+    const anchor = engine.addEntity()
+    Transform.create(anchor, { position: Vector3.Zero() })
+    // AvatarAttach is created lazily on show (it needs an avatarId).
 
-  const anchor = engine.addEntity()
-  Transform.create(anchor, { position: Vector3.Zero() })
-  AvatarAttach.create(anchor, {
-    avatarId: playerId,
+    const planes: Entity[] = []
+    for (let i = 0; i < NUM_PLANES; i++) {
+      const angleDeg = (360 / NUM_PLANES) * i
+      const angleRad = angleDeg * (Math.PI / 180)
+      const x = Math.sin(angleRad) * SHIELD_RADIUS
+      const z = Math.cos(angleRad) * SHIELD_RADIUS
+
+      const plane = engine.addEntity()
+      Transform.create(plane, {
+        parent: anchor,
+        position: Vector3.create(x, getShieldYOffset(), z),
+        rotation: Quaternion.fromEulerDegrees(0, angleDeg, 0),
+        scale: Vector3.Zero()  // parked — hidden until shown
+      })
+      MeshRenderer.setPlane(plane)
+      Material.setPbrMaterial(plane, {
+        albedoColor: SHIELD_COLOR,
+        texture: SHIELD_GRADIENT_TEXTURE,
+        alphaTexture: SHIELD_GRADIENT_TEXTURE,
+        emissiveColor: SHIELD_EMISSIVE,
+        emissiveIntensity: SHIELD_EMISSIVE_INTENSITY,
+        roughness: 1.0,
+        metallic: 0.0,
+        specularIntensity: 0.0,
+        transparencyMode: MaterialTransparencyMode.MTM_AUTO,
+        castShadows: false,
+      })
+      planes.push(plane)
+    }
+
+    shieldPool.push({ anchor, planes, pulseTime: 0, rotationAngle: 0, alphaMultiplier: 1.0, lastMaterialAlpha: -1, lastMaterialEmissive: -1, playerId: null })
+  }
+  console.log('[Shield] Pre-created shield rig pool of', SHIELD_POOL_SIZE)
+}
+
+export function showShieldForPlayer(playerId: string): void {
+  const key = playerId.toLowerCase()
+  if (activeShields.has(key)) return
+  initShieldPool()
+
+  const shield = shieldPool.find(s => s.playerId === null)
+  if (!shield) {
+    console.log('[Shield] Pool exhausted — no free rig for', key.slice(0, 8))
+    return
+  }
+
+  shield.playerId = key
+  shield.pulseTime = 0
+  shield.rotationAngle = 0
+  shield.alphaMultiplier = 1.0
+  shield.lastMaterialAlpha = -1  // force material refresh on next animate frame
+  shield.lastMaterialEmissive = -1
+
+  AvatarAttach.createOrReplace(shield.anchor, {
+    avatarId: key,
     anchorPointId: AvatarAnchorPointType.AAPT_POSITION
   })
 
-  const planes: Entity[] = []
-  for (let i = 0; i < NUM_PLANES; i++) {
-    const angleDeg = (360 / NUM_PLANES) * i
-    const angleRad = angleDeg * (Math.PI / 180)
-    const x = Math.sin(angleRad) * SHIELD_RADIUS
-    const z = Math.cos(angleRad) * SHIELD_RADIUS
-
-    const plane = engine.addEntity()
-    Transform.create(plane, {
-      parent: anchor,
-      position: Vector3.create(x, getShieldYOffset(), z),
-      rotation: Quaternion.fromEulerDegrees(0, angleDeg, 0),
-      scale: Vector3.create(PLANE_WIDTH, PLANE_HEIGHT, 1)
-    })
-    MeshRenderer.setPlane(plane)
-    Material.setPbrMaterial(plane, {
-      albedoColor: SHIELD_COLOR,
-      texture: SHIELD_GRADIENT_TEXTURE,
-      alphaTexture: SHIELD_GRADIENT_TEXTURE,
-      emissiveColor: SHIELD_EMISSIVE,
-      emissiveIntensity: SHIELD_EMISSIVE_INTENSITY,
-      roughness: 1.0,
-      metallic: 0.0,
-      specularIntensity: 0.0,
-      transparencyMode: MaterialTransparencyMode.MTM_AUTO,
-      castShadows: false,
-    })
-    planes.push(plane)
+  // Un-park the planes (animate loop takes over positioning/scale next frame).
+  for (const plane of shield.planes) {
+    if (Transform.has(plane)) Transform.getMutable(plane).scale = Vector3.create(PLANE_WIDTH, PLANE_HEIGHT, 1)
   }
 
-  activeShields.set(playerId, { anchor, planes, pulseTime: 0, rotationAngle: 0, alphaMultiplier: 1.0, lastMaterialAlpha: -1, lastMaterialEmissive: -1 })
-  console.log('[Shield] Forcefield shown for', playerId.slice(0, 8))
+  activeShields.set(key, shield)
+  console.log('[Shield] Forcefield shown for', key.slice(0, 8))
 }
 
 export function hideShieldForPlayer(playerId: string): void {
-  const shield = activeShields.get(playerId)
+  const key = playerId.toLowerCase()
+  const shield = activeShields.get(key)
   if (!shield) return
 
+  // Park the rig back into the pool: hide planes + detach from the avatar.
   for (const plane of shield.planes) {
-    engine.removeEntity(plane)
+    if (Transform.has(plane)) Transform.getMutable(plane).scale = Vector3.Zero()
   }
-  engine.removeEntity(shield.anchor)
-  activeShields.delete(playerId)
-  console.log('[Shield] Forcefield hidden for', playerId.slice(0, 8))
+  if (AvatarAttach.has(shield.anchor)) AvatarAttach.deleteFrom(shield.anchor)
+
+  shield.playerId = null
+  activeShields.delete(key)
+  console.log('[Shield] Forcefield hidden for', key.slice(0, 8))
 }
 
 /** Convenience wrappers for local player */
@@ -121,7 +166,7 @@ export function hideAllShields(): void {
 
 /** Set the alpha multiplier (0–1) for a player's shield, used for fade-out. */
 export function setShieldAlpha(playerId: string, alpha: number): void {
-  const shield = activeShields.get(playerId)
+  const shield = activeShields.get(playerId.toLowerCase())
   if (shield) shield.alphaMultiplier = Math.max(0, Math.min(1, alpha))
 }
 

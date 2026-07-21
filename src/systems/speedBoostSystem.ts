@@ -24,7 +24,7 @@ const MUSHROOM_LOCOMOTION = {
   runSpeed: BASE_RUN * 1.5,
   jumpHeight: BASE_JUMP * 1.5,
   runJumpHeight: BASE_RUN_JUMP * 1.5,
-  glideSpeed: 6.0 * 0,    // default 6 → 9
+  glideSpeed: 6.0 * 1.5,    // default 6 → 9
   doubleJump: 2.0 * 1.5,    // default 2 → 3
 }
 

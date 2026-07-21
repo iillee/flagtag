@@ -4,7 +4,7 @@
  * Keeps engine.addSystem() calls out of the render file.
  * Call `registerUiSystems()` once from main() or setupUi().
  */
-import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType } from '@dcl/sdk/ecs'
+import { engine, AudioSource, Transform, inputSystem, InputAction, PointerEventType, Entity } from '@dcl/sdk/ecs'
 import { registerSystem } from '../systems/systemManager'
 import { Vector3 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
@@ -41,6 +41,32 @@ import { toggleMusic } from './screens/boomboxState'
 
 let _registered = false
 
+// ── Round-end coin "cha-ching" pool ──
+// Blessing/earnings play a rapid sequence of coin sounds. Creating a fresh
+// AudioSource entity per coin leaked ~30 live entities/round and drove the
+// engine toward its ~19k create/destroy renderer break. Instead reuse a small
+// fixed pool (round-robin, capped) via AudioSource.createOrReplace like uiSounds.
+const COIN_CHIME_POOL_SIZE = 4
+const coinChimeEntities: Entity[] = []
+let coinChimeIndex = 0
+
+function playCoinChime(): void {
+  if (coinChimeEntities.length < COIN_CHIME_POOL_SIZE) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: Vector3.Zero() })
+    coinChimeEntities.push(e)
+  }
+  const entity = coinChimeEntities[coinChimeIndex % coinChimeEntities.length]
+  coinChimeIndex = (coinChimeIndex + 1) % COIN_CHIME_POOL_SIZE
+  AudioSource.createOrReplace(entity, {
+    audioClipUrl: 'assets/sounds/coin.mp3',
+    playing: true,
+    volume: 0.7,
+    loop: false,
+    global: true,
+  })
+}
+
 export function registerUiSystems() {
   if (_registered) return
   _registered = true
@@ -68,10 +94,16 @@ export function registerUiSystems() {
     if (blessingState.active) {
       blessingState.timer -= dt
       if (blessingState.timer <= 0) {
-        markBlessingCompleted(true)
+        // Ritual finished — ask the server to grant it, but DON'T celebrate yet:
+        // the reward UI only plays once blessingResult confirms the award was
+        // durably committed (a failed/indeterminate transaction used to hide
+        // behind an already-played success animation). pedestalSystem owns the
+        // response and timeout handling for awaitingResult.
         blessingState.active = false
         blessingState.timer = 0
         blessingState.fadeOut = 1
+        blessingState.awaitingResult = true
+        blessingState.awaitingSince = Date.now()
         room.send('requestBlessing', { t: 0 })
       }
     }
@@ -86,9 +118,11 @@ export function registerUiSystems() {
     if (blessingState.completed) {
       const elapsed = (Date.now() - blessingState.completedAt) / 1000
 
-      if (blessingState.alreadyUsed) {
+      if (blessingState.alreadyUsed || blessingState.failedMessage) {
+        // Text-only popups (already used / ritual failed): no coin celebration.
         if (elapsed > 4) {
           blessingState.completed = false
+          blessingState.failedMessage = ''
           blessingState.coinProgress = 0
           blessingState.coinSoundsPlayed = 0
         }
@@ -98,15 +132,7 @@ export function registerUiSystems() {
         const soundsDue = Math.min(BLESSING_COIN_COUNT, Math.floor(elapsed / BLESSING_COIN_SOUND_INTERVAL) + 1)
         if (blessingState.coinSoundsPlayed < soundsDue) {
           blessingState.coinSoundsPlayed = soundsDue
-          const snd = engine.addEntity()
-          Transform.create(snd, { position: Vector3.Zero() })
-          AudioSource.create(snd, {
-            audioClipUrl: 'assets/sounds/coin.mp3',
-            playing: true,
-            volume: 0.7,
-            loop: false,
-            global: true,
-          })
+          playCoinChime()
         }
 
         if (elapsed > 4) {
@@ -168,15 +194,7 @@ export function registerUiSystems() {
           if (earnedState.coinSoundsPlayed < totalCoins && earnedState.coinSoundTimer >= COIN_SOUND_INTERVAL) {
             earnedState.coinSoundTimer -= COIN_SOUND_INTERVAL
             earnedState.coinSoundsPlayed++
-            const snd = engine.addEntity()
-            Transform.create(snd, { position: Vector3.Zero() })
-            AudioSource.create(snd, {
-              audioClipUrl: 'assets/sounds/coin.mp3',
-              playing: true,
-              volume: 0.7,
-              loop: false,
-              global: true,
-            })
+            playCoinChime()
           }
           earnedState.coinsFlyProgress = Math.min(1, earnedState.timer / totalSoundDuration)
           if (earnedState.coinsFlyProgress >= 1) {

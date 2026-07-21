@@ -60,6 +60,9 @@ export const HOLD_TIME_SYNC_INTERVAL = 2.0 // seconds between CRDT hold-time wri
 export const SPLASH_DURATION_MS = 3000
 export const FLAG_GRAVITY = 15
 export const FLAG_MIN_Y = 49.5
+// Upper bound for any client-reported flag ground Y. The playable terrain sits
+// around Y=48–80 after the +48 scene lift; anything above this is a spoofed report.
+export const FLAG_MAX_Y = 120
 // Y of the invisible collider plane below the lifted scene (players can walk on it).
 // Flag sinks to this Y when it lands in water, instead of falling to Y=0.
 export const SCENE_FLOOR_Y = 48

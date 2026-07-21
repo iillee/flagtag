@@ -2,7 +2,8 @@
  * analytics.ts — Visitor tracking, Discord webhook (player join notifications).
  */
 
-import { Storage, EnvVar } from '@dcl/sdk/server'
+import { EnvVar } from '@dcl/sdk/server'
+import { storageGet, storageSet } from './safeStorage'
 import { getRealm } from '~system/Runtime'
 import {
   visitorSessions, monthlyVisitorSessions, playerNames, isRealName,
@@ -33,8 +34,14 @@ export async function loadDiscordWebhookUrl(): Promise<void> {
     console.log('[Server] ⚠️ Could not detect realm info:', err)
   }
 
-  DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1519451487242031277/N7-eJgllAUTrDPCP1Zy6ga_Sdjp0ilgJXPpWvH5ome4kYHCWYbf1yveS98nowGgFbH9b'
-  console.log('[Server] ✅ Discord player-join webhook set')
+  // Secret must come from the environment only. Never hardcode a webhook token: scene
+  // bundles are publicly downloadable, so a committed token is a compromised token.
+  DISCORD_WEBHOOK_URL = (await EnvVar.get('DISCORD_PLAYER_JOIN_WEBHOOK')) || ''
+  if (DISCORD_WEBHOOK_URL) {
+    console.log('[Server] ✅ Discord player-join webhook loaded from env')
+  } else {
+    console.log('[Server] ℹ️ No DISCORD_PLAYER_JOIN_WEBHOOK set — join notifications disabled')
+  }
 }
 
 // ── Player join Discord notification ──
@@ -50,6 +57,10 @@ const JOIN_NOTIFY_DELAY_MS = 5000
 const JOIN_NOTIFY_MAX_WAIT_MS = 15000 // Max time to wait for name resolution before dropping
 
 export function schedulePlayerJoinDiscord(playerName: string, address: string, onlineCount: number): void {
+  // Don't accumulate pending entries the flush will never drain: when no webhook is
+  // configured (the default now that the hardcoded fallback is gone), flush early-returns
+  // and would otherwise leak one entry per unique joiner for the life of the server.
+  if (!DISCORD_WEBHOOK_URL || isPreview) return
   const userKey = address.toLowerCase()
   if (JOIN_NOTIFY_BLOCKED.has(userKey)) return
   pendingJoinNotifications.set(userKey, { address, onlineCount, scheduledAt: Date.now() })
@@ -61,23 +72,27 @@ export function flushPendingJoinNotifications(): void {
   const now = Date.now()
   for (const [userKey, pending] of pendingJoinNotifications) {
     if (now - pending.scheduledAt < JOIN_NOTIFY_DELAY_MS) continue
-    pendingJoinNotifications.delete(userKey)
 
     // Use the best name available now (name resolver should have run by this point)
     const knownName = playerNames.get(userKey)
     if (!knownName || !isRealName(knownName)) {
-      // Not resolved yet — keep waiting up to max wait, then drop (likely a bot)
-      if (now - pending.scheduledAt < JOIN_NOTIFY_MAX_WAIT_MS) continue
-      pendingJoinNotifications.delete(userKey)
+      // Not resolved yet — keep waiting up to max wait, then drop (likely a bot). Only
+      // remove the pending entry once we've actually given up, so the retry window is real.
+      if (now - pending.scheduledAt >= JOIN_NOTIFY_MAX_WAIT_MS) {
+        pendingJoinNotifications.delete(userKey)
+      }
       continue
     }
 
+    pendingJoinNotifications.delete(userKey)
     const resolvedName = knownName
     const content = `👋 **${resolvedName}** joined Flag Tag (${pending.address.slice(0, 6)}…${pending.address.slice(-4)}) — **${pending.onlineCount}** online`
     fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
+      // allowed_mentions: names are client-supplied — a player named "@everyone" must
+      // never ping the whole Discord server.
+      body: JSON.stringify({ content, allowed_mentions: { parse: [] } })
     }).then(() => {}, () => {})
   }
 }
@@ -91,7 +106,7 @@ export async function checkVisitorDailyReset(): Promise<boolean> {
     console.log('[Server] Daily visitor reset at midnight UTC for new day:', currentDay)
     setLastVisitorResetDay(currentDay)
     visitorSessions.clear()
-    await persistVisitorDataToStorage()
+    await persistVisitorDataToStorage(true)
     console.log('[Server] Visitor data reset completed')
     return true
   }
@@ -101,7 +116,33 @@ export async function checkVisitorDailyReset(): Promise<boolean> {
 
 // ── Persist visitor data to Storage (no CRDT sync) ──
 
-async function persistVisitorDataToStorage(): Promise<void> {
+// Persist throttling: the 10s system tick used to write visitor stats UNCONDITIONALLY
+// (~4 storage writes every 10s around the clock, even with zero players). Now a write
+// only happens when the payload actually changed (idle server → zero writes) and at
+// most once per minute while players are online (their totals tick every call).
+// `force` bypasses both (daily/monthly resets must land immediately). Trade-off: a
+// server crash can lose up to a minute of visitor-stat accumulation — stats only.
+const VISITOR_PERSIST_MIN_INTERVAL_MS = 60_000
+let lastPersistedVisitorJson: string | null = null
+let lastVisitorPersistMs = 0
+let lastPersistedMonthlyJson: string | null = null
+let lastMonthlyPersistMs = 0
+
+// Set when a visitor session ENDS (their accumulated time was just finalized). The
+// next 10s tick then persists unconditionally: the server can be torn down with NO
+// shutdown signal once the world empties, so a session's final total must not sit
+// unwritten behind the min-interval throttle for up to a minute.
+let visitorDataDirty = false
+export function markVisitorDataDirty(): void {
+  visitorDataDirty = true
+  // Also flush right now — teardown can follow the last disconnect at any moment,
+  // beating the 10s tick. If these writes fail, the dirty flag makes the next tick
+  // force-retry (persist markers are only recorded on success).
+  persistVisitorDataToStorage(true).catch(e => console.error('[Server] immediate visitor flush error:', e))
+  persistMonthlyVisitorDataToStorage(true).catch(e => console.error('[Server] immediate monthly visitor flush error:', e))
+}
+
+async function persistVisitorDataToStorage(force = false): Promise<void> {
   const now = Date.now()
   const visitorData = Array.from(visitorSessions.entries()).map(([userId, data]) => {
     const isOnline = data.sessionStartMs > 0
@@ -121,12 +162,24 @@ async function persistVisitorDataToStorage(): Promise<void> {
   })
   .slice(0, 100)
 
-  await persistVisitorData(JSON.stringify(visitorData))
+  const json = JSON.stringify(visitorData)
+  if (!force) {
+    if (json === lastPersistedVisitorJson) return
+    if (now - lastVisitorPersistMs < VISITOR_PERSIST_MIN_INTERVAL_MS) return
+  }
+  // Record the markers only AFTER the write lands. Recording before would cache a
+  // failed/timed-out write as "persisted": once everyone has left, the payload never
+  // changes again, so the final session totals would never be retried.
+  await persistVisitorData(json)
+  lastPersistedVisitorJson = json
+  lastVisitorPersistMs = now
 }
 
 // ── Persist monthly visitor data to Storage (no CRDT sync) ──
 
-async function persistMonthlyVisitorDataToStorage(): Promise<void> {
+let lastWrittenMonthlyResetMonth: string | null = null
+
+async function persistMonthlyVisitorDataToStorage(force = false): Promise<void> {
   const currentMonth = getCurrentMonthString()
   const now = Date.now()
   const visitorData = Array.from(monthlyVisitorSessions.entries()).map(([userId, data]) => {
@@ -147,8 +200,20 @@ async function persistMonthlyVisitorDataToStorage(): Promise<void> {
   })
   .slice(0, 100)
 
-  await Storage.set('monthlyVisitorData', JSON.stringify(visitorData))
-  await Storage.set('monthlyVisitorResetMonth', currentMonth)
+  const json = JSON.stringify(visitorData)
+  if (!force) {
+    if (json === lastPersistedMonthlyJson) return
+    if (now - lastMonthlyPersistMs < VISITOR_PERSIST_MIN_INTERVAL_MS) return
+  }
+  // Markers only after a successful write — see persistVisitorDataToStorage.
+  await storageSet('monthlyVisitorData', json)
+  lastPersistedMonthlyJson = json
+  lastMonthlyPersistMs = now
+  // The reset month only changes once a month — don't rewrite it on every flush.
+  if (lastWrittenMonthlyResetMonth !== currentMonth) {
+    await storageSet('monthlyVisitorResetMonth', currentMonth)
+    lastWrittenMonthlyResetMonth = currentMonth
+  }
 }
 
 // ── Monthly visitor reset ──
@@ -159,7 +224,7 @@ export async function checkMonthlyVisitorReset(): Promise<void> {
     console.log('[Server] Monthly visitor reset for new month:', currentMonth)
     monthlyVisitorSessions.clear()
     setLastMonthlyVisitorResetMonth(currentMonth)
-    await persistMonthlyVisitorDataToStorage()
+    await persistMonthlyVisitorDataToStorage(true)
     console.log('[Server] Monthly visitor data reset completed')
   }
 }
@@ -177,8 +242,11 @@ export function visitorTrackingServerSystem(dt: number): void {
     flushPendingJoinNotifications()
     checkVisitorDailyReset().catch(e => console.error('[Server] checkVisitorDailyReset error:', e))
     checkMonthlyVisitorReset().catch(e => console.error('[Server] checkMonthlyVisitorReset error:', e))
-    persistVisitorDataToStorage().catch(e => console.error('[Server] persistVisitorData error:', e))
-    persistMonthlyVisitorDataToStorage().catch(e => console.error('[Server] persistMonthlyVisitorData error:', e))
+    // A just-ended session forces the write through the throttle (see markVisitorDataDirty).
+    const force = visitorDataDirty
+    visitorDataDirty = false
+    persistVisitorDataToStorage(force).catch(e => console.error('[Server] persistVisitorData error:', e))
+    persistMonthlyVisitorDataToStorage(force).catch(e => console.error('[Server] persistMonthlyVisitorData error:', e))
   }
 }
 
@@ -188,8 +256,8 @@ export async function restoreMonthlyVisitorData(): Promise<void> {
   let savedMonthlyVisitorData: string | null = null
   let savedMonthlyVisitorMonth: string | null = null
   try {
-    savedMonthlyVisitorData = await Storage.get<string>('monthlyVisitorData')
-    savedMonthlyVisitorMonth = await Storage.get<string>('monthlyVisitorResetMonth')
+    savedMonthlyVisitorData = await storageGet<string>('monthlyVisitorData')
+    savedMonthlyVisitorMonth = await storageGet<string>('monthlyVisitorResetMonth')
   } catch (err) {
     console.error('[Server] Failed to load monthly visitor data:', err)
   }

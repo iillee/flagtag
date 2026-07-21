@@ -28,6 +28,10 @@ const BEAM_OUTER_ALPHA = 0.15
 
 // ── Blessing duration ──
 const BLESSING_DURATION = 32
+// How long to wait for blessingResult after the ritual before giving up and
+// letting the player retry. Generous: the server's transactional failure path
+// (write timeout + awaited compensation) can take two storage timeouts.
+const BLESSING_RESULT_TIMEOUT_MS = 25_000
 
 // ── State ──
 let pedestalSetup = false
@@ -155,6 +159,8 @@ function startBlessing() {
   blessingState.timer = BLESSING_DURATION
   blessingState.lineIndex = -1
   blessingState.lineTimer = 0
+  blessingState.awaitingResult = false
+  blessingState.failedMessage = ''
   markBlessingCompleted(false)
 }
 
@@ -163,20 +169,46 @@ export function pedestalSystem(dt: number) {
   if (!listenerRegistered) {
     listenerRegistered = true
     room.onMessage('blessingResult', (data) => {
-      console.log(`[Pedestal] blessingResult received: success=${data.success}, reason="${data.reason}", preCheckWas=${blessingState.preCheckDone}, alreadyUsedWas=${blessingState.alreadyUsed}, blessingActive=${blessingState.active}`)
+      console.log(`[Pedestal] blessingResult received: success=${data.success}, reason="${data.reason}", preCheckWas=${blessingState.preCheckDone}, alreadyUsedWas=${blessingState.alreadyUsed}, awaiting=${blessingState.awaitingResult}, blessingActive=${blessingState.active}`)
       blessingState.preCheckDone = true
+      const wasAwaiting = blessingState.awaitingResult
       if (data.reason === 'already_blessed') {
+        blessingState.awaitingResult = false
         blessingState.alreadyUsed = true
         // If ritual is currently playing, cancel it immediately
         if (blessingState.active) {
           cancelBlessing()
           markBlessingCompleted(true)  // show "already received" popup
           console.log('[Pedestal] ⚠️ Cancelled active ritual — server says already blessed')
+        } else if (wasAwaiting) {
+          markBlessingCompleted(true)  // ritual already ended — still show the popup
         }
       } else if (data.success && data.reason !== 'eligible') {
-        // Successful claim — delay marking as used so the coin reward UI
-        // isn't replaced by the "already blessed" dismissal mid-animation
+        // Confirmed durable claim — NOW play the reward (chimes + flying coins).
+        // The ritual-end path no longer celebrates optimistically.
+        blessingState.awaitingResult = false
+        // Defensive: if a second ritual got started off a stale "eligible"
+        // pre-check while this claim was still queued server-side, stop it —
+        // the blessing IS granted, and playing out another 32s toward an
+        // already_blessed rejection would only waste the player's time.
+        if (blessingState.active) {
+          cancelBlessing()
+          console.log('[Pedestal] ⚠️ Late claim success during an active ritual — cancelling it and showing the reward')
+        }
+        markBlessingCompleted(true)
+        // Delay marking as used so the coin reward UI isn't replaced by the
+        // "already blessed" dismissal mid-animation
         delayedMarkUsed = true
+      } else if (!data.success && (data.reason === 'storage_error' || data.reason === 'storage_uncertain')) {
+        // The claim failed (or its outcome is uncertain) — tell the player
+        // instead of celebrating coins that never persisted. alreadyUsed stays
+        // false, so the pedestal remains clickable for a retry; the server's
+        // transaction lockout keeps an uncertain claim from double-awarding.
+        blessingState.awaitingResult = false
+        blessingState.failedMessage = data.reason === 'storage_uncertain'
+          ? 'The gods are silent — your blessing may yet arrive. Check your coins shortly.'
+          : 'The ritual fizzled — the blessing was not granted. Try again in a moment.'
+        markBlessingCompleted(true)  // reuse the popup shell to show the message
       }
     })
   }
@@ -185,6 +217,22 @@ export function pedestalSystem(dt: number) {
   if (delayedMarkUsed && !blessingState.active && !blessingState.completed) {
     delayedMarkUsed = false
     blessingState.alreadyUsed = true
+  }
+
+  // ── Awaiting-result timeout: no blessingResult at all (server unreachable) ──
+  // Dismiss with an "uncertain" message and leave the pedestal clickable. A late
+  // result arriving after this simply updates the popup (a late success plays
+  // the reward; the server's claim stands either way). Before another ritual is
+  // allowed, re-arm the authoritative pre-check gate: the next click waits for a
+  // fresh checkBlessing answer, which reflects whether the timed-out claim
+  // actually went through — so a retry can't burn 32s on an already-used day.
+  if (blessingState.awaitingResult && Date.now() - blessingState.awaitingSince > BLESSING_RESULT_TIMEOUT_MS) {
+    blessingState.awaitingResult = false
+    blessingState.failedMessage = 'No answer from the gods — check your coins in a moment.'
+    markBlessingCompleted(true)
+    blessingState.preCheckDone = false
+    room.send('checkBlessing', { t: 0 })
+    console.log('[Pedestal] ⚠️ blessingResult timed out — re-checking status, then allowing retry')
   }
 
   // ── Pre-check blessing status on scene load ──
@@ -215,8 +263,12 @@ export function pedestalSystem(dt: number) {
             },
           },
           () => {
-            console.log(`[Pedestal] Click: active=${blessingState.active}, preCheckDone=${blessingState.preCheckDone}, alreadyUsed=${blessingState.alreadyUsed}`)
-            if (blessingState.active) return  // already blessing in progress
+            console.log(`[Pedestal] Click: active=${blessingState.active}, awaiting=${blessingState.awaitingResult}, preCheckDone=${blessingState.preCheckDone}, alreadyUsed=${blessingState.alreadyUsed}`)
+            // Block while a ritual plays AND while a claim is pending: starting
+            // a second ritual mid-claim would orphan the first one's bookkeeping
+            // (startBlessing resets awaitingResult) and waste 32s on a claim the
+            // server will reject as already_blessed.
+            if (blessingState.active || blessingState.awaitingResult) return
             if (!blessingState.preCheckDone) {
               // Server hasn't responded yet — re-send check and wait
               console.log('[Pedestal] Pre-check not done yet, re-sending checkBlessing')

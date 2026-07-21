@@ -20,6 +20,7 @@ import {
 } from './state'
 import { attachProjectileSound, stopProjectileSound } from './sound'
 import { showHitEffect, playHitSound } from '../combatSystem'
+import { hasFlagImmunity } from '../../gameState/flagImmunityState'
 import { acquireProjectileFromPool, releaseProjectileToPool } from './pool'
 import { updateHandBoomerangVisibility } from './handVisual'
 import { getBoomerangModelSrc } from '../../gameState/boomerangColor'
@@ -358,6 +359,9 @@ export function updateMsgProjectileVisuals(dt: number): void {
       for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
         const addr = identity.address.toLowerCase()
         if (addr === localUserId) continue
+        // Skip flag-immune carriers — the server ignores the hit for them, so
+        // producing hit VFX/sound + starting the return here would be a false positive.
+        if (hasFlagImmunity(addr)) continue
         const playerDist = Vector3.distance(shellPos, transform.position)
         if (playerDist < PROJECTILE_HIT_RADIUS) {
           // Predict hit: show VFX immediately

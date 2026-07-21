@@ -12,7 +12,8 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
-import { CoinState, COIN_PICKUP_RADIUS } from '../shared/coins'
+import { CoinState, COIN_PICKUP_RADIUS, coinIdFromPosition } from '../shared/coins'
+import { coinBasePositions } from './coinBobSpinSystem'
 import { room } from '../shared/messages'
 import { setPendingRoundEarnings } from '../gameState/roundEarnings'
 import { registerDeferredBalanceApplier } from '../shared/clientState'
@@ -53,113 +54,160 @@ function playCoinSound(): void {
   })
 }
 
-// ── Spatial coin sound (for other players) ──
+// ── Spatial coin sound pool (for other players' pickups) ──
+// Round-robin a small fixed set of entities instead of creating + destroying one per
+// pickup. Per-pickup entity churn is the failure class that historically broke the
+// engine renderer (see KNOWN_BUGS.md); the clip is short so a 4-deep ring never cuts
+// off an audible sound under normal play.
+const SPATIAL_SOUND_POOL_SIZE = 4
+const spatialSoundPool: Entity[] = []
+let spatialSoundNext = 0
+let spatialSoundPoolReady = false
 
-const spatialCoinSounds: { entity: Entity; timer: number }[] = []
+function initSpatialSoundPool(): void {
+  if (spatialSoundPoolReady) return
+  spatialSoundPoolReady = true
+  for (let i = 0; i < SPATIAL_SOUND_POOL_SIZE; i++) {
+    const e = engine.addEntity()
+    Transform.create(e, { position: Vector3.Zero() })
+    spatialSoundPool.push(e)
+  }
+}
 
 function playCoinSoundAt(pos: { x: number; y: number; z: number }): void {
-  const e = engine.addEntity()
-  Transform.create(e, { position: Vector3.create(pos.x, pos.y, pos.z) })
-  AudioSource.create(e, {
+  initSpatialSoundPool()
+  const e = spatialSoundPool[spatialSoundNext]
+  spatialSoundNext = (spatialSoundNext + 1) % SPATIAL_SOUND_POOL_SIZE
+  Transform.getMutable(e).position = Vector3.create(pos.x, pos.y, pos.z)
+  AudioSource.createOrReplace(e, {
     audioClipUrl: 'assets/sounds/coin.mp3',
     playing: true,
     loop: false,
     volume: 0.5,
     global: false, // spatial sound
   })
-  spatialCoinSounds.push({ entity: e, timer: 2 })
 }
 
-// ── Head bounce state ──
-interface HeadBounce {
-  entity: Entity
-  timer: number
+// ── Head-bounce coin VFX pool ──
+// A coin pops up over the picker's head then falls + shrinks away. Pre-create a fixed set
+// of rigs (anchor -> shrinkParent -> coin) once and reuse them via AvatarAttach re-anchoring
+// + tween restart, instead of creating/destroying ~3 entities on every pickup (the churn
+// class that historically broke the renderer — see KNOWN_BUGS.md).
+const HEAD_BOUNCE_POOL_SIZE = 6
+// Matches the original's 0.6s lifetime: the pop-up (200ms) + fall/shrink (350ms) finishes at
+// 550ms, so parking at 600ms hides the rig right as the shrink completes — before the YOYO
+// loop would visibly grow the coin back up. Longer would add an unwanted "second bounce".
+const HEAD_BOUNCE_DURATION = 0.6 // seconds a rig stays busy before it's parked
+const COIN_MODEL_SRC = 'assets/asset-packs/doubloon/Coin_01/Coin_01.glb'
+
+interface HeadBounceRig {
+  anchor: Entity        // AvatarAttach to the picker's head (added on acquire, removed on release)
+  shrinkParent: Entity  // runs the scale animation
+  coin: Entity          // GltfContainer + move animation
+  timer: number         // seconds remaining while busy
+  busy: boolean
 }
-const activeHeadBounces: HeadBounce[] = []
-const HEAD_BOUNCE_DURATION = 0.7 // seconds
+const headBouncePool: HeadBounceRig[] = []
+let headBouncePoolReady = false
+
+function initHeadBouncePool(): void {
+  if (headBouncePoolReady) return
+  headBouncePoolReady = true
+  for (let i = 0; i < HEAD_BOUNCE_POOL_SIZE; i++) {
+    const anchor = engine.addEntity()
+    Transform.create(anchor, { position: Vector3.Zero() })
+    const shrinkParent = engine.addEntity()
+    Transform.create(shrinkParent, { parent: anchor, position: Vector3.Zero(), scale: Vector3.Zero() }) // parked hidden
+    const coin = engine.addEntity()
+    Transform.create(coin, {
+      parent: shrinkParent,
+      position: Vector3.create(0, 0.5, 0),
+      scale: Vector3.create(10, 10, 10),
+      rotation: Quaternion.fromEulerDegrees(90, 0, 0),
+    })
+    GltfContainer.create(coin, {
+      src: COIN_MODEL_SRC,
+      visibleMeshesCollisionMask: 0,
+      invisibleMeshesCollisionMask: 0,
+    })
+    headBouncePool.push({ anchor, shrinkParent, coin, timer: 0, busy: false })
+  }
+}
+
+/** Park a rig back into the pool: stop its tweens, hide it, detach from the avatar. */
+function releaseHeadBounceRig(rig: HeadBounceRig): void {
+  rig.busy = false
+  rig.timer = 0
+  Tween.deleteFrom(rig.coin)
+  TweenSequence.deleteFrom(rig.coin)
+  Tween.deleteFrom(rig.shrinkParent)
+  TweenSequence.deleteFrom(rig.shrinkParent)
+  if (AvatarAttach.has(rig.anchor)) AvatarAttach.deleteFrom(rig.anchor)
+  Transform.getMutable(rig.shrinkParent).scale = Vector3.Zero()
+}
 
 function spawnHeadBounceCoin(playerId: string): void {
-  const headAnchor = engine.addEntity()
-  AvatarAttach.create(headAnchor, {
+  // Don't create the pooled coin rigs until the one-shot scene scanners have run:
+  // coinBobSpinSystem (@3s) and setupCoins (@>=4s, which then sets setupDone) both scan
+  // for GltfContainers whose src matches 'coin_01'/'doubloon' — which the pool coins' model
+  // also matches. Creating the pool earlier would let those scanners capture the 6 permanent
+  // pool entities as if they were real scene coins (breaking bob/spin + coin tracking).
+  // Skipping a head-bounce for a remote pickup in the first few seconds is imperceptible.
+  if (!setupDone) return
+  initHeadBouncePool()
+
+  // Acquire a free rig, or steal the one that will free soonest (a burst of >6 simultaneous
+  // pickups just reuses the oldest — a clipped frame of a cosmetic bounce is imperceptible).
+  let rig = headBouncePool.find(r => !r.busy)
+  if (!rig) {
+    rig = headBouncePool[0]
+    for (const r of headBouncePool) if (r.timer < rig.timer) rig = r
+  }
+
+  rig.busy = true
+  rig.timer = HEAD_BOUNCE_DURATION
+
+  AvatarAttach.createOrReplace(rig.anchor, {
     avatarId: playerId,
     anchorPointId: AvatarAnchorPointType.AAPT_HEAD,
   })
 
-  const coinClone = engine.addEntity()
-  Transform.create(coinClone, {
-    parent: headAnchor,
-    position: Vector3.create(0, 0.5, 0),
-    scale: Vector3.create(10, 10, 10),
-    rotation: Quaternion.fromEulerDegrees(90, 0, 0),
-  })
-  GltfContainer.create(coinClone, {
-    src: 'assets/asset-packs/doubloon/Coin_01/Coin_01.glb',
-    visibleMeshesCollisionMask: 0,
-    invisibleMeshesCollisionMask: 0,
-  })
+  // Reset transforms then restart the two-phase animation (pop up, then fall + shrink).
+  Transform.getMutable(rig.shrinkParent).scale = Vector3.One()
+  const ct = Transform.getMutable(rig.coin)
+  ct.position = Vector3.create(0, 0.5, 0)
+  ct.scale = Vector3.create(10, 10, 10)
+  ct.rotation = Quaternion.fromEulerDegrees(90, 0, 0)
 
   // Pop up fast then fall + shrink away
-  Tween.create(coinClone, {
-    mode: Tween.Mode.Move({
-      start: Vector3.create(0, 0.5, 0),
-      end: Vector3.create(0, 2.0, 0),
-    }),
+  Tween.createOrReplace(rig.coin, {
+    mode: Tween.Mode.Move({ start: Vector3.create(0, 0.5, 0), end: Vector3.create(0, 2.0, 0) }),
     duration: 200,
     easingFunction: EasingFunction.EF_EASEOUTQUAD,
   })
-  TweenSequence.create(coinClone, {
-    sequence: [
-      {
-        mode: Tween.Mode.Move({
-          start: Vector3.create(0, 2.0, 0),
-          end: Vector3.create(0, 0.8, 0),
-        }),
-        duration: 350,
-        easingFunction: EasingFunction.EF_EASEINQUAD,
-      },
-    ],
+  TweenSequence.createOrReplace(rig.coin, {
+    sequence: [{
+      mode: Tween.Mode.Move({ start: Vector3.create(0, 2.0, 0), end: Vector3.create(0, 0.8, 0) }),
+      duration: 350,
+      easingFunction: EasingFunction.EF_EASEINQUAD,
+    }],
     loop: TweenLoop.TL_YOYO,
   })
 
-  // Shrink on a separate parent so both run simultaneously
-  // Use a delay by starting full scale, holding, then shrinking
-  const shrinkParent = engine.addEntity()
-  Transform.create(shrinkParent, {
-    parent: headAnchor,
-    position: Vector3.Zero(),
-    scale: Vector3.One(),
-  })
-  // Re-parent coin under shrink parent
-  Transform.getMutable(coinClone).parent = shrinkParent
-
   // Hold full size during pop-up (200ms), then shrink during fall (350ms)
-  Tween.create(shrinkParent, {
-    mode: Tween.Mode.Scale({
-      start: Vector3.One(),
-      end: Vector3.One(),
-    }),
+  Tween.createOrReplace(rig.shrinkParent, {
+    mode: Tween.Mode.Scale({ start: Vector3.One(), end: Vector3.One() }),
     duration: 200,
     easingFunction: EasingFunction.EF_LINEAR,
   })
-  TweenSequence.create(shrinkParent, {
-    sequence: [
-      {
-        mode: Tween.Mode.Scale({
-          start: Vector3.One(),
-          end: Vector3.create(0, 0, 0),
-        }),
-        duration: 350,
-        easingFunction: EasingFunction.EF_EASEINQUAD,
-      },
-    ],
+  TweenSequence.createOrReplace(rig.shrinkParent, {
+    sequence: [{
+      mode: Tween.Mode.Scale({ start: Vector3.One(), end: Vector3.create(0, 0, 0) }),
+      duration: 350,
+      easingFunction: EasingFunction.EF_EASEINQUAD,
+    }],
     loop: TweenLoop.TL_YOYO,
   })
-
-  const totalDuration = 0.6
-  activeHeadBounces.push({ entity: coinClone, timer: totalDuration })
-  activeHeadBounces.push({ entity: shrinkParent, timer: totalDuration + 0.05 })
-  // Also clean up anchor after
-  activeHeadBounces.push({ entity: headAnchor, timer: HEAD_BOUNCE_DURATION + 0.1 })
 }
 
 // ── State ──
@@ -167,7 +215,12 @@ function spawnHeadBounceCoin(playerId: string): void {
 const trackedCoins: TrackedCoin[] = []
 let setupDone = false
 let waitTimer = 0
-let localPickupCooldowns = new Set<string>() // prevent spamming requests
+// Client-side spam guard: coinId -> timestamp (ms) when we sent requestCoinPickup.
+// Cleared on coinPickedUp/coinRespawned. An entry older than LOCAL_PICKUP_TIMEOUT_MS
+// is treated as expired so a lost request/silent rejection can't make a coin
+// permanently unpickable for this client.
+const localPickupCooldowns = new Map<string, number>()
+const LOCAL_PICKUP_TIMEOUT_MS = 5000
 let walletBalance = 0
 let balanceRequested = false
 let balanceReceived = false
@@ -194,17 +247,23 @@ export function applyDeferredBalance(newBalance: number): void {
 // Register so UI can call via shared/clientState (avoids circular import)
 registerDeferredBalanceApplier(applyDeferredBalance)
 
-/** Generate a deterministic coin ID from position */
-function coinIdFromPosition(x: number, y: number, z: number): string {
-  // Round to 1 decimal to handle floating point, gives unique ID per placed coin
-  return `coin_${Math.round(x * 10)}_${Math.round(y * 10)}_${Math.round(z * 10)}`
-}
-
 // ── Setup: find coins after composites load ──
+
+// Coin-model entities that are NOT pickable coins (e.g. the interior room's
+// decorative treasure — same glb as the real coins, but client-only, so the
+// server's coin registry can never validate them and every request would be
+// rejected). Registered by their creators; src alone can't distinguish them.
+const excludedCoinEntities = new Set<Entity>()
+
+/** Mark a coin-model entity as decoration so setupCoins never tracks it. */
+export function excludeFromCoinPickup(entity: Entity): void {
+  excludedCoinEntities.add(entity)
+}
 
 function setupCoins(): void {
   let count = 0
   for (const [entity] of engine.getEntitiesWith(GltfContainer, Transform)) {
+    if (excludedCoinEntities.has(entity)) continue
     const gltf = GltfContainer.get(entity)
     const src = gltf.src.toLowerCase()
     if (!src.includes('coin_01') && !src.includes('doubloon')) continue
@@ -213,11 +272,17 @@ function setupCoins(): void {
 
     // After coinBobSpinSystem runs, the coin is parented to a bobParent.
     // The bobParent has the world position. The coin entity is at local (0,0,0).
-    // We need the bobParent's position for proximity checks.
     const parent = t.parent
     if (parent && Transform.has(parent)) {
+      // By the time this scan runs the bobParent is already mid-bob, so hashing its
+      // live Transform bakes the animation offset into the id — which the server
+      // (hashing the static composite position) then rejects as an unknown coin.
+      // Hash the base position coinBobSpinSystem recorded before starting the tween.
+      const base = coinBasePositions.get(entity)
       const parentT = Transform.get(parent)
-      const pos = { x: parentT.position.x, y: parentT.position.y, z: parentT.position.z }
+      const pos = base
+        ? { x: base.x, y: base.y, z: base.z }
+        : { x: parentT.position.x, y: parentT.position.y, z: parentT.position.z }
       const coinId = coinIdFromPosition(pos.x, pos.y, pos.z)
 
       trackedCoins.push({
@@ -347,25 +412,17 @@ export function coinPickupSystem(dt: number): void {
 
 
 
+  // Park head-bounce rigs whose animation has finished (spatial sounds are round-robin,
+  // so they need no per-frame cleanup). MUST run before the trackedCoins early-return:
+  // with zero coins found (slow composite load) remote pickups can still mark rigs busy,
+  // and an unreachable parking loop would leave looping YOYO coins stuck over avatars.
+  for (const rig of headBouncePool) {
+    if (!rig.busy) continue
+    rig.timer -= dt
+    if (rig.timer <= 0) releaseHeadBounceRig(rig)
+  }
+
   if (trackedCoins.length === 0) return
-
-  // Tick spatial coin sounds — clean up expired
-  for (let i = spatialCoinSounds.length - 1; i >= 0; i--) {
-    spatialCoinSounds[i].timer -= dt
-    if (spatialCoinSounds[i].timer <= 0) {
-      engine.removeEntity(spatialCoinSounds[i].entity)
-      spatialCoinSounds.splice(i, 1)
-    }
-  }
-
-  // Tick head bounces — clean up expired
-  for (let i = activeHeadBounces.length - 1; i >= 0; i--) {
-    activeHeadBounces[i].timer -= dt
-    if (activeHeadBounces[i].timer <= 0) {
-      engine.removeEntity(activeHeadBounces[i].entity)
-      activeHeadBounces.splice(i, 1)
-    }
-  }
 
   // Read synced coin state to determine which coins are on cooldown
   const cooldowns = getCooldownMap()
@@ -391,8 +448,17 @@ export function coinPickupSystem(dt: number): void {
       restoreBobSpin(coin)
     }
 
-    // Skip proximity check if on cooldown, animating, or we already sent a request
-    if (onCooldown || coin.hidden || localPickupCooldowns.has(coin.coinId)) continue
+    // Skip proximity check if on cooldown or animating
+    if (onCooldown || coin.hidden) continue
+
+    // Skip if we sent a pickup request recently. A stale entry (older than
+    // LOCAL_PICKUP_TIMEOUT_MS) means the request or its server response was lost,
+    // so drop it and allow a re-request instead of the coin being stuck forever.
+    const requestedAt = localPickupCooldowns.get(coin.coinId)
+    if (requestedAt !== undefined) {
+      if (Date.now() - requestedAt < LOCAL_PICKUP_TIMEOUT_MS) continue
+      localPickupCooldowns.delete(coin.coinId)
+    }
 
     // Check proximity
     const dx = playerPos.x - coin.position.x
@@ -402,7 +468,7 @@ export function coinPickupSystem(dt: number): void {
 
     if (distSq <= COIN_PICKUP_RADIUS * COIN_PICKUP_RADIUS) {
       // Request pickup from server
-      localPickupCooldowns.add(coin.coinId)
+      localPickupCooldowns.set(coin.coinId, Date.now())
       room.send('requestCoinPickup', { coinId: coin.coinId })
       console.log('[CoinPickup] Requesting pickup:', coin.coinId)
     }

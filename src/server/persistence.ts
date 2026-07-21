@@ -4,7 +4,7 @@
  */
 
 import { Transform } from '@dcl/sdk/ecs'
-import { Storage } from '@dcl/sdk/server'
+import { storageGet, storageSet } from './safeStorage'
 import { Flag } from '../shared/components'
 import { getTodayDateString } from '../shared/components'
 import {
@@ -12,11 +12,22 @@ import {
   lastVisitorResetDay, setLastVisitorResetDay,
 } from './serverState'
 
-export async function persistFlagState(): Promise<void> {
+// Serialize flag-state writes through a single chain. The many fire-and-forget callers
+// (pickup, drop, steal, gravity) can otherwise put two Storage.set('flagState') in flight
+// and land them out of order, persisting a stale state. Each queued write reads the LIVE
+// flag state when it runs, so the last write always reflects the current state.
+let flagPersistChain: Promise<void> = Promise.resolve()
+
+export function persistFlagState(): Promise<void> {
+  flagPersistChain = flagPersistChain.then(doPersistFlagState, doPersistFlagState)
+  return flagPersistChain
+}
+
+async function doPersistFlagState(): Promise<void> {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
   const pos = Transform.get(flagEntity).position
-  await Storage.set('flagState', JSON.stringify({
+  await storageSet('flagState', JSON.stringify({
     state: flag.state,
     x: pos.x, y: pos.y, z: pos.z,
     carrierPlayerId: flag.carrierPlayerId,
@@ -27,15 +38,15 @@ export async function persistFlagState(): Promise<void> {
 }
 
 export async function persistLeaderboard(json: string): Promise<void> {
-  await Storage.set('leaderboard', json)
+  await storageSet('leaderboard', json)
 }
 
 export async function persistAllTimeLeaderboard(json: string): Promise<void> {
-  await Storage.set('allTimeLeaderboard', json)
+  await storageSet('allTimeLeaderboard', json)
 }
 
 export async function persistMonthlyLeaderboard(json: string): Promise<void> {
-  await Storage.set('monthlyLeaderboard', json)
+  await storageSet('monthlyLeaderboard', json)
 }
 
 export async function persistPlayerNames(): Promise<void> {
@@ -43,12 +54,12 @@ export async function persistPlayerNames(): Promise<void> {
   for (const [userId, name] of playerNames) {
     if (isRealName(name)) obj[userId] = name
   }
-  await Storage.set('playerNames', JSON.stringify(obj))
+  await storageSet('playerNames', JSON.stringify(obj))
 }
 
 export async function loadPlayerNames(): Promise<void> {
   try {
-    const saved = await Storage.get<string>('playerNames')
+    const saved = await storageGet<string>('playerNames')
     if (saved) {
       const obj: Record<string, string> = JSON.parse(saved)
       for (const [userId, name] of Object.entries(obj)) {
@@ -63,9 +74,15 @@ export async function loadPlayerNames(): Promise<void> {
   }
 }
 
+let lastWrittenVisitorResetDay: string | null = null
+
 export async function persistVisitorData(visitorDataJson: string): Promise<void> {
-  await Storage.set('visitorData', visitorDataJson)
-  await Storage.set('lastVisitorResetDay', lastVisitorResetDay)
+  await storageSet('visitorData', visitorDataJson)
+  // The reset day only changes once a day — don't rewrite it on every flush.
+  if (lastVisitorResetDay !== lastWrittenVisitorResetDay) {
+    await storageSet('lastVisitorResetDay', lastVisitorResetDay)
+    lastWrittenVisitorResetDay = lastVisitorResetDay
+  }
 }
 
 export async function loadVisitorData(): Promise<void> {
@@ -73,8 +90,8 @@ export async function loadVisitorData(): Promise<void> {
   let savedResetDay: string | null = null
   
   try {
-    savedData = await Storage.get<string>('visitorData')
-    savedResetDay = await Storage.get<string>('lastVisitorResetDay')
+    savedData = await storageGet<string>('visitorData')
+    savedResetDay = await storageGet<string>('lastVisitorResetDay')
   } catch (err) {
     console.error('[Server] Failed to load visitor data from storage:', err)
     return

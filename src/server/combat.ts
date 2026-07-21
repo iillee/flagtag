@@ -15,9 +15,10 @@ import {
 import { loadPlayerUpgrades } from './economy'
 import { room } from '../shared/messages'
 import {
-  flagEntity, getPlayerPosition, wasWithinRadius, FLAG_GRAVITY,
+  flagEntity, getPlayerPosition, wasWithinRadius, FLAG_GRAVITY, SCENE_FLOOR_Y,
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   sessionBananasDropped, sessionBoomerangsFired, lastStealTime, STEAL_IMMUNITY_MS,
+  playerBoomerangColors,
 } from './serverState'
 import { handleDrop } from './flagLogic'
 
@@ -151,6 +152,7 @@ export interface ActiveTrap {
   fallVelocity: number
   targetY: number
   groundResolved: boolean
+  dropY: number  // Y at drop time — upper bound for ground reports (ground can't be above the drop)
 }
 export const activeTraps: ActiveTrap[] = []
 
@@ -300,14 +302,74 @@ export interface ActiveOrbit {
 export const activeOrbits: ActiveOrbit[] = []
 const lastOrbitTime = new Map<string, number>()
 
+// ── Action position resolution ──
+
+// How far a client-reported action position may diverge from the server's replicated
+// view (or its ~500ms position history) before we distrust it. Two tiers:
+// - FIRE (projectiles): the position is just the spawn origin — the projectile flies a
+//   client-chosen direction anyway, so a generous 16m adds little abuse surface.
+// - DROP (traps/bombs): the position IS the placement. 16m would let a hostile client
+//   pin an explosive directly onto a nearby victim, so drops get half the slack —
+//   beyond it the item falls back to the server-view position (the old behavior).
+const ACTION_POS_TOLERANCE_FIRE = 16
+const ACTION_POS_TOLERANCE_DROP = 8
+
+/**
+ * The position an item action (fire/drop) should happen at. The server's replicated
+ * avatar transform can lag several meters under CRDT load — spawning at the STALE
+ * position made boomerangs fly from where the shooter used to be (hitting bystanders
+ * "regardless of aim") and dropped traps/bombs onto other players. Prefer the client's
+ * fresher self-reported position when it's plausibly close to the server view;
+ * otherwise fall back to the server position — never reject the action outright.
+ * Returns null only when the player has no replicated position at all (kept as a
+ * bot/pre-sync rejection, same as before).
+ */
+function resolveActionPosition(playerId: string, cx: number | undefined, cy: number | undefined, cz: number | undefined, tolerance: number): Vector3 | null {
+  const serverPos = getPlayerPosition(playerId)
+  if (!serverPos) return null
+  if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(cz)) return serverPos
+  // (0,0,0) is the schema default for a client that had no Transform yet — treat as absent.
+  if (cx === 0 && cy === 0 && cz === 0) return serverPos
+  const clientPos = Vector3.create(cx as number, cy as number, cz as number)
+  if (Vector3.distance(clientPos, serverPos) <= tolerance ||
+      wasWithinRadius(playerId, clientPos, tolerance, 1000)) {
+    return clientPos
+  }
+  console.log('[Server] ⚠️ Client action position rejected (too far from server view) for', playerId.slice(0, 8))
+  return serverPos
+}
+
 // ── Trap logic ──
 
-async function handleTrapDrop(playerId: string): Promise<void> {
+// Synchronous in-flight guard. Without it, a burst of requestBanana messages in one tick
+// all suspend at the loadPlayerUpgrades await below, then all read the same pre-update
+// cooldown + active-count and each drops a trap — bypassing both the cooldown and TRAP_MAX_ACTIVE.
+// Timestamped so a hung inner call (e.g. a wedged storage read before the timeout wrapper
+// existed) can never jam a player's traps permanently — stale entries are ignored.
+const trapDropInFlight = new Map<string, number>()
+const TRAP_DROP_IN_FLIGHT_MAX_MS = 10_000
+
+async function handleTrapDrop(playerId: string, cx?: number, cy?: number, cz?: number): Promise<void> {
+  const now = Date.now()
+  const since = trapDropInFlight.get(playerId)
+  if (since !== undefined && now - since < TRAP_DROP_IN_FLIGHT_MAX_MS) return
+  trapDropInFlight.set(playerId, now)
+  try {
+    await handleTrapDropInner(playerId, cx, cy, cz)
+  } finally {
+    trapDropInFlight.delete(playerId)
+  }
+}
+
+async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, cz?: number): Promise<void> {
   const now = Date.now()
 
-  // Check equipped trap type first so we use the right cooldown
-  const upgrades = await loadPlayerUpgrades(playerId)
-  const trapType = upgrades.equippedTrap || 'banana'
+  // Check equipped trap type first so we use the right cooldown. Lenient read: on a
+  // failed/timed-out storage read, fall back to the default banana rather than dropping
+  // nothing — a storage outage must degrade traps, not disable them (this exact await
+  // hanging forever was the "traps never drop, cooldown still ticks" incident).
+  const upgrades = await loadPlayerUpgrades(playerId).catch(() => null)
+  const trapType = upgrades?.equippedTrap || 'banana'
   const cooldown = trapType === 'bomb' ? BOMB_COOLDOWN_SEC : TRAP_COOLDOWN_SEC
 
   const lastDrop = lastTrapDropTime.get(playerId) ?? 0
@@ -317,7 +379,7 @@ async function handleTrapDrop(playerId: string): Promise<void> {
     return
   }
 
-  const playerPos = getPlayerPosition(playerId)
+  const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_DROP)
   if (!playerPos) {
     console.log('[Server] Trap denied: player position not found')
     room.send('bananaDenied', { reason: 'no_position' }, { to: [playerId] })
@@ -346,6 +408,14 @@ async function handleTrapDrop(playerId: string): Promise<void> {
     bt.position = dropPos
     bt.scale = Vector3.create(1, 1, 1)
 
+    // Impact-explosion height is computed from the SERVER-replicated Y (with 1m jitter
+    // slack), not the client-reported one: the client position is trusted within the
+    // drop tolerance sphere, so a client at ground level could otherwise claim +8m of
+    // altitude and turn every bomb into an instant impact explosion, bypassing the
+    // fuse (the victim's counterplay window).
+    const serverView = getPlayerPosition(playerId)
+    const impactDropY = Math.min(dropPos.y, (serverView?.y ?? dropPos.y) + 1)
+
     activeBombs.push({
       entity: bombEntity,
       bombId,
@@ -353,9 +423,14 @@ async function handleTrapDrop(playerId: string): Promise<void> {
       droppedAtMs: now,
       falling: true,
       fallVelocity: 0,
-      targetY: 0,
+      // Fallback landing height: just under the drop point (players usually drop from
+      // ground level), floored at the scene floor. A lost/missed ground-raycast reply
+      // then leaves the bomb roughly where it was dropped instead of sinking it ~50m
+      // under the lifted map — where the huge fall distance also faked an "impact
+      // explosion". The raycast reply refines this to the true ground within ~300ms.
+      targetY: Math.max(SCENE_FLOOR_Y, dropPos.y - 2),
       groundResolved: false,
-      dropY: dropPos.y,
+      dropY: impactDropY,
       exploded: false,
     })
     lastTrapDropTime.set(playerId, now)
@@ -391,8 +466,12 @@ async function handleTrapDrop(playerId: string): Promise<void> {
     droppedAtMs: now,
     falling: true,
     fallVelocity: 0,
-    targetY: 0,
+    // Fallback landing height just under the drop point (see the bomb equivalent) — a
+    // lost/missed ground reply must not sink the trap under the map (or, on elevated
+    // terrain, below the walkable surface) where nobody can ever trigger it.
+    targetY: Math.max(SCENE_FLOOR_Y, dropPos.y - 2),
     groundResolved: false,
+    dropY: dropPos.y,
   })
   lastTrapDropTime.set(playerId, now)
 
@@ -571,7 +650,7 @@ export function bombServerSystem(dt: number): void {
 
 // ── Projectile logic ──
 
-function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r', chargeSpeed: number = PROJECTILE_SPEED, chargeRange: number = 20, chargeScale: number = 1): void {
+function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r', chargeSpeed: number = PROJECTILE_SPEED, chargeRange: number = 20, chargeScale: number = 1, cx?: number, cy?: number, cz?: number): void {
   const now = Date.now()
 
   const lastFire = lastProjectileFireTime.get(playerId) ?? 0
@@ -590,14 +669,17 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     return
   }
 
-  const playerPos = getPlayerPosition(playerId)
+  const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_FIRE)
   if (!playerPos) {
     console.log('[Server] Projectile denied: player position not found')
     return
   }
 
   const len = Math.sqrt(dirX * dirX + dirZ * dirZ)
-  if (len < 0.01) {
+  // Reject non-finite direction explicitly: `NaN < 0.01` is false, so a NaN/Infinity dir
+  // would slip past the magnitude check and produce a NaN spawn position + rotation that
+  // gets broadcast to every client.
+  if (!Number.isFinite(dirX) || !Number.isFinite(dirZ) || len < 0.01) {
     console.log('[Server] Projectile denied: invalid direction')
     return
   }
@@ -949,32 +1031,50 @@ export function clearAllCombatCooldowns(): void {
 // ── Message handler registration ──
 
 export function registerCombatHandlers(): void {
-  room.onMessage('requestBanana', (_data, context) => {
+  room.onMessage('requestBanana', (data, context) => {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      handleTrapDrop(from)
+      // Entry log: during the "traps silently never drop" incident there was no way to
+      // tell from logs whether the request even reached the server. Keep this line.
+      console.log('[Server] 🪤 requestBanana from', from.slice(0, 8))
+      handleTrapDrop(from, data.x, data.y, data.z).catch(err => {
+        // Always answer — bananaDenied resets the client's local cooldown so the
+        // player can retry instead of staring at a dead hotbar.
+        console.error('[Server] ❌ handleTrapDrop failed:', err)
+        room.send('bananaDenied', { reason: 'error' }, { to: [from] })
+      })
     } catch (err) { console.error('[Server] ❌ requestBanana handler error:', err) }
   })
   room.onMessage('requestShell', (data, context) => {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
-      const chargeSpeed = typeof data.chargeSpeed === 'number' ? Math.max(PROJECTILE_SPEED, Math.min(60, data.chargeSpeed)) : PROJECTILE_SPEED
-      const chargeRange = typeof data.chargeRange === 'number' ? Math.max(20, Math.min(PROJECTILE_MAX_RANGE, data.chargeRange)) : 20
-      const chargeScale = typeof data.chargeScale === 'number' ? Math.max(1, Math.min(3, data.chargeScale)) : 1
+      // Authoritative equipped color — never trust data.color, or a client could claim
+      // 'y' for 5x fire rate + double shot, or 'b' charge params, without owning either.
+      const color = playerBoomerangColors.get(from) || 'r'
+      // Charge params only apply to the Charge boomerang ('b'); ignore them otherwise.
+      const canCharge = color === 'b'
+      // Number.isFinite (not typeof === 'number') so NaN/Infinity fall back to defaults —
+      // Math.max/min propagate NaN, so an unchecked NaN would become the actual param.
+      const chargeSpeed = canCharge && Number.isFinite(data.chargeSpeed) ? Math.max(PROJECTILE_SPEED, Math.min(60, data.chargeSpeed)) : PROJECTILE_SPEED
+      const chargeRange = canCharge && Number.isFinite(data.chargeRange) ? Math.max(20, Math.min(PROJECTILE_MAX_RANGE, data.chargeRange)) : 20
+      const chargeScale = canCharge && Number.isFinite(data.chargeScale) ? Math.max(1, Math.min(3, data.chargeScale)) : 1
       sessionBoomerangsFired.set(from, (sessionBoomerangsFired.get(from) ?? 0) + 1)
-      handleProjectileFire(from, data.dirX, data.dirZ, data.color || 'r', chargeSpeed, chargeRange, chargeScale)
+      handleProjectileFire(from, data.dirX, data.dirZ, color, chargeSpeed, chargeRange, chargeScale, data.x, data.y, data.z)
     } catch (err) { console.error('[Server] ❌ requestShell handler error:', err) }
   })
   room.onMessage('reportShellWallDist', (data, context) => {
     try {
       if (!context) return
+      // Math.min propagates NaN — an unchecked NaN maxDist would make the shell's
+      // travel-distance termination check permanently false.
+      if (!Number.isFinite(data.maxDist)) return
       const from = context.from.toLowerCase()
       for (const projectile of activeProjectiles) {
         if (projectile.firedBy === from && !projectile.wallDistReported) {
           const oldMax = projectile.maxDistance
-          projectile.maxDistance = Math.min(projectile.maxDistance, data.maxDist)
+          projectile.maxDistance = Math.min(projectile.maxDistance, Math.max(0, data.maxDist))
           if (projectile.maxDistance < oldMax) projectile.hitWall = true
           projectile.wallDistReported = true
           console.log('[Server] 🎯 Projectile wall distance updated:', data.maxDist.toFixed(1), 'm')
@@ -986,9 +1086,17 @@ export function registerCombatHandlers(): void {
   room.onMessage('reportShellGroundY', (data, context) => {
     try {
       if (!context) return
+      // Finite-check every client float: Math.max propagates NaN, and a NaN groundY
+      // makes the landing comparison permanently false — the shell would never land.
+      if (!Number.isFinite(data.shellX) || !Number.isFinite(data.shellZ) || !Number.isFinite(data.groundY)) return
+      const from = context.from.toLowerCase()
       let closest: ActiveProjectile | null = null
       let closestDist = 5
       for (const projectile of activeProjectiles) {
+        // Owner-only: every client raycasts the broadcast shells, but accepting
+        // whichever report arrives first would let a hostile client poison other
+        // players' shells. The owner's client always reports its own.
+        if (projectile.firedBy !== from) continue
         const pos = Transform.get(projectile.entity).position
         const dx = pos.x - data.shellX
         const dz = pos.z - data.shellZ
@@ -999,16 +1107,27 @@ export function registerCombatHandlers(): void {
         }
       }
       if (closest) {
-        closest.groundY = Math.max(0, data.groundY)
+        // The client raycasts DOWNWARD from the shell, so the ground can't be above
+        // it — cap the raise or a hostile report could park the shell in the sky.
+        const shellY = Transform.get(closest.entity).position.y
+        closest.groundY = Math.min(shellY + 1, Math.max(0, data.groundY))
       }
     } catch (err) { console.error('[Server] ❌ reportShellGroundY handler error:', err) }
   })
   room.onMessage('reportBananaGroundY', (data, context) => {
     try {
       if (!context) return
+      // Finite-check every client float — a NaN targetY poisons the fall loop's
+      // comparison (never true) and the trap falls forever, neutralized.
+      if (!Number.isFinite(data.bananaX) || !Number.isFinite(data.bananaZ) || !Number.isFinite(data.groundY)) return
+      const from = context.from.toLowerCase()
       let closest: ActiveTrap | null = null
       let closestDist = 3
       for (const trap of activeTraps) {
+        // Owner-only (see reportShellGroundY): groundResolved is first-report-wins,
+        // so without this any client could poison another player's trap before the
+        // honest reports land. The owner's client always reports its own drops.
+        if (trap.droppedBy !== from) continue
         const pos = Transform.get(trap.entity).position
         const dx = pos.x - data.bananaX
         const dz = pos.z - data.bananaZ
@@ -1019,7 +1138,11 @@ export function registerCombatHandlers(): void {
         }
       }
       if (closest && !closest.groundResolved) {
-        closest.targetY = Math.max(0, data.groundY)
+        // Clamp BOTH ways: floor at the scene floor (a missed client raycast reports
+        // groundY=0, ~50m under the lifted map), and cap the raise just above the
+        // drop point — ground can't legitimately be above where the trap was dropped,
+        // and an uncapped raise would park the trap unreachable in the sky.
+        closest.targetY = Math.min(closest.dropY + 1, Math.max(SCENE_FLOOR_Y, data.groundY))
         closest.groundResolved = true
         const currentY = Transform.get(closest.entity).position.y
         if (currentY <= closest.targetY) {
@@ -1034,10 +1157,20 @@ export function registerCombatHandlers(): void {
   room.onMessage('reportBombGroundY', (data, context) => {
     try {
       if (!context) return
+      // Finite-check the client float (see reportBananaGroundY).
+      if (!Number.isFinite(data.groundY)) return
+      const from = context.from.toLowerCase()
       const bombId = data.bombId
       const bomb = activeBombs.find(b => b.bombId === bombId)
       if (bomb && !bomb.groundResolved) {
-        bomb.targetY = Math.max(0, data.groundY)
+        // Owner-only: bomb ids are broadcast, and groundResolved is first-report-wins.
+        if (bomb.droppedBy !== from) return
+        // Clamp BOTH ways: floor at the scene floor (a missed client raycast reports
+        // groundY=0, which both sinks the bomb under the map AND fakes a 50m "impact
+        // explosion" drop), and cap the raise just above the drop point (ground can't
+        // be above the drop; an uncapped raise parks the bomb in the sky and
+        // suppresses its impact explosion).
+        bomb.targetY = Math.min(bomb.dropY + 1, Math.max(SCENE_FLOOR_Y, data.groundY))
         bomb.groundResolved = true
         if (!bomb.exploded) {
           const currentY = Transform.get(bomb.entity).position.y

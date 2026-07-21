@@ -36,10 +36,11 @@ import {
   restoreMonthlyVisitorData,
   visitorTrackingServerSystem,
 } from './analytics'
-import { patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName } from './leaderboard'
+import { patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName, markDailyLeaderboardLoaded } from './leaderboard'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
-import { Storage, EnvVar } from '@dcl/sdk/server'
+import { EnvVar } from '@dcl/sdk/server'
+import { storageGet, safeStorageSystem } from './safeStorage'
 import {
   Flag, FlagState, PlayerFlagHoldTime, CountdownTimer,
   LeaderboardState, AllTimeLeaderboardState,
@@ -61,13 +62,25 @@ import { initPostHog, capture } from './posthog'
 export async function setupServer(): Promise<void> {
   console.log('[Server] Starting Flag Tag server...')
 
-  await loadDiscordWebhookUrl()
-  await loadRoundWinnerWebhook()
-  await loadMailboxWebhook()
-  await initPostHog()
+  // Register the storage timeout ticker BEFORE the first storage call: the engine keeps
+  // ticking frames while setup awaits, so this protects the boot-time loads below too.
+  // Registered later (inside registerSystems) it would leave the entire setup path with
+  // zero timeout coverage — a wedged storage connection would hang the server at boot,
+  // the exact failure safeStorage exists to convert into a rejection.
+  engine.addSystem((dt: number) => {
+    try { safeStorageSystem(dt) } catch (err) { console.error('[Server] ❌ safeStorageSystem error:', err) }
+  })
 
-  // ── Restore flag ──
-  const { state: flagStartState, position: flagStartPos, anchor: dropAnchor } = await loadFlagState()
+  // Boot loads run CONCURRENTLY wherever independent: at ~2s per storage round
+  // trip, the old strictly-sequential chain took ~10 calls x 2s to become ready.
+  // Order constraints that remain: player names must precede the leaderboards
+  // (patchAllLeaderboardNames) and the visitor restores (name backfill), and the
+  // reset check needs the leaderboard entities.
+  await Promise.all([loadDiscordWebhookUrl(), loadRoundWinnerWebhook(), loadMailboxWebhook(), initPostHog()])
+
+  // ── Restore flag (+ names, needed by everything leaderboard/visitor below) ──
+  const [flagRestore] = await Promise.all([loadFlagState(), loadPlayerNames()])
+  const { state: flagStartState, position: flagStartPos, anchor: dropAnchor } = flagRestore
 
   setFlagEntity(engine.addEntity())
   Transform.create(flagEntity, {
@@ -100,16 +113,24 @@ export async function setupServer(): Promise<void> {
   syncEntity(countdownEntity, [CountdownTimer.componentId], SyncIds.COUNTDOWN)
   console.log('[Server] Timer initialized, next round ends at:', new Date(nextBoundary).toISOString())
 
-  // ── Leaderboards ──
-  await loadPlayerNames()
-  await initLeaderboards()
-
-  // ── Reports & resets ──
-  await checkLeaderboardDailyReset()
-
-  // ── Visitor tracking (server-side only, no CRDT sync) ──
-  await loadVisitorData()
-  await restoreMonthlyVisitorData()
+  // ── Leaderboards + reset check, visitor tracking — independent, so concurrent ──
+  await Promise.all([
+    (async () => {
+      await initLeaderboards()
+      // Never let the reset check abort boot: storageGet/storageSet are strict (they
+      // reject on any transient service error, not just a hang), and an uncaught
+      // rejection here would propagate out of setupServer and leave the server
+      // running with NO handlers or systems registered. A skipped boot-time reset
+      // self-heals — handleRoundEnd runs the same check at every round boundary.
+      try {
+        await checkLeaderboardDailyReset()
+      } catch (err) {
+        console.error('[Server] ❌ Boot-time leaderboard reset check failed — continuing; round-end retries it:', err)
+      }
+    })(),
+    loadVisitorData(),
+    restoreMonthlyVisitorData(),
+  ])
 
   // ── Reconcile stale CRDT hold-time entities ──
   reconcileHoldTimeEntities()
@@ -139,7 +160,7 @@ export async function setupServer(): Promise<void> {
 /** Load persisted flag state from Storage. Returns defaults if missing/corrupt. */
 async function loadFlagState() {
   let savedFlag: string | null = null
-  try { savedFlag = await Storage.get<string>('flagState') }
+  try { savedFlag = (await storageGet<string>('flagState')) ?? null }
   catch (err) { console.error('[Server] Failed to load flag state:', err) }
 
   let state = FlagState.AtBase
@@ -149,9 +170,12 @@ async function loadFlagState() {
   if (savedFlag) {
     try {
       const d = JSON.parse(savedFlag)
-      if (d.state === FlagState.Dropped || d.state === FlagState.Carried) {
+      if ((d.state === FlagState.Dropped || d.state === FlagState.Carried)
+          && Number.isFinite(d.x) && Number.isFinite(d.y) && Number.isFinite(d.z)) {
         // Sanity check: if persisted position is far from the current base
         // (e.g. after a scene move), discard it and use fresh base coords.
+        // (Non-finite coords fall through to defaults — otherwise NaN > MAX_DIST is false
+        // and the flag would restore at a NaN position, unpickable until round end.)
         const dx = d.x - FLAG_BASE_POSITION.x
         const dz = d.z - FLAG_BASE_POSITION.z
         const distFromBase = Math.sqrt(dx * dx + dz * dz)
@@ -174,19 +198,36 @@ async function loadFlagState() {
 
 /** Create and sync all three leaderboard entities from Storage. */
 async function initLeaderboards() {
-  const load = async (key: string) => {
-    try { return await Storage.get<string>(key) } catch { return null }
+  // Strict reads (storageGet retries transient failures internally): json is null
+  // only when the key definitively does not exist; ok is false when storage stayed
+  // unreachable. The daily seed loaded here is persisted back from the CRDT at
+  // round end, so booting with a false-empty '[]' could overwrite real data — on
+  // failure, boot with an empty board for display and report ok:false so the daily
+  // persist stays DISABLED (isDailyLeaderboardLoaded) until roundManager recovers
+  // the real board from Storage.
+  const load = async (key: string): Promise<{ ok: boolean; json: string | null }> => {
+    try { return { ok: true, json: await storageGet<string>(key) } } catch (err) {
+      console.error('[Server] ❌ Failed to load', key, '(after retries) — starting empty:', err)
+      return { ok: false, json: null }
+    }
   }
 
+  // Both boards concurrently — independent keys.
+  const [daily, at] = await Promise.all([load('leaderboard'), load('allTimeLeaderboard')])
+
   // Daily
-  const dailyJson = patchAllLeaderboardNames((await load('leaderboard')) || '[]', 'leaderboard')
+  if (daily.ok) markDailyLeaderboardLoaded()
+  else console.error('[Server] ⚠️ Daily leaderboard unavailable — round-end daily persists disabled until a Storage read succeeds')
+  const dailyJson = patchAllLeaderboardNames(daily.json || '[]', 'leaderboard')
   console.log('[Server] Daily leaderboard JSON size:', dailyJson.length, 'bytes')
   setLeaderboardEntity(engine.addEntity())
   LeaderboardState.create(leaderboardEntity, { json: dailyJson, date: '' })
   syncEntity(leaderboardEntity, [LeaderboardState.componentId], SyncIds.LEADERBOARD)
 
-  // All-time — compact format {n,w} for CRDT sync (full data stays in Storage)
-  const atJsonFull = patchAllLeaderboardNames((await load('allTimeLeaderboard')) || '[]', 'all-time leaderboard')
+  // All-time — compact format {n,w} for CRDT sync (full data stays in Storage). No
+  // loaded-flag needed: the round-end update re-reads Storage strictly and aborts on
+  // failure, so a false-empty seed here only affects the synced display until then.
+  const atJsonFull = patchAllLeaderboardNames(at.json || '[]', 'all-time leaderboard')
   let atJsonSync = '[]'
   try {
     const atEntries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(atJsonFull)
@@ -235,6 +276,8 @@ function registerSystems() {
   const safe = (name: string, fn: (dt: number) => void) => (dt: number) => {
     try { fn(dt) } catch (err) { console.error(`[Server] ❌ ${name} error:`, err) }
   }
+  // (safeStorageSystem is registered at the very start of setupServer, before the
+  // boot-time storage loads.)
   engine.addSystem(safe('flagServerSystem', flagServerSystem))
   engine.addSystem(safe('holdTimeServerSystem', holdTimeServerSystem))
   engine.addSystem(safe('lightningServerSystem', lightningServerSystem))
@@ -286,12 +329,12 @@ function registerSystems() {
 
 
 /** Register the registerName handler (only handler still in server.ts). */
-const MAILBOX_WEBHOOK_FALLBACK = 'https://discordapp.com/api/webhooks/1519451678448029706/SIYadqP_pFBDTOO6gn0o8-uiwZG57Mi9C9LiVHJqHixrOeycqxTfaFSbdlbdNdjqf33E'
-let mailboxWebhook = MAILBOX_WEBHOOK_FALLBACK
+// Secret comes from the environment only — never hardcode a webhook token (public bundles).
+let mailboxWebhook = ''
 
 async function loadMailboxWebhook(): Promise<void> {
-  mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || MAILBOX_WEBHOOK_FALLBACK
-  console.log('[Server] ✅ Mailbox webhook loaded')
+  mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || ''
+  console.log(mailboxWebhook ? '[Server] ✅ Mailbox webhook loaded from env' : '[Server] ℹ️ No DISCORD_MAILBOX_WEBHOOK set — feedback disabled')
 }
 const feedbackCooldowns = new Map<string, number>()
 
@@ -337,13 +380,30 @@ function registerFeedbackHandlers(): void {
   })
 }
 
+/**
+ * Clean a client-supplied display name before it reaches synced JSON, Storage and Discord.
+ * Strips control + markdown + mention characters, collapses whitespace, and caps length so a
+ * hostile client can't inject markdown or @everyone/@here pings into webhooks, or bloat
+ * CRDT/Storage with a megabyte-long name.
+ */
+function sanitizePlayerName(raw: string): string {
+  return raw
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/[*_`~|\\@]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24)
+}
+
 function registerHandlers(): void {
   room.onMessage('registerName', (data, context) => {
     try {
       if (!context || !data.name) return
       const from = context.from.toLowerCase()
-      if (updatePlayerName(from, data.name)) {
-        console.log('[Server] registerName: updated', from.slice(0, 8), '->', data.name)
+      const name = sanitizePlayerName(data.name)
+      if (!name) return
+      if (updatePlayerName(from, name)) {
+        console.log('[Server] registerName: updated', from.slice(0, 8), '->', name)
         persistPlayerNames().catch(e => console.error('[Server] persistPlayerNames error:', e))
       }
       for (const [playerId, color] of playerBoomerangColors) {

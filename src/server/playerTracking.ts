@@ -17,9 +17,11 @@ import {
 import { persistPlayerNames } from './persistence'
 import { updatePlayerName } from './leaderboard'
 import { getOrCreateHoldTimeEntity } from './flagLogic'
-import { loadPlayerCoinBalance, loadPlayerLifetimeHoldTime } from './economy'
+import { clearPlayerEconomyState } from './economy'
+import { ensurePlayerHydrated } from './playerDoc'
 import { clearCombatCooldowns } from './combat'
-import { schedulePlayerJoinDiscord } from './analytics'
+import { clearPlayerMushroomState } from './mushroomSystem'
+import { schedulePlayerJoinDiscord, markVisitorDataDirty } from './analytics'
 import { capture, identify } from './posthog'
 
 // ── Player join/leave detection ──
@@ -41,14 +43,13 @@ export function playerTrackingSystem(): void {
 
       // Create synced hold time entity if this is a new player
       getOrCreateHoldTimeEntity(userKey)
-      
-      // Load coin balance and create wallet entity
-      loadPlayerCoinBalance(userKey).then(() => {
-      }).catch(err => console.error('[Coins] Error loading wallet for', userKey.slice(0, 8), err))
 
-      // Load lifetime hold time and create synced entity
-      loadPlayerLifetimeHoldTime(userKey).then(() => {
-      }).catch(err => console.error('[LifetimeHoldTime] Error loading for', userKey.slice(0, 8), err))
+      // Hydrate the player's consolidated doc (coins, upgrades, lifetime stats,
+      // blessing) NOW so every later handler — wallet, store, pedestal — answers
+      // from memory instead of paying a ~2s storage round trip mid-interaction.
+      // Failures self-heal: the next handler that needs the data retries hydration.
+      ensurePlayerHydrated(userKey).catch(err =>
+        console.error('[PlayerDoc] Join-time hydration failed for', userKey.slice(0, 8), '— will retry on demand:', err))
 
       // Start/restart visitor session — use persisted name if available
       const playerName = playerNames.get(userKey) || userKey.slice(0, 8)
@@ -130,6 +131,10 @@ export function playerTrackingSystem(): void {
         monthlyVisitor.sessionStartMs = 0
       }
 
+      // Session totals were just finalized — force the next visitor-stat flush past
+      // the throttle (the server can be torn down without warning once the world empties).
+      markVisitorDataDirty()
+
       // Clean up per-player maps to prevent unbounded growth
       playerLifetimeHoldTimeCache.delete(userKey)
       playerBoomerangColors.delete(userKey)
@@ -143,6 +148,8 @@ export function playerTrackingSystem(): void {
       sessionBananasDropped.delete(userKey)
       sessionBoomerangsFired.delete(userKey)
       clearPositionHistory(userKey)
+      clearPlayerEconomyState(userKey)
+      clearPlayerMushroomState(userKey)
 
       changed = true
     }

@@ -10,7 +10,7 @@ import {
   lastLeaderboardResetDay, setLastLeaderboardResetDay
 } from './serverState'
 import { persistLeaderboard, persistAllTimeLeaderboard } from './persistence'
-import { Storage } from '@dcl/sdk/server'
+import { storageGet, storageSet } from './safeStorage'
 import {
   LeaderboardState, AllTimeLeaderboardState
 } from '../shared/components'
@@ -18,6 +18,24 @@ import {
 // ── Types ──
 
 export type LeaderboardEntry = { userId: string; name: string; roundsWon: number }
+
+// ── Daily leaderboard load state ──
+// False until the daily board has been successfully seeded from Storage. While false,
+// the round-end daily update must not persist: the synced state was seeded with a
+// false-empty '[]' after a failed boot read, and persisting increments computed from
+// it would wipe the stored board — the exact hazard the strict reads exist to prevent.
+// roundManager attempts a strict recovery read before each daily update until one
+// succeeds. (updatePlayerName is already safe while false: an empty board has no
+// entries to patch, so it never persists.)
+let dailyLeaderboardLoaded = false
+
+export function markDailyLeaderboardLoaded(): void {
+  dailyLeaderboardLoaded = true
+}
+
+export function isDailyLeaderboardLoaded(): boolean {
+  return dailyLeaderboardLoaded
+}
 
 // ── Pure helpers ──
 
@@ -102,7 +120,7 @@ export async function checkLeaderboardDailyReset(
 
   // Load last reset day from storage if not set
   if (lastLeaderboardResetDay === '') {
-    const savedResetDay = await Storage.get<string>('lastLeaderboardResetDay')
+    const savedResetDay = await storageGet<string>('lastLeaderboardResetDay')
     setLastLeaderboardResetDay(savedResetDay || currentDay)
   }
 
@@ -125,7 +143,7 @@ export async function checkLeaderboardDailyReset(
     await persistLeaderboard('[]')
 
     // Persist the reset day
-    await Storage.set('lastLeaderboardResetDay', currentDay)
+    await storageSet('lastLeaderboardResetDay', currentDay)
 
     console.log('[Server] Leaderboard reset completed')
     return true
@@ -183,7 +201,7 @@ export function updatePlayerName(userId: string, name: string): boolean {
   }
 
   // Update all-time leaderboard (compact {n,w} synced, full format in Storage)
-  Storage.get<string>('allTimeLeaderboard').then(full => {
+  storageGet<string>('allTimeLeaderboard').then(full => {
     if (!full) return
     const entries = parseLeaderboardJson(full)
     if (patchLeaderboardNames(entries, userId, name)) {
