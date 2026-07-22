@@ -147,10 +147,39 @@ export function isRealName(name: string): boolean {
 
 export function getPlayerPosition(address: string): Vector3 | null {
   const needle = address.toLowerCase()
+  // DIAGNOSTIC (BUG_stale-crdt-transform-in-combat.md, Step 1a):
+  // If duplicate PlayerIdentityData entities exist for the same address (mid-round
+  // reconnect leaving a corpse entity behind), scan them all and return the newest
+  // (highest entity ID). Warn once per lookup so we can confirm the hypothesis.
+  let bestEntity: Entity | null = null
+  let matches = 0
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === needle) return Transform.get(entity).position
+    if (identity.address.toLowerCase() === needle) {
+      matches++
+      if (bestEntity === null || (entity as number) > (bestEntity as number)) bestEntity = entity
+    }
   }
-  return null
+  if (matches > 1) {
+    console.log('[Server] ⚠️ getPlayerPosition: address', needle.slice(0, 8), 'has', matches, 'entities — using newest')
+  }
+  if (bestEntity === null) return null
+  return Transform.get(bestEntity).position
+}
+
+/** Diagnostic sweep: log any address with >1 PlayerIdentityData entity. Called ~1Hz. */
+let _lastDupSweepMs = 0
+export function sweepDuplicateIdentities(): void {
+  const now = Date.now()
+  if (now - _lastDupSweepMs < 1000) return
+  _lastDupSweepMs = now
+  const counts = new Map<string, number>()
+  for (const [, id] of engine.getEntitiesWith(PlayerIdentityData)) {
+    const a = id.address.toLowerCase()
+    counts.set(a, (counts.get(a) ?? 0) + 1)
+  }
+  for (const [addr, n] of counts) {
+    if (n > 1) console.log('[Server] 👥 duplicate PlayerIdentityData:', addr.slice(0, 8), '×', n)
+  }
 }
 
 // ── Player position history (rolling ring buffer for lag-forgiving hit checks) ──

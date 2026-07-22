@@ -29,7 +29,7 @@ import {
   leaderboardEntity, allTimeLeaderboardEntity,
   coinStateEntity,
   holdTimeEntities, knownPlayers, playerBoomerangColors,
-  recordPlayerPositions, getPlayerPosition, isRealName,
+  recordPlayerPositions, sweepDuplicateIdentities, getPlayerPosition, isRealName,
   nameChangeCooldowns, feedbackCooldowns,
 } from './serverState'
 import { persistPlayerNames, loadPlayerNames, loadVisitorData } from './persistence'
@@ -307,6 +307,7 @@ function registerSystems() {
   engine.addSystem(safe('playerTrackingSystem', playerTrackingSystem))
   // Snapshot player positions each tick BEFORE combat runs — combat uses history for lag-forgiving hits
   engine.addSystem(safe('recordPlayerPositions', () => { recordPlayerPositions() }))
+  engine.addSystem(safe('sweepDuplicateIdentities', () => { sweepDuplicateIdentities() }))
   engine.addSystem(safe('countdownServerSystem', countdownServerSystem))
   engine.addSystem(safe('visitorTrackingServerSystem', visitorTrackingServerSystem))
   engine.addSystem(safe('nameResolverServerSystem', nameResolverServerSystem))

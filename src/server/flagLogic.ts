@@ -404,7 +404,24 @@ export function checkProximitySteal(): void {
   }
 
   if (closestId) {
-    console.log('[Server] 🚩 Proximity steal:', closestId.slice(0, 8), '<-', carrierId.slice(0, 8))
+    // DIAG (BUG_stale-crdt-transform-in-combat.md, Step 1c):
+    // Dump the raw positions being compared so we can see WHY the distance was small.
+    const cPos = getPlayerPosition(carrierId)
+    const vPos = getPlayerPosition(closestId)
+    console.log('[Server] 🚩 Proximity steal:', closestId.slice(0, 8), '<-', carrierId.slice(0, 8),
+      '| carrierPos=', cPos ? `(${cPos.x.toFixed(1)},${cPos.y.toFixed(1)},${cPos.z.toFixed(1)})` : 'null',
+      '| victimPos=', vPos ? `(${vPos.x.toFixed(1)},${vPos.y.toFixed(1)},${vPos.z.toFixed(1)})` : 'null',
+      '| dist=', closestDist.toFixed(3),
+      '| sameRef=', cPos === vPos)
+    // Also dump every player's position in the current iteration so we can spot aliasing.
+    for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      const a = identity.address.toLowerCase()
+      const t = Transform.get(entity)
+      const parent = (t.parent ?? 0) as number
+      console.log('[Server]   ⤷ entity', entity as number, 'addr', a.slice(0, 8),
+        'pos=(', t.position.x.toFixed(1), ',', t.position.y.toFixed(1), ',', t.position.z.toFixed(1), ')',
+        'parent=', parent)
+    }
     handleFlagSteal(carrierId, closestId)
   }
 }

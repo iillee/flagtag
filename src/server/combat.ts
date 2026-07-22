@@ -612,7 +612,10 @@ export function bananaServerSystem(dt: number): void {
           console.log('[Server] 🛡️ Trap ignored — player has flag immunity')
           continue
         }
-        console.log('[Server] 🪤 Trap triggered by', addr.slice(0, 8), '! Staggering...')
+        console.log('[Server] 🪤 Trap triggered by', addr.slice(0, 8), '! Staggering...',
+          '| victimPos=(', playerPos.x.toFixed(1), ',', playerPos.y.toFixed(1), ',', playerPos.z.toFixed(1), ')',
+          '| trapPos=(', trapPos.x.toFixed(1), ',', trapPos.y.toFixed(1), ',', trapPos.z.toFixed(1), ')',
+          '| dist=', dist.toFixed(3), '| sameRef=', playerPos === trapPos)
 
         const flag = Flag.getOrNull(flagEntity)
         if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
