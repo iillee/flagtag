@@ -82,6 +82,31 @@ export function clearHeartbeat(store: HeartbeatStore, address: string): void {
 }
 
 /**
+ * Entries older than this are dropped by pruneStaleHeartbeats. Player-leave events
+ * are the primary cleanup (clearPositionHistory), but they are unreliable on this
+ * platform (departed players lingering is a documented symptom of the same CRDT
+ * bug), so the store needs its own bound to not grow by one entry per visitor
+ * forever on a long-running server.
+ */
+export const HEARTBEAT_RETENTION_MS = 30_000
+
+/** Drop stale entries; returns the pruned addresses so callers can clean their own per-address state. */
+export function pruneStaleHeartbeats(
+  store: HeartbeatStore,
+  nowMs: number,
+  retentionMs: number = HEARTBEAT_RETENTION_MS
+): string[] {
+  const pruned: string[] = []
+  for (const [addr, sample] of store) {
+    if (nowMs - sample.t > retentionMs) {
+      store.delete(addr)
+      pruned.push(addr)
+    }
+  }
+  return pruned
+}
+
+/**
  * True when two position readings disagree by more than thresholdM meters.
  * Used to detect the cross-wire in production: a fresh heartbeat that disagrees
  * with the CRDT Transform by several meters is the bug's signature (the victim's

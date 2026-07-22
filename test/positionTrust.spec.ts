@@ -2,11 +2,13 @@ import {
   type HeartbeatStore,
   HEARTBEAT_FRESH_MS,
   HEARTBEAT_MIN_INTERVAL_MS,
+  HEARTBEAT_RETENTION_MS,
   recordHeartbeat,
   getFreshHeartbeat,
   clearHeartbeat,
   isPlausibleHeartbeat,
   positionsDisagree,
+  pruneStaleHeartbeats,
 } from '../src/server/positionTrust'
 
 describe('position heartbeat trust store', () => {
@@ -127,12 +129,42 @@ describe('position heartbeat trust store', () => {
   })
 
   describe('when validating plausibility directly', () => {
+    let terrainPosition: [number, number, number]
+    let infinitePosition: [number, number, number]
+
+    beforeEach(() => {
+      terrainPosition = [372.75, 60, 349.5]
+      infinitePosition = [Number.POSITIVE_INFINITY, 60, 349]
+    })
+
     it('should accept a position on the playable terrain', () => {
-      expect(isPlausibleHeartbeat(372.75, 60, 349.5)).toBe(true)
+      expect(isPlausibleHeartbeat(...terrainPosition)).toBe(true)
     })
 
     it('should reject an infinite coordinate', () => {
-      expect(isPlausibleHeartbeat(Number.POSITIVE_INFINITY, 60, 349)).toBe(false)
+      expect(isPlausibleHeartbeat(...infinitePosition)).toBe(false)
+    })
+  })
+
+  describe('when pruning a store with mixed-age entries', () => {
+    let pruned: string[]
+
+    beforeEach(() => {
+      recordHeartbeat(store, '0xfresh', 372, 60, 349, nowMs)
+      recordHeartbeat(store, '0xstale', 380, 61, 350, nowMs - HEARTBEAT_RETENTION_MS - 1)
+      pruned = pruneStaleHeartbeats(store, nowMs)
+    })
+
+    it('should report the stale address as pruned', () => {
+      expect(pruned).toEqual(['0xstale'])
+    })
+
+    it('should drop the stale entry from the store', () => {
+      expect(store.has('0xstale')).toBe(false)
+    })
+
+    it('should keep the fresh entry in the store', () => {
+      expect(store.has('0xfresh')).toBe(true)
     })
   })
 

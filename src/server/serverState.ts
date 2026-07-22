@@ -6,7 +6,8 @@
 import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import {
-  type HeartbeatStore, recordHeartbeat, getFreshHeartbeat, clearHeartbeat, positionsDisagree
+  type HeartbeatStore, recordHeartbeat, getFreshHeartbeat, clearHeartbeat, positionsDisagree,
+  pruneStaleHeartbeats
 } from './positionTrust'
 
 // ── Entity references (set during setupServer) ──
@@ -245,6 +246,12 @@ const positionHistory = new Map<string, PosSample[]>()
  */
 export function recordPlayerPositions(): void {
   const now = Date.now()
+  // Bound the heartbeat store: leave events (clearPositionHistory) are the primary
+  // cleanup but are unreliable on this platform, so drop entries with no sample in
+  // 30s and their per-address log throttles along with them.
+  for (const addr of pruneStaleHeartbeats(heartbeatPositions, now)) {
+    lastCrosswireLogMs.delete(addr)
+  }
   const cutoff = now - POS_HISTORY_MAX_MS
   const seen = new Set<string>()
   const push = (addr: string, x: number, y: number, z: number) => {

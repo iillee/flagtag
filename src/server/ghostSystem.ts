@@ -18,6 +18,7 @@ import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
 import {
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
+  getPlayerPosition,
 } from './serverState'
 import { activeProjectiles } from './combat'
 
@@ -118,8 +119,13 @@ export function ghostServerSystem(dt: number): void {
     let nearestPos: Vector3 | null = null
     let nearestId = ''
 
-    for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const pPos = transform.position
+    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+      const addr = identity.address.toLowerCase()
+      // Trusted read (heartbeat-preferred): ghostTouching fills the victim's scare
+      // meter, so targeting off the raw CRDT Transform would phantom-hit cross-wired
+      // players just like traps did (BUG_stale-crdt-transform-in-combat.md).
+      const pPos = getPlayerPosition(addr)
+      if (!pPos) continue
       const dx = pPos.x - z.posX
       const dy = Math.abs(pPos.y - z.posY)
       const dz = pPos.z - z.posZ
@@ -128,7 +134,7 @@ export function ghostServerSystem(dt: number): void {
       if (dist < nearestDist) {
         nearestDist = dist
         nearestPos = pPos
-        nearestId = identity.address.toLowerCase()
+        nearestId = addr
       }
     }
 

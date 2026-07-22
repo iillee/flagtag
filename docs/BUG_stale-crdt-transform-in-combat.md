@@ -82,7 +82,9 @@ gameplay impact.
    WebSocket at ~8Hz (`posHeartbeat`). `getPlayerPosition` in `src/server/serverState.ts`
    now prefers a fresh (<1.5s) heartbeat and falls back to the CRDT Transform otherwise, so
    every authoritative proximity decision (trap/bomb/projectile hits, proximity steal,
-   pickup, force-drop position) reads the channel the affected client controls. The rolling
+   pickup, force-drop position, ghost targeting/touch) reads the channel the affected
+   client controls. (Ghost targeting previously read the raw CRDT Transform directly — a
+   victim-side phantom-hit path this doc's affected-files table had missed.) The rolling
    position history (`wasWithinRadius`) is fed from the same preferred source, and players
    whose `PlayerIdentityData` entity never replicated still get history from their
    heartbeat. Trust model: DCL avatar movement is already client-authoritative (the CRDT
