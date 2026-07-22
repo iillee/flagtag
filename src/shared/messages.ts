@@ -133,6 +133,13 @@ export const Messages = {
   // re-anchor over WS when PlayerFlagHoldTime CRDT updates are stalled (0 when not carried).
   // roundId prevents delayed CRDT values from a completed round being adopted by the next one.
   flagHeartbeat: Schemas.Map({ state: Schemas.String, carrierId: Schemas.String, carrierHoldSeconds: Schemas.Float, roundId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+
+  // Position heartbeat (client → server, ~8Hz). The sender's own avatar position.
+  // The server's CRDT view of remote-player Transforms can be cross-wired to ANOTHER
+  // player's live position (docs/BUG_stale-crdt-transform-in-combat.md), so authoritative
+  // proximity decisions (trap/bomb/projectile hits, proximity steal, force-drop position)
+  // prefer this channel over the CRDT Transform whenever it is fresh.
+  posHeartbeat: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
 }
 
 export const room = registerMessages(Messages)

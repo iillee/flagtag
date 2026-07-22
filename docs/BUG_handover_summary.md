@@ -57,13 +57,37 @@ Diagnostic session at `2026-07-22T01:44:02–17Z`. Two players: `0x1e93e5…` (a
 - **Stale/frozen Transform (CRDT saturation)** — values update every tick, they are just wrong.
 - **Scene code clobbering player Transforms** — audited every `Transform.create` / `Transform.getMutable` in the server module; every write targets game entities (traps, bombs, projectiles, flag, ghosts). No writes to player entities.
 
+## What we found ourselves (2026-07-22, from the published `@dcl/hammurabi-server` source)
+
+We partially answered our own routing question by reading the published package
+(1.7.1-29841479494.commit-32667d1):
+
+- Server-side player Transforms have **exactly one writer**: `putPlayerTransform` in
+  `avatar-communication-system.js`, routed per packet by the LiveKit `participant.identity`
+  of `RoomEvent.DataReceived` (`@livekit/rtc-node`, `^0.13.18`). Routing is strictly
+  address-keyed. The SDK scene-sync channel cannot reach entities `< 512` in either
+  direction. **So the misattribution enters at or below LiveKit participant attribution
+  (Rust FFI / SFU), or a peer is emitting packets carrying another player's coordinates.**
+- The consistent **~0.8m Y offset is the Babylon capsule-center anchor**: `PLAYER_HEIGHT =
+  1.7` → center is +0.85m above feet. The corrupted stream is capsule-center-anchored;
+  normal comms movement packets are feet-anchored. That fingerprint should identify which
+  code path emits the misattributed stream.
+- Precedent: `player-entity-manager.js` documents a since-fixed allocator bug that
+  "collided two live players on the same entity number" (fixed before 1.5.0).
+- Adjacent hardening gap: in `scene-context.js` the entity-range guard for `PUT_COMPONENT`
+  is commented out (`// if (!entityIsInRange(...)) continue`), and scene messages are
+  ingested with `allowedEntityRange = [1, MAX]` — any scene VM can write avatar-range
+  renderer component state. Not our trigger (our scene writes no player components), but a
+  cross-wire vector for any buggy/hostile scene.
+
 ## What we're asking
 
-1. **Does `hammurabi-server` receive `PlayerIdentityData` Transform updates through the same code path as client-side scenes, or a distinct one?** The authoritative-server context is unusual; if the sync path differs, this narrows the search substantially.
-2. **What field on an incoming CRDT/comms Transform message routes it to a specific entity server-side?** If that routing key can collide, misroute, or be picked from a shared source, that's likely the mechanism producing the lockstep pattern.
-3. **Is `PlayerIdentityData.address` guaranteed unique per entity at the platform level**, or is that only conventionally true?
-4. **Are you seeing similar reports from other authoritative-server scenes?** (Baskervill was named in prior playtest notes.) If yes, this graduates from a scene report to a known platform issue.
-5. **Can you correlate against comms/CRDT server logs for the room and timestamps above?** Retention permitting, the raw participant-to-entity message routing at those moments would be dispositive.
+1. **Which exact `@dcl/hammurabi-server` version is the flagtag.dcl.eth world server running?** Four versions were published on 2026-07-21 alone; our confirmed-diagnosis session postdates 1.7.1. Reproduction claims are meaningless without pinning this.
+2. **Can the LiveKit participant attribution for `DataReceived` be audited/logged at the FFI level?** Given the single-writer result above, either the SFU/FFI attributes a moving player's packets to the wrong stationary participant, or a client publishes another player's position. Packet-level capture in the room would be dispositive.
+3. **Which explorer code path emits capsule-center-anchored (+0.85m) positions?** Finding it likely finds the bug (see the Y-offset fingerprint above).
+4. **Is `PlayerIdentityData.address` guaranteed unique per entity at the platform level**, or is that only conventionally true?
+5. **Are you seeing similar reports from other authoritative-server scenes?** (Baskervill was named in prior playtest notes.) If yes, this graduates from a scene report to a known platform issue.
+6. **Please restore the commented-out entity-range guard in `scene-context.js`** (or explain why it must stay off) — see the hardening gap above.
 
 ## Attachments to expect from us
 
@@ -74,6 +98,21 @@ Diagnostic session at `2026-07-22T01:44:02–17Z`. Two players: `0x1e93e5…` (a
   - Position/entity dumps in `src/server/flagLogic.ts` (`checkProximitySteal`) and `src/server/combat.ts` (trap hit branch)
 - Screen recordings of the bug reproducing (side-by-side of both clients where possible — victim's client shows them stationary, attacker's client shows the hit landing)
 
-## Our planned defense (in-scene, until platform fix)
+## Our defense (in-scene, shipped 2026-07-22 — until platform fix)
 
-Client-reported position heartbeat over WebSocket at ~8Hz, server uses that as the trusted source for all authoritative proximity decisions, falls back to protected state when heartbeat is stale. Mirrors the pattern PR #6 established for shooter position with `resolveActionPosition`. This is a workaround, not a fix — we're building it because we have to ship, but the platform-side fix is what we actually need.
+Shipped on branch `fix/crosswire-defenses` (see "Defenses shipped" in the full doc):
+
+1. **~8Hz client position heartbeat** over WebSocket; the server prefers a fresh (<1.5s)
+   heartbeat over the CRDT Transform for every authoritative proximity decision, falling
+   back to the CRDT view when stale. Mirrors the pattern PR #6 established for shooter
+   position with `resolveActionPosition`, extended to victim-side reads.
+2. **Client corroboration for proximity steals**: the server only transfers the flag when
+   the beneficiary's client independently predicted the steal (`requestSteal`) within 2s.
+
+Our server logs now emit `🔀 CRDT/heartbeat disagreement` (throttled, unconditional) every
+time a player's fresh self-reported position and the server's CRDT view diverge by >3m —
+that stream is production evidence of the cross-wire firing and we can attach it to this
+report on request.
+
+This is a workaround, not a fix — we shipped it because we have to ship, but the
+platform-side fix is what we actually need.

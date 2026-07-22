@@ -16,6 +16,7 @@ import {
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { persistFlagState } from './persistence'
+import { type StealIntentStore, recordStealIntent, hasRecentStealIntent } from './stealIntent'
 import {
   flagEntity, setFlagEntity,
   holdTimeEntities, knownPlayers, playerNames,
@@ -375,6 +376,15 @@ export function handleFlagSteal(victimId: string, attackerId: string): void {
 
 // ── Proximity steal system ──
 
+// Client corroboration for server-initiated steals (see stealIntent.ts): the
+// beneficiary's client must have sent requestSteal recently, or the server view
+// alone (cross-wire-prone) cannot transfer the flag.
+const stealIntents: StealIntentStore = new Map()
+// Throttle for the "steal blocked" log — under an active cross-wire the block
+// would otherwise fire every tick.
+let lastBlockedStealLogMs = 0
+const BLOCKED_STEAL_LOG_INTERVAL_MS = 5000
+
 export function checkProximitySteal(): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) return
@@ -404,6 +414,21 @@ export function checkProximitySteal(): void {
   }
 
   if (closestId) {
+    // Corroboration gate (cross-wire defense): only transfer when the
+    // beneficiary's client ALSO believes it is next to the carrier — its view
+    // comes through an independent position channel, so a cross-wired server
+    // view can't teleport the flag on its own. Legit steals are unaffected in
+    // practice: the client predicts and retries requestSteal every ~500ms
+    // while in range, and the requestSteal handler remains the fast path.
+    if (!hasRecentStealIntent(stealIntents, closestId, now)) {
+      if (now - lastBlockedStealLogMs >= BLOCKED_STEAL_LOG_INTERVAL_MS) {
+        lastBlockedStealLogMs = now
+        console.log('[Server] 🚫 Proximity steal blocked (no client corroboration):', closestId.slice(0, 8),
+          'near', carrierId.slice(0, 8), '| dist=', closestDist.toFixed(3),
+          '— server view says adjacent but the client never predicted a steal (cross-wire signature)')
+      }
+      return
+    }
     // DIAG (BUG_stale-crdt-transform-in-combat.md, Step 1c):
     // Dump the raw positions being compared so we can see WHY the distance was small.
     const cPos = getPlayerPosition(carrierId)
@@ -666,6 +691,12 @@ export function registerFlagHandlers(): void {
       const attackerId = context.from.toLowerCase()
       const victimId = (data.victimId || '').toLowerCase()
       if (!victimId || victimId === attackerId) return
+
+      // Corroboration for checkProximitySteal: the client believes it is within
+      // steal range, whatever this handler decides below. Recorded before any
+      // validation so a request rejected only for immunity/server-view distance
+      // still lets the server-side steal fire once conditions clear.
+      recordStealIntent(stealIntents, attackerId, Date.now())
 
       const flag = Flag.getOrNull(flagEntity)
       if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) return

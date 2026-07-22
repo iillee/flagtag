@@ -1,8 +1,8 @@
 # Bug: Phantom trap/projectile hits and false flag steals (leading theory: duplicate PlayerIdentityData entities)
 
-**Status:** open · investigated, not fixed · reproducible in multiplayer
+**Status:** open upstream (platform) · scene-side defenses shipped 2026-07-22 (see "Defenses shipped" below)
 **Filed:** 2026-07-21
-**Updated:** 2026-07-21 (second playtest — theory revised, see "Revised leading hypothesis" below)
+**Updated:** 2026-07-22 (platform-side localization + defenses; previously: second playtest — theory revised, see "Revised leading hypothesis" below)
 **Severity:** high — breaks fair play; wrong player gets stunned, flag "teleports" between players
 **Related:** PR #6 (partial fix — same class of stale-position bugs), PR #8 (aware of "documented saturation class")
 
@@ -28,6 +28,86 @@
 - Mid-round join / entity recycling — no `👥 duplicate` or `⚠️` warnings across an entire session with join/leave activity.
 
 **Implication:** the bug lives at or below the CRDT sync / comms layer. The scene cannot fix its source. It can only defend against untrustworthy `PlayerIdentityData` Transforms by using an independent position channel for authoritative decisions.
+
+---
+
+## Platform-side localization (added 2026-07-22, from `@dcl/hammurabi-server` source analysis)
+
+Analysis of the published `@dcl/hammurabi-server@next` package (1.7.1-29841479494.commit-32667d1)
+narrows where the cross-wire can and cannot live:
+
+- **Player Transforms in the server's engine have exactly one writer:** `putPlayerTransform`
+  in `lib/decentraland/communications/avatar-communication-system.js`, routed per packet by
+  the LiveKit `participant.identity` delivered with each `RoomEvent.DataReceived`
+  (`transports/livekit.js` → `CommsTransportWrapper.dispatchMessage`). Routing is strictly
+  address-keyed (`playerEntityManager.addressToEntityMap`). Nothing else in the package
+  writes avatar-range Transforms.
+- **The scene-sync channel cannot produce it:** the SDK's `syncFilter`
+  (`@dcl/sdk/network/filter.js`) drops outbound messages for entities `< 512`, and inbound
+  client network messages only ever map onto server entities `>= 512` via `NetworkEntity`
+  (`@dcl/sdk/network/server/index.js#findOrCreateNetworkEntity`). Confirms the scene-audit
+  result from the other direction.
+- **Therefore the misattribution enters at or below LiveKit packet attribution** (the Rust
+  FFI / SFU participant resolution), or a peer is emitting packets that carry another
+  player's coordinates. This is the precise answer to handover question #2.
+- **The ~0.8m Y offset is explained:** the hammurabi stack defines `PLAYER_HEIGHT = 1.7`
+  (`babylon/scene/logic/static-entities.js`) and Babylon capsules are anchored at their
+  **center** — +0.85m above feet. The logged deltas (0.8 / 0.8 / 0.8 / 0.9) match 0.85 with
+  rounding: the corrupted stream is capsule-center-anchored while normal comms movement
+  packets are feet-anchored, i.e. two different code paths emitting the same player's motion.
+- **Precedent:** `player-entity-manager.js` in the current build documents a since-fixed
+  allocator bug that "collided two live players on the same entity number" (fix predates
+  1.5.0). This layer has produced exactly this bug class before.
+- **Adjacent hardening gap (not our trigger):** in `babylon/scene/scene-context.js` the
+  entity-range guard for `PUT_COMPONENT`/`APPEND_VALUE`/`DELETE_COMPONENT` is commented out
+  and scene messages are ingested with `allowedEntityRange = [1, MAX]`, so any scene VM can
+  write avatar-range renderer state. Worth reporting alongside.
+- **Version caveat:** hammurabi-server was published 4 times on 2026-07-21 (the playtest
+  day); the confirmed-diagnosis session postdates 1.7.1. The Foundation report must state
+  the exact version the flagtag world server is running, not just `@next`.
+- **Evidence caveat:** all lockstep evidence so far is logged only *after* a distance check
+  already passed (sampling bias). The victim's view could be flickering between real and
+  cross-wired values rather than tracking continuously. The `🔀` disagreement logger shipped
+  with the defenses (below) records unconditionally and will settle this in production.
+
+---
+
+## Defenses shipped (2026-07-22, branch `fix/crosswire-defenses`)
+
+Two independent scene-side defenses. Neither fixes the platform bug; both remove its
+gameplay impact.
+
+1. **Client position heartbeat — the trusted channel** (`src/server/positionTrust.ts`,
+   `src/systems/positionHeartbeat.ts`). Every client reports its own avatar position over
+   WebSocket at ~8Hz (`posHeartbeat`). `getPlayerPosition` in `src/server/serverState.ts`
+   now prefers a fresh (<1.5s) heartbeat and falls back to the CRDT Transform otherwise, so
+   every authoritative proximity decision (trap/bomb/projectile hits, proximity steal,
+   pickup, force-drop position) reads the channel the affected client controls. The rolling
+   position history (`wasWithinRadius`) is fed from the same preferred source, and players
+   whose `PlayerIdentityData` entity never replicated still get history from their
+   heartbeat. Trust model: DCL avatar movement is already client-authoritative (the CRDT
+   Transform originates from the same client's comms packets), so this opens no new spoofing
+   vector; samples are validated (finite, world bounds) and rate-limited.
+2. **Client corroboration for proximity steals** (`src/server/stealIntent.ts`).
+   `checkProximitySteal` only transfers the flag when the beneficiary's client sent
+   `requestSteal` within the last 2s. A cross-wired "victim" never predicts a steal (their
+   client sees the true distance), so the server view alone can no longer teleport the flag.
+   Clients already retry `requestSteal` every ~500ms while in range, so legitimate steals
+   are unaffected; the `requestSteal` handler remains the fast path.
+
+**Production observability:** grep server logs for
+- `🔀 CRDT/heartbeat disagreement` — the cross-wire firing in production (fresh heartbeat vs
+  CRDT view >3m apart), logged unconditionally, throttled per player. This is the evidence
+  stream to attach to the Foundation report.
+- `🚫 Proximity steal blocked (no client corroboration)` — a false transfer that the
+  corroboration gate prevented.
+
+**Residual exposure:** combat loops still *enumerate* players via
+`engine.getEntitiesWith(PlayerIdentityData, Transform)`, so a player whose entity never
+replicated (documented related symptom) is invisible to trap/projectile hit checks until
+their entity appears; and a player whose client stops heartbeating falls back to the
+cross-wire-prone CRDT view. Both are platform-bug territory, not fixable scene-side without
+replacing enumeration with a heartbeat-driven roster (possible follow-up).
 
 ---
 
