@@ -1,0 +1,293 @@
+# [ARCHIVED] Known Bugs — Playtest Tracking (through 2026-06-09)
+
+> **This is a historical snapshot.** For current open bugs, see [`docs/KNOWN_BUGS.md`](../KNOWN_BUGS.md).
+>
+> **Superseded by:**
+> - [`docs/BUG_stale-crdt-transform-in-combat.md`](../BUG_stale-crdt-transform-in-combat.md) — identifies the CRDT cross-wire as the actual root cause for Bugs 1, 2a, 2b, and 3 (originally hypothesized as "CRDT saturation," which was a secondary factor at most).
+> - **PR #10** (merged 2026-07-22) — shipped in-scene defenses (position heartbeat, steal corroboration, heartbeat-union victim enumeration).
+> - **PR #11** (merged 2026-07-22) — removed flag Storage persistence, closing the suspected restart-restore vector for Bug 2a.
+>
+> The post-mortem details in this doc remain useful reference — particularly:
+> - Bug 3's discovery that the Decentraland engine has significant per-system dispatch overhead (led to `systemManager.ts`).
+> - Bug 4 (ultrawide UI)'s finding that 59 registered systems caused the same lag as 5 real ones.
+> - Bug 4 (lifetime hold time)'s note about sequential `await Storage.set()` calls at startup.
+>
+> Do not treat the "root cause" theories in this doc as current — many were later revised.
+
+---
+
+Last updated: June 9, 2026
+
+These three game-breaking bugs have been recurring over the past month during multiplayer sessions. Recent refactoring may have resolved them. This document tracks root causes, fixes applied, and remaining risks for the May 19 playtest.
+
+---
+
+## Bug 1: Scoreboard Stops Tracking
+
+**Symptoms:**
+- Live scoreboard on the right freezes mid-round
+- Players stuck at 0 points, or stuck at a random score
+- Usually happens after playing with multiple players for a while
+- Final round-end cinematic score often appears correct
+- Sometimes self-corrects on new round, sometimes persists
+
+**Root Causes Identified & Fixed:**
+
+1. **CRDT buffer saturation (commit `5b9f2ba`)**
+   - Projectiles and traps were synced via `syncEntity` but visuals were driven entirely by WebSocket messages. The CRDT writes + tombstone recycling accumulated and eventually blocked ALL CRDT propagation — including `PlayerFlagHoldTime` updates that drive the scoreboard.
+   - **Fix:** Removed `syncEntity` calls from projectiles and traps. Server collision detection unchanged (still authoritative).
+
+2. **`hasZero` scoreboard wipe (commit `bb7a12e`)**
+   - Old logic: "if ANY hold-time entity for a player has seconds=0, force their displayed score to 0." Orphaned duplicate CRDT entities (from server restarts or ghost data) with seconds=0 would override the real entity's score.
+   - **Fix:** Now only forces score to 0 when ALL entities for a player are 0 (true round reset). Mixed 0/non-zero keeps the max.
+
+3. **Ghost players on scoreboard (commit `bb7a12e`)**
+   - Stale `onEnterScene` CRDT events added phantom players to `playersInScene`. These ghosts appeared on the scoreboard with 0 or stale scores.
+   - **Fix:** `addPlayer()` now validates remote players against `PlayerIdentityData` before accepting. `nameResolverSystem` periodically reconciles `playersInScene` against engine entities.
+
+4. **Round-end race condition (addressed in `roundManager.ts`)**
+   - If flag was still `Carried` during an `await` gap in `handleRoundEnd`, `holdTimeServerSystem` would keep accumulating time and write it back after scores were reset to 0.
+   - **Fix:** All state mutations (flag reset, score reads, score zeroing, `clearHoldTimeAccum()`) happen synchronously before any `await`.
+
+**Remaining Risks:**
+- Client-side interpolation (`updateHoldTimeInterpolation`) adds elapsed time between CRDT syncs. If `interpolationStartTime` doesn't reset properly during rapid steal chains, displayed scores could drift. This is cosmetic — server scores are authoritative for round-end results.
+- The 250ms cache (`HOLD_TIME_CACHE_MS`) in `getPlayersWithHoldTimes()` means the UI won't reflect changes faster than 4x/second. Not a bug, but worth knowing.
+
+**How to verify in playtest:**
+- Watch scoreboard during 3+ player sessions lasting 10+ minutes
+- Check if scores count up smoothly for the flag carrier
+- Check if scores reset to 0 cleanly at round boundaries
+- Check if players who join mid-round appear correctly
+
+---
+
+## Bug 2: Flag Gets Stuck
+
+### Bug 2a: Flag stuck above player's head (can't drop, can't steal)
+
+**Symptoms (updated June 9, 2026):**
+- Usually occurs after 3+ rounds with 3+ players (possibly entity accumulation related)
+- Flag clone appears above a player's head, but NO points accumulate
+- Carrier unable to drop with key 3
+- Other players unable to knock it loose (boomerang, banana, proximity steal — none work)
+- Persists across round resets — clone stays attached even when new round starts
+- Persists if the player leaves and re-enters the scene
+- **Only fix:** ALL players leave the scene for several minutes, or redeploy
+- This suggests the server-side Flag component is stuck in `Carried` state with a `carrierPlayerId` that the server believes is still valid, and round-end reset is not clearing it properly
+
+**Previous Fix Attempt (did not fully resolve):**
+- **AvatarAttach race condition:** Writing `Transform` on a direct child of an `AvatarAttach` entity races with Bevy's internal propagation, causing the entity to "detach" and freeze in world space.
+- **Fix (flagSystem.ts):** Implemented 3-layer architecture:
+  - Layer 1: **Anchor** — has `AvatarAttach`, position controlled by engine
+  - Layer 2: **Static Offset** — child of Anchor, Transform set ONCE at creation, NEVER mutated
+  - Layer 3: **Visual** — grandchild, safely animated per-frame (bob + spin)
+- **Server safety nets:**
+  - Stale carrier detection (`CARRIER_NO_POSITION_TIMEOUT_MS`) — force-drops flag if carrier position unavailable for 5s
+  - Carrier disconnect detection — checks `PlayerIdentityData` every frame, force-drops if carrier entity gone
+
+**Remaining Risks / Investigation Areas:**
+- The 3-layer fix addressed a visual-only issue (AvatarAttach race). The current bug appears to be a **server-side state corruption** — the server thinks someone is carrying but the game logic doesn't function (no points, can't drop, can't steal, survives round reset).
+- Round-end reset may not be properly clearing `Flag.carrierPlayerId` or the flag state may be getting re-written by a stale system after reset.
+- `holdTimeServerSystem` may stop accumulating if it can't find the carrier in `PlayerIdentityData` but the flag state still says Carried.
+- The `persistFlagState` / state restoration on server restart could be restoring a stale Carried state.
+- Possible entity or CRDT accumulation over multiple rounds degrades server system processing.
+
+### Bug 2b: Flag stuck on ground / pickup-then-snap-back
+
+**Symptoms (updated June 9, 2026):**
+- Player walks to flag at spawn, picks it up — clone appears above head, pickup sound plays
+- **If player stays at spawn:** pickup sound plays repeatedly (suggests pickup → reject → re-pickup loop)
+- **When player moves away:** clone follows for 3-5 seconds, then flag snaps back to spawn point
+- No points are accumulated during the carry
+- This is the precursor to Bug 2a — after the snap-back, the flag often becomes permanently stuck
+
+**Analysis:**
+- The repeated pickup sound at spawn suggests the server IS confirming the pickup (`pickupConfirmed` fires, which plays the sound), but then something immediately drops/resets the flag, triggering another auto-pickup cycle.
+- The 3-5 second carry before snap-back matches the `confirmedGraceUntil` (3s) + `PENDING_PICKUP_TIMEOUT_MS` (1.5s) window — the client trusts the clone during grace, then safety net kicks in when CRDT doesn't show Carried.
+- This points to the server setting `FlagState.Carried` and sending `pickupConfirmed`, but the CRDT update never propagating to clients. Possibly CRDT buffer saturation again.
+
+**Previous Fix Attempt (did not fully resolve):**
+- Client-side cooldowns prevent spam:
+  - `AUTO_PICKUP_COOLDOWN_MS` (500ms) — minimum time between pickup requests
+  - `DROP_PICKUP_COOLDOWN_MS` (2000ms) — can't auto-pickup for 2s after dropping
+  - `WITNESSED_DROP_COOLDOWN_MS` (750ms) — brief cooldown after seeing any drop
+  - `pendingPickupUntil` (1.5s timeout) — rolls back optimistic UI if server doesn't confirm
+  - Failed pickup extends cooldown by 2.5s to prevent rapid re-attempts
+
+**Remaining Risks:**
+- Server pickup validation requires `dist <= PICKUP_RADIUS` but if the server's position cache (`getPlayerPosition`) is stale, valid pickups could be rejected silently. The fallback log says "trusting client proximity" when position is missing, but the distance check is skipped entirely — could allow remote pickups.
+- No explicit `pickupDenied` message from server. Client relies on timeout, which means 1.5s of visual confusion on rejection.
+- If CRDT buffer is saturated, the `Flag` component mutation on the server never reaches clients, causing the client to see the flag as still at spawn while the server thinks it's carried.
+
+**Deep Analysis (June 9, 2026):**
+
+After code review, the most likely root cause is a **CRDT propagation failure + client state machine blind spot**:
+
+1. **CRDT stops propagating Flag state changes.** The server sets `Flag.state = Carried` and sends `pickupConfirmed` via WebSocket. The WebSocket message arrives (sound plays, clone shows), but the CRDT component update for `Flag` never reaches the client. This explains the repeated pickup sound: the client shows the clone via WebSocket confirmation, but after the 3s grace period, the CRDT still shows `AtBase` → safety net hides clone → player still at spawn → auto-pickup fires again → loop.
+
+2. **Client `prevFlagState` never transitions to Carried.** Because CRDT never showed `Carried`, `prevFlagState` stays as `AtBase`. When the round resets (server writes `AtBase` again), `stateChanged = false` → `needsCloneRemove` never fires → **clone stays permanently attached**. The safety net SHOULD catch this (`flag.state !== FlagState.Carried && !inGracePeriod → hideClone`), but if `confirmedGraceUntil` was recently renewed by a late `pickupConfirmed` message, the clone is protected.
+
+3. **Why CRDT stops propagating after a few rounds with 3+ players:** Likely causes:
+   - Leaderboard JSON updates (3 leaderboard components written every round end)
+   - Hold time entity accumulation (syncEntity called per player, tombstones from removed entities)
+   - `persistFlagState()` calls `Storage.set` which might interact with CRDT timing
+   - Total synced component writes per round could exceed CRDT buffer capacity
+
+4. **Why it persists across round resets and scene re-entry:** The server-side `Flag` component is in a valid state (it correctly resets to `AtBase`). But if CRDT propagation is broken for this session, no amount of server state changes will reach clients. The clone on the client side was created from a WebSocket message, not CRDT — so it persists independently of CRDT state. Only a full server restart (all players leave) clears the CRDT buffer.
+
+**Fix approach:** Add diagnostic logging to detect CRDT propagation failures (compare server Flag state vs client Flag state via WebSocket heartbeat). Consider a WebSocket-based fallback for flag state if CRDT is unreliable. Reduce CRDT write volume (fewer synced components, smaller leaderboard payloads, batch hold time updates).
+
+**How to verify in playtest:**
+- Have carrier disconnect/teleport away — does flag drop properly?
+- Have 3+ players contest a dropped flag simultaneously — does one pick it up cleanly?
+- Have carrier get hit by banana/boomerang — does flag drop and become pickable?
+- Check if flag ever appears frozen in mid-air for more than a few seconds
+
+---
+
+## Bug 3: Boomerangs Don't Render When Thrown
+
+**Symptoms:**
+- Player presses E (or taps mobile button), cooldown activates normally
+- No boomerang visual appears in the world
+- Sound may or may not play
+- Cooldown expires, next throw may or may not work
+
+**Root Cause & Fix:**
+- **CRDT buffer saturation (commit `5b9f2ba`)** — Same root cause as Bug 1. When CRDT buffer fills up, WebSocket messages like `shellDropped` are delayed or dropped. The server processes the throw (starting cooldown, creating server-side projectile for collision), broadcasts `shellDropped`, but the message never arrives at the throwing client or other clients.
+- **Fix:** Removing `syncEntity` from projectiles/traps eliminated the CRDT tombstone accumulation that caused buffer saturation.
+
+**Secondary causes:**
+- **Pool exhaustion:** 10 entities per color. Yellow fires 2 simultaneously. Under extreme load with many players all throwing, pool could exhaust (logged as `Pool exhausted for color X`).
+- **`localThrow.active` stuck state:** If `shellReturned` message is lost (network issue), `localThrow.active` stays true, blocking subsequent throws. Safety timeout at `LOCAL_THROW_SAFETY_MS` (4s) force-clears it, and a second check at `PROJECTILE_LIFETIME_SEC` also clears.
+
+**Root Cause Identified (May 20 playtest):**
+- **Entity churn causing engine renderer failure.** After ~45 min with 3-5 players, ALL projectile and trap visuals stopped rendering simultaneously. Hand-attached boomerangs (persistent entities) still visible. Cooldowns still worked (set locally before server round-trip).
+- **Primary offender: `remoteBoomerangSystem.ts` charge VFX.** `startRemoteCharge()` created 21 entities (1 glow + 20 particles) per charge cycle, and `stopRemoteCharge()` destroyed all of them. Over 45 min with active combat: ~19,000 entity create/destroy cycles. The Decentraland engine's internal renderer eventually stops tracking entities after excessive churn.
+- **Secondary offender: per-frame `Material.setPbrMaterial()` calls.** The charge animation called `Material.setPbrMaterial()` on 20 particles × N players × 60fps — thousands of material replacements per second, despite the color only changing once (at 75% charge).
+- **Other entity churn sources:** wall raycasts (1 per throw), ground raycasts (1 per trap), mushroom head bounce entities (3 per pickup). These are lower volume but contribute.
+
+**Fixes Applied (May 20):**
+1. **Pooled charge VFX particles** (`remoteBoomerangSystem.ts`): Pre-created pool of 100 sphere entities (enough for 5 concurrent chargers). `startRemoteCharge` acquires from pool, `stopRemoteCharge` releases back. Zero entity creation during gameplay.
+2. **Throttled material updates**: Material only updated when charge phase changes (blue→gold at 75%), reducing `setPbrMaterial` calls by ~99%.
+
+**Remaining Risks:**
+- If WebSocket messages are still unreliable for reasons other than CRDT saturation (network latency, server load), `shellDropped` could still be missed. The client has no retry/ack mechanism for projectile visuals.
+- The `localThrow` → `sawVisual` → `shellReturned` chain has three points of failure. If any message is lost, the state machine relies on timeouts (4s safety, lifetime expiry) rather than self-healing.
+- Other entity churn sources (raycasts, mushroom bounces) are not yet pooled. If the issue persists after this fix, pool those next.
+- The `remoteOrbitAnimSystem` still creates/destroys 1 entity per orbit per remote player (lower volume, ~1 per green throw).
+
+**How to verify in playtest:**
+- Have 3-5 players throwing boomerangs continuously for 45+ minutes
+- Check if boomerang AND banana visuals still render after extended play
+- Check if boomerang visuals appear for both the thrower and other players
+- Check if cooldown and visual are always in sync
+- Watch server logs for `Pool exhausted` messages
+
+---
+
+---
+
+## Bug 4: Lifetime Flag Hold Time Tracking Breaks Server Connection
+
+**Discovered:** May 22, 2026
+
+**Symptoms:**
+- After deploying with lifetime hold time tracking code, the authoritative server never connects
+- Scene loads visually but no CRDT sync, no flag, no round timer — server is completely unreachable
+- The same codebase WITHOUT the hold time tracking deploys and connects fine (verified on both flagtag.dcl.eth and baskervill.dcl.eth)
+
+**What was added (commits `d366380` → `7bd4b82`):**
+- `playerLifetimeHoldTimeCache` Map in `serverState.ts`
+- `loadPlayerLifetimeHoldTime()` and `addPlayerLifetimeHoldTime()` in `economy.ts` — uses `Storage.get`/`Storage.set` with per-player keys (`lifetimeHoldTime:{walletAddress}`)
+- `handleRoundEnd()` in `roundManager.ts` — loops over players with hold time > 0 and calls `await addPlayerLifetimeHoldTime()` for each
+- `playerTrackingSystem` — added `lifetime_hold_seconds` to PostHog player leave event
+
+**What was also tried:**
+- SDK upgrade to `7.23.4-auth-server` tag (commit `bfcd3d3`) — did NOT fix the issue
+- Reverting to SDK `7.23.2-commit-1828100` with hold time code still present — still broken
+- Reverting hold time code on SDK `7.23.2` — **fixed, server connects**
+
+**Likely root cause:**
+- Unknown. The hold time code is server-only (no new CRDT components, no new syncEntity calls). It only uses `Storage.get`/`Storage.set` and a `Map` cache. Possibly the multiple sequential `await Storage.set()` calls inside the `handleRoundEnd` loop are causing a server startup or runtime issue. Or the additional import/reference graph change is triggering a bundler or server initialization problem.
+
+**Status:** ✅ FIXED. Root cause was an engine/server-side bug on the devs' side, not our code. Lifetime hold time tracking can be re-deployed.
+
+---
+
+## Playtest Results (May 19, 2026)
+
+- [x] Scoreboard counts up smoothly for carrier during entire round — **MOSTLY OK, one incident of local player stuck at 0 (reload fixed)**
+- [x] Scores reset to 0 at round boundary for all players
+- [x] Final cinematic scores match live scoreboard
+- [x] No phantom/ghost players on scoreboard
+- [x] Flag drops cleanly when carrier is hit (banana, boomerang, orbit)
+- [x] Flag drops cleanly when carrier disconnects
+- [x] Dropped flag is pickable by nearby players within ~1s
+- [x] No flag stuck in mid-air for more than 5s
+- [x] Boomerang visuals appear on every throw — **FAILED after ~45 min**
+- [x] Boomerang visuals visible to other players — **FAILED after ~45 min**
+- [ ] No "cooldown without visual" occurrences after 10+ min sessions — **FAILED after ~45 min**
+- [x] Test with 5+ concurrent players for 15+ minutes minimum
+- **NEW:** Grace period shield persists on both players after steal — **FIXED**
+- **NEW:** Discord webhook spam from unnamed bot accounts — **FIXED**
+
+---
+
+## Bug 4: UI Buttons Unresponsive on Ultrawide (21:9) Monitors
+
+**Symptoms:**
+- ALL UI buttons require 1-4 clicks to register on a 21:9 ultrawide monitor
+- Same machine on a 16:9 TV — buttons work first click every time
+- Other Decentraland scenes (including LootDrop) work perfectly on the same ultrawide
+- Other players' scenes also work fine on the same ultrawide
+- Issue is specific to FlagTag — not an engine bug
+
+**Observations:**
+- FlagTag has 28 UI files, 245+ `S()` scaling calls, 35 absolute-positioned elements, 37 click handlers
+- LootDrop has 5 UI files, no dynamic scaling, hardcoded pixel values — and works perfectly on ultrawide
+- FlagTag's `S()` function scales all pixel values by `canvas.width / 1920` (clamped 0.6–1.6)
+- On 21:9 ultrawide (~3440×1440): width ratio = 1.79 (clamped to 1.6), but height ratio would be 1440/1080 = 1.33
+- The scaling is **width-only** — it ignores height entirely. On ultrawide, UI elements are scaled 20% larger than they should be vertically relative to the actual screen height
+
+**Suspected Root Causes (to investigate):**
+
+1. **Width-only scaling mismatch on ultrawide aspect ratios.** The `S()` function computes scale from `canvas.width / 1920`, which on ultrawide gives a much higher scale factor than the height warrants. This means all absolute-positioned elements are offset further than expected. The SDK's internal click hitbox detection may use a different coordinate system or the scaled positions may push elements partially offscreen/overlapping in ways that cause hitbox conflicts. On 16:9, width and height ratios are proportional so no mismatch occurs.
+
+2. **Stacked full-screen CLICK_BLOCKER overlays.** There are 13+ full-screen overlay wrappers with `CLICK_BLOCKER` (alpha=0.001) backgrounds and `onMouseDown={() => {}}`. Even when their content is conditionally hidden, the `PlayerListUi` function evaluates all overlay conditions every frame. If any invisible wrapper is still intercepting pointer events due to the SDK treating near-zero-alpha backgrounds as valid hit targets, clicks would be silently consumed. The larger the screen, the more chance of overlap with actual buttons.
+
+3. **Absolute positioning with scaled offsets.** FlagTag uses 35 absolute-positioned elements with `S()`-scaled positions. On ultrawide, the scale factor is at max clamp (1.6), so positions are pushed 60% further from their anchors. If two absolute-positioned elements overlap at this scale but not at 16:9 scale, the top element would intercept clicks meant for the one underneath.
+
+4. **UI complexity / React-ECS render overhead.** 28 files and 245+ scaled values means the UI tree is large. The SDK's UI event system processes hit-tests against the full tree every frame. Unlikely to cause missed clicks (more likely would cause lag), but worth ruling out.
+
+**Diagnosis Plan:**
+
+1. **Quick test — disable `S()` scaling:** Temporarily make `S(px)` return `px` unchanged. If clicks work on ultrawide, the scaling system is confirmed as the cause.
+2. **Quick test — use `Math.min(width, height)` scaling:** Change to `Math.min(canvas.width / 1920, canvas.height / 1080)` so ultrawide uses the height ratio (1.33) instead of the width ratio (1.6). This was in the stashed commit `stash@{0}` but was reverted.
+3. **Quick test — remove all CLICK_BLOCKER overlays:** Temporarily strip all `uiBackground={{ color: CLICK_BLOCKER }}` to see if invisible overlays are eating clicks.
+4. **Quick test — count UI entities:** Add a diagnostic counter showing total UI elements rendered per frame. Compare ultrawide vs 16:9.
+
+**Prior art:**
+- Commit `8e933be` fixed the original "2-4 clicks" issue by adding CLICK_BLOCKERs to prevent 3D entity click-through
+- Stash `stash@{0}` had height-aware scaling with device breakpoints but was reverted
+- REFACTOR_PLAN.md notes: "Noticeably improved but user reports 'not perfect.' Remaining click issues may be related to the SDK's own UI event processing or z-order conflicts between overlapping absolute-positioned elements"
+
+**Root Cause Found & Fixed (commit `850cedb`):**
+- **Engine dispatch overhead.** Decentraland's engine has significant per-system overhead in its dispatch loop — even 50 empty no-op systems cause the same lag as 50 real systems. FlagTag had 59 registered client systems; LootDrop had 5.
+- **Fix:** Created `systemManager.ts` — a central scheduler that batches all systems into just 2 actual `engine.addSystem` calls. All files now use `registerSystem()` / `registerThrottled()` instead of `engine.addSystem()` directly.
+- **Also fixed:** Removed CLICK_BLOCKER overlays, added `pointerFilter: 'none'` to 22 non-interactive UI wrappers, consolidated uiSystems from 12 to 1, pooled sound cleanup entities.
+
+**Status:** FIXED — deployed May 29, 2026
+
+---
+
+## Playtest Checklist (Next Session)
+
+- [ ] Scoreboard counts up for ALL players (especially local) over full session
+- [ ] Boomerang visuals render after 45+ min of active combat (charge VFX pooling fix)
+- [ ] Banana visuals render after 45+ min
+- [ ] Grace period shield correctly transfers on steal (only new carrier has shield)
+- [ ] Discord webhook only fires for named players (no bot spam)
+- [ ] Test with 3-5 concurrent players for 45+ minutes minimum
+- [ ] UI buttons register first-click on ultrawide (21:9) monitor
+- [ ] Test S() scaling bypass on ultrawide to confirm root cause
