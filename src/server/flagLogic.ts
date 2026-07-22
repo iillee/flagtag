@@ -15,7 +15,6 @@ import {
   FLAG_BASE_POSITION, getRandomSpawnPoint
 } from '../shared/components'
 import { room } from '../shared/messages'
-import { persistFlagState } from './persistence'
 import {
   type StealIntentStore, type StealCandidate,
   recordStealIntent, hasRecentStealIntent, pruneStaleIntents, selectStealCandidate
@@ -45,8 +44,8 @@ let lastDropperId = ''  // Who dropped the flag — '' means server-initiated (n
 //   purpose (un-burying a flag dropped inside terrain) needs exactly one report.
 // - groundLowerReportsLeft bounds the anyone-may-LOWER path used for drops with no
 //   trusted dropper (see the reportGroundY handler): honest resolution needs one or
-//   two reports, and the budget stops report spam from flooding persistFlagState.
-//   Initialized non-zero so a restart-restored dropped flag (which never goes
+//   two reports, and the budget stops report spam from flooding the ground-report
+//   handler. Initialized non-zero so a startup-placed flag (which never goes
 //   through computeGravityTarget) gets a budget too.
 let dropBaselineY = 0
 let groundReportUsed = false
@@ -313,7 +312,6 @@ export function handlePickup(playerId: string): void {
   room.send('pickupConfirmed', { playerId })
   room.send('flagImmunity', { playerId, durationMs: STEAL_IMMUNITY_MS })
   room.send('pickupSound', { t: 0 })
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 
 export function handleDrop(playerId: string, forced: boolean = false): void {
@@ -353,7 +351,6 @@ export function handleDrop(playerId: string, forced: boolean = false): void {
   if (forced) {
     room.send('dropForced', { playerId })
   }
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 
 export function handleFlagSteal(victimId: string, attackerId: string): void {
@@ -374,7 +371,6 @@ export function handleFlagSteal(victimId: string, attackerId: string): void {
   room.send('pickupConfirmed', { playerId: attackerId })
   room.send('flagImmunity', { playerId: attackerId, durationMs: STEAL_IMMUNITY_MS })
   room.send('pickupSound', { t: 0 })
-  persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
 }
 
 // ── Proximity steal system ──
@@ -538,7 +534,6 @@ export function flagServerSystem(dt: number): void {
       resetCarrierTracking()
       computeGravityTarget(dropPos.y)
       room.send('dropSound', { t: 0 })
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
     }
   } else {
     resetCarrierTracking()
@@ -553,7 +548,6 @@ export function flagServerSystem(dt: number): void {
       newY = flagGravityTargetY
       flagFalling = false
       flagFallVelocity = 0
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
     }
     currentAnchorY = newY
     const flagMutable = Flag.getMutable(flagEntity)
@@ -598,7 +592,6 @@ export function flagServerSystem(dt: number): void {
         t2.position = Vector3.create(spawn.x, spawn.y, spawn.z)
         flagFalling = false
         flagFallVelocity = 0
-        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       }
     }
   }
@@ -644,7 +637,6 @@ export function flagServerSystem(dt: number): void {
       resetCarrierTracking()
       computeGravityTarget(dropPos.y)
       room.send('dropSound', { t: 0 })
-      persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
     }
   }
 }
@@ -775,7 +767,7 @@ export function registerFlagHandlers(): void {
         // so the worst a hostile client gets is sinking the flag to FLAG_MIN_Y —
         // below the water line, i.e. a water respawn back to base. Mild, bounded,
         // and better than a flag hanging unreachable for the rest of the round.
-        // Budgeted per drop so spammed ε-lower reports can't flood persistFlagState.
+        // Budgeted per drop so spammed ε-lower reports can't flood the handler.
         if (groundLowerReportsLeft <= 0) return
         newTarget = Math.max(FLAG_MIN_Y, data.y + 0.5)
         if (newTarget >= flagGravityTargetY) return
@@ -789,7 +781,6 @@ export function registerFlagHandlers(): void {
         flagMutable.dropAnchorY = newTarget
         flagFalling = false
         flagFallVelocity = 0
-        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       } else if (!flagFalling) {
         flagFalling = true
         flagFallVelocity = 0

@@ -18,7 +18,7 @@ import {
   SPLASH_DURATION_MS, roundParticipants,
   currentScoreRoundId, scoreRoundSessionId, setCurrentScoreRoundId,
 } from './serverState'
-import { persistFlagState, persistLeaderboard } from './persistence'
+import { persistLeaderboard } from './persistence'
 import {
   parseLeaderboardJson, incrementLeaderboardWins, checkLeaderboardDailyReset,
   isDailyLeaderboardLoaded, recoverDailyLeaderboard,
@@ -152,7 +152,6 @@ export function lightningServerSystem(dt: number): void {
         // height — lightning strikes high-value carriers, often airborne in updrafts.
         clearLastDropper()
         computeGravityTarget(strikePos.y)
-        persistFlagState().catch(e => console.error('[Server] persistFlagState error:', e))
       }
 
       _lightningOriginalCarrierId = ''
@@ -551,12 +550,7 @@ async function handleRoundEnd(endedRoundEndMs: number, nextScoreRoundId: string)
     } catch (err) { console.error('[Server] Round-end stats send failed for', p.userId.slice(0, 8), err) }
   }))
 
-  // ── 8. Persist flag state ──
-  try {
-    await persistFlagState()
-  } catch (err) { console.error('[Server] ❌ Round-end flag persist failed:', err) }
-
-  // ── 8b. Discord webhook: announce round winner(s) ──
+  // ── 8. Discord webhook: announce round winner(s) ──
   if (maxSeconds > 0) {
     const winners = players.filter(p => p.seconds >= maxSeconds)
     if (winners.length > 0) {

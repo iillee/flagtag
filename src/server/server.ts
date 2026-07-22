@@ -87,9 +87,14 @@ export async function setupServer(): Promise<void> {
   // reset check needs the leaderboard entities.
   await Promise.all([loadDiscordWebhookUrl(), loadRoundWinnerWebhook(), loadMailboxWebhook(), initPostHog()])
 
-  // ── Restore flag (+ names, needed by everything leaderboard/visitor below) ──
-  const [flagRestore] = await Promise.all([loadFlagState(), loadPlayerNames()])
-  const { state: flagStartState, position: flagStartPos, anchor: dropAnchor } = flagRestore
+  // ── Player names (needed by leaderboards + visitor restores below) ──
+  await loadPlayerNames()
+
+  // ── Flag init: always spawn at base. Flag state is NOT persisted to Storage;
+  //    nothing else about the round survives a restart, so a "resumed" flag
+  //    produced a half-consistent state. See persistence.ts for full rationale.
+  const spawnPoint = FLAG_SPAWN_POINTS[0]
+  const flagStartPos = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
 
   setFlagEntity(engine.addEntity())
   Transform.create(flagEntity, {
@@ -97,16 +102,10 @@ export async function setupServer(): Promise<void> {
     rotation: Quaternion.fromEulerDegrees(0, 0, 0),
     scale: Vector3.create(1, 1, 1),
   })
-  const initialBase = flagStartState === FlagState.AtBase
-    ? FLAG_SPAWN_POINTS[0]
-    : { x: flagStartPos.x, y: flagStartPos.y, z: flagStartPos.z }
-  const anchor = flagStartState === FlagState.AtBase
-    ? { x: initialBase.x, y: initialBase.y, z: initialBase.z }
-    : dropAnchor
   Flag.create(flagEntity, {
-    teamId: 0, state: flagStartState, carrierPlayerId: '',
-    baseX: initialBase.x, baseY: initialBase.y, baseZ: initialBase.z,
-    dropAnchorX: anchor.x, dropAnchorY: anchor.y, dropAnchorZ: anchor.z,
+    teamId: 0, state: FlagState.AtBase, carrierPlayerId: '',
+    baseX: spawnPoint.x, baseY: spawnPoint.y, baseZ: spawnPoint.z,
+    dropAnchorX: spawnPoint.x, dropAnchorY: spawnPoint.y, dropAnchorZ: spawnPoint.z,
   })
   syncEntity(flagEntity, [Transform.componentId, Flag.componentId], SyncIds.FLAG)
 
@@ -173,45 +172,6 @@ export async function setupServer(): Promise<void> {
 }
 
 // ── Helpers ──
-
-/** Load persisted flag state from Storage. Returns defaults if missing/corrupt. */
-async function loadFlagState() {
-  let savedFlag: string | null = null
-  try { savedFlag = (await storageGet<string>('flagState')) ?? null }
-  catch (err) { console.error('[Server] Failed to load flag state:', err) }
-
-  let state = FlagState.AtBase
-  let position = Vector3.create(FLAG_BASE_POSITION.x, FLAG_BASE_POSITION.y, FLAG_BASE_POSITION.z)
-  let anchor = { x: 0, y: 0, z: 0 }
-
-  if (savedFlag) {
-    try {
-      const d = JSON.parse(savedFlag)
-      if ((d.state === FlagState.Dropped || d.state === FlagState.Carried)
-          && Number.isFinite(d.x) && Number.isFinite(d.y) && Number.isFinite(d.z)) {
-        // Sanity check: if persisted position is far from the current base
-        // (e.g. after a scene move), discard it and use fresh base coords.
-        // (Non-finite coords fall through to defaults — otherwise NaN > MAX_DIST is false
-        // and the flag would restore at a NaN position, unpickable until round end.)
-        const dx = d.x - FLAG_BASE_POSITION.x
-        const dz = d.z - FLAG_BASE_POSITION.z
-        const distFromBase = Math.sqrt(dx * dx + dz * dz)
-        const MAX_VALID_DIST = 300 // meters — anything further is a stale coord
-        if (distFromBase > MAX_VALID_DIST) {
-          console.log('[Server] ⚠️  Persisted flag position (', d.x.toFixed(1), d.z.toFixed(1),
-            ') is', distFromBase.toFixed(0), 'm from base — discarding, using base')
-        } else {
-          state = FlagState.Dropped
-          position = Vector3.create(d.x, d.y, d.z)
-          anchor = d.state === FlagState.Dropped
-            ? { x: d.dropAnchorX || d.x, y: d.dropAnchorY || d.y, z: d.dropAnchorZ || d.z }
-            : { x: d.x, y: d.y, z: d.z }
-        }
-      }
-    } catch { /* invalid data, use defaults */ }
-  }
-  return { state, position, anchor }
-}
 
 /** Create and sync all three leaderboard entities from Storage. */
 async function initLeaderboards() {
