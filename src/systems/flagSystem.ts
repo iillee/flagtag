@@ -292,7 +292,9 @@ room.onMessage('pickupConfirmed', (data) => {
   // Play pickup sound now that server confirmed (prevents repeated sounds on rejected pickups)
   // But skip if Phase 1 (auto-pickup) already played it
   if (!skipNextPickupSound) {
-    playPickupSound()
+    playPickupSound('Phase2:pickupConfirmed')
+  } else {
+    console.log('[Flag] 🔇 Phase2:pickupConfirmed skipped (Phase 1 already played)')
   }
   skipNextPickupSound = true  // skip the CRDT-triggered sound since we already played it
 })
@@ -428,9 +430,15 @@ room.onMessage('flagHeartbeat', (data) => {
 
 let lastPickupSoundMs = 0
 const PICKUP_SOUND_COOLDOWN_MS = 250
-function playPickupSound(): void {
+function playPickupSound(caller: string = '?'): void {
   const now = Date.now()
-  if (now - lastPickupSoundMs < PICKUP_SOUND_COOLDOWN_MS) return
+  const msSinceLast = now - lastPickupSoundMs
+  const isFirstEver = !pickupSoundEntity
+  if (msSinceLast < PICKUP_SOUND_COOLDOWN_MS) {
+    console.log('[Flag] 🔇 pickup sound SKIPPED (cooldown)', { caller, msSinceLast })
+    return
+  }
+  console.log('[Flag] 🔊 pickup sound PLAY', { caller, isFirstEver, msSinceLast })
   lastPickupSoundMs = now
   if (!pickupSoundEntity) {
     pickupSoundEntity = engine.addEntity()
@@ -616,7 +624,7 @@ export function flagClientSystem(dt: number): void {
           // If server rejects, the pending-pickup timeout will roll everything back.
           if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
           showClone(userId)
-          playPickupSound()
+          playPickupSound('Phase1:autoPickup')
           skipNextPickupSound = true  // suppress duplicate when pickupConfirmed arrives
           showShieldForPlayer(userId)
           setShieldAlpha(userId, 1.0)
@@ -785,11 +793,13 @@ export function flagClientSystem(dt: number): void {
         // If clone is already showing for the correct carrier (from Phase 1/2),
         // this is just CRDT catching up — don't replay the sound
         if (skipNextPickupSound) {
+          console.log('[Flag] 🔇 Phase3:CRDT skipped (skipNextPickupSound)')
           skipNextPickupSound = false
         } else if (cloneVisible && carryCloneCarrierId === flag.carrierPlayerId) {
           // Clone already showing from pickupConfirmed — suppress duplicate sound
+          console.log('[Flag] 🔇 Phase3:CRDT skipped (clone already visible for carrier)')
         } else {
-          playPickupSound()
+          playPickupSound('Phase3:CRDT')
         }
       }
       
