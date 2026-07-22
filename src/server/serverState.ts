@@ -7,7 +7,7 @@ import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs
 import { Vector3 } from '@dcl/sdk/math'
 import {
   type HeartbeatStore, recordHeartbeat, getFreshHeartbeat, clearHeartbeat, positionsDisagree,
-  pruneStaleHeartbeats
+  pruneStaleHeartbeats, activeAddressUnion
 } from './positionTrust'
 
 // ── Entity references (set during setupServer) ──
@@ -212,6 +212,21 @@ export function getPlayerPosition(address: string): Vector3 | null {
     return Vector3.create(hb.x, hb.y, hb.z)
   }
   return crdtPos
+}
+
+/**
+ * Every address that should be considered a live victim candidate: players with a
+ * CRDT PlayerIdentityData entity plus players with only a fresh heartbeat (their
+ * entity never replicated — documented symptom of the same CRDT bug). Combat and
+ * steal loops iterate this instead of getEntitiesWith(PlayerIdentityData, ...) so
+ * neither symptom (cross-wired Transform, missing entity) hides a player.
+ */
+export function getActivePlayerAddresses(): Set<string> {
+  const crdtAddresses: string[] = []
+  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+    crdtAddresses.push(identity.address)
+  }
+  return activeAddressUnion(crdtAddresses, heartbeatPositions, Date.now())
 }
 
 /** Diagnostic sweep: log any address with >1 PlayerIdentityData entity. Called ~1Hz. */

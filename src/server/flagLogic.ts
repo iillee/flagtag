@@ -24,7 +24,7 @@ import {
   lastStealTime,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
-  getPlayerPosition
+  getPlayerPosition, getActivePlayerAddresses
 } from './serverState'
 
 // ── Module-local state ──
@@ -400,8 +400,9 @@ export function checkProximitySteal(): void {
   let closestId: string | null = null
   let closestDist = PROXIMITY_STEAL_RADIUS
 
-  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    const addr = identity.address.toLowerCase()
+  // Heartbeat-union roster: a candidate whose PlayerIdentityData entity never
+  // replicated can still steal (their client corroborates via requestSteal anyway).
+  for (const addr of getActivePlayerAddresses()) {
     if (addr === carrierId) continue
 
     const pos = getPlayerPosition(addr)

@@ -104,12 +104,13 @@ gameplay impact.
 - `🚫 Proximity steal blocked (no client corroboration)` — a false transfer that the
   corroboration gate prevented.
 
-**Residual exposure:** combat loops still *enumerate* players via
-`engine.getEntitiesWith(PlayerIdentityData, Transform)`, so a player whose entity never
-replicated (documented related symptom) is invisible to trap/projectile hit checks until
-their entity appears; and a player whose client stops heartbeating falls back to the
-cross-wire-prone CRDT view. Both are platform-bug territory, not fixable scene-side without
-replacing enumeration with a heartbeat-driven roster (possible follow-up).
+**Residual exposure:** a player whose client sends no heartbeats (e.g. a stale cached
+bundle from before this deploy) falls back to the cross-wire-prone CRDT view for position
+reads. Victim *enumeration* is no longer CRDT-dependent: combat/steal/ghost loops iterate
+`getActivePlayerAddresses()` — the union of CRDT-visible players and players with a fresh
+heartbeat — so a player whose `PlayerIdentityData` entity never replicated (documented
+related symptom) is still hittable/stealable, and duplicate entities per address can no
+longer double-iterate a victim.
 
 ---
 

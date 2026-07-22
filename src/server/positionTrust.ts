@@ -107,6 +107,23 @@ export function pruneStaleHeartbeats(
 }
 
 /**
+ * Union of the CRDT-visible player addresses and every address with a fresh
+ * heartbeat, lowercased and deduplicated. Victim enumeration in combat/steal
+ * checks iterates this instead of raw `PlayerIdentityData` entities: a player
+ * whose entity never replicated (documented symptom of the same CRDT bug) is
+ * still hittable/stealable through their heartbeat, and duplicate entities per
+ * address can no longer double-iterate a victim.
+ */
+export function activeAddressUnion(crdtAddresses: Iterable<string>, store: HeartbeatStore, nowMs: number): Set<string> {
+  const union = new Set<string>()
+  for (const addr of crdtAddresses) union.add(addr.toLowerCase())
+  for (const [addr, sample] of store) {
+    if (nowMs - sample.t <= HEARTBEAT_FRESH_MS) union.add(addr)
+  }
+  return union
+}
+
+/**
  * True when two position readings disagree by more than thresholdM meters.
  * Used to detect the cross-wire in production: a fresh heartbeat that disagrees
  * with the CRDT Transform by several meters is the bug's signature (the victim's

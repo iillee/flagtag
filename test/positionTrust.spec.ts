@@ -9,6 +9,7 @@ import {
   isPlausibleHeartbeat,
   positionsDisagree,
   pruneStaleHeartbeats,
+  activeAddressUnion,
 } from '../src/server/positionTrust'
 
 describe('position heartbeat trust store', () => {
@@ -143,6 +144,35 @@ describe('position heartbeat trust store', () => {
 
     it('should reject an infinite coordinate', () => {
       expect(isPlausibleHeartbeat(...infinitePosition)).toBe(false)
+    })
+  })
+
+  describe('when building the active-address roster from CRDT and heartbeat sources', () => {
+    let crdtAddresses: string[]
+    let roster: Set<string>
+
+    beforeEach(() => {
+      crdtAddresses = ['0xCrdtOnly', '0xBoth']
+      recordHeartbeat(store, '0xboth', 372, 60, 349, nowMs)
+      recordHeartbeat(store, '0xhbonly', 380, 61, 350, nowMs)
+      recordHeartbeat(store, '0xstalehb', 390, 62, 351, nowMs - HEARTBEAT_FRESH_MS - 1)
+      roster = activeAddressUnion(crdtAddresses, store, nowMs)
+    })
+
+    it('should include a CRDT-only player lowercased', () => {
+      expect(roster.has('0xcrdtonly')).toBe(true)
+    })
+
+    it('should include a heartbeat-only player whose entity never replicated', () => {
+      expect(roster.has('0xhbonly')).toBe(true)
+    })
+
+    it('should not duplicate a player present in both sources', () => {
+      expect(roster.size).toBe(3)
+    })
+
+    it('should exclude a player whose heartbeat went stale', () => {
+      expect(roster.has('0xstalehb')).toBe(false)
     })
   })
 

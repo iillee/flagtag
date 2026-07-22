@@ -3,7 +3,7 @@
  * Handles placement, movement, collision detection, and cleanup.
  */
 
-import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
+import { engine, Transform, type Entity } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import {
   Flag, FlagState,
@@ -16,7 +16,7 @@ import { dropFloorY } from '../shared/constants'
 import { loadPlayerUpgrades } from './economy'
 import { room } from '../shared/messages'
 import {
-  flagEntity, getPlayerPosition, wasWithinRadius, FLAG_GRAVITY, SCENE_FLOOR_Y,
+  flagEntity, getPlayerPosition, getActivePlayerAddresses, wasWithinRadius, FLAG_GRAVITY, SCENE_FLOOR_Y,
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   sessionBananasDropped, sessionBoomerangsFired, lastStealTime, STEAL_IMMUNITY_MS,
   playerBoomerangColors,
@@ -234,9 +234,9 @@ function explodeBomb(bomb: ActiveBomb): void {
   const bombPos = Transform.get(bomb.entity).position
   const victims: string[] = []
 
-  // Check all players in explosion radius
-  for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    const addr = identity.address.toLowerCase()
+  // Check all players in explosion radius (heartbeat-union roster: players whose
+  // PlayerIdentityData entity never replicated are still hittable — see serverState)
+  for (const addr of getActivePlayerAddresses()) {
     const playerPos = getPlayerPosition(addr)
     if (!playerPos) continue
 
@@ -598,9 +598,8 @@ export function bananaServerSystem(dt: number): void {
     }
     if (trapConsumed) continue
 
-    // Player-trap collision
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const addr = identity.address.toLowerCase()
+    // Player-trap collision (heartbeat-union roster)
+    for (const addr of getActivePlayerAddresses()) {
       if (addr === trap.droppedBy && (now - trap.droppedAtMs) < 2000) continue
 
       const playerPos = getPlayerPosition(addr)
@@ -683,8 +682,7 @@ export function bombServerSystem(dt: number): void {
 
     // Proximity trigger — any player walks into it (1s grace for dropper)
     const bombPos = Transform.get(bomb.entity).position
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const addr = identity.address.toLowerCase()
+    for (const addr of getActivePlayerAddresses()) {
       if (addr === bomb.droppedBy && ageMs < 2000) continue  // grace period for dropper
 
       const playerPos = getPlayerPosition(addr)
@@ -884,16 +882,14 @@ export function shellServerSystem(dt: number): void {
     const LOOKBACK_MS = 300
     let hitAddr: string | null = null
     let hitMode: 'current' | 'lookback' = 'current'
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const addr = identity.address.toLowerCase()
+    for (const addr of getActivePlayerAddresses()) {
       if (addr === projectile.firedBy) continue
       const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
       if (Vector3.distance(playerPos, projectilePos) < hitRadius) { hitAddr = addr; break }
     }
     if (!hitAddr) {
-      for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-        const addr = identity.address.toLowerCase()
+      for (const addr of getActivePlayerAddresses()) {
         if (addr === projectile.firedBy) continue
         if (wasWithinRadius(addr, projectilePos, hitRadius, LOOKBACK_MS)) {
           hitAddr = addr; hitMode = 'lookback'; break
@@ -1053,8 +1049,7 @@ export function orbitServerSystem(_dt: number): void {
     const orbiterPos = getPlayerPosition(orbit.playerId)
     if (!orbiterPos) continue
 
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const addr = identity.address.toLowerCase()
+    for (const addr of getActivePlayerAddresses()) {
       if (addr === orbit.playerId) continue
       if (orbit.hitPlayers.has(addr)) continue
 

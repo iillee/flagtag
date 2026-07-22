@@ -6,7 +6,7 @@
  * and client-reported hit validation.
  */
 
-import { engine, Transform, PlayerIdentityData } from '@dcl/sdk/ecs'
+import { engine, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import {
@@ -18,7 +18,7 @@ import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
 import {
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
-  getPlayerPosition,
+  getPlayerPosition, getActivePlayerAddresses,
 } from './serverState'
 import { activeProjectiles } from './combat'
 
@@ -119,8 +119,7 @@ export function ghostServerSystem(dt: number): void {
     let nearestPos: Vector3 | null = null
     let nearestId = ''
 
-    for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const addr = identity.address.toLowerCase()
+    for (const addr of getActivePlayerAddresses()) {
       // Trusted read (heartbeat-preferred): ghostTouching fills the victim's scare
       // meter, so targeting off the raw CRDT Transform would phantom-hit cross-wired
       // players just like traps did (BUG_stale-crdt-transform-in-combat.md).
