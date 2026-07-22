@@ -80,8 +80,21 @@ them; the compatible-major `protobufjs` patch applies across its protocol consum
 `npm run build`, `npm run test:cli`, and `npm audit` green when upgrading the SDK.
 
 ### Deploy
+
+Deployment is **automated**: merging a PR into `main` that touches scene content
+(`src/**`, `assets/**`, `scene.json`, or build config) triggers
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). It type-checks
+and runs the test suite, then builds the scene and publishes it to
+`flagtag.dcl.eth` — a failing check blocks the deploy. Docs-only merges (e.g.
+README changes) are skipped. This requires a repository secret `DCL_PRIVATE_KEY`
+— the private key of a wallet with deploy permission on the world. You can also
+trigger a deploy manually from the Actions tab (**Deploy → Run workflow**),
+which runs regardless of which files changed.
+
+To deploy manually from your machine (it's a World, so the target content server
+flag is required):
 ```bash
-npm run deploy       # Deploy to flagtag.dcl.eth
+npm run deploy -- --target-content https://worlds-content-server.decentraland.org
 ```
 
 ### Other Commands

@@ -1,0 +1,54 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'scene.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-world
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy World
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Build scene
+        run: npm run build
+
+      - name: Deploy to Decentraland World
+        env:
+          DCL_PRIVATE_KEY: ${{ secrets.DCL_PRIVATE_KEY }}
+        run: npm run deploy -- --target-content https://worlds-content-server.decentraland.org
