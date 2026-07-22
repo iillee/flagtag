@@ -285,19 +285,33 @@ export function ensureFlagEntity(): boolean {
 
 export function handlePickup(playerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  if (flag.state !== FlagState.AtBase && flag.state !== FlagState.Dropped) return
+  if (!flag) {
+    console.log('[Server] ⚠️ handlePickup REJECT: no flag entity for', playerId.slice(0, 8))
+    return
+  }
+  if (flag.state !== FlagState.AtBase && flag.state !== FlagState.Dropped) {
+    console.log('[Server] ⚠️ handlePickup REJECT: flag state is', flag.state, '(not AtBase/Dropped) for', playerId.slice(0, 8), 'carrier=', flag.carrierPlayerId?.slice(0, 8) || 'none')
+    return
+  }
 
   const playerPos = getPlayerPosition(playerId)
   if (!playerPos) {
     // No authoritative position yet (avatar Transform not replicated) — reject rather
     // than trust the client, or a hostile client could pick up from anywhere. Legitimate
     // pickups self-heal once the position replicates a moment later.
-    console.log('[Server] ⚠️ handlePickup: no position for', playerId.slice(0, 8), '— rejecting')
+    console.log('[Server] ⚠️ handlePickup REJECT: no position for', playerId.slice(0, 8))
     return
   }
-  const dist = Vector3.distance(playerPos, authoritativeFlagPos(flag))
-  if (dist > PICKUP_RADIUS) return
+  const flagPos = authoritativeFlagPos(flag)
+  const dist = Vector3.distance(playerPos, flagPos)
+  if (dist > PICKUP_RADIUS) {
+    console.log('[Server] ⚠️ handlePickup REJECT: distance', dist.toFixed(2), '> PICKUP_RADIUS', PICKUP_RADIUS,
+      '| player=(', playerPos.x.toFixed(1), playerPos.y.toFixed(1), playerPos.z.toFixed(1), ')',
+      '| flag=(', flagPos.x.toFixed(1), flagPos.y.toFixed(1), flagPos.z.toFixed(1), ')',
+      '| for', playerId.slice(0, 8))
+    return
+  }
+  console.log('[Server] ✅ handlePickup ACCEPT for', playerId.slice(0, 8), '| dist=', dist.toFixed(2))
 
   // Flush any leftover hold time from a previous carrier (safety)
   flushHoldTimeAccum()

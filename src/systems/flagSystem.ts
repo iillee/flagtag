@@ -292,7 +292,9 @@ room.onMessage('pickupConfirmed', (data) => {
   // Play pickup sound now that server confirmed (prevents repeated sounds on rejected pickups)
   // But skip if Phase 1 (auto-pickup) already played it
   if (!skipNextPickupSound) {
-    playPickupSound()
+    playPickupSound('Phase2:pickupConfirmed')
+  } else {
+    console.log('[Flag] 🔇 Phase2:pickupConfirmed skipped (Phase 1 already played)')
   }
   skipNextPickupSound = true  // skip the CRDT-triggered sound since we already played it
 })
@@ -428,9 +430,15 @@ room.onMessage('flagHeartbeat', (data) => {
 
 let lastPickupSoundMs = 0
 const PICKUP_SOUND_COOLDOWN_MS = 250
-function playPickupSound(): void {
+function playPickupSound(caller: string = '?'): void {
   const now = Date.now()
-  if (now - lastPickupSoundMs < PICKUP_SOUND_COOLDOWN_MS) return
+  const msSinceLast = now - lastPickupSoundMs
+  const isFirstEver = !pickupSoundEntity
+  if (msSinceLast < PICKUP_SOUND_COOLDOWN_MS) {
+    console.log(`[Flag] 🔇 pickup sound SKIPPED (cooldown) caller=${caller} msSinceLast=${msSinceLast}`)
+    return
+  }
+  console.log(`[Flag] 🔊 pickup sound PLAY caller=${caller} isFirstEver=${isFirstEver} msSinceLast=${msSinceLast}`)
   lastPickupSoundMs = now
   if (!pickupSoundEntity) {
     pickupSoundEntity = engine.addEntity()
@@ -614,14 +622,20 @@ export function flagClientSystem(dt: number): void {
           // Auto-pickup (walking onto a ground flag) is rarely rejected by the server, so
           // optimistic shield is safe here. Steal prediction stays server-confirmed (contested).
           // If server rejects, the pending-pickup timeout will roll everything back.
-          if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-          showClone(userId)
-          playPickupSound()
-          skipNextPickupSound = true  // suppress duplicate when pickupConfirmed arrives
-          showShieldForPlayer(userId)
-          setShieldAlpha(userId, 1.0)
-          pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
-          
+          // NOTE: we always send requestPickup (server may have rejected the prior try due to
+          // position lag — this acts as a retry), but only replay the optimistic sound/visuals
+          // if we don't already have a pending optimistic pickup in flight.
+          const alreadyOptimistic = pendingPickupUntil > now
+          if (!alreadyOptimistic) {
+            if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+            showClone(userId)
+            playPickupSound('Phase1:autoPickup')
+            skipNextPickupSound = true  // suppress duplicate when pickupConfirmed arrives
+            showShieldForPlayer(userId)
+            setShieldAlpha(userId, 1.0)
+            pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
+          }
+
           room.send('requestPickup', { t: 0 })
           lastAutoPickupRequestMs = now
           break
@@ -785,11 +799,13 @@ export function flagClientSystem(dt: number): void {
         // If clone is already showing for the correct carrier (from Phase 1/2),
         // this is just CRDT catching up — don't replay the sound
         if (skipNextPickupSound) {
+          console.log('[Flag] 🔇 Phase3:CRDT skipped (skipNextPickupSound)')
           skipNextPickupSound = false
         } else if (cloneVisible && carryCloneCarrierId === flag.carrierPlayerId) {
           // Clone already showing from pickupConfirmed — suppress duplicate sound
+          console.log('[Flag] 🔇 Phase3:CRDT skipped (clone already visible for carrier)')
         } else {
-          playPickupSound()
+          playPickupSound('Phase3:CRDT')
         }
       }
       

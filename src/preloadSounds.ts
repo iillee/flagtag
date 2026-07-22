@@ -46,7 +46,7 @@ export function preloadAllSounds(): void {
       audioClipUrl: url,
       playing: true,
       loop: false,
-      volume: 0.0,
+      volume: 0.0001, // non-zero so the engine actually decodes/caches the clip (0.0 can short-circuit)
       global: true,
     })
   }
