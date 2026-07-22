@@ -1,10 +1,13 @@
 import {
   type StealIntentStore,
+  type StealCandidate,
+  type StealSelection,
   STEAL_INTENT_WINDOW_MS,
   recordStealIntent,
   hasRecentStealIntent,
   clearStealIntent,
   pruneStaleIntents,
+  selectStealCandidate,
 } from '../src/server/stealIntent'
 
 describe('proximity steal client corroboration', () => {
@@ -79,6 +82,119 @@ describe('proximity steal client corroboration', () => {
 
     it('should keep the recent intent', () => {
       expect(store.has('0xrecent')).toBe(true)
+    })
+  })
+})
+
+describe('steal candidate selection', () => {
+  let radius: number
+  let corroborated: Set<string>
+  let hasIntent: (addr: string) => boolean
+  let candidates: StealCandidate[]
+  let selection: StealSelection
+
+  beforeEach(() => {
+    radius = 1.8
+    corroborated = new Set()
+    hasIntent = (addr: string) => corroborated.has(addr)
+    candidates = []
+  })
+
+  afterEach(() => {
+    corroborated.clear()
+    candidates = []
+  })
+
+  describe('when the closest in-radius candidate has client corroboration', () => {
+    beforeEach(() => {
+      corroborated.add('0xstealer')
+      candidates = [
+        { addr: '0xstealer', dist: 1.2 },
+        { addr: '0xfar', dist: 5.0 },
+      ]
+      selection = selectStealCandidate(candidates, hasIntent, radius)
+    })
+
+    it('should select the corroborated candidate for the steal', () => {
+      expect(selection.closestId).toBe('0xstealer')
+    })
+
+    it('should report no blocked candidate', () => {
+      expect(selection.blockedId).toBeNull()
+    })
+  })
+
+  describe('when an uncorroborated candidate is closer than a corroborated one', () => {
+    beforeEach(() => {
+      // Regression for the shadowing bug: a cross-wired ghost at a fake 0.85m
+      // must not stop a real stealer at 1.5m from taking the flag.
+      corroborated.add('0xrealstealer')
+      candidates = [
+        { addr: '0xcrosswiredghost', dist: 0.85 },
+        { addr: '0xrealstealer', dist: 1.5 },
+      ]
+      selection = selectStealCandidate(candidates, hasIntent, radius)
+    })
+
+    it('should still select the corroborated candidate for the steal', () => {
+      expect(selection.closestId).toBe('0xrealstealer')
+    })
+
+    it('should report the uncorroborated candidate as blocked', () => {
+      expect(selection.blockedId).toBe('0xcrosswiredghost')
+    })
+  })
+
+  describe('when no in-radius candidate has corroboration', () => {
+    beforeEach(() => {
+      candidates = [
+        { addr: '0xcrosswiredghost', dist: 0.85 },
+        { addr: '0xanotherghost', dist: 1.1 },
+      ]
+      selection = selectStealCandidate(candidates, hasIntent, radius)
+    })
+
+    it('should select nobody for the steal', () => {
+      expect(selection.closestId).toBeNull()
+    })
+
+    it('should report the closest uncorroborated candidate as blocked', () => {
+      expect(selection.blockedId).toBe('0xcrosswiredghost')
+    })
+
+    it('should report the blocked candidate distance for the log', () => {
+      expect(selection.blockedDist).toBe(0.85)
+    })
+  })
+
+  describe('when every candidate is outside the steal radius', () => {
+    beforeEach(() => {
+      corroborated.add('0xstealer')
+      candidates = [
+        { addr: '0xstealer', dist: 2.5 },
+        { addr: '0xghost', dist: 3.0 },
+      ]
+      selection = selectStealCandidate(candidates, hasIntent, radius)
+    })
+
+    it('should select nobody for the steal', () => {
+      expect(selection.closestId).toBeNull()
+    })
+
+    it('should report nobody as blocked', () => {
+      expect(selection.blockedId).toBeNull()
+    })
+  })
+
+  describe('when a corroborated candidate stands exactly at the radius boundary', () => {
+    beforeEach(() => {
+      corroborated.add('0xstealer')
+      candidates = [{ addr: '0xstealer', dist: 1.8 }]
+      selection = selectStealCandidate(candidates, hasIntent, radius)
+    })
+
+    it('should not select it (strictly-inside check, matching the previous behavior)', () => {
+      expect(selection.closestId).toBeNull()
     })
   })
 })

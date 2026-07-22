@@ -61,3 +61,52 @@ export function pruneStaleIntents(
     if (nowMs - t > windowMs) store.delete(addr)
   }
 }
+
+// ── Steal candidate selection ──
+
+export interface StealCandidate {
+  addr: string
+  /** Distance from the carrier, meters (server view, heartbeat-preferred). */
+  dist: number
+}
+
+export interface StealSelection {
+  /** Closest in-radius candidate WITH client corroboration — the steal beneficiary. */
+  closestId: string | null
+  closestDist: number
+  /** Closest in-radius candidate WITHOUT corroboration — logged, never stealed to. */
+  blockedId: string | null
+  blockedDist: number
+}
+
+/**
+ * Two-track selection for server-initiated proximity steals. Corroborated and
+ * uncorroborated candidates compete separately so an uncorroborated candidate can
+ * never shadow a corroborated one: a cross-wired ghost can sit at a fake "0.85m"
+ * from the carrier for an entire session, and it must not stop a real stealer at
+ * 1.5m from taking the flag through the server-side fallback path.
+ */
+export function selectStealCandidate(
+  candidates: Iterable<StealCandidate>,
+  hasIntent: (addr: string) => boolean,
+  radius: number
+): StealSelection {
+  const selection: StealSelection = {
+    closestId: null,
+    closestDist: radius,
+    blockedId: null,
+    blockedDist: radius
+  }
+  for (const { addr, dist } of candidates) {
+    if (hasIntent(addr)) {
+      if (dist < selection.closestDist) {
+        selection.closestDist = dist
+        selection.closestId = addr
+      }
+    } else if (dist < selection.blockedDist) {
+      selection.blockedDist = dist
+      selection.blockedId = addr
+    }
+  }
+  return selection
+}

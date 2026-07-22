@@ -16,7 +16,10 @@ import {
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { persistFlagState } from './persistence'
-import { type StealIntentStore, recordStealIntent, hasRecentStealIntent, pruneStaleIntents } from './stealIntent'
+import {
+  type StealIntentStore, type StealCandidate,
+  recordStealIntent, hasRecentStealIntent, pruneStaleIntents, selectStealCandidate
+} from './stealIntent'
 import {
   flagEntity, setFlagEntity,
   holdTimeEntities, knownPlayers, playerNames,
@@ -402,39 +405,28 @@ export function checkProximitySteal(): void {
   const carrierStealTime = lastStealTime.get(carrierId) ?? 0
   if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
 
-  let closestId: string | null = null
-  let closestDist = PROXIMITY_STEAL_RADIUS
-  // Nearest in-radius candidate WITHOUT client corroboration, tracked separately:
-  // it must not shadow a corroborated stealer farther away (a cross-wired ghost
-  // can sit "0.85m" from the carrier for an entire session), and it's the thing
-  // worth logging when no legitimate steal happens.
-  let blockedId: string | null = null
-  let blockedDist = PROXIMITY_STEAL_RADIUS
-
   // Heartbeat-union roster: a candidate whose PlayerIdentityData entity never
   // replicated can still steal (their client corroborates via requestSteal anyway).
+  const candidates: StealCandidate[] = []
+  for (const addr of getActivePlayerAddresses()) {
+    if (addr === carrierId) continue
+    const pos = getPlayerPosition(addr)
+    if (!pos) continue
+    candidates.push({ addr, dist: Vector3.distance(carrierPos, pos) })
+  }
+
   // Corroboration gate (cross-wire defense): only candidates whose client ALSO
   // believes it is next to the carrier are eligible — that view comes through an
   // independent position channel, so a cross-wired server view can't teleport the
   // flag on its own. Legit steals are unaffected in practice: the client predicts
   // and retries requestSteal every ~500ms while in range, and the requestSteal
-  // handler remains the fast path.
-  for (const addr of getActivePlayerAddresses()) {
-    if (addr === carrierId) continue
-
-    const pos = getPlayerPosition(addr)
-    if (!pos) continue
-    const dist = Vector3.distance(carrierPos, pos)
-    if (hasRecentStealIntent(stealIntents, addr, now)) {
-      if (dist < closestDist) {
-        closestDist = dist
-        closestId = addr
-      }
-    } else if (dist < blockedDist) {
-      blockedDist = dist
-      blockedId = addr
-    }
-  }
+  // handler remains the fast path. Two-track selection (see selectStealCandidate):
+  // an uncorroborated ghost must not shadow a real corroborated stealer.
+  const { closestId, closestDist, blockedId, blockedDist } = selectStealCandidate(
+    candidates,
+    (addr) => hasRecentStealIntent(stealIntents, addr, now),
+    PROXIMITY_STEAL_RADIUS
+  )
 
   if (!closestId) {
     if (blockedId && now - lastBlockedStealLogMs >= BLOCKED_STEAL_LOG_INTERVAL_MS) {
