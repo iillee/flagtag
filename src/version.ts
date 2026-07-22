@@ -1,1 +1,1 @@
-export const GAME_VERSION = '2026.07.22-crosswire-defenses'
+export const GAME_VERSION = '2026.07.22-1300-bf62942'

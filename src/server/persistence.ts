@@ -3,39 +3,22 @@
  * Handles saving and loading game state to/from Decentraland Storage.
  */
 
-import { Transform } from '@dcl/sdk/ecs'
 import { storageGet, storageSet } from './safeStorage'
-import { Flag } from '../shared/components'
 import { getTodayDateString } from '../shared/components'
 import {
-  flagEntity, playerNames, visitorSessions, isRealName,
+  playerNames, visitorSessions, isRealName,
   lastVisitorResetDay, setLastVisitorResetDay,
 } from './serverState'
 
-// Serialize flag-state writes through a single chain. The many fire-and-forget callers
-// (pickup, drop, steal, gravity) can otherwise put two Storage.set('flagState') in flight
-// and land them out of order, persisting a stale state. Each queued write reads the LIVE
-// flag state when it runs, so the last write always reflects the current state.
-let flagPersistChain: Promise<void> = Promise.resolve()
-
-export function persistFlagState(): Promise<void> {
-  flagPersistChain = flagPersistChain.then(doPersistFlagState, doPersistFlagState)
-  return flagPersistChain
-}
-
-async function doPersistFlagState(): Promise<void> {
-  const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  const pos = Transform.get(flagEntity).position
-  await storageSet('flagState', JSON.stringify({
-    state: flag.state,
-    x: pos.x, y: pos.y, z: pos.z,
-    carrierPlayerId: flag.carrierPlayerId,
-    dropAnchorX: flag.dropAnchorX,
-    dropAnchorY: flag.dropAnchorY,
-    dropAnchorZ: flag.dropAnchorZ
-  }))
-}
+// NOTE: Flag state is intentionally NOT persisted to Storage.
+// The flag Transform + Flag component are already CRDT-synced to all clients via
+// syncEntity() in server.ts, which is the only replication the running scene needs.
+// Persisting to Storage was only used to restore mid-round flag state after a server
+// restart, but nothing else about the round survives a restart (hold-time accumulators,
+// round timer, projectiles, ghosts, player sessions) so a "resumed" round produced a
+// half-consistent state and was a suspected contributor to the "flag stuck" bug
+// (KNOWN_BUGS.md Bug 2a). Boot now always initializes the flag at AtBase / spawn.
+// Removing this dropped ~75-85% of the scene's total Storage write volume.
 
 export async function persistLeaderboard(json: string): Promise<void> {
   await storageSet('leaderboard', json)
