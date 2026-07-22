@@ -46,3 +46,18 @@ export function hasRecentStealIntent(
 export function clearStealIntent(store: StealIntentStore, address: string): void {
   store.delete(address.toLowerCase())
 }
+
+/**
+ * Drop intents too old to ever corroborate a steal again. The store otherwise
+ * grows by one entry per address that ever pressed a steal on a long-running
+ * server (same bound-the-maps standard as pruneStaleHeartbeats).
+ */
+export function pruneStaleIntents(
+  store: StealIntentStore,
+  nowMs: number,
+  windowMs: number = STEAL_INTENT_WINDOW_MS
+): void {
+  for (const [addr, t] of store) {
+    if (nowMs - t > windowMs) store.delete(addr)
+  }
+}

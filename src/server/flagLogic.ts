@@ -16,7 +16,7 @@ import {
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { persistFlagState } from './persistence'
-import { type StealIntentStore, recordStealIntent, hasRecentStealIntent } from './stealIntent'
+import { type StealIntentStore, recordStealIntent, hasRecentStealIntent, pruneStaleIntents } from './stealIntent'
 import {
   flagEntity, setFlagEntity,
   holdTimeEntities, knownPlayers, playerNames,
@@ -386,6 +386,11 @@ let lastBlockedStealLogMs = 0
 const BLOCKED_STEAL_LOG_INTERVAL_MS = 5000
 
 export function checkProximitySteal(): void {
+  // Bound the intent store (one entry per address that ever pressed a steal).
+  // Runs every tick; the map only ever holds recently-active stealers, so the
+  // sweep is a handful of entries.
+  pruneStaleIntents(stealIntents, Date.now())
+
   const flag = Flag.getOrNull(flagEntity)
   if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) return
 
@@ -399,37 +404,49 @@ export function checkProximitySteal(): void {
 
   let closestId: string | null = null
   let closestDist = PROXIMITY_STEAL_RADIUS
+  // Nearest in-radius candidate WITHOUT client corroboration, tracked separately:
+  // it must not shadow a corroborated stealer farther away (a cross-wired ghost
+  // can sit "0.85m" from the carrier for an entire session), and it's the thing
+  // worth logging when no legitimate steal happens.
+  let blockedId: string | null = null
+  let blockedDist = PROXIMITY_STEAL_RADIUS
 
   // Heartbeat-union roster: a candidate whose PlayerIdentityData entity never
   // replicated can still steal (their client corroborates via requestSteal anyway).
+  // Corroboration gate (cross-wire defense): only candidates whose client ALSO
+  // believes it is next to the carrier are eligible — that view comes through an
+  // independent position channel, so a cross-wired server view can't teleport the
+  // flag on its own. Legit steals are unaffected in practice: the client predicts
+  // and retries requestSteal every ~500ms while in range, and the requestSteal
+  // handler remains the fast path.
   for (const addr of getActivePlayerAddresses()) {
     if (addr === carrierId) continue
 
     const pos = getPlayerPosition(addr)
     if (!pos) continue
     const dist = Vector3.distance(carrierPos, pos)
-    if (dist < closestDist) {
-      closestDist = dist
-      closestId = addr
+    if (hasRecentStealIntent(stealIntents, addr, now)) {
+      if (dist < closestDist) {
+        closestDist = dist
+        closestId = addr
+      }
+    } else if (dist < blockedDist) {
+      blockedDist = dist
+      blockedId = addr
     }
   }
 
-  if (closestId) {
-    // Corroboration gate (cross-wire defense): only transfer when the
-    // beneficiary's client ALSO believes it is next to the carrier — its view
-    // comes through an independent position channel, so a cross-wired server
-    // view can't teleport the flag on its own. Legit steals are unaffected in
-    // practice: the client predicts and retries requestSteal every ~500ms
-    // while in range, and the requestSteal handler remains the fast path.
-    if (!hasRecentStealIntent(stealIntents, closestId, now)) {
-      if (now - lastBlockedStealLogMs >= BLOCKED_STEAL_LOG_INTERVAL_MS) {
-        lastBlockedStealLogMs = now
-        console.log('[Server] 🚫 Proximity steal blocked (no client corroboration):', closestId.slice(0, 8),
-          'near', carrierId.slice(0, 8), '| dist=', closestDist.toFixed(3),
-          '— server view says adjacent but the client never predicted a steal (cross-wire signature)')
-      }
-      return
+  if (!closestId) {
+    if (blockedId && now - lastBlockedStealLogMs >= BLOCKED_STEAL_LOG_INTERVAL_MS) {
+      lastBlockedStealLogMs = now
+      console.log('[Server] 🚫 Proximity steal blocked (no client corroboration):', blockedId.slice(0, 8),
+        'near', carrierId.slice(0, 8), '| dist=', blockedDist.toFixed(3),
+        '— server view says adjacent but the client never predicted a steal (cross-wire signature)')
     }
+    return
+  }
+
+  {
     // DIAG (BUG_stale-crdt-transform-in-combat.md, Step 1c):
     // Dump the raw positions being compared so we can see WHY the distance was small.
     const cPos = getPlayerPosition(carrierId)

@@ -4,6 +4,7 @@ import {
   recordStealIntent,
   hasRecentStealIntent,
   clearStealIntent,
+  pruneStaleIntents,
 } from '../src/server/stealIntent'
 
 describe('proximity steal client corroboration', () => {
@@ -62,6 +63,22 @@ describe('proximity steal client corroboration', () => {
   describe('when no intent was ever recorded for the address', () => {
     it('should not corroborate the steal', () => {
       expect(hasRecentStealIntent(store, '0xnobody', nowMs)).toBe(false)
+    })
+  })
+
+  describe('when pruning a store with mixed-age intents', () => {
+    beforeEach(() => {
+      recordStealIntent(store, '0xrecent', nowMs)
+      recordStealIntent(store, '0xexpired', nowMs - STEAL_INTENT_WINDOW_MS - 1)
+      pruneStaleIntents(store, nowMs)
+    })
+
+    it('should drop the expired intent', () => {
+      expect(store.has('0xexpired')).toBe(false)
+    })
+
+    it('should keep the recent intent', () => {
+      expect(store.has('0xrecent')).toBe(true)
     })
   })
 })
