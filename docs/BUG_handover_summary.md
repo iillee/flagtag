@@ -80,12 +80,53 @@ We partially answered our own routing question by reading the published package
   renderer component state. Not our trigger (our scene writes no player components), but a
   cross-wire vector for any buggy/hostile scene.
 
+## Attribution chain audit (2026-07-22, from `@livekit/rtc-node` 0.13.18 + `livekit/rust-sdks` source)
+
+We traced the participant-attribution path end to end, from the data-channel wire up to
+hammurabi's Transform write, to localize where a moving player's packets can end up on a
+different player's entity. Every hop routes on **participant identity**:
+
+1. Sender publishes a `DataPacket`; the SFU stamps `DataPacket.participant_identity`
+   (field 4, packet root) — the client-side `UserPacket.participant_identity` (field 5) is
+   **deprecated**, read only as a fallback when the root is empty
+   (`rtc_session.rs::emit_incoming_packet`).
+2. `room/mod.rs::handle_data` resolves it: `get_participant_by_identity(identity)`, falling
+   back to `get_participant_by_sid` only when identity resolution fails.
+3. `remote_participants` is a `HashMap<ParticipantIdentity, RemoteParticipant>` — **keyed by
+   identity**; `create_participant` does `participants.insert(identity, participant)` and
+   disconnect does `participants.remove(&identity)`.
+4. FFI emits `participant.identity()`; rtc-node does `remoteParticipants.get(identity)`;
+   hammurabi's `CommsTransportWrapper` emits `{ address: participant.identity }`; the avatar
+   system writes the Transform to `findPlayerEntityByAddress(address)`.
+
+**What this rules out (from source we can read):** the Rust SDK and rtc-node thread identity
+through faithfully; the participant map is consistently identity-keyed on insert, lookup, and
+remove. No coordinate/entity mixup exists in that layer.
+
+**The one structural failure it leaves — and it fits BOTH reported symptoms:** the map holds
+**one** `RemoteParticipant` per identity. If two live comms participants ever resolve to the
+same `ParticipantIdentity`, `insert` clobbers — one wins the slot, the other has none. Then:
+- the winner's entity receives *both* players' position streams → **the cross-wire** (one
+  entity lockstep-tracking another player's movement), and
+- the loser is **absent from `PlayerIdentityData` iteration entirely** → exactly the second
+  handover symptom ("connected players who never appear / lingering ghosts").
+
+That both symptoms fall out of a single identity-collision is strong evidence the root cause
+is **identity non-uniqueness at the comms layer, not a coordinate mixup**. Note LiveKit
+`participant.identity` is whatever the DCL comms token (gatekeeper) assigns; hammurabi assumes
+it equals the lowercased wallet address. The prime suspects are therefore: two sessions issued
+the same identity (same wallet on two devices; a guest/walleted collision; a token-minting
+reuse), or an identity whose lowercasing collides with another. The `DUPLICATE_IDENTITY`
+disconnect reason hammurabi already handles in `livekit.ts` shows the SFU *does* kick identity
+dupes — so there is a live window before the kick, and any case the kick misses is a permanent
+cross-wire.
+
 ## What we're asking
 
 1. **Which exact `@dcl/hammurabi-server` version is the flagtag.dcl.eth world server running?** Four versions were published on 2026-07-21 alone; our confirmed-diagnosis session postdates 1.7.1. Reproduction claims are meaningless without pinning this.
-2. **Can the LiveKit participant attribution for `DataReceived` be audited/logged at the FFI level?** Given the single-writer result above, either the SFU/FFI attributes a moving player's packets to the wrong stationary participant, or a client publishes another player's position. Packet-level capture in the room would be dispositive.
-3. **Which explorer code path emits capsule-center-anchored (+0.85m) positions?** Finding it likely finds the bug (see the Y-offset fingerprint above).
-4. **Is `PlayerIdentityData.address` guaranteed unique per entity at the platform level**, or is that only conventionally true?
+2. **Is the DCL comms token's LiveKit `identity` guaranteed globally unique per live session?** Given the attribution-chain audit above, an identity collision reproduces BOTH reported symptoms at once. What does the gatekeeper set `identity` to, and can two concurrent sessions (same wallet/two devices, guest vs. walleted, or lowercase-collision) ever share it? This is now our leading hypothesis.
+3. **Can the LiveKit participant attribution for `DataReceived` be audited/logged at the FFI level?** If identities are provably unique, the fault is the SFU attributing a moving player's packets to the wrong participant. Packet-level capture in the room would be dispositive. Our `HAMMURABI_DEBUG_COMMS_POSITIONS` tracer distinguishes the two: an identity collision logs *both* trajectories under the *same* address; an SFU misattribution logs one player's trajectory under the *other's* (distinct) address.
+4. **Which explorer code path emits capsule-center-anchored (+0.85m) positions?** Finding it likely finds the bug (see the Y-offset fingerprint above).
 5. **Are you seeing similar reports from other authoritative-server scenes?** (Baskervill was named in prior playtest notes.) If yes, this graduates from a scene report to a known platform issue.
 6. **Please restore the commented-out entity-range guard in `scene-context.js`** (or explain why it must stay off) — see the hardening gap above.
 
