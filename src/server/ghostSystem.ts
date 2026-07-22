@@ -6,7 +6,7 @@
  * and client-reported hit validation.
  */
 
-import { engine, Transform, PlayerIdentityData } from '@dcl/sdk/ecs'
+import { engine, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import {
@@ -18,7 +18,9 @@ import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
 import {
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
+  getPlayerPosition, getActivePlayerAddresses,
 } from './serverState'
+import { type GhostTargetCandidate, findNearestGhostTarget } from './ghostTargeting'
 import { activeProjectiles } from './combat'
 
 // ── Module-local state ──
@@ -110,44 +112,41 @@ export function ghostServerSystem(dt: number): void {
   }
 
   // ── Update each ghost ──
+  // Candidate positions once per tick, from trusted heartbeat-preferred reads:
+  // ghostTouching fills the victim's scare meter, so targeting off the raw CRDT
+  // Transform would phantom-hit cross-wired players just like traps did
+  // (BUG_stale-crdt-transform-in-combat.md). Selection itself is pure and tested
+  // (ghostTargeting.ts).
+  const targetCandidates: GhostTargetCandidate[] = []
+  if (activeGhosts.length > 0) {
+    for (const addr of getActivePlayerAddresses()) {
+      const pPos = getPlayerPosition(addr)
+      if (!pPos) continue
+      targetCandidates.push({ addr, x: pPos.x, y: pPos.y, z: pPos.z })
+    }
+  }
   for (let i = activeGhosts.length - 1; i >= 0; i--) {
     const z = activeGhosts[i]
 
-    // Find nearest player
-    let nearestDist = Infinity
-    let nearestPos: Vector3 | null = null
-    let nearestId = ''
+    // Find nearest player (XZ distance, ±20m vertical band)
+    const nearest = findNearestGhostTarget(targetCandidates, z.posX, z.posY, z.posZ)
 
-    for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const pPos = transform.position
-      const dx = pPos.x - z.posX
-      const dy = Math.abs(pPos.y - z.posY)
-      const dz = pPos.z - z.posZ
-      const dist = Math.sqrt(dx * dx + dz * dz)
-      if (dy > 20) continue // ignore players too far above/below
-      if (dist < nearestDist) {
-        nearestDist = dist
-        nearestPos = pPos
-        nearestId = identity.address.toLowerCase()
-      }
-    }
-
-    if (nearestPos && nearestDist < GHOST_DETECT_RADIUS) {
+    if (nearest && nearest.distXZ < GHOST_DETECT_RADIUS) {
       // Move toward player
-      const speed = nearestDist < GHOST_FAST_DIST ? GHOST_FAST_SPEED : GHOST_SPEED
-      const dx = nearestPos.x - z.posX
-      const dz = nearestPos.z - z.posZ
+      const speed = nearest.distXZ < GHOST_FAST_DIST ? GHOST_FAST_SPEED : GHOST_SPEED
+      const dx = nearest.x - z.posX
+      const dz = nearest.z - z.posZ
       const dist2d = Math.sqrt(dx * dx + dz * dz)
       if (dist2d > 0.1) {
         z.posX += (dx / dist2d) * speed * clampedDt
         z.posZ += (dz / dist2d) * speed * clampedDt
       }
       // Match target Y (float above ground at player level)
-      z.posY += (nearestPos.y - z.posY) * 2.0 * clampedDt
+      z.posY += (nearest.y - z.posY) * 2.0 * clampedDt
 
       // Check contact → send ghostTouching (scare meter fills on client)
-      if (nearestDist < GHOST_HIT_RADIUS) {
-        room.send('ghostTouching', { victimId: nearestId })
+      if (nearest.distXZ < GHOST_HIT_RADIUS) {
+        room.send('ghostTouching', { victimId: nearest.addr })
       }
     } else {
       // Idle: slow orbit around spawn point
