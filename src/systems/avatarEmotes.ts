@@ -117,7 +117,7 @@ export function stopThrowEmote(): void {
 //                                                    (auto-stop BLUE_END_SEC)
 const BLUE_TAP_WINDOW_SEC = 0.18  // release under this = no charge emote
 const BLUE_START_SEC      = 0.15  // Start clip duration before Loop takes over
-const BLUE_END_SEC        = 0.40  // End clip auto-stop
+const BLUE_END_SEC        = 0.40  // End clip auto-stop (matches mask test scene)
 
 let blueTapWindowTimer = -1   // ticks down until Start fires
 let blueStartTimer     = -1   // ticks down until Loop takes over
@@ -184,8 +184,8 @@ export function releaseBoomerangCharge(): void {
     playThrowEmote('boomerangThrow')
     return
   }
-  // Cut the (possibly still-playing) Loop and play End, auto-stopping after BLUE_END_SEC.
-  void stopEmote({}).catch(() => {})
+  // Play End — triggerSceneEmote replaces the currently-playing Loop.
+  // (Matches mask test scene: no explicit stopEmote before End.)
   playThrowEmote('boomerangEnd', false, BLUE_END_SEC)
 }
 
