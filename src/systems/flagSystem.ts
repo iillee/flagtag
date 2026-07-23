@@ -255,6 +255,9 @@ let prevCarrierId: string = ''
 const AUTO_PICKUP_RADIUS = 3
 const AUTO_PICKUP_COOLDOWN_MS = 500 // don't spam server
 let lastAutoPickupRequestMs = 0
+// DIAG (proximity-steal-broken bug): throttle for the "carrier known but no Transform" warning.
+let lastMissingCarrierTransformLogMs = 0
+const MISSING_CARRIER_TRANSFORM_LOG_INTERVAL_MS = 3000
 const DROP_PICKUP_COOLDOWN_MS = 2000 // after dropping, can't auto-pickup for 2s
 let lastDropTimeMs = 0
 const WITNESSED_DROP_COOLDOWN_MS = 750 // after seeing anyone drop, brief cooldown to let server settle
@@ -680,8 +683,10 @@ export function flagClientSystem(dt: number): void {
       // immunity window — the server would reject the steal and the failed attempt would apply
       // a ~2.5s local lockout, which feels like "can't knock it loose").
       const myPos = Transform.get(engine.PlayerEntity).position
+      let foundCarrierTransform = false
       for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
         if (identity.address.toLowerCase() === carrierIdForSteal) {
+          foundCarrierTransform = true
           const dist = Vector3.distance(myPos, transform.position)
           if (dist <= PROXIMITY_STEAL_RADIUS) {
             // Optimistic steal: show clone immediately, sound + shield wait for confirmation
@@ -695,6 +700,14 @@ export function flagClientSystem(dt: number): void {
           }
           break
         }
+      }
+      // DIAG (proximity-steal-broken bug): heartbeat says X is carrying, but we
+      // don't have their PlayerIdentityData+Transform locally. Server’s corroboration
+      // gate then blocks the steal because we can’t send requestSteal without a
+      // proximity check. Log throttled to confirm hypothesis from playtest logs.
+      if (!foundCarrierTransform && now - lastMissingCarrierTransformLogMs >= MISSING_CARRIER_TRANSFORM_LOG_INTERVAL_MS) {
+        lastMissingCarrierTransformLogMs = now
+        console.log('[Flag] ⚠️ Carrier known (', carrierIdForSteal.slice(0, 8), ') but no local Transform — proximity steal disabled (CRDT sync gap)')
       }
     }
   }

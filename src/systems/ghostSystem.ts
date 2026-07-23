@@ -120,10 +120,27 @@ export function cancelGhostDeathRespawn(): void {
   console.log('[Ghost] Death respawn cancelled')
 }
 
+// DIAG (invisible-ghost bug): throttle a warning when we get hit by a ghost
+// we can't see. Effects come from this WebSocket message (server-authoritative),
+// visuals come from the Ghost CRDT component. If CRDT sync is lagging/dropped,
+// server keeps hitting us with a ghost that has no local visual. Log once every
+// few seconds so we can confirm the hypothesis from live playtest logs.
+let lastInvisibleGhostLogMs = 0
+const INVISIBLE_GHOST_LOG_INTERVAL_MS = 3000
+
 room.onMessage('ghostTouching', (data) => {
   const me = getPlayerData()?.userId?.toLowerCase()
   if (me && data.victimId === me) {
     ghostTouchingThisFrame = true
+    // Diagnostic: any local ghost visuals present? If none, we're taking effects
+    // from a ghost whose CRDT never arrived (invisible-ghost bug).
+    if (clientGhosts.size === 0) {
+      const now = Date.now()
+      if (now - lastInvisibleGhostLogMs >= INVISIBLE_GHOST_LOG_INTERVAL_MS) {
+        lastInvisibleGhostLogMs = now
+        console.log('[Ghost] ⚠️ ghostTouching hit but NO local ghost visuals — CRDT sync gap (invisible-ghost bug)')
+      }
+    }
   }
 })
 
