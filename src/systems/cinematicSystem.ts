@@ -5,8 +5,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { setCinematicFade, cinematicState, creditsState, hideMailboxPopup, hideChestPopup } from '../ui'
 import { setCinematicActive, isCinematicActive } from '../gameState/cinematicState'
-import { getCountdownSeconds, CountdownTimer } from '../shared/components'
-import { setServerTimeOffsetMs } from '../shared/dateUtils'
+import { getCountdownSeconds } from '../shared/components'
 import { setWinConditionOverlayVisible, setLeaderboardOverlayVisible } from '../gameState/overlayState'
 import { cancelDrownRespawn } from './waterSystem'
 import { cancelLightningRespawn } from './lightningSystem'
@@ -406,22 +405,6 @@ export function setupCinematicSystem(): void {
   room.onMessage('respawnPlayers', (data) => {
     const nowMs = Date.now()
     const intervalMs = 5 * 60 * 1000
-
-    // Anchor client→server time offset from the server-synced CountdownTimer.
-    // Server just crossed its prev boundary and set roundEndTimeMs = nextBoundary,
-    // so server-now ≈ (roundEndTimeMs - interval) at the moment this message was sent.
-    for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
-      const target = timer.roundEndTimeMs
-      // Sanity: only accept the freshly-updated target (should be ~5min ahead of client-now).
-      if (target - nowMs > intervalMs * 0.75 && target - nowMs < intervalMs * 1.25) {
-        const inferredServerNow = target - intervalMs
-        const offset = inferredServerNow - nowMs
-        setServerTimeOffsetMs(offset)
-        console.log(`[Cinematic] ⏱️ server time offset anchored: ${offset}ms (clientNow=${nowMs}, inferredServerNow=${inferredServerNow})`)
-      }
-      break
-    }
-
     const nextBoundary = (Math.floor(nowMs / intervalMs) + 1) * intervalMs
     const msToBoundary = nextBoundary - nowMs
     console.log(`[Cinematic] 📨 respawnPlayers RECEIVED msToBoundary=${msToBoundary} preFadeStarted=${preFadeStarted} nowMs=${nowMs}`)
