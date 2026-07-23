@@ -27,6 +27,7 @@ import { room } from '../shared/messages'
 import { playErrorSound, isServerConnected } from './clientUtils'
 
 import { triggerEmote } from '~system/RestrictedActions'
+import { playThrowEmote } from './avatarEmotes'
 import { isSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { triggerHitFlash } from '../gameState/hitFlashState'
@@ -624,6 +625,7 @@ export function triggerTrapFromUI(): void {
   if (now - lastLocalTrapDropTime < getActiveCooldown() * 1000) { playErrorSound(); return }
 
   lastLocalTrapDropTime = now
+  playThrowEmote('drop')
   const serverUp = isServerConnected()
 
   if (serverUp) {
@@ -691,6 +693,7 @@ export function trapClientSystem(dt: number): void {
     }
 
     lastLocalTrapDropTime = now
+    playThrowEmote('drop')
 
     if (serverUp) {
       // Production: send to server
