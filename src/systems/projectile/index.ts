@@ -19,6 +19,7 @@ import { isCinematicActive } from '../../gameState/cinematicState'
 import { triggerHitFlash } from '../../gameState/hitFlashState'
 import { isDrownRespawning } from '../waterSystem'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
+import { playBoomerangThrowEmote, beginBoomerangCharge, releaseBoomerangCharge, cancelBoomerangCharge } from '../avatarEmotes'
 import { isWinsLoaded } from '../../gameState/playerUpgradeState'
 
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from '../combatSystem'
@@ -280,6 +281,7 @@ export function triggerProjectileFromUI(): void {
     charge.isCharging = true
     playChargeSound()
     applyChargeSlow()
+    beginBoomerangCharge()
     room.send('chargeStart', { t: now })
     console.log('[Projectile] ⚡ UI press — charging started (blue)')
     return
@@ -294,6 +296,7 @@ export function triggerProjectileFromUI(): void {
     const { dirX: oaDirX, dirZ: oaDirZ } = getPlayerForward()
     const uiOrbitAngle = Math.atan2(oaDirX, oaDirZ) * (180 / Math.PI)
     const serverUp = isServerConnected()
+    playBoomerangThrowEmote('g')
     if (serverUp) {
       localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
       updateHandBoomerangVisibility()
@@ -306,6 +309,7 @@ export function triggerProjectileFromUI(): void {
   }
 
   cooldown.extraCooldown = uiColor === 'y' ? 2 : 1
+  playBoomerangThrowEmote(uiColor as 'r' | 'g' | 'y' | 'b')
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
@@ -340,6 +344,7 @@ export function triggerProjectileReleaseFromUI(): void {
   charge.isCharging = false
   stopChargeSound()
   removeChargeSlow()
+  releaseBoomerangCharge()
   room.send('chargeStop', { t: now })
   const chargeFrac = Math.min(1, (now - charge.startMs) / 1000 / CHARGE_TIME_SEC)
   const chargeSpeed = chargeToSpeed(chargeFrac)
@@ -469,6 +474,7 @@ export function projectileClientSystem(dt: number): void {
       cooldown.extraCooldown = 4
       const { dirX: eaDirX, dirZ: eaDirZ } = getPlayerForward()
       const eOrbitAngle = Math.atan2(eaDirX, eaDirZ) * (180 / Math.PI)
+      playBoomerangThrowEmote('g')
       if (serverUp) {
         localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
         updateHandBoomerangVisibility()
@@ -484,6 +490,7 @@ export function projectileClientSystem(dt: number): void {
     if (currentColor !== 'b') {
       cooldown.lastFireTime = now
       cooldown.extraCooldown = currentColor === 'y' ? 2 : 1
+      playBoomerangThrowEmote(currentColor)
       const { dirX, dirZ } = getPlayerForward()
       const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
       const speed = CHARGE_MIN_SPEED
@@ -528,6 +535,7 @@ export function projectileClientSystem(dt: number): void {
     charge.isCharging = true
     playChargeSound()
     applyChargeSlow()
+    beginBoomerangCharge()
     room.send('chargeStart', { t: now })
     console.log('[Projectile] ⚡ E pressed — charging started (blue)')
   }
@@ -538,6 +546,7 @@ export function projectileClientSystem(dt: number): void {
     charge.startMs = 0
     stopChargeSound()
     removeChargeSlow()
+    cancelBoomerangCharge()
     room.send('chargeStop', { t: now })
     console.log('[Projectile] ⚡ Charge cancelled (state change)')
   }
@@ -549,6 +558,7 @@ export function projectileClientSystem(dt: number): void {
     cooldown.lastFireTime = now
     stopChargeSound()
     removeChargeSlow()
+    cancelBoomerangCharge()
     room.send('chargeStop', { t: now })
     charge.burnoutFlashUntil = Date.now() + BURNOUT_FLASH_MS
     console.log('[Projectile] 💥 BURNOUT — held too long, self-stun!')
@@ -572,6 +582,7 @@ export function projectileClientSystem(dt: number): void {
     charge.isCharging = false
     stopChargeSound()
     removeChargeSlow()
+    releaseBoomerangCharge()
     room.send('chargeStop', { t: now })
     const chargeFrac = Math.min(1, (now - charge.startMs) / 1000 / CHARGE_TIME_SEC)
     const currentColor = getBoomerangColor()
