@@ -84,6 +84,18 @@ export function playThrowEmote(
   }
 }
 
+/**
+ * Convenience: play the correct single-hand/dual-wield throw for a boomerang color.
+ * - 'r' | 'g': single-hand ThrowBoomerang
+ * - 'y'      : dual-wield ThrowBoomerang2
+ * - 'b'      : (charge sequence — handled separately in slice 4)
+ */
+export function playBoomerangThrowEmote(color: 'r' | 'g' | 'y' | 'b'): void {
+  if (color === 'y') playThrowEmote('boomerangThrow2')
+  else if (color === 'r' || color === 'g') playThrowEmote('boomerangThrow')
+  // 'b' intentionally omitted — blue uses Start/Loop/End sequence.
+}
+
 /** Stop the currently playing scene emote (e.g. cancel the blue Loop). */
 export function stopThrowEmote(): void {
   stopTimer = -1

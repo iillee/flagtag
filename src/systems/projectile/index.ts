@@ -19,6 +19,7 @@ import { isCinematicActive } from '../../gameState/cinematicState'
 import { triggerHitFlash } from '../../gameState/hitFlashState'
 import { isDrownRespawning } from '../waterSystem'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
+import { playBoomerangThrowEmote } from '../avatarEmotes'
 import { isWinsLoaded } from '../../gameState/playerUpgradeState'
 
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from '../combatSystem'
@@ -294,6 +295,7 @@ export function triggerProjectileFromUI(): void {
     const { dirX: oaDirX, dirZ: oaDirZ } = getPlayerForward()
     const uiOrbitAngle = Math.atan2(oaDirX, oaDirZ) * (180 / Math.PI)
     const serverUp = isServerConnected()
+    playBoomerangThrowEmote('g')
     if (serverUp) {
       localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
       updateHandBoomerangVisibility()
@@ -306,6 +308,7 @@ export function triggerProjectileFromUI(): void {
   }
 
   cooldown.extraCooldown = uiColor === 'y' ? 2 : 1
+  playBoomerangThrowEmote(uiColor as 'r' | 'g' | 'y' | 'b')
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
@@ -469,6 +472,7 @@ export function projectileClientSystem(dt: number): void {
       cooldown.extraCooldown = 4
       const { dirX: eaDirX, dirZ: eaDirZ } = getPlayerForward()
       const eOrbitAngle = Math.atan2(eaDirX, eaDirZ) * (180 / Math.PI)
+      playBoomerangThrowEmote('g')
       if (serverUp) {
         localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
         updateHandBoomerangVisibility()
@@ -484,6 +488,7 @@ export function projectileClientSystem(dt: number): void {
     if (currentColor !== 'b') {
       cooldown.lastFireTime = now
       cooldown.extraCooldown = currentColor === 'y' ? 2 : 1
+      playBoomerangThrowEmote(currentColor)
       const { dirX, dirZ } = getPlayerForward()
       const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
       const speed = CHARGE_MIN_SPEED
