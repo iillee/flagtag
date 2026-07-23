@@ -253,57 +253,15 @@ export function setupCinematicSystem(): void {
     }
     } // end pendingEmote
 
-    // ── Pre-fade: client-side trigger at countdown zero ──
-    if (!preFadeStarted && fadePhase === 0 && !isCinematicActive()) {
-      const secsLeft = getCountdownSeconds()
-      if (secsLeft === 0) {
-        const nowMs = Date.now()
-        const intervalMs = 5 * 60 * 1000
-        const nextBoundary = (Math.floor(nowMs / intervalMs) + 1) * intervalMs
-        const msToBoundary = nextBoundary - nowMs
-        console.log(`[Cinematic] 🎬 PRE-FADE TRIGGER secsLeft=${secsLeft} msToBoundary=${msToBoundary} nowMs=${nowMs}`)
-        preFadeStarted = true
-        preFadeElapsed = 0
-        snapshotScoresForCinematic()
-        fadePhase = 1
-        fadeTimer = FADE_IN_DUR
-        cinematicState.roundOverVisible = true
-
-        // Pre-setup: lock movement + teleport to audience area immediately
-        InputModifier.createOrReplace(engine.PlayerEntity, {
-          mode: InputModifier.Mode.Standard({
-            disableWalk: true, disableRun: true, disableJump: true,
-            disableJog: true, disableGliding: true, disableDoubleJump: true,
-          })
-        })
-        cancelDrownRespawn()
-        cancelLightningRespawn()
-        clearSpeedBoost()
-        setCinematicActive(true)
-        setWinConditionOverlayVisible(false)
-        setLeaderboardOverlayVisible(false)
-
-        hideMailboxPopup()
-        hideChestPopup()
-        exitSpectatorMode()
-
-        // Defer audience teleport until screen is fully black (phase 2)
-        pendingPreFadeTeleport = true
-        orbitAngle = -Math.PI * 100 / 180
-        orbitDist = ORBIT_DEFAULT_DIST
-        orbitHeight = ORBIT_DEFAULT_HEIGHT
-        orbitLookX = PODIUM_CENTER.x
-        orbitLookY = PODIUM_CENTER.y
-        orbitLookZ = PODIUM_CENTER.z
-        const initX = orbitLookX + Math.sin(orbitAngle) * orbitDist
-        const initZ = orbitLookZ + Math.cos(orbitAngle) * orbitDist
-        const initY = orbitLookY + orbitHeight
-        const ct = Transform.getMutable(cinematicCam)
-        ct.position = Vector3.create(initX, initY, initZ)
-        const lt = Transform.getMutable(lookTarget)
-        lt.position = Vector3.create(orbitLookX, orbitLookY + 1.5, orbitLookZ)
-      }
-    }
+    // ── Pre-fade: DISABLED. Server's respawnPlayers message is now the single
+    // source of truth for cinematic start (see the room.onMessage handler below).
+    // Rationale: the previous client-clock trigger (getCountdownSeconds() === 0)
+    // could fire up to ~1s early due to floor rounding, AND — more importantly —
+    // could disagree with the server by several seconds when the client's system
+    // clock drifted (Windows NTP slack). Symptoms: fade starting while UI still
+    // shows 5s, countdown ticks bleeding into the podium, visual desync between
+    // clients. Letting the server drive eliminates all of it at the cost of a
+    // small (network-latency) delay before every client sees the fade begin.
 
     // ── Fade overlay + cinematic timer ──
     if (fadePhase > 0) {
