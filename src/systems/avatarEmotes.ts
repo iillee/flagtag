@@ -169,7 +169,8 @@ export function beginBoomerangCharge(): void {
 
 /**
  * Call when the blue charge is released normally (E-key up / UI release).
- * Fires the End emote iff the Start phase actually began; quick taps play nothing.
+ * - Quick taps (under BLUE_TAP_WINDOW_SEC): play the single-hand throw emote.
+ * - Held charges: cut Loop and play End (auto-stop after BLUE_END_SEC).
  */
 export function releaseBoomerangCharge(): void {
   const wasQuickTap = !blueStartFired
@@ -177,7 +178,12 @@ export function releaseBoomerangCharge(): void {
   blueStartTimer     = -1
   blueLoopActive     = false
   blueStartFired     = false
-  if (wasQuickTap) return
+  if (wasQuickTap) {
+    // No charge emote played — fall back to the regular single-hand throw
+    // so a snap-tap still gets visible feedback.
+    playThrowEmote('boomerangThrow')
+    return
+  }
   // Cut the (possibly still-playing) Loop and play End, auto-stopping after BLUE_END_SEC.
   void stopEmote({}).catch(() => {})
   playThrowEmote('boomerangEnd', false, BLUE_END_SEC)
