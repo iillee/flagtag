@@ -101,3 +101,94 @@ export function stopThrowEmote(): void {
   stopTimer = -1
   void stopEmote({}).catch(() => {})
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Blue boomerang charge sequence (Start → Loop → End)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Quick taps (release under BLUE_TAP_WINDOW_SEC) play no charge emote at all
+// — the throw feels snappier and we avoid a visible Start→End jitter.
+//
+// Held charges fire:
+//   t=0                    beginBoomerangCharge()  → schedule Start
+//   t=BLUE_TAP_WINDOW_SEC  fire Start emote        → schedule Loop
+//   t=+BLUE_START_SEC      fire Loop emote (loop:true)
+//   release                releaseBoomerangCharge() → stopEmote, fire End
+//                                                    (auto-stop BLUE_END_SEC)
+const BLUE_TAP_WINDOW_SEC = 0.18  // release under this = no charge emote
+const BLUE_START_SEC      = 0.15  // Start clip duration before Loop takes over
+const BLUE_END_SEC        = 0.40  // End clip auto-stop
+
+let blueTapWindowTimer = -1   // ticks down until Start fires
+let blueStartTimer     = -1   // ticks down until Loop takes over
+let blueLoopActive     = false
+let blueStartFired     = false // whether we've entered the Start/Loop phase
+
+// Register the blue-charge tick system exactly once (independent of stop-system).
+let blueSystemRegistered = false
+function registerBlueSystem(): void {
+  if (blueSystemRegistered) return
+  blueSystemRegistered = true
+  engine.addSystem((dt: number) => {
+    // Phase 1: tap window elapsed → fire Start emote.
+    if (blueTapWindowTimer > 0) {
+      blueTapWindowTimer -= dt
+      if (blueTapWindowTimer <= 0) {
+        blueTapWindowTimer = -1
+        blueStartFired = true
+        void triggerSceneEmote({
+          src: EMOTE_SRC.boomerangStart, loop: false, mask: AM_UPPER_BODY
+        }).catch(() => {})
+        blueStartTimer = BLUE_START_SEC
+      }
+    }
+    // Phase 2: Start clip finished → transition into looping Hold emote.
+    if (blueStartTimer > 0) {
+      blueStartTimer -= dt
+      if (blueStartTimer <= 0) {
+        blueStartTimer = -1
+        if (!blueLoopActive) {
+          blueLoopActive = true
+          void triggerSceneEmote({
+            src: EMOTE_SRC.boomerangLoop, loop: true, mask: AM_UPPER_BODY
+          }).catch(() => {})
+        }
+      }
+    }
+  })
+}
+
+/** Call when the blue charge begins (E-key down / UI press-in). */
+export function beginBoomerangCharge(): void {
+  registerBlueSystem()
+  blueTapWindowTimer = BLUE_TAP_WINDOW_SEC
+  blueStartTimer     = -1
+  blueLoopActive     = false
+  blueStartFired     = false
+}
+
+/**
+ * Call when the blue charge is released normally (E-key up / UI release).
+ * Fires the End emote iff the Start phase actually began; quick taps play nothing.
+ */
+export function releaseBoomerangCharge(): void {
+  const wasQuickTap = !blueStartFired
+  blueTapWindowTimer = -1
+  blueStartTimer     = -1
+  blueLoopActive     = false
+  blueStartFired     = false
+  if (wasQuickTap) return
+  // Cut the (possibly still-playing) Loop and play End, auto-stopping after BLUE_END_SEC.
+  void stopEmote({}).catch(() => {})
+  playThrowEmote('boomerangEnd', false, BLUE_END_SEC)
+}
+
+/** Call to abort the charge sequence without playing End (burnout, cinematic, spectator). */
+export function cancelBoomerangCharge(): void {
+  const hadEmote = blueStartFired
+  blueTapWindowTimer = -1
+  blueStartTimer     = -1
+  blueLoopActive     = false
+  blueStartFired     = false
+  if (hadEmote) void stopEmote({}).catch(() => {})
+}

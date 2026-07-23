@@ -19,7 +19,7 @@ import { isCinematicActive } from '../../gameState/cinematicState'
 import { triggerHitFlash } from '../../gameState/hitFlashState'
 import { isDrownRespawning } from '../waterSystem'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
-import { playBoomerangThrowEmote } from '../avatarEmotes'
+import { playBoomerangThrowEmote, beginBoomerangCharge, releaseBoomerangCharge, cancelBoomerangCharge } from '../avatarEmotes'
 import { isWinsLoaded } from '../../gameState/playerUpgradeState'
 
 import { showHitEffect, showMissEffect, playHitSound, playMissSound } from '../combatSystem'
@@ -281,6 +281,7 @@ export function triggerProjectileFromUI(): void {
     charge.isCharging = true
     playChargeSound()
     applyChargeSlow()
+    beginBoomerangCharge()
     room.send('chargeStart', { t: now })
     console.log('[Projectile] ⚡ UI press — charging started (blue)')
     return
@@ -343,6 +344,7 @@ export function triggerProjectileReleaseFromUI(): void {
   charge.isCharging = false
   stopChargeSound()
   removeChargeSlow()
+  releaseBoomerangCharge()
   room.send('chargeStop', { t: now })
   const chargeFrac = Math.min(1, (now - charge.startMs) / 1000 / CHARGE_TIME_SEC)
   const chargeSpeed = chargeToSpeed(chargeFrac)
@@ -533,6 +535,7 @@ export function projectileClientSystem(dt: number): void {
     charge.isCharging = true
     playChargeSound()
     applyChargeSlow()
+    beginBoomerangCharge()
     room.send('chargeStart', { t: now })
     console.log('[Projectile] ⚡ E pressed — charging started (blue)')
   }
@@ -543,6 +546,7 @@ export function projectileClientSystem(dt: number): void {
     charge.startMs = 0
     stopChargeSound()
     removeChargeSlow()
+    cancelBoomerangCharge()
     room.send('chargeStop', { t: now })
     console.log('[Projectile] ⚡ Charge cancelled (state change)')
   }
@@ -554,6 +558,7 @@ export function projectileClientSystem(dt: number): void {
     cooldown.lastFireTime = now
     stopChargeSound()
     removeChargeSlow()
+    cancelBoomerangCharge()
     room.send('chargeStop', { t: now })
     charge.burnoutFlashUntil = Date.now() + BURNOUT_FLASH_MS
     console.log('[Projectile] 💥 BURNOUT — held too long, self-stun!')
@@ -577,6 +582,7 @@ export function projectileClientSystem(dt: number): void {
     charge.isCharging = false
     stopChargeSound()
     removeChargeSlow()
+    releaseBoomerangCharge()
     room.send('chargeStop', { t: now })
     const chargeFrac = Math.min(1, (now - charge.startMs) / 1000 / CHARGE_TIME_SEC)
     const currentColor = getBoomerangColor()
