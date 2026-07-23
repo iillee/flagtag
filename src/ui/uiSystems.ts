@@ -20,6 +20,7 @@ import { spectatorState } from '../shared/clientState'
 import { getServerConnectionStatus, cycleUIScale } from './uiConstants'
 import { clearCinematicSnapshot } from '../gameState/flagHoldTime'
 import { playTickSound } from './uiSounds'
+import { isCinematicActive } from '../gameState/cinematicState'
 import {
   cinematicState,
   creditsState, CREDIT_LINES, CREDIT_LINE_DURATION,
@@ -265,7 +266,7 @@ export function registerUiSystems() {
     // ── Countdown tick (last 10 seconds) ──
     {
       const seconds = getCountdownSeconds()
-      if (seconds > 0 && seconds <= 10 && seconds !== countdownState.lastTickSecond) {
+      if (!isCinematicActive() && seconds > 0 && seconds <= 10 && seconds !== countdownState.lastTickSecond) {
         countdownState.lastTickSecond = seconds
         playTickSound()
       }

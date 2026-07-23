@@ -257,6 +257,11 @@ export function setupCinematicSystem(): void {
     if (!preFadeStarted && fadePhase === 0 && !isCinematicActive()) {
       const secsLeft = getCountdownSeconds()
       if (secsLeft === 0) {
+        const nowMs = Date.now()
+        const intervalMs = 5 * 60 * 1000
+        const nextBoundary = (Math.floor(nowMs / intervalMs) + 1) * intervalMs
+        const msToBoundary = nextBoundary - nowMs
+        console.log(`[Cinematic] 🎬 PRE-FADE TRIGGER secsLeft=${secsLeft} msToBoundary=${msToBoundary} nowMs=${nowMs}`)
         preFadeStarted = true
         preFadeElapsed = 0
         snapshotScoresForCinematic()
@@ -440,6 +445,11 @@ export function setupCinematicSystem(): void {
 
   // ── respawnPlayers message handler ──
   room.onMessage('respawnPlayers', (data) => {
+    const nowMs = Date.now()
+    const intervalMs = 5 * 60 * 1000
+    const nextBoundary = (Math.floor(nowMs / intervalMs) + 1) * intervalMs
+    const msToBoundary = nextBoundary - nowMs
+    console.log(`[Cinematic] 📨 respawnPlayers RECEIVED msToBoundary=${msToBoundary} preFadeStarted=${preFadeStarted} nowMs=${nowMs}`)
     const localPlayer = getPlayer()
     const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
 

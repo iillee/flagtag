@@ -364,6 +364,14 @@ async function handleRoundEnd(endedRoundEndMs: number, nextScoreRoundId: string)
   flagT.position = Vector3.create(spawnPoint.x, spawnPoint.y, spawnPoint.z)
 
   // ── 2b. Send respawnPlayers AFTER flag reset ──
+  {
+    const nowMs = Date.now()
+    const intervalMs = 5 * 60 * 1000
+    const nextBoundary = (Math.floor(nowMs / intervalMs) + 1) * intervalMs
+    const msToBoundary = nextBoundary - nowMs
+    const msAfterEnded = nowMs - endedRoundEndMs
+    console.log('[Server] SENDING respawnPlayers msToBoundary=' + msToBoundary + ' msAfterEndedRound=' + msAfterEnded + ' endedRoundEndMs=' + endedRoundEndMs)
+  }
   room.send('respawnPlayers', { t: 0, winnersJson })
   console.log('[Server] 📍 Respawning all players (flag already reset)')
 
