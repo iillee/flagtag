@@ -5,8 +5,8 @@ import { getPlayer } from '@dcl/sdk/players'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { setCinematicFade, cinematicState, creditsState, hideMailboxPopup, hideChestPopup } from '../ui'
 import { setCinematicActive, isCinematicActive } from '../gameState/cinematicState'
-import { getCountdownSeconds, CountdownTimer } from '../shared/components'
-import { setServerTimeOffsetMs } from '../shared/dateUtils'
+import { getCountdownSeconds } from '../shared/components'
+import { snapCountdownToZero, releaseCountdownSnap } from '../shared/dateUtils'
 import { setWinConditionOverlayVisible, setLeaderboardOverlayVisible } from '../gameState/overlayState'
 import { cancelDrownRespawn } from './waterSystem'
 import { cancelLightningRespawn } from './lightningSystem'
@@ -284,7 +284,7 @@ export function setupCinematicSystem(): void {
         // Safety: if respawnPlayers never arrives within 8s, abort
         if (preFadeElapsed > 8 && cinematicTimer <= 0) {
           setCinematicFade(0); fadePhase = 0; preFadeStarted = false
-          cinematicState.roundOverVisible = false; clearCinematicSnapshot(); setCinematicActive(false)
+          cinematicState.roundOverVisible = false; clearCinematicSnapshot(); setCinematicActive(false); releaseCountdownSnap()
           if (InputModifier.has(engine.PlayerEntity)) InputModifier.deleteFrom(engine.PlayerEntity)
           return
         }
@@ -332,7 +332,7 @@ export function setupCinematicSystem(): void {
       } else if (fadePhase === 7) {
         const progress = Math.max(0, fadeTimer / END_FADE_OUT_DUR)
         setCinematicFade(progress)
-        if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 0; preFadeStarted = false; cinematicState.roundOverVisible = false; clearCinematicSnapshot(); setCinematicActive(false) }
+        if (fadeTimer <= 0) { setCinematicFade(0); fadePhase = 0; preFadeStarted = false; cinematicState.roundOverVisible = false; clearCinematicSnapshot(); setCinematicActive(false); releaseCountdownSnap() }
       }
     }
 
@@ -406,25 +406,13 @@ export function setupCinematicSystem(): void {
   room.onMessage('respawnPlayers', (data) => {
     const nowMs = Date.now()
     const intervalMs = 5 * 60 * 1000
-
-    // Anchor client→server time offset from the server-synced CountdownTimer.
-    // Server just crossed its prev boundary and set roundEndTimeMs = nextBoundary,
-    // so server-now ≈ (roundEndTimeMs - interval) at the moment this message was sent.
-    for (const [, timer] of engine.getEntitiesWith(CountdownTimer)) {
-      const target = timer.roundEndTimeMs
-      // Sanity: only accept the freshly-updated target (should be ~5min ahead of client-now).
-      if (target - nowMs > intervalMs * 0.75 && target - nowMs < intervalMs * 1.25) {
-        const inferredServerNow = target - intervalMs
-        const offset = inferredServerNow - nowMs
-        setServerTimeOffsetMs(offset)
-        console.log(`[Cinematic] ⏱️ server time offset anchored: ${offset}ms (clientNow=${nowMs}, inferredServerNow=${inferredServerNow})`)
-      }
-      break
-    }
-
     const nextBoundary = (Math.floor(nowMs / intervalMs) + 1) * intervalMs
     const msToBoundary = nextBoundary - nowMs
     console.log(`[Cinematic] 📨 respawnPlayers RECEIVED msToBoundary=${msToBoundary} preFadeStarted=${preFadeStarted} nowMs=${nowMs}`)
+    // Force UI countdown to 0 for the frame(s) before the fade covers it — hides
+    // any residual client-clock skew (e.g. UI still reading 0:05 when the server
+    // says the round has ended). Released when the cinematic ends.
+    snapCountdownToZero()
     const localPlayer = getPlayer()
     const localUserId = localPlayer?.userId?.toLowerCase() ?? ''
 
