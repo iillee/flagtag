@@ -574,9 +574,15 @@ room.onMessage('flagFallStart', (data) => {
 })
 
 room.onMessage('flagLanded', (_data) => {
-  // Server has written the final rest position to the synced Transform;
-  // clear the local override so the visual snaps to its parent again.
-  flagLocalFall = null
+  // DO NOT clear flagLocalFall here! flagLanded (WS) typically arrives ~30-50ms
+  // BEFORE the CRDT Transform update that endFall() also emitted. Clearing
+  // immediately makes the visual snap back to the parent's frozen startY —
+  // that's the 'smooth then pause then teleport' bug from the second playtest.
+  //
+  // Instead we let updateFlagBob clear it once it observes that the parent
+  // Transform has actually moved to the landing position (within 1m). Until
+  // then, computeFallY stays clamped to targetY so the visual sits correctly
+  // at (parent.startY + bobY + (targetY - startY)) = targetY + bobY.
 })
 
 /**
@@ -714,7 +720,19 @@ function updateFlagBob(dt: number): void {
           flagLocalFall.startY, flagLocalFall.targetY,
           flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
         )
-        fallOffsetY = analyticY - flagLocalFall.startY
+        // Clear the local sim only when analyticY has clamped to targetY AND
+        // the parent Transform has caught up to (roughly) the landing Y. This
+        // closes the WS-vs-CRDT race on flagLanded: WS arrives first with 'the
+        // fall is done', but if we clear immediately the visual pops back up
+        // to the frozen startY-parent for the ~30–50ms until CRDT catches up.
+        const parentT = Transform.get(flagSyncedEntity)
+        const analyticSettled = analyticY <= flagLocalFall.targetY
+        const parentCaughtUp = Math.abs(parentT.position.y - flagLocalFall.targetY) < 1
+        if (analyticSettled && parentCaughtUp) {
+          flagLocalFall = null
+        } else {
+          fallOffsetY = analyticY - flagLocalFall.startY
+        }
       }
       const t = Transform.getMutable(flagVisualEntity)
       t.position = Vector3.create(0, bobY + fallOffsetY, 0)
