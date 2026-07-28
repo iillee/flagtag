@@ -26,7 +26,12 @@ export const Messages = {
   pickupConfirmed: Schemas.Map({ playerId: Schemas.String }),
   pickupSound: Schemas.Map({ t: Schemas.Int }),
   dropSound: Schemas.Map({ t: Schemas.Int }),
-  dropForced: Schemas.Map({ playerId: Schemas.String }),
+  // Fast-path WS notification of a forced drop (combat hit, lightning, etc.)
+  // arrives ~50ms before the CRDT Transform update. x/y/z are the drop
+  // position, so the client can move the flag visual to the correct spot
+  // immediately instead of leaving it at the stale carrier-parented offset
+  // (playtest: "split-second delay between hit and flag drop").
+  dropForced: Schemas.Map({ playerId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   bananaDenied: Schemas.Map({ reason: Schemas.String }),
   bananaDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String }),
   bananaTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),

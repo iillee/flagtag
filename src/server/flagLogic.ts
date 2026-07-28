@@ -364,9 +364,13 @@ export function handleDrop(playerId: string, forced: boolean = false): void {
   computeGravityTarget(dropPos.y)
 
   room.send('dropSound', { t: 0 })
-  // Fast-path WS message for combat-forced drops so clients don't wait for CRDT
+  // Fast-path WS message for combat-forced drops so clients don't wait for CRDT.
+  // Includes the drop position so the client visual can jump straight to the
+  // real spot (previously it lingered at the stale carrier-local offset until
+  // the CRDT Transform update propagated — the split-second delay playtesters
+  // reported).
   if (forced) {
-    room.send('dropForced', { playerId })
+    room.send('dropForced', { playerId, x: dropPos.x, y: dropPos.y, z: dropPos.z })
   }
 }
 
