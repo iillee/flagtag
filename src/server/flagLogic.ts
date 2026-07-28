@@ -308,17 +308,21 @@ function authoritativeFlagPos(flag: { state: FlagState; baseX: number; baseY: nu
  */
 function beginFall(startX: number, startY: number, startZ: number, targetY: number): void {
   const now = Date.now()
+  const landMs = computeLandTimeMs(startY, targetY, FLAG_GRAVITY)
   flagFallInfo = {
     active: true,
     startX, startY, startZ, targetY,
     dropTimeMs: now,
-    landTimeMs: now + computeLandTimeMs(startY, targetY, FLAG_GRAVITY)
+    landTimeMs: now + landMs
   }
   // Every client (and any late-joiner via flagHeartbeat piggyback) will now
   // compute the same Y for the same `now`. No CRDT writes during the fall.
   room.send('flagFallStart', {
     startX, startY, startZ, targetY, dropTimeMs: now
   })
+  console.log('[Server] 🚩⬇️ beginFall startY=', startY.toFixed(1),
+    'targetY=', targetY.toFixed(1),
+    'estLandInMs=', landMs.toFixed(0))
 }
 
 /**
@@ -337,6 +341,7 @@ function endFall(landX: number, landY: number, landZ: number): void {
   const t = Transform.getMutable(flagEntity)
   t.position = Vector3.create(landX, landY, landZ)
   room.send('flagLanded', { x: landX, y: landY, z: landZ })
+  console.log('[Server] 🚩🎯 endFall landedY=', landY.toFixed(1))
 }
 
 /**
@@ -586,6 +591,13 @@ export function checkProximitySteal(): void {
 // PlayerFlagHoldTime entities stall. Match the displayed score cadence.
 const FLAG_HEARTBEAT_INTERVAL_MS = 1000
 let lastHeartbeatMs = 0
+// During an active analytic fall we re-broadcast flagFallStart on a MUCH
+// faster cadence (250ms) so a client that dropped the initial packet only
+// stares at a stuck flag for a quarter second before catching up, not a
+// whole heartbeat. Idempotent — same dropTimeMs is a no-op on clients
+// already tracking this fall.
+const FLAG_FALL_REBROADCAST_INTERVAL_MS = 250
+let lastFallRebroadcastMs = 0
 
 // ── Server systems ──
 
@@ -638,20 +650,25 @@ export function flagServerSystem(dt: number): void {
       z: bz
     })
 
-    // Re-broadcast the fall start conditions so a client that joined AFTER
-    // the initial flagFallStart (or missed it under packet loss) can still
-    // spin up local analytic sim and render the falling flag smoothly. Same
-    // dropTimeMs on every re-broadcast — idempotent for clients already
-    // simulating this fall.
-    if (flagFallInfo.active) {
-      room.send('flagFallStart', {
-        startX: flagFallInfo.startX,
-        startY: flagFallInfo.startY,
-        startZ: flagFallInfo.startZ,
-        targetY: flagFallInfo.targetY,
-        dropTimeMs: flagFallInfo.dropTimeMs
-      })
-    }
+  }
+
+  // Fast fall-rebroadcast loop — independent of heartbeat cadence.
+  // Reason: the initial flagFallStart at drop-time can be lost to packet
+  // drops or arrive at a client that hadn't registered its handler yet
+  // (fresh join / hot reload). Waiting a full heartbeat (1s) to recover
+  // is the exact symptom playtest showed: flag stays stuck then teleports.
+  // Re-firing every 250ms bounds the worst-case stuck-visual to ~250ms.
+  const nowForFallRebroadcast = Date.now()
+  if (flagFallInfo.active &&
+      nowForFallRebroadcast - lastFallRebroadcastMs >= FLAG_FALL_REBROADCAST_INTERVAL_MS) {
+    lastFallRebroadcastMs = nowForFallRebroadcast
+    room.send('flagFallStart', {
+      startX: flagFallInfo.startX,
+      startY: flagFallInfo.startY,
+      startZ: flagFallInfo.startZ,
+      targetY: flagFallInfo.targetY,
+      dropTimeMs: flagFallInfo.dropTimeMs
+    })
   }
 
   const clampedDt = Math.min(dt, 0.1)

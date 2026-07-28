@@ -567,6 +567,31 @@ room.onMessage('flagLanded', (_data) => {
   flagLocalFall = null
 })
 
+/**
+ * Defensive fallback: if we see the flag in Dropped state with a Transform
+ * still parked at the drop point (server froze it there for the fall) BUT
+ * we never received a flagFallStart (initial packet lost + before the
+ * 250ms rebroadcast fires), the visual would hover in mid-air. Kick off a
+ * best-effort local sim from `now` toward Flag.dropAnchorY — which the
+ * server WILL update on land, so we'll snap-correct the moment endFall
+ * lands. Runs at most once per new Dropped edge so we don't spam.
+ */
+function maybeStartFallbackFall(parentPos: { x: number; y: number; z: number }, dropAnchorY: number): void {
+  if (flagLocalFall) return
+  // Only if there's a meaningful gap (>1m) worth animating — otherwise the
+  // flag is essentially at rest and the visual is fine as-is.
+  if (parentPos.y - dropAnchorY < 1) return
+  flagLocalFall = {
+    startX: parentPos.x,
+    startY: parentPos.y,
+    startZ: parentPos.z,
+    targetY: dropAnchorY,
+    dropTimeMs: Date.now()
+  }
+  console.log('[Flag] 🚩⚠️ fallback local fall (missed flagFallStart) startY=',
+    parentPos.y.toFixed(1), 'targetY=', dropAnchorY.toFixed(1))
+}
+
 const IDLE_BOB_AMPLITUDE = 0.15
 const IDLE_BOB_SPEED = 2
 const IDLE_ROT_SPEED_DEG_PER_SEC = 25
@@ -657,9 +682,16 @@ function updateFlagBob(dt: number): void {
   // frozen at startY (no CRDT writes during the fall). offset is negative
   // and grows downward until landing, when the server sends flagLanded and
   // clears flagLocalFall.
-  if (flagVisualEntity && Transform.has(flagVisualEntity)) {
-    const flag = flagSyncedEntity ? Flag.getOrNull(flagSyncedEntity) : null
+  if (flagVisualEntity && Transform.has(flagVisualEntity) && flagSyncedEntity) {
+    const flag = Flag.getOrNull(flagSyncedEntity)
     if (flag && flag.state !== FlagState.Carried) {
+      // Fallback: if we're in Dropped but no local sim is running and the
+      // parent Transform is well above the anchor, we probably missed the
+      // initial flagFallStart. Kick off a best-effort local sim now.
+      if (flag.state === FlagState.Dropped && !flagLocalFall) {
+        const parentT = Transform.get(flagSyncedEntity)
+        maybeStartFallbackFall(parentT.position, flag.dropAnchorY)
+      }
       let fallOffsetY = 0
       if (flagLocalFall) {
         const analyticY = computeFallY(
