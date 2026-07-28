@@ -113,6 +113,12 @@ export const Messages = {
   ghostKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: ghost died (VFX)
   // zombieStagger and ghostDeath removed — replaced by ghostTouching + scare meter
   ghostTouching: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: ghost is touching a player this frame
+  // Ghost heartbeat (server → client, ~2Hz). JSON array of {id,x,y,z} for every
+  // active server-side ghost. Independent of the CRDT `Ghost` component: when
+  // that component fails to replicate (invisible-ghost bug) the client builds a
+  // lightweight fallback visual from this stream so the ghost is at least
+  // visible while it can still kill you. See shared/ghostHeartbeat.ts.
+  ghostHeartbeat: Schemas.Map({ ghostsJson: Schemas.String }),
 
   // Death penalty
   deathPenalty: Schemas.Map({ cause: Schemas.String }),           // Client → Server: player died, deduct coins

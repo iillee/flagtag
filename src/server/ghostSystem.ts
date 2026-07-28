@@ -15,7 +15,8 @@ import {
   PROJECTILE_HIT_RADIUS,
 } from '../shared/components'
 import { room } from '../shared/messages'
-import { isNightTime, updateWorldTime } from '../shared/dayNight'
+import { isNightTime, updateWorldTime, getCurrentSkyTime } from '../shared/dayNight'
+import { serializeGhostHeartbeat, type GhostHeartbeatEntry } from '../shared/ghostHeartbeat'
 import {
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   getPlayerPosition, getActivePlayerAddresses,
@@ -28,6 +29,18 @@ const GHOST_SPAWN_POS = Vector3.create(347, 49.25, 381) // Black cube location
 let ghostSpawnTimer = 10 // first spawn after 10s
 const GHOST_STAGGER_COOLDOWN_MS = 3000 // can only stagger same player every 3s
 const GHOST_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
+// Fallback-visual heartbeat cadence. 500ms is fast enough that a fallback ghost
+// moves smoothly (client lerps between updates) and slow enough that it costs
+// far less than the CRDT stream this backstops — typical payload is one entry.
+const GHOST_HEARTBEAT_INTERVAL_MS = 500
+let lastGhostHeartbeatMs = 0
+// DIAG (day-night-spawn-unreliable bug): characterize whether the server's
+// getWorldTime() clock actually advances on the headless realm. If this logs a
+// stuck value across playtests, isNightTime() is the root cause of "ghost
+// rarely spawns" and we file a separate fix; if it advances normally, the
+// complaint is a UX issue with the 24-minute cycle length. Throttled to 30s.
+const DAYNIGHT_DIAG_INTERVAL_MS = 30_000
+let lastDayNightDiagMs = 0
 
 // ── Message handlers ──
 export function registerGhostHandlers(): void {
@@ -173,6 +186,28 @@ export function ghostServerSystem(dt: number): void {
       zm.targetY = z.posY
       zm.targetZ = z.posZ
     }
+  }
+
+  // ── Day/night clock diagnostic (see DAYNIGHT_DIAG_INTERVAL_MS) ──
+  if (now - lastDayNightDiagMs >= DAYNIGHT_DIAG_INTERVAL_MS) {
+    lastDayNightDiagMs = now
+    console.log('[Server] 🌓 day/night diag: worldSeconds=', getCurrentSkyTime().toFixed(0),
+      '| isNight=', isNightTime(),
+      '| activeGhosts=', activeGhosts.length)
+  }
+
+  // ── Fallback-visual heartbeat (server → all clients, ~2Hz) ──
+  // Independent of the CRDT `Ghost` component so a client whose CRDT sync
+  // dropped the ghost entity can still render a visual. Send only while at
+  // least one ghost is alive; empty payloads would just be noise (a client
+  // with no fallback visual has nothing to reconcile).
+  if (activeGhosts.length > 0 && now - lastGhostHeartbeatMs >= GHOST_HEARTBEAT_INTERVAL_MS) {
+    lastGhostHeartbeatMs = now
+    const entries: GhostHeartbeatEntry[] = []
+    for (const z of activeGhosts) {
+      entries.push({ id: z.syncId, x: z.posX, y: z.posY, z: z.posZ })
+    }
+    room.send('ghostHeartbeat', { ghostsJson: serializeGhostHeartbeat(entries) })
   }
 
   // ── Check projectile-ghost collisions ──
