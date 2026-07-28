@@ -28,7 +28,7 @@ import { isMobile } from '@dcl/sdk/platform'
 
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
-import { PROXIMITY_STEAL_RADIUS } from '../shared/constants'
+import { PROXIMITY_STEAL_RADIUS, SCENE_FLOOR_Y } from '../shared/constants'
 import { room } from '../shared/messages'
 import { computeFallY, FLAG_GRAVITY } from '../shared/flagFall'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
@@ -555,21 +555,30 @@ room.onMessage('flagFallStart', (data) => {
   if (flagLocalFall && flagLocalFall.serverDropTimeMs === data.dropTimeMs) return
 
   // If we're already mid-fall and the server sends a NEW beginFall (different
-  // serverDropTimeMs), this is almost always the reportGroundY retarget —
-  // server measured a lower ground and re-armed the fall to a deeper target.
-  // See flagLogic.ts reportGroundY handler → beginFall(currentAnchorY, newTarget).
+  // serverDropTimeMs), it's USUALLY the reportGroundY retarget ~230ms after
+  // the initial fall (server measured a lower ground and re-armed to a deeper
+  // target). BUT it can also be a totally new drop after a mid-fall pickup
+  // where our local sim was never cleared — in that case treating it as a
+  // retarget keeps the OLD startY/clientDropTimeMs and puts the analytic on
+  // a bogus trajectory.
   //
-  // If we re-init clientDropTimeMs=now and startY=data.startY, the analytic
-  // restarts from t=0 and the visual JUMPS UP to data.startY, then re-falls
-  // from rest. That's the 'drops then freezes then re-drops' bug from the
-  // third playtest. Instead, retarget in place: keep clientDropTimeMs and
-  // startY, only update targetY. The analytic continues smoothly from where
-  // it already is, just heading to a deeper floor now.
+  // Distinguish by checking whether data.startY is near where our analytic
+  // thinks the flag currently is. If yes → retarget in place (avoids the
+  // 'drops then freezes then re-drops' bug from the 3rd playtest). If no
+  // → fall through to the fresh-start path below (drop the stale sim).
   if (flagLocalFall) {
-    flagLocalFall.targetY = data.targetY
-    flagLocalFall.serverDropTimeMs = data.dropTimeMs  // dedupe future rebroadcasts of THIS new fall
-    console.log('[Flag] 🚩🎯 flagFallStart RETARGET (in-flight) new targetY=', data.targetY.toFixed(1))
-    return
+    const currentAnalytic = computeFallY(
+      flagLocalFall.startY, flagLocalFall.targetY,
+      flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
+    )
+    if (Math.abs(data.startY - currentAnalytic) < 3) {
+      flagLocalFall.targetY = data.targetY
+      flagLocalFall.serverDropTimeMs = data.dropTimeMs
+      console.log('[Flag] 🚩🎯 flagFallStart RETARGET (in-flight) new targetY=', data.targetY.toFixed(1))
+      return
+    }
+    console.log('[Flag] 🚩🔄 flagFallStart stale-sim override — fresh start startY=',
+      data.startY.toFixed(1), 'was analytic=', currentAnalytic.toFixed(1))
   }
 
   // Fresh fall — no existing local sim. Anchor the analytic to OUR clock,
@@ -611,22 +620,30 @@ room.onMessage('flagLanded', (_data) => {
  * server WILL update on land, so we'll snap-correct the moment endFall
  * lands. Runs at most once per new Dropped edge so we don't spam.
  */
-function maybeStartFallbackFall(parentPos: { x: number; y: number; z: number }, dropAnchorY: number): void {
+function maybeStartFallbackFall(parentPos: { x: number; y: number; z: number }): void {
   if (flagLocalFall) return
-  // Only if there's a meaningful gap (>1m) worth animating — otherwise the
-  // flag is essentially at rest and the visual is fine as-is.
-  if (parentPos.y - dropAnchorY < 1) return
+  // Only if parent is meaningfully above the scene floor — otherwise flag is
+  // essentially at rest and the visual is fine as-is.
+  //
+  // NOTE: we deliberately do NOT use flag.dropAnchorY as the reference or
+  // target. During an active message-driven fall dropAnchorY is FROZEN at
+  // the fall's startY (see flagLogic.ts endFall / authoritativeFlagPos),
+  // and the parent Transform is also frozen at startY. So the old check
+  // 'parentPos.y - dropAnchorY < 1' was ALWAYS true during a missed fall
+  // — fallback never fired — visual sat stuck at startY+bobY for the whole
+  // fall. The 'stuck in the air' bug reported in the 5th playtest.
+  if (parentPos.y - SCENE_FLOOR_Y < 2) return
   const now = Date.now()
   flagLocalFall = {
     startX: parentPos.x,
     startY: parentPos.y,
     startZ: parentPos.z,
-    targetY: dropAnchorY,
+    targetY: SCENE_FLOOR_Y,
     serverDropTimeMs: 0,  // no server anchor — fallback path
     clientDropTimeMs: now
   }
   console.log('[Flag] 🚩⚠️ fallback local fall (missed flagFallStart) startY=',
-    parentPos.y.toFixed(1), 'targetY=', dropAnchorY.toFixed(1))
+    parentPos.y.toFixed(1), 'targetY=', SCENE_FLOOR_Y.toFixed(1))
 }
 
 const IDLE_BOB_AMPLITUDE = 0.15
@@ -740,11 +757,14 @@ function updateFlagBob(dt: number): void {
     const flag = Flag.getOrNull(flagSyncedEntity)
     if (flag && flag.state !== FlagState.Carried) {
       // Fallback: if we're in Dropped but no local sim is running and the
-      // parent Transform is well above the anchor, we probably missed the
-      // initial flagFallStart. Kick off a best-effort local sim now.
+      // parent Transform is well above the scene floor, we probably missed
+      // the initial flagFallStart (packet loss, or our local sim got nulled
+      // by a Carried-flicker below and state came back to Dropped). Kick off
+      // a best-effort local sim toward the floor — endFall's CRDT snap will
+      // correct the exact landing Y when it arrives.
       if (flag.state === FlagState.Dropped && !flagLocalFall) {
         const parentT = Transform.get(flagSyncedEntity)
-        maybeStartFallbackFall(parentT.position, flag.dropAnchorY)
+        maybeStartFallbackFall(parentT.position)
       }
       let fallOffsetY = 0
       if (flagLocalFall) {
@@ -780,8 +800,14 @@ function updateFlagBob(dt: number): void {
       const t = Transform.getMutable(flagVisualEntity)
       t.position = Vector3.create(0, bobY + fallOffsetY, 0)
       t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
-    } else if (flag && flag.state === FlagState.Carried && flagLocalFall) {
-      // Flag was picked up mid-fall — clear any lingering local sim.
+    } else if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId && flagLocalFall) {
+      // Flag was picked up mid-fall — clear any lingering local sim. Gate on
+      // carrierPlayerId being non-empty so brief CRDT state flickers during
+      // the fall (state momentarily reads Carried while carrierPlayerId is
+      // still empty) don't null our sim. That flicker was the '5th playtest
+      // stuck in the air' bug: Carried nulled the sim, state flipped back to
+      // Dropped, and the fallback's dropAnchorY guard also failed — so the
+      // visual just sat there for the whole fall.
       flagLocalFall = null
     }
   }
