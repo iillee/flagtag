@@ -124,10 +124,16 @@ export function beaconClientSystem(dt: number): void {
 
   // First try to find server flag (multiplayer)
   for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
-    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+    // Source of truth for "is carried": carrierPlayerId alone. Using flag.state
+    // as well causes desync during the CRDT window where state and
+    // carrierPlayerId disagree (state=Dropped stale but carrierPlayerId=X
+    // already set, or vice versa). In that window the else branch pinned
+    // the beacon to the flag entity's stale Transform — different per client,
+    // making the beacon appear "detached" until the next steal forced a resync.
+    if (flag.carrierPlayerId) {
       // Flag is carried - use carrier's world position + flag offset
       const carrierPos = getCarrierWorldPos(flag.carrierPlayerId)
-      if (!carrierPos) break // carrier not found yet, skip this frame
+      if (!carrierPos) break // carrier not found yet, skip this frame (beacon hidden)
       worldPos = Vector3.create(
         carrierPos.x + FLAG_CARRY_OFFSET.x,
         carrierPos.y + FLAG_CARRY_OFFSET.y,

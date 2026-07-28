@@ -19,7 +19,7 @@ export const PROJECTILE_SPIN_SPEED = 720 // degrees per second
 export const PROJECTILE_CHEST_OFFSET = 0.8
 export const PROJECTILE_SCALE = Vector3.create(2.5, 4.5, 2.5)
 export const LOCAL_THROW_SAFETY_MS = 4000
-export const YELLOW_SECOND_THROW_DELAY_MS = 250
+export const YELLOW_SECOND_THROW_DELAY_MS = 120  // matches mask reference: gap between 1st and 2nd yellow spawns
 export const ORBIT_VISUAL_RADIUS = 3.0
 export const ORBIT_FULL_ROTATIONS = 3
 export const ORBIT_DURATION_MS = 3500
@@ -46,6 +46,16 @@ export const hand = {
   orbitAngle: 0,
   emoteActive: false,
   lastPlayerPos: null as Vector3 | null,
+  // Overrides ALL hand-hide triggers until this timestamp. Used to keep
+  // the hand-attached boomerang visible during the throw emote's windup,
+  // so it appears to leave the hand at the emote's release moment instead
+  // of vanishing on the input frame. Matches mask reference project's
+  // `handHideTimer` behavior.
+  forceShowUntilMs: 0,
+  // Same for the left-hand boomerang (yellow dual-wield). Set slightly
+  // longer than the right hand so the 2nd throw's release moment also lines
+  // up with the emote animation.
+  forceShowLeftUntilMs: 0,
 }
 
 export const HAND_BOOMERANG_SCALE = Vector3.create(1, 1.5, 1)
