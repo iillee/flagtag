@@ -15,6 +15,10 @@ import {
   parseGhostHeartbeat, decideFallbackAction,
   type GhostHeartbeatEntry
 } from '../shared/ghostHeartbeat'
+import {
+  isTouchingHeld,
+  GHOST_TOUCHING_HOLD_MS,
+} from '../shared/ghostContactState'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { exitSpectatorMode } from './spectatorSystem'
 import { initPools as initCombatPools } from './combatSystem'
@@ -60,7 +64,12 @@ const SCARE_RECHARGE_DELAY = 3.0 // seconds after last touch before recharge beg
 let scareRemaining = 0
 let scareBarVisible = false
 let lastTouchedTimer = SCARE_RECHARGE_DELAY + 1 // time since last ghost touch (start high so no bar on load)
-let ghostTouchingThisFrame = false
+// Timestamp (ms) of the most recent `ghostTouching` message addressed to us.
+// The server used to fire this every tick (~30 Hz) so a simple per-frame
+// boolean was fine. It's now throttled to ~5 Hz per victim to fit the room
+// msg/s budget, so we hold the "being touched" state for a window longer
+// than the send interval (see GHOST_TOUCHING_HOLD_MS). 0 = never touched.
+let lastGhostTouchMs = 0
 
 // ── Ghost death respawn ──
 const GHOST_DEATH_EMOTE = 'urn:decentraland:matic:collections-v2:0x7bdc37ff3e8dca2d69f01a3dc34f3ad82e2e1870:0'
@@ -182,7 +191,7 @@ function destroyFallbackVisual(): void {
 room.onMessage('ghostTouching', (data) => {
   const me = getPlayerData()?.userId?.toLowerCase()
   if (me && data.victimId === me) {
-    ghostTouchingThisFrame = true
+    lastGhostTouchMs = Date.now()
     // Diagnostic: any local ghost visuals present? If none, we're taking effects
     // from a ghost whose CRDT never arrived (invisible-ghost bug).
     if (clientGhosts.size === 0) {
@@ -267,8 +276,13 @@ export function ghostClientSystem(dt: number): void {
   // This prevents desync where some players see ghosts and others don't.
 
   // ── Scare meter: drain while ghost is touching, recharge when safe ──
+  // "Being touched" is true whenever the last ghostTouching message for us
+  // arrived within GHOST_TOUCHING_HOLD_MS. Server sends every ~200ms; the
+  // hold window (300ms) tolerates a single dropped message without the meter
+  // visibly draining between real ticks.
+  const ghostTouchingHeld = isTouchingHeld(Date.now(), lastGhostTouchMs, GHOST_TOUCHING_HOLD_MS)
   if (ghostDeathRespawnDelay <= 0) {
-    if (ghostTouchingThisFrame) {
+    if (ghostTouchingHeld) {
       lastTouchedTimer = 0
       scareRemaining += dt
       if (scareRemaining > SCARE_TIME) scareRemaining = SCARE_TIME
@@ -310,7 +324,6 @@ export function ghostClientSystem(dt: number): void {
       }
     }
   }
-  ghostTouchingThisFrame = false
 
   // ── Ghost death: respawn countdown ──
   if (ghostDeathRespawnDelay > 0) {
