@@ -32,25 +32,37 @@ import {
 } from './serverState'
 import { getFreshHeartbeat } from './positionTrust'
 import {
-  shouldWriteFallCrdt,
-  FALL_CRDT_INTERVAL_MS
-} from '../shared/flagFallThrottle'
+  computeFallY,
+  computeLandTimeMs
+} from '../shared/flagFall'
 
 // ── Module-local state ──
 
 let flagFalling = false
 let flagFallVelocity = 0
 let flagGravityTargetY = FLAG_MIN_Y
-// Fall-CRDT throttle bookkeeping. Physics runs every server tick (~30 Hz),
-// but promotion of dropAnchorY + Transform to CRDT is quantized to ~10 Hz
-// (see FALL_CRDT_INTERVAL_MS) to keep the room msg/s budget healthy. The
-// landing frame always promotes so the final rest position is authoritative.
-// See src/shared/flagFallThrottle.ts and docs/CRDT_SATURATION_REDUCTION.md.
-let lastFallCrdtWriteMs = 0
-let fallCrdtWriteCount = 0
-let fallCrdtSkipCount = 0
-const FALL_CRDT_DIAG_INTERVAL_MS = 30_000
-let lastFallCrdtDiagMs = 0
+
+// Message-driven flag fall (bomb/banana pattern; see src/shared/flagFall.ts).
+//
+// Instead of writing Flag.dropAnchorY + Transform.position every physics tick
+// (~60 CRDT writes/sec during a multi-second fall — historical saturation
+// profile per docs/CRDT_SATURATION_REDUCTION.md), the server broadcasts ONE
+// `flagFallStart` message per fall and every client runs the same analytic
+// gravity locally at 60fps. Server tracks the fall parameters and evaluates
+// the analytic Y on demand for pickup validation and water-hit detection.
+// One `flagLanded` message + one CRDT write closes the fall.
+interface FlagFallInfo {
+  active: boolean
+  startX: number
+  startY: number
+  startZ: number
+  targetY: number
+  dropTimeMs: number
+  landTimeMs: number  // absolute wall time (Date.now() ms) when analytic Y hits targetY
+}
+let flagFallInfo: FlagFallInfo = {
+  active: false, startX: 0, startY: 0, startZ: 0, targetY: 0, dropTimeMs: 0, landTimeMs: 0
+}
 const carrierYSamples: { y: number; time: number }[] = []
 let lastDropperId = ''  // Who dropped the flag — '' means server-initiated (no trusted dropper)
 // Ground-report guards (reset by computeGravityTarget at every drop):
@@ -93,7 +105,7 @@ function resetCarrierTracking(): void {
  * is our best estimate of the terrain they were walking on. If the flag is dropped
  * above that level (e.g. mid-jump), gravity pulls it down to the estimated ground.
  */
-export function computeGravityTarget(dropY: number): void {
+export function computeGravityTarget(dropX: number, dropY: number, dropZ: number): void {
   // Called at every drop site — record the immutable baseline for this drop and
   // re-arm the one-shot ground report and the lower-only report budget.
   dropBaselineY = dropY
@@ -110,8 +122,15 @@ export function computeGravityTarget(dropY: number): void {
   if (dropY > flagGravityTargetY + 0.1) {
     flagFalling = true
     flagFallVelocity = 0
+    // Kick off the message-driven analytic fall. Every client's local sim
+    // will render this fall smoothly at 60fps without any per-frame CRDT.
+    beginFall(dropX, dropY, dropZ, flagGravityTargetY)
   } else {
     flagFalling = false
+    // Any previous fall must be finalized — clear the info so pickup logic
+    // reads dropAnchor directly and any lingering flagFallStart on a client
+    // is superseded by the current CRDT Transform on next tick.
+    flagFallInfo.active = false
   }
 }
 
@@ -119,6 +138,10 @@ export function resetGravityState(): void {
   flagFalling = false
   flagFallVelocity = 0
   carrierYSamples.length = 0
+  // Cancel any active analytic fall too — the flag has been picked up,
+  // steal-handed, respawned, or the round reset. Clients ignore stale
+  // fall data anyway because the CRDT Flag.state changes.
+  flagFallInfo.active = false
   resetCarrierTracking()
 }
 
@@ -260,9 +283,60 @@ export function clearHoldTimeAccum(): void {
  * for server-side distance checks.
  */
 function authoritativeFlagPos(flag: { state: FlagState; baseX: number; baseY: number; baseZ: number; dropAnchorX: number; dropAnchorY: number; dropAnchorZ: number }): Vector3 {
-  return flag.state === FlagState.AtBase
-    ? Vector3.create(flag.baseX, flag.baseY, flag.baseZ)
-    : Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ)
+  if (flag.state === FlagState.AtBase) return Vector3.create(flag.baseX, flag.baseY, flag.baseZ)
+  // During an active analytic fall, Flag.dropAnchorY is frozen at startY (we
+  // deliberately don't dirty it per-frame anymore). Compute the true Y from
+  // the analytic formula so pickup validation stays exact — no throttle
+  // staleness like the earlier fall-throttle approach had.
+  if (flagFallInfo.active) {
+    return Vector3.create(
+      flagFallInfo.startX,
+      computeFallY(flagFallInfo.startY, flagFallInfo.targetY, flagFallInfo.dropTimeMs, Date.now(), FLAG_GRAVITY),
+      flagFallInfo.startZ
+    )
+  }
+  return Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ)
+}
+
+/**
+ * Begin a message-driven fall from (startX, startY, startZ) to targetY.
+ * Broadcasts `flagFallStart` so every client can start local analytic sim,
+ * arms internal fall bookkeeping for pickup validation and landing detection.
+ * Called at every drop site (voluntary drop, force-drop, carrier disconnect,
+ * stale carrier, lightning) AND when a client `reportGroundY` lowers the
+ * target mid-fall (fall restarts from current analytic position with new target).
+ */
+function beginFall(startX: number, startY: number, startZ: number, targetY: number): void {
+  const now = Date.now()
+  flagFallInfo = {
+    active: true,
+    startX, startY, startZ, targetY,
+    dropTimeMs: now,
+    landTimeMs: now + computeLandTimeMs(startY, targetY, FLAG_GRAVITY)
+  }
+  // Every client (and any late-joiner via flagHeartbeat piggyback) will now
+  // compute the same Y for the same `now`. No CRDT writes during the fall.
+  room.send('flagFallStart', {
+    startX, startY, startZ, targetY, dropTimeMs: now
+  })
+}
+
+/**
+ * Close the active fall. Writes the final rest position to Flag.dropAnchorY
+ * and Transform (one CRDT write each — the ONLY per-frame writes normally
+ * suppressed by the message-driven pattern), broadcasts `flagLanded`, and
+ * clears fall bookkeeping so authoritativeFlagPos falls back to the Flag
+ * component's dropAnchor fields again.
+ */
+function endFall(landX: number, landY: number, landZ: number): void {
+  flagFallInfo.active = false
+  const fm = Flag.getMutable(flagEntity)
+  fm.dropAnchorX = landX
+  fm.dropAnchorY = landY
+  fm.dropAnchorZ = landZ
+  const t = Transform.getMutable(flagEntity)
+  t.position = Vector3.create(landX, landY, landZ)
+  room.send('flagLanded', { x: landX, y: landY, z: landZ })
 }
 
 /**
@@ -375,7 +449,7 @@ export function handleDrop(playerId: string, forced: boolean = false): void {
   t.position = dropPos
 
   lastDropperId = playerId
-  computeGravityTarget(dropPos.y)
+  computeGravityTarget(dropPos.x, dropPos.y, dropPos.z)
 
   room.send('dropSound', { t: 0 })
   // Fast-path WS message for combat-forced drops so clients don't wait for CRDT.
@@ -563,23 +637,24 @@ export function flagServerSystem(dt: number): void {
       y: by,
       z: bz
     })
+
+    // Re-broadcast the fall start conditions so a client that joined AFTER
+    // the initial flagFallStart (or missed it under packet loss) can still
+    // spin up local analytic sim and render the falling flag smoothly. Same
+    // dropTimeMs on every re-broadcast — idempotent for clients already
+    // simulating this fall.
+    if (flagFallInfo.active) {
+      room.send('flagFallStart', {
+        startX: flagFallInfo.startX,
+        startY: flagFallInfo.startY,
+        startZ: flagFallInfo.startZ,
+        targetY: flagFallInfo.targetY,
+        dropTimeMs: flagFallInfo.dropTimeMs
+      })
+    }
   }
 
   const clampedDt = Math.min(dt, 0.1)
-
-  // Fall-CRDT throttle diagnostic. Prints only if we actually wrote or skipped
-  // during the window — flags at rest generate no traffic and no log spam.
-  // Healthy ratio during a 2s fall: ~20 writes vs ~40 skips (10 Hz of ~30 Hz).
-  const nowForFallDiag = Date.now()
-  if (nowForFallDiag - lastFallCrdtDiagMs >= FALL_CRDT_DIAG_INTERVAL_MS) {
-    lastFallCrdtDiagMs = nowForFallDiag
-    if (fallCrdtWriteCount > 0 || fallCrdtSkipCount > 0) {
-      console.log('[Server] 🚩 fall CRDT diag (30s): wrote=', fallCrdtWriteCount,
-        '| skipped=', fallCrdtSkipCount)
-    }
-    fallCrdtWriteCount = 0
-    fallCrdtSkipCount = 0
-  }
 
   // Track carrier Y for gravity target estimation + staleness detection
   if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
@@ -611,45 +686,40 @@ export function flagServerSystem(dt: number): void {
       mutable.dropAnchorZ = dropPos.z
       lastDropperId = ''
       resetCarrierTracking()
-      computeGravityTarget(dropPos.y)
+      computeGravityTarget(dropPos.x, dropPos.y, dropPos.z)
       room.send('dropSound', { t: 0 })
     }
   } else {
     resetCarrierTracking()
   }
 
-  // Gravity for dropped flag.
+  // Gravity for dropped flag — message-driven analytic model.
   //
-  // Physics (velocity accumulation, landing detection) runs EVERY server tick
-  // for correctness. CRDT promotion of dropAnchorY is throttled to ~10 Hz via
-  // shouldWriteFallCrdt so a multi-second sink doesn't burn ~30 CRDT writes/s
-  // on this component alone. `promoteFallThisFrame` is also read by the
-  // Transform re-assert further down — both fields ride the same cadence so
-  // they stay coherent frame-for-frame.
+  // No per-frame CRDT writes here. When a drop begins, beginFall() sends one
+  // `flagFallStart` and clients render the fall via computeFallY at 60fps.
+  // This tick only:
+  //   1. Evaluates the analytic Y for internal use (water-hit test below,
+  //      currentAnchorY handoff to any downstream at-rest logic).
+  //   2. Detects landing via the pre-computed landTimeMs and closes the fall
+  //      with a SINGLE CRDT write via endFall().
+  //
+  // flagFalling/flagFallVelocity are kept in sync with the message-driven
+  // state so other code paths (reportGroundY re-arm, roundManager reset)
+  // still work the same way.
   let currentAnchorY = flag.dropAnchorY
-  let promoteFallThisFrame = false
-  let wasFallingBeforePhysics = false
-  if (flag.state === FlagState.Dropped && flagFalling) {
-    wasFallingBeforePhysics = true
-    flagFallVelocity += FLAG_GRAVITY * clampedDt
-    let newY = currentAnchorY - flagFallVelocity * clampedDt
-    const landed = newY <= flagGravityTargetY
-    if (landed) {
-      newY = flagGravityTargetY
+  if (flagFallInfo.active) {
+    const nowMs = Date.now()
+    const analyticY = computeFallY(
+      flagFallInfo.startY, flagFallInfo.targetY, flagFallInfo.dropTimeMs, nowMs, FLAG_GRAVITY
+    )
+    currentAnchorY = analyticY
+    if (nowMs >= flagFallInfo.landTimeMs) {
+      // Land on the same authoritative target the fall was scheduled against —
+      // don't use the possibly-slightly-past analytic value.
+      endFall(flagFallInfo.startX, flagFallInfo.targetY, flagFallInfo.startZ)
       flagFalling = false
       flagFallVelocity = 0
-    }
-    currentAnchorY = newY
-
-    const nowMs = Date.now()
-    promoteFallThisFrame = shouldWriteFallCrdt(nowMs, lastFallCrdtWriteMs, FALL_CRDT_INTERVAL_MS, landed)
-    if (promoteFallThisFrame) {
-      lastFallCrdtWriteMs = nowMs
-      const flagMutable = Flag.getMutable(flagEntity)
-      flagMutable.dropAnchorY = newY
-      fallCrdtWriteCount++
-    } else {
-      fallCrdtSkipCount++
+      currentAnchorY = flagFallInfo.targetY
     }
   }
 
@@ -658,9 +728,13 @@ export function flagServerSystem(dt: number): void {
   if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y && !waterRespawnActive) {
     waterRespawnActive = true
     waterRespawnTimer = WATER_RESPAWN_DELAY
-    // Let the flag sink to the invisible collider floor during the delay
+    // Let the flag sink to the invisible collider floor during the delay.
+    // Re-arm a fresh analytic fall from CURRENT analytic Y (not from the last
+    // CRDT dropAnchorY, which we deliberately froze at the drop start) so
+    // clients pick up the sink from where the visual actually is.
     flagGravityTargetY = SCENE_FLOOR_Y
     flagFalling = true
+    beginFall(flag.dropAnchorX, currentAnchorY, flag.dropAnchorZ, SCENE_FLOOR_Y)
     console.log('[Server] 🌊 Flag hit water (Y=' + currentAnchorY.toFixed(2) + ') — sinking to Y=0, respawning in ' + WATER_RESPAWN_DELAY + 's')
     room.send('flagSinking', { t: 0 })
   }
@@ -695,28 +769,21 @@ export function flagServerSystem(dt: number): void {
     }
   }
 
-  // Re-assert the authoritative Transform whenever the flag isn't carried. This drives
-  // gravity visuals AND overwrites any hostile client Transform write (Transform has no
-  // validateBeforeChange). Only writes when the value actually changed, to avoid dirtying
-  // the synced component every frame while the flag sits still at base.
-  //
-  // During an active fall this write is quantized to the SAME 10 Hz cadence as the
-  // Flag.dropAnchorY write above — `wasFallingBeforePhysics` covers both mid-fall frames
-  // and the landing frame (where flagFalling flips to false during physics). The visual
-  // entity is parented to this Transform, so client render smoothness == our write rate;
-  // 10 Hz over a 1–3s fall is subjectively fine. Non-fall changes (state transitions,
-  // at-rest reads) still fall through to the position-diff guard and write immediately.
-  if (flag.state !== FlagState.Carried) {
+  // Re-assert the authoritative Transform whenever the flag isn't carried and
+  // no analytic fall is active. This drives at-rest position AND overwrites any
+  // hostile client Transform write (Transform has no validateBeforeChange).
+  // During an active analytic fall we deliberately DON'T write Transform —
+  // clients drive the visual locally from `flagFallStart`. The final rest
+  // position is written once by endFall(), and non-fall state changes fall
+  // through the position-diff guard below.
+  if (flag.state !== FlagState.Carried && !flagFallInfo.active) {
     const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
-    const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
+    const restY = flag.state === FlagState.AtBase ? flag.baseY : flag.dropAnchorY
     const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
-    const skipMidFallWrite = wasFallingBeforePhysics && !promoteFallThisFrame
-    if (!skipMidFallWrite) {
-      const t = Transform.getMutable(flagEntity)
-      const p = t.position
-      if (p.x !== restX || p.y !== restY || p.z !== restZ) {
-        t.position = Vector3.create(restX, restY, restZ)
-      }
+    const t = Transform.getMutable(flagEntity)
+    const p = t.position
+    if (p.x !== restX || p.y !== restY || p.z !== restZ) {
+      t.position = Vector3.create(restX, restY, restZ)
     }
   }
 
@@ -744,7 +811,7 @@ export function flagServerSystem(dt: number): void {
       mutable.dropAnchorZ = dropPos.z
       lastDropperId = ''
       resetCarrierTracking()
-      computeGravityTarget(dropPos.y)
+      computeGravityTarget(dropPos.x, dropPos.y, dropPos.z)
       room.send('dropSound', { t: 0 })
     }
   }
@@ -884,15 +951,29 @@ export function registerFlagHandlers(): void {
       }
       flagGravityTargetY = newTarget
 
-      const currentAnchorY = flag.dropAnchorY
+      // Read the current analytic Y if a fall is in progress — dropAnchorY is
+      // frozen at the fall's startY under the message-driven model.
+      const nowMs = Date.now()
+      const currentAnchorY = flagFallInfo.active
+        ? computeFallY(flagFallInfo.startY, flagFallInfo.targetY, flagFallInfo.dropTimeMs, nowMs, FLAG_GRAVITY)
+        : flag.dropAnchorY
       if (currentAnchorY <= newTarget) {
-        const flagMutable = Flag.getMutable(flagEntity)
-        flagMutable.dropAnchorY = newTarget
+        // Already at/below the new target — snap to it and end any active fall.
+        if (flagFallInfo.active) {
+          endFall(flag.dropAnchorX, newTarget, flag.dropAnchorZ)
+        } else {
+          const flagMutable = Flag.getMutable(flagEntity)
+          flagMutable.dropAnchorY = newTarget
+        }
         flagFalling = false
         flagFallVelocity = 0
-      } else if (!flagFalling) {
+      } else {
+        // Need to (re)start a fall from the current visual position to the new
+        // lower target. If a fall is already in progress, this replaces it —
+        // clients receive a fresh flagFallStart and reset their local sim.
         flagFalling = true
         flagFallVelocity = 0
+        beginFall(flag.dropAnchorX, currentAnchorY, flag.dropAnchorZ, newTarget)
       }
     } catch (err) { console.error('[Server] ❌ reportGroundY handler error:', err) }
   })

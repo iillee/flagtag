@@ -30,6 +30,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { PROXIMITY_STEAL_RADIUS } from '../shared/constants'
 import { room } from '../shared/messages'
+import { computeFallY, FLAG_GRAVITY } from '../shared/flagFall'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
 import { setConfirmedCarrier, clearConfirmedCarrier, applyServerHoldTime } from '../gameState/flagHoldTime'
@@ -526,6 +527,46 @@ function fireGroundRaycastForServer(dropPos: Vector3): void {
 // The synced flag entity is a plain Transform anchor (position only, no model).
 // We create a LOCAL child entity that holds the GltfContainer and animates bob/spin
 // every frame — zero CRDT writes, smooth on every client.
+// ── Message-driven flag fall (bomb/banana pattern; see src/shared/flagFall.ts) ──
+//
+// Server broadcasts one `flagFallStart` per fall; we run identical analytic
+// gravity locally at 60fps so the flag visual falls perfectly smoothly with
+// zero CRDT writes during the fall. The visual entity is parented to the
+// synced flag entity, whose Transform stays FROZEN at startY during the fall
+// (server deliberately doesn't dirty it). We compensate by writing the fall
+// offset into the visual's LOCAL Y each frame — world Y = startY + offset
+// where offset = computeFallY(...) - startY (negative, growing downward).
+// On flagLanded the offset is cleared; the parent Transform (now updated
+// once by endFall) takes over.
+interface FlagLocalFall {
+  startX: number
+  startY: number
+  startZ: number
+  targetY: number
+  dropTimeMs: number
+}
+let flagLocalFall: FlagLocalFall | null = null
+
+room.onMessage('flagFallStart', (data) => {
+  // Idempotent: heartbeat re-broadcasts arrive with the same dropTimeMs.
+  // Only reset local sim if this is a NEW fall (different dropTimeMs) so
+  // we don't jitter between identical evaluations mid-frame.
+  if (flagLocalFall && flagLocalFall.dropTimeMs === data.dropTimeMs) return
+  flagLocalFall = {
+    startX: data.startX,
+    startY: data.startY,
+    startZ: data.startZ,
+    targetY: data.targetY,
+    dropTimeMs: data.dropTimeMs
+  }
+})
+
+room.onMessage('flagLanded', (_data) => {
+  // Server has written the final rest position to the synced Transform;
+  // clear the local override so the visual snaps to its parent again.
+  flagLocalFall = null
+})
+
 const IDLE_BOB_AMPLITUDE = 0.15
 const IDLE_BOB_SPEED = 2
 const IDLE_ROT_SPEED_DEG_PER_SEC = 25
@@ -610,13 +651,29 @@ function updateFlagBob(dt: number): void {
   const bobY = IDLE_BOB_AMPLITUDE * Math.sin(flagBobTime * IDLE_BOB_SPEED)
   const angleDeg = (flagBobTime * IDLE_ROT_SPEED_DEG_PER_SEC) % 360
 
-  // Animate the idle flag visual (at base or dropped)
+  // Animate the idle flag visual (at base or dropped). During an active
+  // message-driven fall, add the analytic fall offset to the local Y so
+  // the visual drops smoothly at 60fps while the parent Transform stays
+  // frozen at startY (no CRDT writes during the fall). offset is negative
+  // and grows downward until landing, when the server sends flagLanded and
+  // clears flagLocalFall.
   if (flagVisualEntity && Transform.has(flagVisualEntity)) {
     const flag = flagSyncedEntity ? Flag.getOrNull(flagSyncedEntity) : null
     if (flag && flag.state !== FlagState.Carried) {
+      let fallOffsetY = 0
+      if (flagLocalFall) {
+        const analyticY = computeFallY(
+          flagLocalFall.startY, flagLocalFall.targetY,
+          flagLocalFall.dropTimeMs, Date.now(), FLAG_GRAVITY
+        )
+        fallOffsetY = analyticY - flagLocalFall.startY
+      }
       const t = Transform.getMutable(flagVisualEntity)
-      t.position = Vector3.create(0, bobY, 0)
+      t.position = Vector3.create(0, bobY + fallOffsetY, 0)
       t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+    } else if (flag && flag.state === FlagState.Carried && flagLocalFall) {
+      // Flag was picked up mid-fall — clear any lingering local sim.
+      flagLocalFall = null
     }
   }
 
