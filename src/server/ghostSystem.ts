@@ -15,7 +15,7 @@ import {
   PROJECTILE_HIT_RADIUS,
 } from '../shared/components'
 import { room } from '../shared/messages'
-import { isNightTime, updateWorldTime } from '../shared/dayNight'
+import { isNightTime, updateWorldTime, getCurrentSkyTime } from '../shared/dayNight'
 import { serializeGhostHeartbeat, type GhostHeartbeatEntry } from '../shared/ghostHeartbeat'
 import {
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
@@ -34,6 +34,13 @@ const GHOST_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
 // far less than the CRDT stream this backstops — typical payload is one entry.
 const GHOST_HEARTBEAT_INTERVAL_MS = 500
 let lastGhostHeartbeatMs = 0
+// DIAG (day-night-spawn-unreliable bug): characterize whether the server's
+// getWorldTime() clock actually advances on the headless realm. If this logs a
+// stuck value across playtests, isNightTime() is the root cause of "ghost
+// rarely spawns" and we file a separate fix; if it advances normally, the
+// complaint is a UX issue with the 24-minute cycle length. Throttled to 30s.
+const DAYNIGHT_DIAG_INTERVAL_MS = 30_000
+let lastDayNightDiagMs = 0
 
 // ── Message handlers ──
 export function registerGhostHandlers(): void {
@@ -179,6 +186,14 @@ export function ghostServerSystem(dt: number): void {
       zm.targetY = z.posY
       zm.targetZ = z.posZ
     }
+  }
+
+  // ── Day/night clock diagnostic (see DAYNIGHT_DIAG_INTERVAL_MS) ──
+  if (now - lastDayNightDiagMs >= DAYNIGHT_DIAG_INTERVAL_MS) {
+    lastDayNightDiagMs = now
+    console.log('[Server] 🌓 day/night diag: worldSeconds=', getCurrentSkyTime().toFixed(0),
+      '| isNight=', isNightTime(),
+      '| activeGhosts=', activeGhosts.length)
   }
 
   // ── Fallback-visual heartbeat (server → all clients, ~2Hz) ──
