@@ -553,14 +553,31 @@ room.onMessage('flagFallStart', (data) => {
   // the server) arrive with the same server dropTimeMs. Skip if we're
   // already simulating this exact fall.
   if (flagLocalFall && flagLocalFall.serverDropTimeMs === data.dropTimeMs) return
-  // Anchor the analytic to OUR clock, not the server's. Wall-clock skew
-  // between server and client (commonly 100ms–a few seconds) would make
-  // computeFallY(nowMs, dropTimeMs=serverFuture) return startY for the
-  // entire skew window — the flag would visibly hover, then teleport when
-  // flagLanded arrived. Using client-local now sidesteps clock skew entirely.
-  // Cost: a client that joins mid-fall via heartbeat rebroadcast sees the
-  // visual restart from startY (up to ~a second of ugly), but flagLanded
-  // snaps them to rest correctly at the true landing moment.
+
+  // If we're already mid-fall and the server sends a NEW beginFall (different
+  // serverDropTimeMs), this is almost always the reportGroundY retarget —
+  // server measured a lower ground and re-armed the fall to a deeper target.
+  // See flagLogic.ts reportGroundY handler → beginFall(currentAnchorY, newTarget).
+  //
+  // If we re-init clientDropTimeMs=now and startY=data.startY, the analytic
+  // restarts from t=0 and the visual JUMPS UP to data.startY, then re-falls
+  // from rest. That's the 'drops then freezes then re-drops' bug from the
+  // third playtest. Instead, retarget in place: keep clientDropTimeMs and
+  // startY, only update targetY. The analytic continues smoothly from where
+  // it already is, just heading to a deeper floor now.
+  if (flagLocalFall) {
+    flagLocalFall.targetY = data.targetY
+    flagLocalFall.serverDropTimeMs = data.dropTimeMs  // dedupe future rebroadcasts of THIS new fall
+    console.log('[Flag] 🚩🎯 flagFallStart RETARGET (in-flight) new targetY=', data.targetY.toFixed(1))
+    return
+  }
+
+  // Fresh fall — no existing local sim. Anchor the analytic to OUR clock,
+  // not the server's. Wall-clock skew between server and client (commonly
+  // 100ms–a few seconds) would make computeFallY(nowMs, dropTimeMs=serverFuture)
+  // return startY for the entire skew window — the flag would visibly hover,
+  // then teleport when flagLanded arrived. Using client-local now sidesteps
+  // clock skew entirely.
   flagLocalFall = {
     startX: data.startX,
     startY: data.startY,
@@ -720,18 +737,27 @@ function updateFlagBob(dt: number): void {
           flagLocalFall.startY, flagLocalFall.targetY,
           flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
         )
-        // Clear the local sim only when analyticY has clamped to targetY AND
-        // the parent Transform has caught up to (roughly) the landing Y. This
-        // closes the WS-vs-CRDT race on flagLanded: WS arrives first with 'the
-        // fall is done', but if we clear immediately the visual pops back up
-        // to the frozen startY-parent for the ~30–50ms until CRDT catches up.
+        // Compute fallOffsetY relative to the PARENT'S CURRENT Y, not the
+        // original startY. The visual is a child at local (0, bobY+off, 0),
+        // so world Y = parent.y + bobY + off. We want world Y = analyticY + bobY,
+        // therefore off = analyticY - parent.y.
+        //
+        // Why this matters: the third-playtest 'invisible / below floor' bug
+        // was because we used (analyticY - startY). While parent==startY that's
+        // fine. But the instant CRDT lands parent at targetY (which happens
+        // ~simultaneous with flagLanded WS), off is still ≈ (targetY - startY)
+        // ≈ -25m, giving world Y ≈ targetY - 25m = deep underground for a frame
+        // or two until the clear condition fires. Using parent.y as the anchor
+        // makes the offset self-correcting the instant parent moves.
         const parentT = Transform.get(flagSyncedEntity)
+        fallOffsetY = analyticY - parentT.position.y
+        // Clear when analytic settled AND parent caught up — both are stable
+        // enough that removing the local override won't cause a visible pop.
         const analyticSettled = analyticY <= flagLocalFall.targetY
         const parentCaughtUp = Math.abs(parentT.position.y - flagLocalFall.targetY) < 1
         if (analyticSettled && parentCaughtUp) {
           flagLocalFall = null
-        } else {
-          fallOffsetY = analyticY - flagLocalFall.startY
+          fallOffsetY = 0
         }
       }
       const t = Transform.getMutable(flagVisualEntity)
