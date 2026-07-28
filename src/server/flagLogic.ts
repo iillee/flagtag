@@ -31,12 +31,26 @@ import {
   heartbeatPositions
 } from './serverState'
 import { getFreshHeartbeat } from './positionTrust'
+import {
+  shouldWriteFallCrdt,
+  FALL_CRDT_INTERVAL_MS
+} from '../shared/flagFallThrottle'
 
 // ── Module-local state ──
 
 let flagFalling = false
 let flagFallVelocity = 0
 let flagGravityTargetY = FLAG_MIN_Y
+// Fall-CRDT throttle bookkeeping. Physics runs every server tick (~30 Hz),
+// but promotion of dropAnchorY + Transform to CRDT is quantized to ~10 Hz
+// (see FALL_CRDT_INTERVAL_MS) to keep the room msg/s budget healthy. The
+// landing frame always promotes so the final rest position is authoritative.
+// See src/shared/flagFallThrottle.ts and docs/CRDT_SATURATION_REDUCTION.md.
+let lastFallCrdtWriteMs = 0
+let fallCrdtWriteCount = 0
+let fallCrdtSkipCount = 0
+const FALL_CRDT_DIAG_INTERVAL_MS = 30_000
+let lastFallCrdtDiagMs = 0
 const carrierYSamples: { y: number; time: number }[] = []
 let lastDropperId = ''  // Who dropped the flag — '' means server-initiated (no trusted dropper)
 // Ground-report guards (reset by computeGravityTarget at every drop):
@@ -553,6 +567,20 @@ export function flagServerSystem(dt: number): void {
 
   const clampedDt = Math.min(dt, 0.1)
 
+  // Fall-CRDT throttle diagnostic. Prints only if we actually wrote or skipped
+  // during the window — flags at rest generate no traffic and no log spam.
+  // Healthy ratio during a 2s fall: ~20 writes vs ~40 skips (10 Hz of ~30 Hz).
+  const nowForFallDiag = Date.now()
+  if (nowForFallDiag - lastFallCrdtDiagMs >= FALL_CRDT_DIAG_INTERVAL_MS) {
+    lastFallCrdtDiagMs = nowForFallDiag
+    if (fallCrdtWriteCount > 0 || fallCrdtSkipCount > 0) {
+      console.log('[Server] 🚩 fall CRDT diag (30s): wrote=', fallCrdtWriteCount,
+        '| skipped=', fallCrdtSkipCount)
+    }
+    fallCrdtWriteCount = 0
+    fallCrdtSkipCount = 0
+  }
+
   // Track carrier Y for gravity target estimation + staleness detection
   if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
     const nowMs = Date.now()
@@ -590,19 +618,39 @@ export function flagServerSystem(dt: number): void {
     resetCarrierTracking()
   }
 
-  // Gravity for dropped flag
+  // Gravity for dropped flag.
+  //
+  // Physics (velocity accumulation, landing detection) runs EVERY server tick
+  // for correctness. CRDT promotion of dropAnchorY is throttled to ~10 Hz via
+  // shouldWriteFallCrdt so a multi-second sink doesn't burn ~30 CRDT writes/s
+  // on this component alone. `promoteFallThisFrame` is also read by the
+  // Transform re-assert further down — both fields ride the same cadence so
+  // they stay coherent frame-for-frame.
   let currentAnchorY = flag.dropAnchorY
+  let promoteFallThisFrame = false
+  let wasFallingBeforePhysics = false
   if (flag.state === FlagState.Dropped && flagFalling) {
+    wasFallingBeforePhysics = true
     flagFallVelocity += FLAG_GRAVITY * clampedDt
     let newY = currentAnchorY - flagFallVelocity * clampedDt
-    if (newY <= flagGravityTargetY) {
+    const landed = newY <= flagGravityTargetY
+    if (landed) {
       newY = flagGravityTargetY
       flagFalling = false
       flagFallVelocity = 0
     }
     currentAnchorY = newY
-    const flagMutable = Flag.getMutable(flagEntity)
-    flagMutable.dropAnchorY = newY
+
+    const nowMs = Date.now()
+    promoteFallThisFrame = shouldWriteFallCrdt(nowMs, lastFallCrdtWriteMs, FALL_CRDT_INTERVAL_MS, landed)
+    if (promoteFallThisFrame) {
+      lastFallCrdtWriteMs = nowMs
+      const flagMutable = Flag.getMutable(flagEntity)
+      flagMutable.dropAnchorY = newY
+      fallCrdtWriteCount++
+    } else {
+      fallCrdtSkipCount++
+    }
   }
 
   // Water respawn (with delay)
@@ -651,14 +699,24 @@ export function flagServerSystem(dt: number): void {
   // gravity visuals AND overwrites any hostile client Transform write (Transform has no
   // validateBeforeChange). Only writes when the value actually changed, to avoid dirtying
   // the synced component every frame while the flag sits still at base.
+  //
+  // During an active fall this write is quantized to the SAME 10 Hz cadence as the
+  // Flag.dropAnchorY write above — `wasFallingBeforePhysics` covers both mid-fall frames
+  // and the landing frame (where flagFalling flips to false during physics). The visual
+  // entity is parented to this Transform, so client render smoothness == our write rate;
+  // 10 Hz over a 1–3s fall is subjectively fine. Non-fall changes (state transitions,
+  // at-rest reads) still fall through to the position-diff guard and write immediately.
   if (flag.state !== FlagState.Carried) {
     const restX = flag.state === FlagState.AtBase ? flag.baseX : flag.dropAnchorX
     const restY = flag.state === FlagState.AtBase ? flag.baseY : currentAnchorY
     const restZ = flag.state === FlagState.AtBase ? flag.baseZ : flag.dropAnchorZ
-    const t = Transform.getMutable(flagEntity)
-    const p = t.position
-    if (p.x !== restX || p.y !== restY || p.z !== restZ) {
-      t.position = Vector3.create(restX, restY, restZ)
+    const skipMidFallWrite = wasFallingBeforePhysics && !promoteFallThisFrame
+    if (!skipMidFallWrite) {
+      const t = Transform.getMutable(flagEntity)
+      const p = t.position
+      if (p.x !== restX || p.y !== restY || p.z !== restZ) {
+        t.position = Vector3.create(restX, restY, restZ)
+      }
     }
   }
 
