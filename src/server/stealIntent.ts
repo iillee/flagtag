@@ -62,6 +62,41 @@ export function pruneStaleIntents(
   }
 }
 
+// ── Corroboration composition ──
+
+export interface CorroborationInputs {
+  /** The candidate's client sent requestSteal within the intent window. */
+  hasClientIntent: boolean
+  /** The carrier's posHeartbeat is fresh (server has a trusted position for them). */
+  carrierHasFreshHeartbeat: boolean
+  /** The candidate's posHeartbeat is fresh (server has a trusted position for them). */
+  candidateHasFreshHeartbeat: boolean
+}
+
+/**
+ * Whether a proximity-steal candidate is corroborated enough for the
+ * server-side fallback to fire. Two independent signals qualify:
+ *
+ * 1. Client intent — the candidate's own client believes it is next to the
+ *    carrier and sent requestSteal. That view comes through an independent
+ *    position channel from the CRDT, so a cross-wired server Transform can't
+ *    manufacture it.
+ *
+ * 2. Heartbeat-dual freshness — both the carrier and the candidate have a
+ *    fresh posHeartbeat. Each heartbeat is a per-sender authenticated WS
+ *    message, so two of them agreeing on proximity cannot be produced by a
+ *    CRDT cross-wire (which is a shared-CRDT-buffer artifact). Closes the
+ *    playtest bug where a client whose flag CRDT is fully stalled never sent
+ *    requestSteal and the server-side path was previously blocked.
+ *
+ * Either signal alone is sufficient. Not both required: forcing intent AND
+ * heartbeats would re-open the original "steal doesn't work" hole.
+ */
+export function isStealCorroborated(i: CorroborationInputs): boolean {
+  if (i.hasClientIntent) return true
+  return i.carrierHasFreshHeartbeat && i.candidateHasFreshHeartbeat
+}
+
 // ── Steal candidate selection ──
 
 export interface StealCandidate {

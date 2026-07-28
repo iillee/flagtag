@@ -354,6 +354,23 @@ let heartbeatAuthorityState: FlagState | null = null
 let heartbeatAuthorityCarrier = ''
 let heartbeatStaleState: FlagState | null = null
 let heartbeatStaleCarrier = ''
+// Last heartbeat's authoritative carrier world position (see the flagLogic.ts
+// server change: when carried, flagHeartbeat.x/y/z is the carrier's real
+// world position, not the parented-flag's local Transform). Used as a fallback
+// for the proximity-steal predictor when the carrier's PlayerIdentityData /
+// Transform never replicated to this client (root cause of "running over the
+// carrier sometimes doesn't steal the flag" — without a position we couldn't
+// send requestSteal, and the server's corroboration gate then blocked the
+// server-side path too).
+let heartbeatCarrierX = 0
+let heartbeatCarrierY = 0
+let heartbeatCarrierZ = 0
+let heartbeatCarrierPosCarrier = ''
+let heartbeatCarrierPosAt = 0
+// Fresh window for the cached position. Two heartbeat intervals of tolerance,
+// same reasoning as HEARTBEAT_AUTHORITY_MS: covers a dropped packet without
+// letting a stale position authorize a steal against a carrier who moved.
+const HEARTBEAT_CARRIER_POS_FRESH_MS = 2500
 // Must outlast TWO heartbeat intervals, not one: a re-correction needs 2 consecutive
 // mismatched heartbeats (2s), so a shorter authority window leaves a gap where the
 // safety nets revert to the stale CRDT and the orphaned clone flickers back.
@@ -361,6 +378,19 @@ const HEARTBEAT_AUTHORITY_MS = 2500
 room.onMessage('flagHeartbeat', (data) => {
   const hbState = data.state as FlagState
   const hbCarrier = (data.carrierId || '').toLowerCase()
+
+  // Cache the carrier's world position for the steal predictor. Only when
+  // Carried — for AtBase/Dropped the x/y/z is the flag itself, not a player,
+  // and the predictor only needs a carrier position.
+  if (hbState === FlagState.Carried && hbCarrier &&
+      typeof data.x === 'number' && typeof data.y === 'number' && typeof data.z === 'number' &&
+      Number.isFinite(data.x) && Number.isFinite(data.y) && Number.isFinite(data.z)) {
+    heartbeatCarrierX = data.x
+    heartbeatCarrierY = data.y
+    heartbeatCarrierZ = data.z
+    heartbeatCarrierPosCarrier = hbCarrier
+    heartbeatCarrierPosAt = Date.now()
+  }
 
   // Authoritative hold total rides the heartbeat (WS) — feed the scoreboard so it can
   // re-anchor even when PlayerFlagHoldTime CRDT updates are stalled. Reported on EVERY
@@ -684,30 +714,53 @@ export function flagClientSystem(dt: number): void {
       // a ~2.5s local lockout, which feels like "can't knock it loose").
       const myPos = Transform.get(engine.PlayerEntity).position
       let foundCarrierTransform = false
+      let carrierPosSource: 'crdt' | 'heartbeat' | null = null
+      let carrierPosX = 0, carrierPosY = 0, carrierPosZ = 0
       for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
         if (identity.address.toLowerCase() === carrierIdForSteal) {
           foundCarrierTransform = true
-          const dist = Vector3.distance(myPos, transform.position)
-          if (dist <= PROXIMITY_STEAL_RADIUS) {
-            // Optimistic steal: show clone immediately, sound + shield wait for confirmation
-            if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-            showClone(userId)
-            pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
-
-            room.send('requestSteal', { victimId: carrierIdForSteal })
-            lastAutoPickupRequestMs = now
-            console.log('[Flag] 🚩 Client proximity steal prediction — sending requestSteal for', carrierIdForSteal.slice(0, 8))
-          }
+          carrierPosSource = 'crdt'
+          carrierPosX = transform.position.x
+          carrierPosY = transform.position.y
+          carrierPosZ = transform.position.z
           break
         }
       }
+      // Heartbeat fallback: when the carrier's PlayerIdentityData never replicated,
+      // the flagHeartbeat's x/y/z is the carrier's authoritative world position
+      // (see flagLogic.ts). This is what unblocks the "steal doesn't work" bug —
+      // without it the predictor couldn't send requestSteal, and the server's
+      // corroboration gate blocked the server-side path too.
+      if (!foundCarrierTransform &&
+          heartbeatCarrierPosCarrier === carrierIdForSteal &&
+          now - heartbeatCarrierPosAt <= HEARTBEAT_CARRIER_POS_FRESH_MS) {
+        carrierPosSource = 'heartbeat'
+        carrierPosX = heartbeatCarrierX
+        carrierPosY = heartbeatCarrierY
+        carrierPosZ = heartbeatCarrierZ
+      }
+      if (carrierPosSource !== null) {
+        const dist = Vector3.distance(myPos, Vector3.create(carrierPosX, carrierPosY, carrierPosZ))
+        if (dist <= PROXIMITY_STEAL_RADIUS) {
+          // Optimistic steal: show clone immediately, sound + shield wait for confirmation
+          if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
+          showClone(userId)
+          pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
+
+          room.send('requestSteal', { victimId: carrierIdForSteal })
+          lastAutoPickupRequestMs = now
+          console.log('[Flag] 🚩 Client proximity steal prediction — sending requestSteal for',
+            carrierIdForSteal.slice(0, 8), '| src=', carrierPosSource, '| dist=', dist.toFixed(2))
+        }
+      }
       // DIAG (proximity-steal-broken bug): heartbeat says X is carrying, but we
-      // don't have their PlayerIdentityData+Transform locally. Server’s corroboration
-      // gate then blocks the steal because we can’t send requestSteal without a
-      // proximity check. Log throttled to confirm hypothesis from playtest logs.
-      if (!foundCarrierTransform && now - lastMissingCarrierTransformLogMs >= MISSING_CARRIER_TRANSFORM_LOG_INTERVAL_MS) {
+      // don't have their PlayerIdentityData+Transform AND no fresh flagHeartbeat
+      // carrier position either — the last-resort case. Should be extremely rare
+      // now that the heartbeat carries the carrier's world position; if this fires
+      // in playtest the flagHeartbeat itself is stalled, not just the CRDT.
+      if (carrierPosSource === null && now - lastMissingCarrierTransformLogMs >= MISSING_CARRIER_TRANSFORM_LOG_INTERVAL_MS) {
         lastMissingCarrierTransformLogMs = now
-        console.log('[Flag] ⚠️ Carrier known (', carrierIdForSteal.slice(0, 8), ') but no local Transform — proximity steal disabled (CRDT sync gap)')
+        console.log('[Flag] ⚠️ Carrier known (', carrierIdForSteal.slice(0, 8), ') but no CRDT Transform AND no fresh flagHeartbeat position — proximity steal disabled')
       }
     }
   }

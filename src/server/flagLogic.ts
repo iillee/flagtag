@@ -17,7 +17,8 @@ import {
 import { room } from '../shared/messages'
 import {
   type StealIntentStore, type StealCandidate,
-  recordStealIntent, hasRecentStealIntent, pruneStaleIntents, selectStealCandidate
+  recordStealIntent, hasRecentStealIntent, pruneStaleIntents, selectStealCandidate,
+  isStealCorroborated
 } from './stealIntent'
 import {
   flagEntity, setFlagEntity,
@@ -26,8 +27,10 @@ import {
   lastStealTime,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
-  getPlayerPosition, getActivePlayerAddresses
+  getPlayerPosition, getActivePlayerAddresses,
+  heartbeatPositions
 } from './serverState'
+import { getFreshHeartbeat } from './positionTrust'
 
 // ── Module-local state ──
 
@@ -432,9 +435,24 @@ export function checkProximitySteal(): void {
   // and retries requestSteal every ~500ms while in range, and the requestSteal
   // handler remains the fast path. Two-track selection (see selectStealCandidate):
   // an uncorroborated ghost must not shadow a real corroborated stealer.
+  //
+  // Heartbeat-dual corroboration (playtest bug "proximity steal sometimes
+  // doesn't work"): when BOTH the carrier and the candidate have a fresh
+  // posHeartbeat, two independent per-sender WS position streams agree on the
+  // proximity. That combination cannot be produced by a CRDT cross-wire (each
+  // heartbeat is authenticated to its sender), so it counts as corroboration on
+  // its own. Closes the gap where a client whose flag CRDT is fully stalled
+  // never sends requestSteal, and the server-side path was previously blocked
+  // because there was no client intent to corroborate.
+  const carrierHasFreshHb = getFreshHeartbeat(heartbeatPositions, carrierId, now) !== null
+  const corroborated = (addr: string): boolean => isStealCorroborated({
+    hasClientIntent: hasRecentStealIntent(stealIntents, addr, now),
+    carrierHasFreshHeartbeat: carrierHasFreshHb,
+    candidateHasFreshHeartbeat: getFreshHeartbeat(heartbeatPositions, addr, now) !== null,
+  })
   const { closestId, closestDist, blockedId, blockedDist } = selectStealCandidate(
     candidates,
-    (addr) => hasRecentStealIntent(stealIntents, addr, now),
+    corroborated,
     PROXIMITY_STEAL_RADIUS
   )
 
@@ -489,7 +507,22 @@ export function flagServerSystem(dt: number): void {
   const nowForHb = Date.now()
   if (nowForHb - lastHeartbeatMs >= FLAG_HEARTBEAT_INTERVAL_MS) {
     lastHeartbeatMs = nowForHb
-    const pos = Transform.get(flagEntity).position
+    // Broadcast the CARRIER's authoritative world position when carried, not the
+    // flag entity's Transform — the flag is parented to the carrier, so its
+    // Transform.position is a local offset (a few meters near origin), useless
+    // to any client trying to do a proximity check. Falls back to the flag
+    // Transform for AtBase / Dropped, where it's the real world position.
+    // This lets the client's proximity-steal prediction work even when the
+    // carrier's PlayerIdentityData CRDT hasn't replicated (root cause of
+    // "sometimes running over the carrier doesn't steal the flag").
+    let bx: number, by: number, bz: number
+    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
+      const cPos = getPlayerPosition(flag.carrierPlayerId)
+      if (cPos) { bx = cPos.x; by = cPos.y; bz = cPos.z }
+      else { const p = Transform.get(flagEntity).position; bx = p.x; by = p.y; bz = p.z }
+    } else {
+      const p = Transform.get(flagEntity).position; bx = p.x; by = p.y; bz = p.z
+    }
     // Piggyback the carrier's authoritative hold total (synced component + unflushed
     // accumulator). PlayerFlagHoldTime rides the CRDT, which historically stalls under
     // load — this WS copy lets clients re-anchor the live scoreboard even when the
@@ -508,9 +541,9 @@ export function flagServerSystem(dt: number): void {
       carrierId: flag.carrierPlayerId || '',
       carrierHoldSeconds,
       roundId: currentScoreRoundId,
-      x: pos.x,
-      y: pos.y,
-      z: pos.z
+      x: bx,
+      y: by,
+      z: bz
     })
   }
 
