@@ -17,10 +17,13 @@ import {
 // Phase 0 = blue (< 75%), Phase 1 = gold (>= 75%), Phase -1 = hidden/not charging
 let lastGlowPhase = -1
 let lastParticlePhase = -1
+// Yellow-throw state: has the shell count reached 2 (both launched)?
+let yellowBothLaunched = false
 import { getChargeFraction } from './charge'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { isCinematicActive } from '../../gameState/cinematicState'
 import { localProjectiles, msgProjectileVisuals } from './state'
+import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 
 export function setHandBoomerangEntity(e: Entity): void {
   hand.entity = e
@@ -87,7 +90,33 @@ export function updateHandBoomerangVisibility(): void {
     }
   }
 
-  const shouldShow = localProjectiles.length === 0 && !localThrow.active && !hand.emoteActive && !isCinematicActive()
+  const isYellow = getBoomerangColor() === 'y'
+  const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
+  // For yellow, use per-hand count-based visibility so the right hand can
+  // reappear as soon as its own (1st) shell finishes, without waiting for
+  // the 2nd shell.
+  const ownShellCount = isYellow
+    ? msgProjectileVisuals.reduce((n, v) => n + (v.firedBy === localUserId ? 1 : 0), 0)
+    : 0
+  // Track whether both yellow shells have been launched (count reached 2 at
+  // some point). Needed to distinguish "count==1 because 1st was just thrown
+  // and 2nd hasn't launched yet" (right should be hidden) from "count==1
+  // because 1st returned already" (right should reappear).
+  if (ownShellCount >= 2) yellowBothLaunched = true
+  if (!isYellow || ownShellCount === 0) yellowBothLaunched = false
+
+  // `forceShowUntilMs` overrides all hide triggers during the throw emote's
+  // windup so the boomerang leaves the hand at the emote release moment.
+  const forceShow = Date.now() < hand.forceShowUntilMs && !isCinematicActive()
+  const yellowRightAllows = isYellow && (
+    ownShellCount === 0 || (ownShellCount === 1 && yellowBothLaunched)
+  )
+  const shouldShow = forceShow || (
+    localProjectiles.length === 0 &&
+    !hand.emoteActive &&
+    !isCinematicActive() &&
+    (isYellow ? yellowRightAllows : !localThrow.active)
+  )
 
   if (Transform.has(hand.entity)) {
     const t = Transform.getMutable(hand.entity)
@@ -174,9 +203,15 @@ export function updateHandBoomerangVisibility(): void {
       }
     }
 
-    // Left-hand boomerang: show when yellow, ready, and no pending 2nd throw
+    // Left-hand boomerang: yellow only. Uses independent visibility so it
+    // stays hidden while the 2nd shell is in flight even after the 1st has
+    // returned and the right hand reappeared.
+    // - `forceShowLeftUntilMs` overrides during the yellow throw emote window.
+    // - Otherwise: show only when ALL own yellow shells are done.
     if (hand.leftEntity && Transform.has(hand.leftEntity)) {
-      const showLeft = shouldShow && getBoomerangColor() === 'y' && yellow.secondThrowAt === 0
+      const forceShowLeft = Date.now() < hand.forceShowLeftUntilMs && !isCinematicActive()
+      const leftBaseAllows = localProjectiles.length === 0 && !hand.emoteActive && !isCinematicActive()
+      const showLeft = forceShowLeft || (isYellow && leftBaseAllows && ownShellCount === 0)
       const leftVisible = Transform.get(hand.leftEntity).scale.x > 0
       if (showLeft !== leftVisible) {
         Transform.getMutable(hand.leftEntity).scale = showLeft ? LEFT_HAND_SCALE : Vector3.Zero()

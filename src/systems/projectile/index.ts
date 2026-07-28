@@ -73,11 +73,85 @@ export function getProjectileCooldownRemaining(): number {
   return remaining > 0 ? Math.ceil(remaining / 1000) : 0
 }
 
+// ── Own-red visual buffering ──
+// The server's `shellDropped` for our own red throw can arrive well before
+// the throw emote's release moment when RTT is low, so the projectile pops
+// out of the hand mid-windup. Hold our own red shells until `ownRedShellMinDisplayAt`.
+// Other players' shells and other colors are unaffected.
+//
+// On display we re-anchor the spawn to the player's current position (see
+// shellDropped handler) so a running player doesn't see the visual pop in
+// behind them.
+let ownRedShellMinDisplayAt = 0
+type PendingRedVisual = { displayAt: number; run: () => void }
+const pendingRedVisuals: PendingRedVisual[] = []
+const RED_BUFFER_MS = 300  // matches throw emote release moment
+
+// Yellow: two shells (right + left hand). Queue holds the target display time
+// for each incoming own-yellow `shellDropped`, popped FIFO as they arrive.
+const ownYellowShellDisplayQueue: number[] = []
+const pendingYellowVisuals: PendingRedVisual[] = []
+const YELLOW_BUFFER_MS = 200  // 1st visual displays at input+200ms
+// 2nd server request must go out AFTER the server-side yellow cooldown
+// (200ms in combat.ts). Anything shorter is denied as 'cooldown active'.
+const YELLOW_SECOND_REQUEST_MS = 250
+// (YELLOW_SECOND_THROW_DELAY_MS from state.ts = 120 = gap between 1st and 2nd)
+
+// Blue: single shell. Delay depends on whether the release was a quick tap
+// (single-hand throw emote, 300ms release) or a held charge (End emote, 150ms
+// release). Matches mask reference project.
+let ownBlueShellMinDisplayAt = 0
+const pendingBlueVisuals: PendingRedVisual[] = []
+const BLUE_BUFFER_HELD_MS = 150   // End emote release moment
+const BLUE_BUFFER_TAP_MS  = 300   // single-hand throw emote release moment
+const BLUE_TAP_THRESHOLD_MS = 180 // matches avatarEmotes.ts internal threshold
+
 // ── Message listeners ──
 room.onMessage('shellDropped', (data) => {
-  createMsgProjectileVisual(data.x, data.y, data.z, data.dirX, data.dirZ, data.color, data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale, data.shellId)
   const localUserId = getPlayerData()?.userId?.toLowerCase() || ''
   const throwerId = (data.firedBy || '').toLowerCase()
+  const isOwn = throwerId !== '' && throwerId === localUserId
+  const isRed = data.color === 'r'
+  const now = Date.now()
+
+  const isYellow = data.color === 'y'
+  const isBlue = data.color === 'b'
+
+  // Re-anchor helper: replace stale server spawn coords with the player's
+  // CURRENT position + forward offset. Direction stays server-authoritative.
+  const createReanchored = () => {
+    let sx = data.x, sy = data.y, sz = data.z
+    if (Transform.has(engine.PlayerEntity)) {
+      const p = Transform.get(engine.PlayerEntity).position
+      sx = p.x + data.dirX * 1.0
+      sy = p.y + 0.8
+      sz = p.z + data.dirZ * 1.0
+    }
+    createMsgProjectileVisual(
+      sx, sy, sz, data.dirX, data.dirZ, data.color,
+      data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale, data.shellId,
+    )
+  }
+
+  if (isOwn && isRed && ownRedShellMinDisplayAt > now) {
+    pendingRedVisuals.push({ displayAt: ownRedShellMinDisplayAt, run: createReanchored })
+  } else if (isOwn && isYellow && ownYellowShellDisplayQueue.length > 0) {
+    // Pop the next queued display time (FIFO: 1st shell → 1st time, etc.).
+    const displayAt = ownYellowShellDisplayQueue.shift()!
+    if (displayAt > now) {
+      pendingYellowVisuals.push({ displayAt, run: createReanchored })
+    } else {
+      createReanchored()
+    }
+  } else if (isOwn && isBlue && ownBlueShellMinDisplayAt > now) {
+    pendingBlueVisuals.push({ displayAt: ownBlueShellMinDisplayAt, run: createReanchored })
+  } else {
+    createMsgProjectileVisual(
+      data.x, data.y, data.z, data.dirX, data.dirZ, data.color,
+      data.firedBy, data.chargeSpeed, data.chargeRange, data.chargeScale, data.shellId,
+    )
+  }
+
   if (throwerId && throwerId !== localUserId && data.color === 'b' && data.chargeSpeed >= 55) {
     playReleaseSoundAt(Vector3.create(data.x, data.y, data.z))
   }
@@ -313,6 +387,22 @@ export function triggerProjectileFromUI(): void {
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
 
+  // Red / Yellow: keep the hand-attached boomerang(s) visible during the
+  // throw emote windup and buffer own returning shellDropped visual(s) so
+  // they don't pop out of the hand before the emote motion completes.
+  if (uiColor === 'r') {
+    const nowMs = Date.now()
+    hand.forceShowUntilMs = nowMs + RED_BUFFER_MS
+    ownRedShellMinDisplayAt = nowMs + RED_BUFFER_MS
+  } else if (uiColor === 'y') {
+    const nowMs = Date.now()
+    const firstAt = nowMs + YELLOW_BUFFER_MS
+    const secondAt = firstAt + YELLOW_SECOND_THROW_DELAY_MS
+    hand.forceShowUntilMs = firstAt          // right hand
+    hand.forceShowLeftUntilMs = secondAt     // left hand (kept longer for 2nd throw)
+    ownYellowShellDisplayQueue.push(firstAt, secondAt)
+  }
+
   if (serverUp) {
     console.log('[Projectile] 🎯 UI tap — requesting projectile fire (server)')
     localThrow.active = true; localThrow.sawVisual = false; localThrow.startMs = Date.now()
@@ -332,7 +422,8 @@ export function triggerProjectileFromUI(): void {
   }
 
   if (getBoomerangColor() === 'y') {
-    yellow.secondThrowAt = now + YELLOW_SECOND_THROW_DELAY_MS
+    // 2nd server request must be past the 200ms server-side yellow cooldown.
+    yellow.secondThrowAt = now + YELLOW_SECOND_REQUEST_MS
     yellow.secondThrowDir = { dirX, dirZ }
   }
 }
@@ -354,6 +445,13 @@ export function triggerProjectileReleaseFromUI(): void {
   const chargeElapsed = chargeFrac * CHARGE_TIME_SEC
   cooldown.extraCooldown = chargeElapsed >= 1 ? 2 : 1
 
+  // Blue: quick-tap uses the single-hand throw emote (300ms release moment),
+  // held-charge uses the End emote (150ms release moment).
+  const isQuickTap = chargeElapsed * 1000 < BLUE_TAP_THRESHOLD_MS
+  const blueDelayMs = isQuickTap ? BLUE_BUFFER_TAP_MS : BLUE_BUFFER_HELD_MS
+  hand.forceShowUntilMs = now + blueDelayMs
+  ownBlueShellMinDisplayAt = now + blueDelayMs
+
   const { dirX, dirZ } = getPlayerForward()
   const serverUp = isServerConnected()
   if (serverUp) {
@@ -370,13 +468,42 @@ export function triggerProjectileReleaseFromUI(): void {
     updateHandBoomerangVisibility()
     fireProjectileLocally(chargeSpeed, chargeRange)
   }
-  console.log(`[Projectile] ⚡ UI release — blue fired with charge ${(chargeFrac * 100).toFixed(0)}%`)
+  console.log(`[Projectile] ⚡ UI release — blue fired (${isQuickTap ? 'tap' : 'held'} ${blueDelayMs}ms) charge ${(chargeFrac * 100).toFixed(0)}%`)
 }
 
 // ── Main client system ──
 export function projectileClientSystem(dt: number): void {
   updateHandBoomerangVisibility()
   const now = Date.now()
+
+  // Release any buffered own-red / own-yellow shellDropped visuals whose display time has arrived.
+  if (pendingRedVisuals.length > 0) {
+    for (let i = pendingRedVisuals.length - 1; i >= 0; i--) {
+      if (pendingRedVisuals[i].displayAt <= now) {
+        const run = pendingRedVisuals[i].run
+        pendingRedVisuals.splice(i, 1)
+        run()
+      }
+    }
+  }
+  if (pendingYellowVisuals.length > 0) {
+    for (let i = pendingYellowVisuals.length - 1; i >= 0; i--) {
+      if (pendingYellowVisuals[i].displayAt <= now) {
+        const run = pendingYellowVisuals[i].run
+        pendingYellowVisuals.splice(i, 1)
+        run()
+      }
+    }
+  }
+  if (pendingBlueVisuals.length > 0) {
+    for (let i = pendingBlueVisuals.length - 1; i >= 0; i--) {
+      if (pendingBlueVisuals[i].displayAt <= now) {
+        const run = pendingBlueVisuals[i].run
+        pendingBlueVisuals.splice(i, 1)
+        run()
+      }
+    }
+  }
 
   if (!charge.isCharging && Transform.has(engine.PlayerEntity)) {
     charge.lastGroundY = Transform.get(engine.PlayerEntity).position.y
@@ -443,9 +570,9 @@ export function projectileClientSystem(dt: number): void {
     } else {
       fireProjectileLocally(CHARGE_MIN_SPEED, CHARGE_MIN_RANGE)
     }
-    if (hand.leftEntity && Transform.has(hand.leftEntity)) {
-      Transform.getMutable(hand.leftEntity).scale = Vector3.Zero()
-    }
+    // Left-hand hide is now driven by updateHandBoomerangVisibility via
+    // hand.forceShowLeftUntilMs expiry — don't force-hide here or we'd cut
+    // the left-hand visual before the 2nd throw's emote release moment.
     console.log('[Projectile] 🎯 Yellow 2nd throw fired')
   }
 
@@ -491,6 +618,21 @@ export function projectileClientSystem(dt: number): void {
       cooldown.lastFireTime = now
       cooldown.extraCooldown = currentColor === 'y' ? 2 : 1
       playBoomerangThrowEmote(currentColor)
+      // Red / Yellow: keep hand-attached boomerang(s) visible during emote
+      // windup and buffer own returning shellDropped visual(s). See UI path
+      // above for details.
+      if (currentColor === 'r') {
+        const nowMs = Date.now()
+        hand.forceShowUntilMs = nowMs + RED_BUFFER_MS
+        ownRedShellMinDisplayAt = nowMs + RED_BUFFER_MS
+      } else if (currentColor === 'y') {
+        const nowMs = Date.now()
+        const firstAt = nowMs + YELLOW_BUFFER_MS
+        const secondAt = firstAt + YELLOW_SECOND_THROW_DELAY_MS
+        hand.forceShowUntilMs = firstAt
+        hand.forceShowLeftUntilMs = secondAt
+        ownYellowShellDisplayQueue.push(firstAt, secondAt)
+      }
       const { dirX, dirZ } = getPlayerForward()
       const range = currentColor === 'r' ? RED_RANGE : CHARGE_MIN_RANGE
       const speed = CHARGE_MIN_SPEED
@@ -509,7 +651,8 @@ export function projectileClientSystem(dt: number): void {
         fireProjectileLocally(speed, range)
       }
       if (currentColor === 'y') {
-        yellow.secondThrowAt = now + YELLOW_SECOND_THROW_DELAY_MS
+        // 2nd server request must be past the 200ms server-side yellow cooldown.
+        yellow.secondThrowAt = now + YELLOW_SECOND_REQUEST_MS
         yellow.secondThrowDir = { dirX, dirZ }
       }
       console.log('[Projectile] 🎯 Instant throw (non-charge color)')
@@ -598,6 +741,15 @@ export function projectileClientSystem(dt: number): void {
 
     console.log('[Projectile] 🎯 E released — charge:', (chargeFrac * 100).toFixed(0) + '%, speed:', chargeSpeed.toFixed(0), 'range:', chargeRange.toFixed(0), 'scale:', chargeScale.toFixed(1), 'extraCD:', cooldown.extraCooldown)
     if (chargeElapsed >= 1.25) playReleaseSound()
+
+    // Blue: quick-tap uses the single-hand throw emote (300ms release moment),
+    // held-charge uses the End emote (150ms release moment).
+    if (currentColor === 'b') {
+      const isQuickTap = chargeElapsed * 1000 < BLUE_TAP_THRESHOLD_MS
+      const blueDelayMs = isQuickTap ? BLUE_BUFFER_TAP_MS : BLUE_BUFFER_HELD_MS
+      hand.forceShowUntilMs = now + blueDelayMs
+      ownBlueShellMinDisplayAt = now + blueDelayMs
+    }
 
     const { dirX, dirZ } = getPlayerForward()
 
