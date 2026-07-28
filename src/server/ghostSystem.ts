@@ -51,11 +51,18 @@ export function registerGhostHandlers(): void {
 
 // ── Despawn all ghosts ──
 export function despawnAllGhosts(): void {
+  const hadGhosts = activeGhosts.length > 0
   for (const z of activeGhosts) {
     Ghost.deleteFrom(z.entity)
     engine.removeEntity(z.entity); recycleGhostSyncId(z.syncId)
   }
   activeGhosts.length = 0
+  // Same reasoning as the projectile-kill path: without an explicit empty
+  // heartbeat the last one stays fresh and a fallback flashes at dawn.
+  if (hadGhosts) {
+    room.send('ghostHeartbeat', { ghostsJson: serializeGhostHeartbeat([]) })
+    lastGhostHeartbeatMs = Date.now()
+  }
 }
 
 // ── Spawn a single ghost ──
@@ -232,6 +239,14 @@ export function ghostServerSystem(dt: number): void {
           engine.removeEntity(z.entity); recycleGhostSyncId(z.syncId)
           activeGhosts.splice(i, 1)
           setGhostRespawnCooldown(GHOST_RESPAWN_COOLDOWN)
+          // Immediate empty heartbeat: without this, the last non-empty heartbeat
+          // stays "fresh" for GHOST_HEARTBEAT_STALE_MS and pops up a fallback
+          // visual the moment the CRDT sink animation completes and clientGhosts
+          // empties (playtest report: "ghost glb flashes above for a split second"
+          // on death). Also resets our own throttle so the next tick's regular
+          // heartbeat isn't suppressed.
+          room.send('ghostHeartbeat', { ghostsJson: serializeGhostHeartbeat([]) })
+          lastGhostHeartbeatMs = now
         }
         // Trigger boomerang return (same as hitting a player)
         if (!proj.returning) {
