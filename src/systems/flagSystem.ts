@@ -543,22 +543,34 @@ interface FlagLocalFall {
   startY: number
   startZ: number
   targetY: number
-  dropTimeMs: number
+  serverDropTimeMs: number  // ONLY for idempotency vs rebroadcasts
+  clientDropTimeMs: number  // when THIS client saw the message — what the analytic evaluates against
 }
 let flagLocalFall: FlagLocalFall | null = null
 
 room.onMessage('flagFallStart', (data) => {
-  // Idempotent: heartbeat re-broadcasts arrive with the same dropTimeMs.
-  // Only reset local sim if this is a NEW fall (different dropTimeMs) so
-  // we don't jitter between identical evaluations mid-frame.
-  if (flagLocalFall && flagLocalFall.dropTimeMs === data.dropTimeMs) return
+  // Idempotent: heartbeat re-broadcasts (and the 250ms fast rebroadcast on
+  // the server) arrive with the same server dropTimeMs. Skip if we're
+  // already simulating this exact fall.
+  if (flagLocalFall && flagLocalFall.serverDropTimeMs === data.dropTimeMs) return
+  // Anchor the analytic to OUR clock, not the server's. Wall-clock skew
+  // between server and client (commonly 100ms–a few seconds) would make
+  // computeFallY(nowMs, dropTimeMs=serverFuture) return startY for the
+  // entire skew window — the flag would visibly hover, then teleport when
+  // flagLanded arrived. Using client-local now sidesteps clock skew entirely.
+  // Cost: a client that joins mid-fall via heartbeat rebroadcast sees the
+  // visual restart from startY (up to ~a second of ugly), but flagLanded
+  // snaps them to rest correctly at the true landing moment.
   flagLocalFall = {
     startX: data.startX,
     startY: data.startY,
     startZ: data.startZ,
     targetY: data.targetY,
-    dropTimeMs: data.dropTimeMs
+    serverDropTimeMs: data.dropTimeMs,
+    clientDropTimeMs: Date.now()
   }
+  console.log('[Flag] 🚩⬇️ flagFallStart received startY=', data.startY.toFixed(1),
+    'targetY=', data.targetY.toFixed(1))
 })
 
 room.onMessage('flagLanded', (_data) => {
@@ -581,12 +593,14 @@ function maybeStartFallbackFall(parentPos: { x: number; y: number; z: number }, 
   // Only if there's a meaningful gap (>1m) worth animating — otherwise the
   // flag is essentially at rest and the visual is fine as-is.
   if (parentPos.y - dropAnchorY < 1) return
+  const now = Date.now()
   flagLocalFall = {
     startX: parentPos.x,
     startY: parentPos.y,
     startZ: parentPos.z,
     targetY: dropAnchorY,
-    dropTimeMs: Date.now()
+    serverDropTimeMs: 0,  // no server anchor — fallback path
+    clientDropTimeMs: now
   }
   console.log('[Flag] 🚩⚠️ fallback local fall (missed flagFallStart) startY=',
     parentPos.y.toFixed(1), 'targetY=', dropAnchorY.toFixed(1))
@@ -694,9 +708,11 @@ function updateFlagBob(dt: number): void {
       }
       let fallOffsetY = 0
       if (flagLocalFall) {
+        // Evaluate against client-local dropTime so wall-clock skew between
+        // server and client can't stall the visual (see flagFallStart handler).
         const analyticY = computeFallY(
           flagLocalFall.startY, flagLocalFall.targetY,
-          flagLocalFall.dropTimeMs, Date.now(), FLAG_GRAVITY
+          flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
         )
         fallOffsetY = analyticY - flagLocalFall.startY
       }
