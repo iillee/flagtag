@@ -4,6 +4,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
+import { getFlagAnimatedWorldY } from './flagSystem'
 import { Flag, FlagState } from '../shared/components'
 
 // ── Configuration ──
@@ -140,8 +141,14 @@ export function beaconClientSystem(dt: number): void {
         carrierPos.z + FLAG_CARRY_OFFSET.z
       )
     } else {
-      // Dropped or at base - use flag's world position
-      worldPos = Transform.get(flagEntity).position
+      // Dropped or at base - use flag's world position. During an active
+      // analytic fall the parent Transform is FROZEN at startY (only the
+      // child visual is animated locally), so we ask flagSystem for the
+      // animated Y — otherwise the beacon hovers at drop height for the
+      // entire fall and then teleports to the ground with the flag.
+      const parentPos = Transform.get(flagEntity).position
+      const animatedY = getFlagAnimatedWorldY(parentPos.y)
+      worldPos = Vector3.create(parentPos.x, animatedY, parentPos.z)
     }
     break // only one flag
   }

@@ -635,6 +635,23 @@ const IDLE_ROT_SPEED_DEG_PER_SEC = 25
 let flagVisualEntity: Entity | null = null
 export let flagSyncedEntity: Entity | null = null
 
+/**
+ * Returns the flag's ANIMATED world Y — i.e. what the visual is actually
+ * rendering at this frame, including the local analytic fall offset. The
+ * synced parent Transform is frozen at startY throughout a fall (only the
+ * child visual moves), so anything that wants to track the flag mid-fall
+ * (e.g. the beacon light pillar) must call this instead of reading the
+ * parent Transform directly. Returns null if there is no flag entity yet.
+ */
+export function getFlagAnimatedWorldY(parentY: number): number {
+  if (!flagLocalFall) return parentY
+  const analyticY = computeFallY(
+    flagLocalFall.startY, flagLocalFall.targetY,
+    flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
+  )
+  return analyticY
+}
+
 /** Manually drop the flag — called from mobile UI button */
 export function requestManualDrop(): void {
   const userId = getPlayerData()?.userId?.toLowerCase()
