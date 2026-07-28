@@ -513,6 +513,16 @@ export function ghostClientSystem(dt: number): void {
       fallbackVisual.renderPos.y + 1.0 + bobY,
       fallbackVisual.renderPos.z
     )
+    // Face the direction of movement (renderPos → targetPos). Mirrors the CRDT
+    // path's rotation logic so a fallback ghost stalks the player visually
+    // instead of drifting sideways facing a fixed direction. Threshold guards
+    // against Quaternion jitter when the ghost is stationary.
+    const dx = fallbackVisual.targetPos.x - fallbackVisual.renderPos.x
+    const dz = fallbackVisual.targetPos.z - fallbackVisual.renderPos.z
+    if (dx * dx + dz * dz > 0.001) {
+      const angle = Math.atan2(dx, dz) * (180 / Math.PI)
+      t.rotation = Quaternion.fromEulerDegrees(0, angle, 0)
+    }
   }
 }
 
