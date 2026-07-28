@@ -16,6 +16,7 @@ import {
 } from '../shared/components'
 import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime } from '../shared/dayNight'
+import { serializeGhostHeartbeat, type GhostHeartbeatEntry } from '../shared/ghostHeartbeat'
 import {
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   getPlayerPosition, getActivePlayerAddresses,
@@ -28,6 +29,11 @@ const GHOST_SPAWN_POS = Vector3.create(347, 49.25, 381) // Black cube location
 let ghostSpawnTimer = 10 // first spawn after 10s
 const GHOST_STAGGER_COOLDOWN_MS = 3000 // can only stagger same player every 3s
 const GHOST_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
+// Fallback-visual heartbeat cadence. 500ms is fast enough that a fallback ghost
+// moves smoothly (client lerps between updates) and slow enough that it costs
+// far less than the CRDT stream this backstops — typical payload is one entry.
+const GHOST_HEARTBEAT_INTERVAL_MS = 500
+let lastGhostHeartbeatMs = 0
 
 // ── Message handlers ──
 export function registerGhostHandlers(): void {
@@ -173,6 +179,20 @@ export function ghostServerSystem(dt: number): void {
       zm.targetY = z.posY
       zm.targetZ = z.posZ
     }
+  }
+
+  // ── Fallback-visual heartbeat (server → all clients, ~2Hz) ──
+  // Independent of the CRDT `Ghost` component so a client whose CRDT sync
+  // dropped the ghost entity can still render a visual. Send only while at
+  // least one ghost is alive; empty payloads would just be noise (a client
+  // with no fallback visual has nothing to reconcile).
+  if (activeGhosts.length > 0 && now - lastGhostHeartbeatMs >= GHOST_HEARTBEAT_INTERVAL_MS) {
+    lastGhostHeartbeatMs = now
+    const entries: GhostHeartbeatEntry[] = []
+    for (const z of activeGhosts) {
+      entries.push({ id: z.syncId, x: z.posX, y: z.posY, z: z.posZ })
+    }
+    room.send('ghostHeartbeat', { ghostsJson: serializeGhostHeartbeat(entries) })
   }
 
   // ── Check projectile-ghost collisions ──
