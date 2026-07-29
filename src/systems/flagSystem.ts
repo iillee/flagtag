@@ -543,6 +543,7 @@ function fireGroundRaycastForServer(dropPos: Vector3): void {
 // (it carries the drop coords cleanly, faster than waiting for CRDT).
 // Everything else the server tells us about the fall is ignored client-side.
 interface FlagVisualFall {
+  serverDropTimeMs: number  // idempotency key — rebroadcasts share this
   x: number
   z: number
   currentY: number
@@ -557,14 +558,13 @@ const FLAG_LOCAL_GRAVITY = 15  // matches server FLAG_GRAVITY for pickup timing 
 
 room.onMessage('flagFallStart', (data) => {
   // Bomb-pattern: use this as the drop trigger + coords. Ignore data.targetY
-  // and data.dropTimeMs — client picks target via its own raycast, and runs
-  // at its own frame rate. Server rebroadcasts every 250ms during a fall so
-  // late-joiners still get it, but we treat re-arrivals as no-ops if we're
-  // already simulating from these approximate coords.
-  if (flagVisualFall &&
-      Math.abs(flagVisualFall.x - data.startX) < 1 &&
-      Math.abs(flagVisualFall.z - data.startZ) < 1 &&
-      Math.abs(flagVisualFall.currentY - data.startY) < 5) {
+  // (client picks via its own raycast). Use data.dropTimeMs as the
+  // idempotency key — server rebroadcasts flagFallStart every 250ms for
+  // late-joiners, all sharing the same dropTimeMs; ignore repeats of the
+  // fall we're already animating so we don't respawn the visual at startY
+  // mid-drop (playtest #11 bug: the flag would 'stutter' back to the drop
+  // point every 250ms during long falls).
+  if (flagVisualFall && flagVisualFall.serverDropTimeMs === data.dropTimeMs) {
     return  // same fall we're already animating
   }
 
@@ -586,6 +586,7 @@ room.onMessage('flagFallStart', (data) => {
   })
 
   flagVisualFall = {
+    serverDropTimeMs: data.dropTimeMs,
     x: data.startX,
     z: data.startZ,
     currentY: data.startY,
