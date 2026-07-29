@@ -72,7 +72,10 @@ export const PICKUP_RADIUS = 3
 export { PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS } from '../shared/constants'
 export const HOLD_TIME_SYNC_INTERVAL = 2.0 // seconds between CRDT hold-time writes (was 0.5)
 export const SPLASH_DURATION_MS = 3000
-export const FLAG_GRAVITY = 15
+// Re-export so existing server code that imports from serverState keeps
+// working; canonical definition now lives in shared/flagFall so client and
+// server share the same value for the message-driven analytic fall.
+export { FLAG_GRAVITY } from '../shared/flagFall'
 export const FLAG_MIN_Y = 49.5
 // Upper bound for any client-reported flag ground Y. The playable terrain sits
 // around Y=48–80 after the +48 scene lift; anything above this is a spoofed report.

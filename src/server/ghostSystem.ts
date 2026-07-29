@@ -18,6 +18,10 @@ import { room } from '../shared/messages'
 import { isNightTime, updateWorldTime, getCurrentSkyTime } from '../shared/dayNight'
 import { serializeGhostHeartbeat, type GhostHeartbeatEntry } from '../shared/ghostHeartbeat'
 import {
+  shouldSendGhostTouching,
+  GHOST_TOUCHING_SEND_INTERVAL_MS,
+} from '../shared/ghostContactState'
+import {
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   getPlayerPosition, getActivePlayerAddresses,
 } from './serverState'
@@ -41,6 +45,21 @@ let lastGhostHeartbeatMs = 0
 // complaint is a UX issue with the 24-minute cycle length. Throttled to 30s.
 const DAYNIGHT_DIAG_INTERVAL_MS = 30_000
 let lastDayNightDiagMs = 0
+
+// ── ghostTouching throttle state ──
+// Per-victim last-sent timestamp. Server ticks at ~30 Hz; without throttling
+// this fires every tick to ALL clients while a ghost is in contact. Throttled
+// to ~5 Hz per victim (see GHOST_TOUCHING_SEND_INTERVAL_MS). Client holds the
+// "being touched" state for a window longer than this interval so one dropped
+// message doesn't visibly drain the scare meter. See
+// docs/CRDT_SATURATION_REDUCTION.md and src/shared/ghostContactState.ts.
+const lastGhostTouchingSentMs = new Map<string, number>()
+// Diagnostic counters — logged every 30s so we can characterize the
+// send/throttle ratio during playtest and confirm the reduction landed.
+let ghostTouchingSentCount = 0
+let ghostTouchingThrottledCount = 0
+const GHOST_TOUCHING_DIAG_INTERVAL_MS = 30_000
+let lastGhostTouchingDiagMs = 0
 
 // ── Message handlers ──
 export function registerGhostHandlers(): void {
@@ -164,9 +183,19 @@ export function ghostServerSystem(dt: number): void {
       // Match target Y (float above ground at player level)
       z.posY += (nearest.y - z.posY) * 2.0 * clampedDt
 
-      // Check contact → send ghostTouching (scare meter fills on client)
+      // Check contact → send ghostTouching (scare meter fills on client).
+      // Throttled to ~5 Hz per victim to stay within the room msg/s budget;
+      // the client holds the touched state between messages so the 3-second
+      // scare meter still fills smoothly. See ghostContactState.ts.
       if (nearest.distXZ < GHOST_HIT_RADIUS) {
-        room.send('ghostTouching', { victimId: nearest.addr })
+        const lastSent = lastGhostTouchingSentMs.get(nearest.addr)
+        if (shouldSendGhostTouching(now, lastSent, GHOST_TOUCHING_SEND_INTERVAL_MS)) {
+          room.send('ghostTouching', { victimId: nearest.addr })
+          lastGhostTouchingSentMs.set(nearest.addr, now)
+          ghostTouchingSentCount++
+        } else {
+          ghostTouchingThrottledCount++
+        }
       }
     } else {
       // Idle: slow orbit around spawn point
@@ -192,6 +221,28 @@ export function ghostServerSystem(dt: number): void {
       zm.targetX = z.posX
       zm.targetY = z.posY
       zm.targetZ = z.posZ
+    }
+  }
+
+  // ── ghostTouching throttle diagnostic ──
+  // Logs how many ghostTouching messages we actually sent vs. suppressed
+  // over the last 30s window. Under normal contact the throttled count
+  // should dominate (30 Hz raw → 5 Hz sent = 25 suppressed for every 5 sent).
+  // If sent >> throttled, the throttle isn't engaging as expected.
+  if (now - lastGhostTouchingDiagMs >= GHOST_TOUCHING_DIAG_INTERVAL_MS) {
+    lastGhostTouchingDiagMs = now
+    if (ghostTouchingSentCount > 0 || ghostTouchingThrottledCount > 0) {
+      console.log('[Server] 👻 ghostTouching diag (30s): sent=', ghostTouchingSentCount,
+        '| throttled=', ghostTouchingThrottledCount,
+        '| activeVictims=', lastGhostTouchingSentMs.size)
+    }
+    ghostTouchingSentCount = 0
+    ghostTouchingThrottledCount = 0
+    // Prune per-victim entries that haven't been touched in a while so this
+    // map doesn't grow unbounded with visitor churn. 10s is well past the
+    // throttle window and any realistic contact episode.
+    for (const [addr, ts] of lastGhostTouchingSentMs) {
+      if (now - ts > 10_000) lastGhostTouchingSentMs.delete(addr)
     }
   }
 

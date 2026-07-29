@@ -28,8 +28,9 @@ import { isMobile } from '@dcl/sdk/platform'
 
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
-import { PROXIMITY_STEAL_RADIUS } from '../shared/constants'
+import { PROXIMITY_STEAL_RADIUS, SCENE_FLOOR_Y } from '../shared/constants'
 import { room } from '../shared/messages'
+import { computeFallY, FLAG_GRAVITY } from '../shared/flagFall'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
 import { setConfirmedCarrier, clearConfirmedCarrier, applyServerHoldTime } from '../gameState/flagHoldTime'
@@ -522,15 +523,164 @@ function fireGroundRaycastForServer(dropPos: Vector3): void {
   })
 }
 
-// ── Client-side visual flag with local bob/spin ──
-// The synced flag entity is a plain Transform anchor (position only, no model).
-// We create a LOCAL child entity that holds the GltfContainer and animates bob/spin
-// every frame — zero CRDT writes, smooth on every client.
+// ── Client-side visual flag with local bob/spin + BOMB-PATTERN fall ──
+//
+// After 10 playtest iterations of message-driven analytic fall (server
+// broadcasts start conditions, both sides compute the same formula), we
+// gave up and copied the bomb/banana pattern verbatim. That pattern:
+//
+//   1. Server sends ONE message per drop with (x, y, z).
+//   2. Client spawns visual at (x, y, z).
+//   3. Client fires ITS OWN raycast down to find local ground.
+//   4. Client runs LOCAL Euler gravity every frame until currentY <= targetY.
+//   5. Client reports groundY back to server (server uses for pickup radius).
+//
+// No retargets, no CRDT-vs-message races, no dropAnchor synchronization,
+// no 'analytic settled' clear conditions. Client owns the fall visual
+// from drop to landing, full stop.
+//
+// We still receive `flagFallStart` from the server as the drop trigger
+// (it carries the drop coords cleanly, faster than waiting for CRDT).
+// Everything else the server tells us about the fall is ignored client-side.
+interface FlagVisualFall {
+  serverDropTimeMs: number  // idempotency key — rebroadcasts share this
+  x: number
+  z: number
+  currentY: number
+  velocity: number
+  targetY: number
+  falling: boolean
+  groundRayEntity: Entity | null
+  groundResolved: boolean
+}
+let flagVisualFall: FlagVisualFall | null = null
+const FLAG_LOCAL_GRAVITY = 15  // matches server FLAG_GRAVITY for pickup timing parity
+const FLAG_GROUND_OFFSET = 0.2  // rest this far above ground so idle bob doesn't clip terrain
+
+room.onMessage('flagFallStart', (data) => {
+  // Bomb-pattern: use this as the drop trigger + coords. Ignore data.targetY
+  // (client picks via its own raycast). Use data.dropTimeMs as the
+  // idempotency key — server rebroadcasts flagFallStart every 250ms for
+  // late-joiners, all sharing the same dropTimeMs; ignore repeats of the
+  // fall we're already animating so we don't respawn the visual at startY
+  // mid-drop (playtest #11 bug: the flag would 'stutter' back to the drop
+  // point every 250ms during long falls).
+  if (flagVisualFall && flagVisualFall.serverDropTimeMs === data.dropTimeMs) {
+    return  // same fall we're already animating
+  }
+
+  // Clean up any previous fall
+  if (flagVisualFall?.groundRayEntity !== null && flagVisualFall) {
+    try { engine.removeEntity(flagVisualFall.groundRayEntity!) } catch { /* already gone */ }
+  }
+
+  // Fire a downward raycast from just above the drop point (bomb does +0.5).
+  const rayEntity = engine.addEntity()
+  Transform.create(rayEntity, {
+    position: Vector3.create(data.startX, data.startY + 0.5, data.startZ)
+  })
+  Raycast.create(rayEntity, {
+    direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
+    maxDistance: 200,
+    queryType: RaycastQueryType.RQT_HIT_FIRST,
+    continuous: false
+  })
+
+  flagVisualFall = {
+    serverDropTimeMs: data.dropTimeMs,
+    x: data.startX,
+    z: data.startZ,
+    currentY: data.startY,
+    velocity: 0,
+    // Fallback target until raycast returns — SCENE_FLOOR_Y is the safe minimum.
+    // If raycast returns before we fall this far, targetY gets refined upward.
+    targetY: SCENE_FLOOR_Y,
+    falling: true,
+    groundRayEntity: rayEntity,
+    groundResolved: false
+  }
+  console.log('[Flag] 🚩⬇️ local fall started at Y=', data.startY.toFixed(1))
+})
+
+room.onMessage('flagLanded', (_data) => {
+  // Client owns landing detection via its own gravity + raycast (bomb
+  // pattern). Server's flagLanded is informational only — no visual action.
+})
+
 const IDLE_BOB_AMPLITUDE = 0.15
 const IDLE_BOB_SPEED = 2
 const IDLE_ROT_SPEED_DEG_PER_SEC = 25
 let flagVisualEntity: Entity | null = null
 export let flagSyncedEntity: Entity | null = null
+
+/**
+ * Returns the flag's AUTHORITATIVE world position for the current frame.
+ * Priority: active local fall (bomb-pattern Euler sim) → validated Flag
+ * fields (dropAnchor / base) → null (Carried or not-yet-loaded).
+ */
+export function getFlagAuthoritativeWorldPos(): Vector3 | null {
+  if (flagVisualFall) {
+    return Vector3.create(flagVisualFall.x, flagVisualFall.currentY, flagVisualFall.z)
+  }
+  if (!flagSyncedEntity) return null
+  const flag = Flag.getOrNull(flagSyncedEntity)
+  if (!flag) return null
+  if (flag.state === FlagState.AtBase) {
+    return Vector3.create(flag.baseX, flag.baseY, flag.baseZ)
+  }
+  if (flag.state === FlagState.Dropped) {
+    return Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ)
+  }
+  return null  // Carried — visual is hidden, beacon uses carrier position
+}
+
+/**
+ * Advance the local visual fall (bomb-pattern): poll raycast, apply Euler
+ * gravity. Called from updateFlagBob every frame while a fall is active.
+ */
+function updateFlagVisualFall(dt: number): void {
+  if (!flagVisualFall) return
+  // Poll raycast result. When it lands, update targetY and report to server.
+  if (flagVisualFall.groundRayEntity !== null) {
+    const result = RaycastResult.getOrNull(flagVisualFall.groundRayEntity)
+    if (result) {
+      if (result.hits.length > 0) {
+        // Lift slightly above ground so the flag's base doesn't clip through
+        // terrain during the idle bob (amplitude 0.15m, so 0.2m clears it).
+        flagVisualFall.targetY = Math.max(SCENE_FLOOR_Y, result.hits[0].position!.y) + FLAG_GROUND_OFFSET
+      }
+      flagVisualFall.groundResolved = true
+      try { engine.removeEntity(flagVisualFall.groundRayEntity) } catch { /* already gone */ }
+      flagVisualFall.groundRayEntity = null
+      // Report ground Y to server for pickup validation (same message the old
+      // system used; server accepts it as a target-lowering hint).
+      room.send('reportGroundY', { y: flagVisualFall.targetY })
+      // If we've already fallen past the ground (raycast came late), snap up.
+      if (flagVisualFall.currentY <= flagVisualFall.targetY) {
+        flagVisualFall.currentY = flagVisualFall.targetY
+        flagVisualFall.falling = false
+        flagVisualFall.velocity = 0
+      }
+    }
+  }
+  // Local Euler gravity — matches bombSystem exactly.
+  if (flagVisualFall.falling) {
+    const clampedDt = Math.min(dt, 0.1)
+    flagVisualFall.velocity += FLAG_LOCAL_GRAVITY * clampedDt
+    flagVisualFall.currentY -= flagVisualFall.velocity * clampedDt
+    if (flagVisualFall.currentY <= flagVisualFall.targetY) {
+      flagVisualFall.currentY = flagVisualFall.targetY
+      flagVisualFall.falling = false
+      flagVisualFall.velocity = 0
+    }
+  }
+}
+
+/** @deprecated — kept for backwards-compat; delegates to getFlagAuthoritativeWorldPos. */
+export function getFlagAnimatedWorldY(parentY: number): number {
+  const pos = getFlagAuthoritativeWorldPos()
+  return pos ? pos.y : parentY
+}
 
 /** Manually drop the flag — called from mobile UI button */
 export function requestManualDrop(): void {
@@ -578,11 +728,16 @@ function ensureFlagModel(): void {
   }
   if (flagModelAttached) return
   for (const [entity] of engine.getEntitiesWith(Flag, Transform)) {
-    // Create a local child entity for the visual model + bob/spin
+    // Bomb/banana pattern: the visual is a STANDALONE world-space entity,
+    // NOT a child of the server-synced flag entity. Every previous approach
+    // that parented it kept hitting parent-Transform staleness bugs
+    // (playtests 3–8). Now we position it directly each frame from
+    // getFlagAuthoritativeWorldPos() — which reads the analytic during a
+    // fall and the validated Flag.dropAnchor*/base* fields at rest. Zero
+    // dependence on the synced entity's Transform.
     flagVisualEntity = engine.addEntity()
     Transform.create(flagVisualEntity, {
-      parent: entity,
-      position: Vector3.create(0, 0, 0)
+      position: Vector3.create(0, -1000, 0)  // hidden until first update tick
     })
     GltfContainer.create(flagVisualEntity, {
       src: BANNER_SRC,
@@ -610,13 +765,55 @@ function updateFlagBob(dt: number): void {
   const bobY = IDLE_BOB_AMPLITUDE * Math.sin(flagBobTime * IDLE_BOB_SPEED)
   const angleDeg = (flagBobTime * IDLE_ROT_SPEED_DEG_PER_SEC) % 360
 
-  // Animate the idle flag visual (at base or dropped)
-  if (flagVisualEntity && Transform.has(flagVisualEntity)) {
-    const flag = flagSyncedEntity ? Flag.getOrNull(flagSyncedEntity) : null
+  // Animate the idle flag visual (at base or dropped). During an active
+  // message-driven fall, add the analytic fall offset to the local Y so
+  // the visual drops smoothly at 60fps while the parent Transform stays
+  // frozen at startY (no CRDT writes during the fall). offset is negative
+  // and grows downward until landing, when the server sends flagLanded and
+  // clears flagLocalFall.
+  if (flagVisualEntity && Transform.has(flagVisualEntity) && flagSyncedEntity) {
+    const flag = Flag.getOrNull(flagSyncedEntity)
     if (flag && flag.state !== FlagState.Carried) {
-      const t = Transform.getMutable(flagVisualEntity)
-      t.position = Vector3.create(0, bobY, 0)
-      t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+      // Standalone visual, positioned directly in WORLD SPACE from the
+      // authoritative source. No parent, no compensation math, no staleness.
+      const authPos = getFlagAuthoritativeWorldPos()
+      if (authPos) {
+        const t = Transform.getMutable(flagVisualEntity)
+        t.position = Vector3.create(authPos.x, authPos.y + bobY, authPos.z)
+        t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+      }
+      // Deliberately DO NOT clear flagLocalFall based on 'analytic settled'.
+      // Playtest #10: a jump/glide drop triggers TWO beginFalls on the
+      // server — first with target=dropY-0.5 (near startY, ~260ms fall),
+      // then a retarget after reportGroundY reports the real distant ground.
+      // If we clear the sim the instant the first tiny analytic settles, the
+      // visual snaps to dropAnchorY (which server has set to the first
+      // target, still up in the air), and the retarget's flagFallStart#2
+      // then races to arrive before the visual is noticed as stuck. The
+      // window is tight enough that sometimes the visual stays stuck for
+      // seconds and drops only when the CRDT for dropAnchor finally updates.
+      //
+      // Solution: keep the sim alive as long as it's valid. Analytic clamps
+      // to targetY forever — visual sits at correct spot at rest. Retargets
+      // land on the live sim (in-flight targetY update). We only clear on:
+      //   • A stale-sim override (flagFallStart arrives with data.startY
+      //     far from current analytic — handled in the flagFallStart handler).
+      //   • Flag becoming Carried with a real carrier (handled below).
+      //   • Flag becoming AtBase (round reset / respawn).
+      if (flagVisualFall && flag.state === FlagState.AtBase) {
+        if (flagVisualFall.groundRayEntity !== null) {
+          try { engine.removeEntity(flagVisualFall.groundRayEntity) } catch { /* gone */ }
+        }
+        flagVisualFall = null
+      }
+    } else if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId && flagVisualFall) {
+      // Flag was picked up mid-fall — clear the local sim. Gate on
+      // carrierPlayerId being non-empty so brief CRDT state flickers during
+      // the fall don't null our sim.
+      if (flagVisualFall.groundRayEntity !== null) {
+        try { engine.removeEntity(flagVisualFall.groundRayEntity) } catch { /* gone */ }
+      }
+      flagVisualFall = null
     }
   }
 
@@ -628,6 +825,7 @@ export function flagClientSystem(dt: number): void {
   // Ensure the synced flag entity has a local visual child (GltfContainer + bob/spin)
   ensureFlagModel()
   initClonePool()
+  updateFlagVisualFall(dt)
   updateFlagBob(dt)
 
   const userId = getPlayerData()?.userId?.toLowerCase()
@@ -941,9 +1139,10 @@ export function flagClientSystem(dt: number): void {
       // Restore flag visual visibility (server controls position via CRDT)
       if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
 
-      if (flag.state === FlagState.Dropped) {
-        fireGroundRaycastForServer(Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ))
-      }
+      // (No state-change-triggered raycast anymore — the new bomb-pattern
+      // local fall fires its own raycast from the drop point inside the
+      // flagFallStart handler. Firing another from a stale dropAnchor here
+      // just duplicates and confuses the server.)
     }
 
     // ── Safety nets (unconditional, run every frame) ──

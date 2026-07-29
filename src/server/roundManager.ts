@@ -151,7 +151,7 @@ export function lightningServerSystem(dt: number): void {
         // fresh one-shot re-armed by computeGravityTarget) anchored at the strike
         // height — lightning strikes high-value carriers, often airborne in updrafts.
         clearLastDropper()
-        computeGravityTarget(strikePos.y)
+        computeGravityTarget(strikePos.x, strikePos.y, strikePos.z)
       }
 
       _lightningOriginalCarrierId = ''
