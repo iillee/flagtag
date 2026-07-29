@@ -620,31 +620,9 @@ room.onMessage('flagLanded', (_data) => {
  * server WILL update on land, so we'll snap-correct the moment endFall
  * lands. Runs at most once per new Dropped edge so we don't spam.
  */
-function maybeStartFallbackFall(parentPos: { x: number; y: number; z: number }): void {
-  if (flagLocalFall) return
-  // Only if parent is meaningfully above the scene floor — otherwise flag is
-  // essentially at rest and the visual is fine as-is.
-  //
-  // NOTE: we deliberately do NOT use flag.dropAnchorY as the reference or
-  // target. During an active message-driven fall dropAnchorY is FROZEN at
-  // the fall's startY (see flagLogic.ts endFall / authoritativeFlagPos),
-  // and the parent Transform is also frozen at startY. So the old check
-  // 'parentPos.y - dropAnchorY < 1' was ALWAYS true during a missed fall
-  // — fallback never fired — visual sat stuck at startY+bobY for the whole
-  // fall. The 'stuck in the air' bug reported in the 5th playtest.
-  if (parentPos.y - SCENE_FLOOR_Y < 2) return
-  const now = Date.now()
-  flagLocalFall = {
-    startX: parentPos.x,
-    startY: parentPos.y,
-    startZ: parentPos.z,
-    targetY: SCENE_FLOOR_Y,
-    serverDropTimeMs: 0,  // no server anchor — fallback path
-    clientDropTimeMs: now
-  }
-  console.log('[Flag] 🚩⚠️ fallback local fall (missed flagFallStart) startY=',
-    parentPos.y.toFixed(1), 'targetY=', SCENE_FLOOR_Y.toFixed(1))
-}
+// (Removed maybeStartFallbackFall — see 'no fallback needed' note in
+// updateFlagBob. It was a bandage over the parent-Transform-stale bug that
+// is now fixed properly by getFlagAuthoritativeWorldY reading dropAnchorY.)
 
 const IDLE_BOB_AMPLITUDE = 0.15
 const IDLE_BOB_SPEED = 2
@@ -779,16 +757,17 @@ function updateFlagBob(dt: number): void {
   if (flagVisualEntity && Transform.has(flagVisualEntity) && flagSyncedEntity) {
     const flag = Flag.getOrNull(flagSyncedEntity)
     if (flag && flag.state !== FlagState.Carried) {
-      // Fallback: if we're in Dropped but no local sim is running and the
-      // parent Transform is well above the scene floor, we probably missed
-      // the initial flagFallStart (packet loss, or our local sim got nulled
-      // by a Carried-flicker below and state came back to Dropped). Kick off
-      // a best-effort local sim toward the floor — endFall's CRDT snap will
-      // correct the exact landing Y when it arrives.
-      if (flag.state === FlagState.Dropped && !flagLocalFall) {
-        const parentT = Transform.get(flagSyncedEntity)
-        maybeStartFallbackFall(parentT.position)
-      }
+      // (No fallback fall needed anymore.) getFlagAuthoritativeWorldY below
+      // now reads flag.dropAnchorY when there's no active local sim, and
+      // dropAnchorY is a validated field that reliably syncs. The old
+      // 'parent.y > FLOOR+2 → start fake fall to FLOOR' fallback fired on
+      // every ground-level walking drop above Y=50 and pulled the visual
+      // straight through the actual floor — the 7th-playtest bug. If we
+      // ever miss a real flagFallStart, the visual will simply pop from
+      // startY to landY when dropAnchorY updates (not perfect but not the
+      // multi-second-stuck bug we were guarding against, since we no
+      // longer depend on parent Transform).
+      void flag  // (kept to preserve control-flow symmetry with prior guard)
       let fallOffsetY = 0
       if (flagLocalFall) {
         // Evaluate against client-local dropTime so wall-clock skew between
