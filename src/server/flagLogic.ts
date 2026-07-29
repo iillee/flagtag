@@ -111,13 +111,19 @@ export function computeGravityTarget(dropX: number, dropY: number, dropZ: number
   dropBaselineY = dropY
   groundReportUsed = false
   groundLowerReportsLeft = GROUND_LOWER_REPORT_BUDGET
-  let minY = Infinity
-  for (const s of carrierYSamples) {
-    if (s.y < minY) minY = s.y
-  }
-  const groundEstimate = minY === Infinity ? dropY - 0.5 : minY
-  flagGravityTargetY = Math.max(FLAG_MIN_Y, groundEstimate + 0.5)
+  // Default: assume the drop happens ON the ground (walking drop). The flag
+  // shouldn't fall through the terrain the carrier is standing on — that was
+  // the playtest-#9 bug caused by using min(carrierYSamples.y) as the target:
+  // a carrier who picked up the flag in a valley (Y=50), climbed a mountain
+  // (Y=90) and dropped it there had the flag animate from Y=90 down to Y=50
+  // straight through the mountain. Bananas/bombs don't do this because their
+  // target is a ground raycast at the DROP location, not carrier history.
+  //
+  // If the drop is genuinely mid-air (jump, updraft, edge), the client's
+  // reportGroundY raycast (below) will lower the target to real ground after
+  // ~230ms — retargeting the analytic in-flight without a visible restart.
   carrierYSamples.length = 0
+  flagGravityTargetY = Math.max(FLAG_MIN_Y, dropY - 0.5)
 
   if (dropY > flagGravityTargetY + 0.1) {
     flagFalling = true
