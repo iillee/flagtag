@@ -631,43 +631,42 @@ let flagVisualEntity: Entity | null = null
 export let flagSyncedEntity: Entity | null = null
 
 /**
- * Returns the flag's AUTHORITATIVE world Y for the current frame. Callers:
- * beacon (positions itself in world space) and the flag visual (compensates
- * its local Y so world lands on this value regardless of parent staleness).
+ * Returns the flag's AUTHORITATIVE world position for the current frame.
+ * Used by the visual GLB (unparented, positioned directly in world space)
+ * and the beacon. Bomb/banana pattern — zero dependence on the server-
+ * synced flag entity's Transform, which has repeatedly proven unreliable
+ * (stale after endFall, missing after CRDT batching edge cases, etc.).
  *
  * Priority:
- *   1. Active local fall sim  → analytic Y (only reliable source mid-fall).
- *   2. flag.dropAnchorY / baseY — validated Flag fields, always synced from
- *      server (this is what server pickup uses; if server accepts a pickup
- *      here, this Y is correct on the client).
- *   3. Fallback — whatever parentY was passed in.
- *
- * Why NOT trust parent Transform: the 6th playtest showed the parent's
- * Transform CRDT update from endFall never reached the client (or was
- * clobbered) — flag stayed visually in mid-air for 19+ seconds while
- * server-side pickup worked at the true landing Y. The Flag component's
- * dropAnchorY did sync (validated field), so read that instead.
+ *   1. Active local fall sim  → analytic (startX/Z frozen, Y from formula).
+ *   2. flag.dropAnchor* (Dropped) / flag.base* (AtBase) — validated Flag
+ *      fields that reliably sync (server pickup uses these too).
+ *   3. null — no flag entity yet, or Carried (visual is hidden anyway).
  */
-export function getFlagAuthoritativeWorldY(parentY: number): number {
+export function getFlagAuthoritativeWorldPos(): Vector3 | null {
   if (flagLocalFall) {
-    return computeFallY(
+    const y = computeFallY(
       flagLocalFall.startY, flagLocalFall.targetY,
       flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
     )
+    return Vector3.create(flagLocalFall.startX, y, flagLocalFall.startZ)
   }
-  if (flagSyncedEntity) {
-    const flag = Flag.getOrNull(flagSyncedEntity)
-    if (flag) {
-      if (flag.state === FlagState.AtBase) return flag.baseY
-      if (flag.state === FlagState.Dropped) return flag.dropAnchorY
-    }
+  if (!flagSyncedEntity) return null
+  const flag = Flag.getOrNull(flagSyncedEntity)
+  if (!flag) return null
+  if (flag.state === FlagState.AtBase) {
+    return Vector3.create(flag.baseX, flag.baseY, flag.baseZ)
   }
-  return parentY
+  if (flag.state === FlagState.Dropped) {
+    return Vector3.create(flag.dropAnchorX, flag.dropAnchorY, flag.dropAnchorZ)
+  }
+  return null  // Carried — visual is hidden, beacon uses carrier position
 }
 
-/** @deprecated — kept for backwards-compat; delegates to getFlagAuthoritativeWorldY. */
+/** @deprecated — kept for backwards-compat; delegates to getFlagAuthoritativeWorldPos. */
 export function getFlagAnimatedWorldY(parentY: number): number {
-  return getFlagAuthoritativeWorldY(parentY)
+  const pos = getFlagAuthoritativeWorldPos()
+  return pos ? pos.y : parentY
 }
 
 /** Manually drop the flag — called from mobile UI button */
@@ -716,11 +715,16 @@ function ensureFlagModel(): void {
   }
   if (flagModelAttached) return
   for (const [entity] of engine.getEntitiesWith(Flag, Transform)) {
-    // Create a local child entity for the visual model + bob/spin
+    // Bomb/banana pattern: the visual is a STANDALONE world-space entity,
+    // NOT a child of the server-synced flag entity. Every previous approach
+    // that parented it kept hitting parent-Transform staleness bugs
+    // (playtests 3–8). Now we position it directly each frame from
+    // getFlagAuthoritativeWorldPos() — which reads the analytic during a
+    // fall and the validated Flag.dropAnchor*/base* fields at rest. Zero
+    // dependence on the synced entity's Transform.
     flagVisualEntity = engine.addEntity()
     Transform.create(flagVisualEntity, {
-      parent: entity,
-      position: Vector3.create(0, 0, 0)
+      position: Vector3.create(0, -1000, 0)  // hidden until first update tick
     })
     GltfContainer.create(flagVisualEntity, {
       src: BANNER_SRC,
@@ -757,67 +761,32 @@ function updateFlagBob(dt: number): void {
   if (flagVisualEntity && Transform.has(flagVisualEntity) && flagSyncedEntity) {
     const flag = Flag.getOrNull(flagSyncedEntity)
     if (flag && flag.state !== FlagState.Carried) {
-      // (No fallback fall needed anymore.) getFlagAuthoritativeWorldY below
-      // now reads flag.dropAnchorY when there's no active local sim, and
-      // dropAnchorY is a validated field that reliably syncs. The old
-      // 'parent.y > FLOOR+2 → start fake fall to FLOOR' fallback fired on
-      // every ground-level walking drop above Y=50 and pulled the visual
-      // straight through the actual floor — the 7th-playtest bug. If we
-      // ever miss a real flagFallStart, the visual will simply pop from
-      // startY to landY when dropAnchorY updates (not perfect but not the
-      // multi-second-stuck bug we were guarding against, since we no
-      // longer depend on parent Transform).
-      void flag  // (kept to preserve control-flow symmetry with prior guard)
-      let fallOffsetY = 0
+      // Standalone visual, positioned directly in WORLD SPACE from the
+      // authoritative source. No parent, no compensation math, no staleness.
+      const authPos = getFlagAuthoritativeWorldPos()
+      if (authPos) {
+        const t = Transform.getMutable(flagVisualEntity)
+        t.position = Vector3.create(authPos.x, authPos.y + bobY, authPos.z)
+        t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
+      }
+      // Release the local sim when analytic has settled AND dropAnchor
+      // (validated field, reliably syncs) agrees with targetY. No parent
+      // Transform involvement.
       if (flagLocalFall) {
-        // Evaluate against client-local dropTime so wall-clock skew between
-        // server and client can't stall the visual (see flagFallStart handler).
         const analyticY = computeFallY(
           flagLocalFall.startY, flagLocalFall.targetY,
           flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
         )
-        // Compensate for potentially-stale parent Y so world Y always lands
-        // on analyticY. world Y = parent.y + bobY + fallOffsetY, and we want
-        // world Y = analyticY + bobY, so fallOffsetY = analyticY - parent.y.
-        // Works whether or not the parent Transform has caught up to the
-        // landing position.
-        const parentT = Transform.get(flagSyncedEntity)
-        fallOffsetY = analyticY - parentT.position.y
-        // Clear when the analytic has settled AND we have SOME anchor that
-        // agrees with targetY — either the parent Transform caught up OR the
-        // Flag component's dropAnchorY caught up. The 6th-playtest bug: only
-        // waiting on parent leaves us in local-sim forever when parent CRDT
-        // never propagates, but dropAnchorY (validated field) does propagate
-        // and is a reliable green-light to release the sim.
-        const flagNow = Flag.getOrNull(flagSyncedEntity)
         const analyticSettled = analyticY <= flagLocalFall.targetY
-        const parentCaughtUp = Math.abs(parentT.position.y - flagLocalFall.targetY) < 1
-        const anchorCaughtUp = !!flagNow && Math.abs(flagNow.dropAnchorY - flagLocalFall.targetY) < 1
-        if (analyticSettled && (parentCaughtUp || anchorCaughtUp)) {
+        const anchorCaughtUp = Math.abs(flag.dropAnchorY - flagLocalFall.targetY) < 1
+        if (analyticSettled && anchorCaughtUp) {
           flagLocalFall = null
-          fallOffsetY = 0
         }
       }
-      // Compute the child's local Y so that world Y ends up on the
-      // authoritative value even if the parent Transform is stale.
-      //   world = parent.y + localY  →  localY = authWorldY - parent.y + bobY
-      // During an active local fall, this collapses to (analyticY - parent.y + bobY)
-      // which matches the fallOffsetY computed above. Post-fall / at-rest it
-      // uses flag.dropAnchorY (or baseY), which we now trust over parent.y.
-      const parentT2 = Transform.get(flagSyncedEntity)
-      const authWorldY = getFlagAuthoritativeWorldY(parentT2.position.y)
-      const localY = authWorldY - parentT2.position.y + bobY
-      const t = Transform.getMutable(flagVisualEntity)
-      t.position = Vector3.create(0, localY, 0)
-      t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
     } else if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId && flagLocalFall) {
       // Flag was picked up mid-fall — clear any lingering local sim. Gate on
       // carrierPlayerId being non-empty so brief CRDT state flickers during
-      // the fall (state momentarily reads Carried while carrierPlayerId is
-      // still empty) don't null our sim. That flicker was the '5th playtest
-      // stuck in the air' bug: Carried nulled the sim, state flipped back to
-      // Dropped, and the fallback's dropAnchorY guard also failed — so the
-      // visual just sat there for the whole fall.
+      // the fall don't null our sim.
       flagLocalFall = null
     }
   }
