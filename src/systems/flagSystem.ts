@@ -769,19 +769,26 @@ function updateFlagBob(dt: number): void {
         t.position = Vector3.create(authPos.x, authPos.y + bobY, authPos.z)
         t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
       }
-      // Release the local sim when analytic has settled AND dropAnchor
-      // (validated field, reliably syncs) agrees with targetY. No parent
-      // Transform involvement.
-      if (flagLocalFall) {
-        const analyticY = computeFallY(
-          flagLocalFall.startY, flagLocalFall.targetY,
-          flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
-        )
-        const analyticSettled = analyticY <= flagLocalFall.targetY
-        const anchorCaughtUp = Math.abs(flag.dropAnchorY - flagLocalFall.targetY) < 1
-        if (analyticSettled && anchorCaughtUp) {
-          flagLocalFall = null
-        }
+      // Deliberately DO NOT clear flagLocalFall based on 'analytic settled'.
+      // Playtest #10: a jump/glide drop triggers TWO beginFalls on the
+      // server — first with target=dropY-0.5 (near startY, ~260ms fall),
+      // then a retarget after reportGroundY reports the real distant ground.
+      // If we clear the sim the instant the first tiny analytic settles, the
+      // visual snaps to dropAnchorY (which server has set to the first
+      // target, still up in the air), and the retarget's flagFallStart#2
+      // then races to arrive before the visual is noticed as stuck. The
+      // window is tight enough that sometimes the visual stays stuck for
+      // seconds and drops only when the CRDT for dropAnchor finally updates.
+      //
+      // Solution: keep the sim alive as long as it's valid. Analytic clamps
+      // to targetY forever — visual sits at correct spot at rest. Retargets
+      // land on the live sim (in-flight targetY update). We only clear on:
+      //   • A stale-sim override (flagFallStart arrives with data.startY
+      //     far from current analytic — handled in the flagFallStart handler).
+      //   • Flag becoming Carried with a real carrier (handled below).
+      //   • Flag becoming AtBase (round reset / respawn).
+      if (flagLocalFall && flag.state === FlagState.AtBase) {
+        flagLocalFall = null
       }
     } else if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId && flagLocalFall) {
       // Flag was picked up mid-fall — clear any lingering local sim. Gate on
