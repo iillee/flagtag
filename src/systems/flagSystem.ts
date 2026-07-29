@@ -555,6 +555,7 @@ interface FlagVisualFall {
 }
 let flagVisualFall: FlagVisualFall | null = null
 const FLAG_LOCAL_GRAVITY = 15  // matches server FLAG_GRAVITY for pickup timing parity
+const FLAG_GROUND_OFFSET = 0.2  // rest this far above ground so idle bob doesn't clip terrain
 
 room.onMessage('flagFallStart', (data) => {
   // Bomb-pattern: use this as the drop trigger + coords. Ignore data.targetY
@@ -644,7 +645,9 @@ function updateFlagVisualFall(dt: number): void {
     const result = RaycastResult.getOrNull(flagVisualFall.groundRayEntity)
     if (result) {
       if (result.hits.length > 0) {
-        flagVisualFall.targetY = Math.max(SCENE_FLOOR_Y, result.hits[0].position!.y)
+        // Lift slightly above ground so the flag's base doesn't clip through
+        // terrain during the idle bob (amplitude 0.15m, so 0.2m clears it).
+        flagVisualFall.targetY = Math.max(SCENE_FLOOR_Y, result.hits[0].position!.y) + FLAG_GROUND_OFFSET
       }
       flagVisualFall.groundResolved = true
       try { engine.removeEntity(flagVisualFall.groundRayEntity) } catch { /* already gone */ }
