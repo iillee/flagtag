@@ -321,20 +321,10 @@ function beginFall(startX: number, startY: number, startZ: number, targetY: numb
     dropTimeMs: now,
     landTimeMs: now + landMs
   }
-  // IMMEDIATELY write dropAnchor to the PREDICTED landing (startX, targetY, startZ).
-  // Historically dropAnchorY was left at startY throughout the fall and only
-  // updated in endFall. But clients that read dropAnchorY as their at-rest
-  // source of truth (bomb-template flag visual) would render at startY —
-  // stuck in mid-air — during the whole fall if they ever missed the
-  // flagFallStart WS message (playtest #8). Writing the predicted landing
-  // means: if the client got flagFallStart the analytic drives the descent;
-  // if they didn't, the visual sits at the correct final position rather
-  // than hovering in mid-air. Pickup validation is unaffected (it uses
-  // computeFallY from flagFallInfo, not dropAnchor, while a fall is active).
-  const fm = Flag.getMutable(flagEntity)
-  fm.dropAnchorX = startX
-  fm.dropAnchorY = targetY
-  fm.dropAnchorZ = startZ
+  // (No dropAnchor writes here. Client visual runs its own local raycast +
+  // Euler gravity from the flagFallStart coords — bomb pattern — and doesn't
+  // consult dropAnchor during a fall. Server writes dropAnchor to landY in
+  // endFall as before, for post-landing at-rest position.)
   // Every client (and any late-joiner via flagHeartbeat piggyback) will now
   // compute the same Y for the same `now`. No CRDT writes during the fall.
   room.send('flagFallStart', {
