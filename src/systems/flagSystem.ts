@@ -253,7 +253,7 @@ let prevFlagState: FlagState | null = null
 let prevCarrierId: string = ''
 
 // Auto-pickup proximity
-const AUTO_PICKUP_RADIUS = 3
+const AUTO_PICKUP_RADIUS = 4.5
 const AUTO_PICKUP_COOLDOWN_MS = 500 // don't spam server
 let lastAutoPickupRequestMs = 0
 // DIAG (proximity-steal-broken bug): throttle for the "carrier known but no Transform" warning.
@@ -857,7 +857,15 @@ export function flagClientSystem(dt: number): void {
       const myPos = Transform.get(engine.PlayerEntity).position
       for (const [flagEnt, flag] of engine.getEntitiesWith(Flag, Transform)) {
         if (flag.state === FlagState.Carried) continue
-        const dist = Vector3.distance(myPos, Transform.get(flagEnt).position)
+        // During a message-driven fall the synced Flag entity's Transform is
+        // frozen at drop-start Y (no CRDT writes during fall). Use the same
+        // authoritative world pos the visual is drawn from — otherwise the
+        // distance check reads a stale height and mid-air pickups fail even
+        // though the server would accept them. (Playtest: 2-player mid-air
+        // grab was silently dropped by the client before requestPickup.)
+        const authFallPos = getFlagAuthoritativeWorldPos()
+        const flagPos = authFallPos ?? Transform.get(flagEnt).position
+        const dist = Vector3.distance(myPos, flagPos)
         if (dist <= AUTO_PICKUP_RADIUS) {
           // Optimistic Phase 1: show clone + sound + shield immediately (no server round-trip lag)
           // Auto-pickup (walking onto a ground flag) is rarely rejected by the server, so
