@@ -253,7 +253,7 @@ let prevFlagState: FlagState | null = null
 let prevCarrierId: string = ''
 
 // Auto-pickup proximity
-const AUTO_PICKUP_RADIUS = 3
+const AUTO_PICKUP_RADIUS = 4.5
 const AUTO_PICKUP_COOLDOWN_MS = 500 // don't spam server
 let lastAutoPickupRequestMs = 0
 // DIAG (proximity-steal-broken bug): throttle for the "carrier known but no Transform" warning.
