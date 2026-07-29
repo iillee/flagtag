@@ -653,20 +653,43 @@ let flagVisualEntity: Entity | null = null
 export let flagSyncedEntity: Entity | null = null
 
 /**
- * Returns the flag's ANIMATED world Y — i.e. what the visual is actually
- * rendering at this frame, including the local analytic fall offset. The
- * synced parent Transform is frozen at startY throughout a fall (only the
- * child visual moves), so anything that wants to track the flag mid-fall
- * (e.g. the beacon light pillar) must call this instead of reading the
- * parent Transform directly. Returns null if there is no flag entity yet.
+ * Returns the flag's AUTHORITATIVE world Y for the current frame. Callers:
+ * beacon (positions itself in world space) and the flag visual (compensates
+ * its local Y so world lands on this value regardless of parent staleness).
+ *
+ * Priority:
+ *   1. Active local fall sim  → analytic Y (only reliable source mid-fall).
+ *   2. flag.dropAnchorY / baseY — validated Flag fields, always synced from
+ *      server (this is what server pickup uses; if server accepts a pickup
+ *      here, this Y is correct on the client).
+ *   3. Fallback — whatever parentY was passed in.
+ *
+ * Why NOT trust parent Transform: the 6th playtest showed the parent's
+ * Transform CRDT update from endFall never reached the client (or was
+ * clobbered) — flag stayed visually in mid-air for 19+ seconds while
+ * server-side pickup worked at the true landing Y. The Flag component's
+ * dropAnchorY did sync (validated field), so read that instead.
  */
+export function getFlagAuthoritativeWorldY(parentY: number): number {
+  if (flagLocalFall) {
+    return computeFallY(
+      flagLocalFall.startY, flagLocalFall.targetY,
+      flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
+    )
+  }
+  if (flagSyncedEntity) {
+    const flag = Flag.getOrNull(flagSyncedEntity)
+    if (flag) {
+      if (flag.state === FlagState.AtBase) return flag.baseY
+      if (flag.state === FlagState.Dropped) return flag.dropAnchorY
+    }
+  }
+  return parentY
+}
+
+/** @deprecated — kept for backwards-compat; delegates to getFlagAuthoritativeWorldY. */
 export function getFlagAnimatedWorldY(parentY: number): number {
-  if (!flagLocalFall) return parentY
-  const analyticY = computeFallY(
-    flagLocalFall.startY, flagLocalFall.targetY,
-    flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
-  )
-  return analyticY
+  return getFlagAuthoritativeWorldY(parentY)
 }
 
 /** Manually drop the flag — called from mobile UI button */
@@ -774,31 +797,39 @@ function updateFlagBob(dt: number): void {
           flagLocalFall.startY, flagLocalFall.targetY,
           flagLocalFall.clientDropTimeMs, Date.now(), FLAG_GRAVITY
         )
-        // Compute fallOffsetY relative to the PARENT'S CURRENT Y, not the
-        // original startY. The visual is a child at local (0, bobY+off, 0),
-        // so world Y = parent.y + bobY + off. We want world Y = analyticY + bobY,
-        // therefore off = analyticY - parent.y.
-        //
-        // Why this matters: the third-playtest 'invisible / below floor' bug
-        // was because we used (analyticY - startY). While parent==startY that's
-        // fine. But the instant CRDT lands parent at targetY (which happens
-        // ~simultaneous with flagLanded WS), off is still ≈ (targetY - startY)
-        // ≈ -25m, giving world Y ≈ targetY - 25m = deep underground for a frame
-        // or two until the clear condition fires. Using parent.y as the anchor
-        // makes the offset self-correcting the instant parent moves.
+        // Compensate for potentially-stale parent Y so world Y always lands
+        // on analyticY. world Y = parent.y + bobY + fallOffsetY, and we want
+        // world Y = analyticY + bobY, so fallOffsetY = analyticY - parent.y.
+        // Works whether or not the parent Transform has caught up to the
+        // landing position.
         const parentT = Transform.get(flagSyncedEntity)
         fallOffsetY = analyticY - parentT.position.y
-        // Clear when analytic settled AND parent caught up — both are stable
-        // enough that removing the local override won't cause a visible pop.
+        // Clear when the analytic has settled AND we have SOME anchor that
+        // agrees with targetY — either the parent Transform caught up OR the
+        // Flag component's dropAnchorY caught up. The 6th-playtest bug: only
+        // waiting on parent leaves us in local-sim forever when parent CRDT
+        // never propagates, but dropAnchorY (validated field) does propagate
+        // and is a reliable green-light to release the sim.
+        const flagNow = Flag.getOrNull(flagSyncedEntity)
         const analyticSettled = analyticY <= flagLocalFall.targetY
         const parentCaughtUp = Math.abs(parentT.position.y - flagLocalFall.targetY) < 1
-        if (analyticSettled && parentCaughtUp) {
+        const anchorCaughtUp = !!flagNow && Math.abs(flagNow.dropAnchorY - flagLocalFall.targetY) < 1
+        if (analyticSettled && (parentCaughtUp || anchorCaughtUp)) {
           flagLocalFall = null
           fallOffsetY = 0
         }
       }
+      // Compute the child's local Y so that world Y ends up on the
+      // authoritative value even if the parent Transform is stale.
+      //   world = parent.y + localY  →  localY = authWorldY - parent.y + bobY
+      // During an active local fall, this collapses to (analyticY - parent.y + bobY)
+      // which matches the fallOffsetY computed above. Post-fall / at-rest it
+      // uses flag.dropAnchorY (or baseY), which we now trust over parent.y.
+      const parentT2 = Transform.get(flagSyncedEntity)
+      const authWorldY = getFlagAuthoritativeWorldY(parentT2.position.y)
+      const localY = authWorldY - parentT2.position.y + bobY
       const t = Transform.getMutable(flagVisualEntity)
-      t.position = Vector3.create(0, bobY + fallOffsetY, 0)
+      t.position = Vector3.create(0, localY, 0)
       t.rotation = Quaternion.fromEulerDegrees(0, angleDeg, 0)
     } else if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId && flagLocalFall) {
       // Flag was picked up mid-fall — clear any lingering local sim. Gate on
