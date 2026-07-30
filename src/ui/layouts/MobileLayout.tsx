@@ -102,8 +102,8 @@ export function MobileLayout() {
           <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 350, right: 60 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 16 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { console.log('[UI] boomerang tapped'); playClickSound(); triggerProjectileFromUI() }}
-              onMouseUp={() => { console.log('[UI] boomerang released'); triggerProjectileReleaseFromUI() }}
+              onMouseDown={() => { playClickSound(); triggerProjectileFromUI() }}
+              onMouseUp={() => { triggerProjectileReleaseFromUI() }}
             >
               {/* Blue charge circle glow — over black bg, under boomerang icon */}
               {getBoomerangColor() === 'b' && getChargeFraction() > 0 && (() => {
@@ -129,7 +129,7 @@ export function MobileLayout() {
             </UiEntity>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 0 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { console.log('[UI] banana tapped'); playClickSound(); triggerTrapFromUI() }}
+              onMouseDown={() => { playClickSound(); triggerTrapFromUI() }}
             >
               <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
