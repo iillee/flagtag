@@ -270,9 +270,7 @@ function PlayerListUi() {
 
       {/* Server-down overlay */}
       {serverDownState.visible && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
-          uiBackground={{ color: Color4.create(0, 0, 0, 0.6) }}
-          onMouseDown={() => {}}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
         >
           <UiEntity uiTransform={{ width: mobile ? 900 : S(460), flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 40 : S(20), padding: mobile ? { top: 64, bottom: 48, left: 48, right: 48 } : { top: S(36), bottom: S(28), left: S(40), right: S(40) } }}
             uiBackground={{ color: PANEL_BG }}
