@@ -297,7 +297,7 @@ function PlayerListUi() {
       {/* Mailbox popup */}
       {popupState.mailbox && (() => {
         // Match chest UI mobile scale.
-        const MB = 2
+        const MB = 1.5 // 2 -> 1.5 to match chest (25% reduction, mobile pass 2026-07-30)
         const mb = (v: number) => Math.round(v * MB)
         return (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
@@ -409,7 +409,7 @@ function PlayerListUi() {
       {/* Title Splash */}
       {cinematicState.titleSplashVisible && (() => {
         const mobile = isMobile()
-        const M = 2
+        const M = 1.5 // mobile scale (2 -> 1.5, 25% reduction, 2026-07-30)
         const s = mobile ? (v: number) => Math.round(v * M) : S
         const radius = mobile ? 40 : S(16)
         return (

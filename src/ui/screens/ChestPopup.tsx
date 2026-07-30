@@ -117,7 +117,7 @@ export function ChestPopup() {
 
   const SLOTS = 4
   // Mobile scale multiplier — bump this to grow the whole chest UI on mobile.
-  const MS = 2
+  const MS = 1.5 // 2 -> 1.5 (25% reduction, mobile pass 2026-07-30)
   const m = (v: number) => Math.round(v * MS)
   const panelWidth = mobile ? m(500) : S(620)
   const pad = mobile ? m(20) : S(20)

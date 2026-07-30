@@ -50,7 +50,7 @@ export function HowToPlayOverlay() {
           justifyContent: mobile ? 'center' : 'space-between',
           alignItems: 'stretch',
           width: mobile ? '78%' : S(1000),
-          margin: { top: mobile ? 140 : S(40), bottom: mobile ? 14 * M : S(12) },
+          margin: { top: mobile ? 50 : S(40), bottom: mobile ? 14 * M : S(12) },
         }}
         // Was onMouseDown={() => {}} (empty swallow to block clicks bubbling to
         // the game world). That's no longer needed — the outer wrapper catches

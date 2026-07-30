@@ -216,7 +216,7 @@ function MobileStatusPopup() {
     <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
       onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
       >
-      <UiEntity uiTransform={{ width: '24%', height: 860, flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, borderRadius: 40, margin: { top: 140 } }}
+      <UiEntity uiTransform={{ width: '24%', height: 600, flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, borderRadius: 40, margin: { top: 50 } }}
         uiBackground={{ color: PANEL_BG }}
       >
         <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 52 * M, alignItems: 'center', justifyContent: 'center', margin: { bottom: 10 * M } }}>
