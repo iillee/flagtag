@@ -57,7 +57,7 @@ export function MobileLayout() {
         const isLeader = localPlayer && leaderUserId !== null && localPlayer.userId === leaderUserId
         const hasFlag = localPlayer && carrierUserId !== null && localPlayer.userId === carrierUserId
         const scoreColor = isLeader ? GOLD : WHITE
-        const T = 1.5 // top HUD scale multiplier
+        const T = 1.2 // top HUD scale multiplier (was 1.5, rendered too large on mobile after Foundation's virtual-screen revert 2026-07-30)
         return (
           <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 20 * T }, width: '100%', height: 68 * T, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -95,10 +95,11 @@ export function MobileLayout() {
 
       {/* Mobile Ability Bar */}
       {!spectatorState.active && (() => {
-        const AB_SIZE = M_CIRCLE_SIZE * 2.6775
-        const AB_ICON = 50 * 2.6775
+        // Ability bar scaled by 0.8 alongside top HUD (2026-07-30 mobile pass)
+        const AB_SIZE = M_CIRCLE_SIZE * 2.142
+        const AB_ICON = 50 * 2.142
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 463, right: 100 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 332, right: 70 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 16 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               onMouseDown={() => { playClickSound(); triggerProjectileFromUI() }}
@@ -117,7 +118,7 @@ export function MobileLayout() {
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_circle_filled.png' }, color: Color4.create(r, g, b, a) }} />
                 )
               })()}
-              <UiEntity uiTransform={{ width: (AB_ICON - 8) * 1.4175, height: (AB_ICON - 8) * 1.4175, margin: { top: -8 }, pointerFilter: 'none' }}
+              <UiEntity uiTransform={{ width: (AB_ICON - 8) * 1.134, height: (AB_ICON - 8) * 1.134, margin: { top: -8 }, pointerFilter: 'none' }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
               {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={78} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', pointerFilter: 'none' }} />}
             </UiEntity>
@@ -134,7 +135,7 @@ export function MobileLayout() {
       })()}
 
       {/* Mobile Scoreboard Overlay */}
-      {mobileState.scoreboardVisible && (() => { const M = 2; return (
+      {mobileState.scoreboardVisible && (() => { const M = 1.6; return (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
           >
           <UiEntity uiTransform={{ positionType: 'relative', width: '46%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, overflow: 'hidden', borderRadius: 40 }}
@@ -192,7 +193,7 @@ function MobileStatusPopup() {
   const boomerang = getBoomerangColor()
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
-  const M = 2 // match HowToPlay mobile scale
+  const M = 1.6 // match HowToPlay mobile scale (scaled 2 -> 1.6 in mobile pass 2026-07-30)
   const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White(), iconScale: number = 1) => {
     const icoSize = Math.round(30 * iconScale * M)
     const rowH = 48 * M
