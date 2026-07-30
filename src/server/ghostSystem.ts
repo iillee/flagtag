@@ -84,6 +84,10 @@ export function despawnAllGhosts(): void {
   }
 }
 
+// Backoff after a syncEntity failure so we don't retry every frame (~30Hz)
+// and flood the log stream with identical stack traces. See spawnGhost().
+const GHOST_SPAWN_FAILURE_BACKOFF_S = 5
+
 // ── Spawn a single ghost ──
 function spawnGhost(): void {
   const entity = engine.addEntity()
@@ -103,7 +107,23 @@ function spawnGhost(): void {
   // and freezes all other synced components (scoreboard, flag state, hold time).
   // Clients interpolate toward Ghost.targetX/Y/Z which is updated at 5Hz.
   const ghostSyncId = getNextGhostSyncId()
-  syncEntity(entity, [Ghost.componentId], ghostSyncId)
+  try {
+    syncEntity(entity, [Ghost.componentId], ghostSyncId)
+  } catch (err) {
+    // `syncEntity failed because the id provided is already in use` — the SDK
+    // still considers this ID claimed (CRDT tombstone from the previous ghost
+    // that used this slot hasn't cleared). Without this guard the outer
+    // system-level try/catch just logs and we retry every frame, producing
+    // ~30 identical stacks/s that drown the log stream (playtest 2026-07-29).
+    // Clean up the orphan entity, drop the tainted ID (do NOT recycle — it
+    // clearly isn't ready for reuse), and back off so night-time isn't a
+    // permanent error firehose.
+    console.error('[Server] 🧟 spawnGhost failed (id=', ghostSyncId, '), backing off', GHOST_SPAWN_FAILURE_BACKOFF_S, 's:', err)
+    Ghost.deleteFrom(entity)
+    engine.removeEntity(entity)
+    setGhostRespawnCooldown(GHOST_SPAWN_FAILURE_BACKOFF_S)
+    return
+  }
 
   activeGhosts.push({
     entity,

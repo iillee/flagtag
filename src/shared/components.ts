@@ -195,7 +195,14 @@ Ghost.validateBeforeChange((value) => value.senderAddress === AUTH_SERVER_PEER_I
 
 // ── Ghost sync ID pool ──
 
-const ghostPool = createSyncIdPool(3_000_000, 5)
+// Pool sized generously (64 slots) so recycled IDs aren't handed back before the
+// SDK's internal CRDT tombstone for a removed entity has cleared across the
+// network. With single-ghost gameplay + 30s respawn cooldown we cycle through
+// the whole pool in ~30 minutes of night-time, well past any realistic
+// tombstone window. Prior value was 5, which caused fast recycling and
+// `syncEntity failed because the id provided is already in use` throws that
+// spammed the log stream. See src/server/ghostSystem.ts spawnGhost().
+const ghostPool = createSyncIdPool(3_000_000, 64)
 export const getNextGhostSyncId = ghostPool.next.bind(ghostPool)
 export const recycleGhostSyncId = ghostPool.recycle.bind(ghostPool)
 
