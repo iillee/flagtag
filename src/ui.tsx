@@ -270,18 +270,20 @@ function PlayerListUi() {
 
       {/* Server-down overlay */}
       {serverDownState.visible && (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+          onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }}
         >
           <UiEntity uiTransform={{ width: mobile ? 900 : S(460), flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 40 : S(20), padding: mobile ? { top: 64, bottom: 48, left: 48, right: 48 } : { top: S(36), bottom: S(28), left: S(40), right: S(40) } }}
             uiBackground={{ color: PANEL_BG }}
+            onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }}
           >
             {mobile ? (
-              <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -20, right: -5 }, width: 104, height: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+              <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 8, right: 8 }, width: 80, height: 80, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', pointerFilter: 'block' }}
                 onMouseEnter={() => { hover.closeServerDown = true }}
                 onMouseLeave={() => { hover.closeServerDown = false }}
                 onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false; hover.closeServerDown = false }}
               >
-                <Label value="×" fontSize={104} color={hover.closeServerDown ? Color4.create(0.85, 0.85, 0.9, 1) : Color4.create(0.55, 0.55, 0.6, 1)} font="sans-serif" />
+                <Label value="×" fontSize={72} color={hover.closeServerDown ? Color4.create(0.85, 0.85, 0.9, 1) : Color4.create(0.55, 0.55, 0.6, 1)} font="sans-serif" />
               </UiEntity>
             ) : (
               <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />

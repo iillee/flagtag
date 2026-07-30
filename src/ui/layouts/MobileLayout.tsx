@@ -99,11 +99,11 @@ export function MobileLayout() {
         const AB_SIZE = M_CIRCLE_SIZE * 2.142
         const AB_ICON = 50 * 2.142
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 332, right: 70 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 350, right: 60 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 16 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { playClickSound(); triggerProjectileFromUI() }}
-              onMouseUp={() => { triggerProjectileReleaseFromUI() }}
+              onMouseDown={() => { console.log('[UI] boomerang tapped'); playClickSound(); triggerProjectileFromUI() }}
+              onMouseUp={() => { console.log('[UI] boomerang released'); triggerProjectileReleaseFromUI() }}
             >
               {/* Blue charge circle glow — over black bg, under boomerang icon */}
               {getBoomerangColor() === 'b' && getChargeFraction() > 0 && (() => {
@@ -118,13 +118,18 @@ export function MobileLayout() {
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_circle_filled.png' }, color: Color4.create(r, g, b, a) }} />
                 )
               })()}
-              <UiEntity uiTransform={{ width: (AB_ICON - 8) * 1.134, height: (AB_ICON - 8) * 1.134, margin: { top: -8 }, pointerFilter: 'none' }}
+              {/* Match banana structure exactly: no negative margin, no inner
+                 handlers, no pointerFilter. Previous margin:{top:-8} pushed the
+                 icon 8px above the button bounds and broke hit-testing on the
+                 icon region (only a small strip below the icon was clickable
+                 — the classic 'children outside parent don't bubble' SDK quirk). */}
+              <UiEntity uiTransform={{ width: (AB_ICON - 8) * 1.134, height: (AB_ICON - 8) * 1.134 }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
               {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={78} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', pointerFilter: 'none' }} />}
             </UiEntity>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 0 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { playClickSound(); triggerTrapFromUI() }}
+              onMouseDown={() => { console.log('[UI] banana tapped'); playClickSound(); triggerTrapFromUI() }}
             >
               <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
                 uiBackground={{ textureMode: 'stretch', texture: { src: getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
@@ -136,7 +141,8 @@ export function MobileLayout() {
 
       {/* Mobile Scoreboard Overlay */}
       {mobileState.scoreboardVisible && (() => { const M = 1.6; return (
-        <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+        <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+          onMouseDown={() => { playClickSound(); mobileState.scoreboardVisible = false; notifyOverlayClosed() }}
           >
           <UiEntity uiTransform={{ positionType: 'relative', width: '46%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, overflow: 'hidden', borderRadius: 40 }}
             uiBackground={{ color: PANEL_BG }}
@@ -207,7 +213,8 @@ function MobileStatusPopup() {
   }
 
   return (
-    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
+    <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
+      onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
       >
       <UiEntity uiTransform={{ width: '24%', height: 860, flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, borderRadius: 40, margin: { top: 140 } }}
         uiBackground={{ color: PANEL_BG }}

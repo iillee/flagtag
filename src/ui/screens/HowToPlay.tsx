@@ -17,10 +17,10 @@ const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 
 export function HowToPlayOverlay() {
   const mobile = isMobile()
-  const M = 2 // mobile scale multiplier
+  const M = 1.25 // mobile scale multiplier (2 -> 1.25 in mobile pass 2026-07-30)
   const s = mobile ? (v: number) => Math.round(v * M) : S
   const cardW = mobile ? '24%' : S(320)
-  const cardH = mobile ? 860 : S(520)
+  const cardH = mobile ? 480 * M : S(520) // scales with M (was raw 860 at M=2 -> base 480 after visual tune)
   const cardPad = mobile
     ? { top: 18 * M, bottom: 32 * M, left: 20 * M, right: 20 * M }
     : { top: S(18), bottom: S(18), left: S(20), right: S(20) }
@@ -38,8 +38,11 @@ export function HowToPlayOverlay() {
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        pointerFilter: 'none',
       }}
+      // Tap anywhere on the overlay closes it (mobile-friendly dismiss). The
+      // inner card row swallows its own onMouseDown so taps inside content
+      // don't accidentally dismiss. See mobile UI pass 2026-07-30.
+      onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
     >
       <UiEntity
         uiTransform={{
@@ -49,7 +52,11 @@ export function HowToPlayOverlay() {
           width: mobile ? '78%' : S(1000),
           margin: { top: mobile ? 140 : S(40), bottom: mobile ? 14 * M : S(12) },
         }}
-        onMouseDown={() => {}}
+        // Was onMouseDown={() => {}} (empty swallow to block clicks bubbling to
+        // the game world). That's no longer needed — the outer wrapper catches
+        // all clicks now — and was blocking the tap-to-close behavior for taps
+        // that landed on the cards themselves. Matching Title Splash pattern.
+        onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
       >
         {/* Flag Card */}
         <UiEntity
