@@ -145,18 +145,21 @@ export function ghostServerSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   const now = Date.now()
 
-  // Keep world time cache fresh for night detection (no skybox on server)
+  // Keep world time cache fresh for the diagnostic below. Note: on the
+  // headless server getWorldTime() resolves with seconds=0 (see playtest
+  // 2026-07-30 logs), so isNightTime() is effectively always-true here.
+  // Client callers still get correct time because the platform advances the
+  // skybox clock in-browser.
   updateWorldTime(clampedDt, false)
 
-  // ── Ghost only spawns at night ──
-  if (!isNightTime()) {
-    if (activeGhosts.length > 0) {
-      despawnAllGhosts()
-      console.log('[Server] ☀️ Dawn — despawning ghost')
-    }
-    ghostSpawnTimer = 5 // ready to spawn quickly when night falls
-    return
-  }
+  // ── Ghost is active 24/7 by design ──
+  // Design decision (2026-07-30): keep-away flag gameplay wants the ghost
+  // as a constant environmental threat, not a nightly one. We intentionally
+  // skip the night-gate here on the server so gameplay doesn't hinge on the
+  // getWorldTime() sandbox quirk documented above — if Foundation ever fixes
+  // the headless clock, ghost stays 24/7 instead of silently going dark for
+  // half the day. Client-side visuals (proximity lights, moon/sun icon) still
+  // use isNightTime() and remain correct on real clients.
 
   // ── Spawn timer (single ghost, 30s respawn cooldown after death) ──
   if (ghostRespawnCooldown > 0) {
