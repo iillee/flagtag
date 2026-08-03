@@ -31,13 +31,13 @@ Context: playtest ran on `flagtag.dcl.eth` with ~4 players on SDK `7.24.6-295051
 ## Diagnostic tools available
 
 - `npx sdk-commands sdk-server-logs --world flagtag.dcl.eth` — streams live production server logs. Wallet already in `logsPermissions`. Use this for any of the above.
-- Existing server log signatures: `🔀 CRDT/heartbeat disagreement`, `🚩 Client proximity steal prediction`, `⚠️ handlePickup REJECT`, `✅ handlePickup ACCEPT`, `🚩⬇️ beginFall`, `🚫 Proximity steal blocked (no client corroboration)`.
+- Existing server log signatures: `🚩 Client proximity steal prediction`, `⚠️ handlePickup REJECT`, `✅ handlePickup ACCEPT`, `🚩⬇️ beginFall`, `🚫 Proximity steal blocked (no client corroboration)`, `⚠️ getPlayerPosition: address … has N entities`. (`🔀 CRDT/heartbeat disagreement` is gone — it was removed with the position heartbeat on 2026-08-03.)
 
 ---
 
 ## Recently resolved (2026-07-22)
 
-- **CRDT cross-wire on player Transforms** — server-side `Transform.get(remotePlayerEntity)` lockstep-tracked another player's position, causing phantom trap hits, wrong steal targets, and "flag teleporting" symptoms. Root cause is a platform-level identity/routing bug in the Multiplayer Server / LiveKit layer (see `BUG_stale-crdt-transform-in-combat.md` and `BUG_handover_summary.md`). Foundation has been notified; in-scene defenses shipped in PR #10 neutralize the impact by preferring a client-reported position heartbeat over the CRDT view, requiring client corroboration for proximity steals, and enumerating victims from the heartbeat-union roster. Look for `🔀 CRDT/heartbeat disagreement` in server logs — that signature is the platform bug firing and being caught.
+- **CRDT cross-wire on player Transforms** — server-side `Transform.get(remotePlayerEntity)` lockstep-tracked another player's position, causing phantom trap hits, wrong steal targets, and "flag teleporting" symptoms. Root cause was a platform-level identity/routing bug in the Multiplayer Server / LiveKit layer (see `BUG_stale-crdt-transform-in-combat.md` and `BUG_handover_summary.md`). **The platform issue is now reported fixed, and on 2026-08-03 the in-scene position-heartbeat workaround was removed** — `getPlayerPosition` reads the CRDT Transform again, and the `🔀 CRDT/heartbeat disagreement` detector is gone with it. The `requestSteal` corroboration gate and the duplicate-entity diagnostics were kept. If phantom hits or wrong steal targets reappear in playtest, this is the first thing to suspect: there is no longer a log signature that catches it, so re-read the bug doc before re-diagnosing from scratch.
 
 - **Flag state persisted to Storage on every gameplay event** — PR #11 removed all Storage writes for flag state (the CRDT `syncEntity` handles live replication; nothing else about a round survives a server restart, so persisting the flag alone produced a half-consistent state and was a suspected contributor to the historical "flag stuck" bug). Cut ~75–85% of the scene's total Storage write volume.
 

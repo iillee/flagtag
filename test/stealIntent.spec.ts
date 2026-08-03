@@ -8,7 +8,6 @@ import {
   clearStealIntent,
   pruneStaleIntents,
   selectStealCandidate,
-  isStealCorroborated,
 } from '../src/server/stealIntent'
 
 describe('proximity steal client corroboration', () => {
@@ -84,60 +83,6 @@ describe('proximity steal client corroboration', () => {
     it('should keep the recent intent', () => {
       expect(store.has('0xrecent')).toBe(true)
     })
-  })
-})
-
-describe('isStealCorroborated', () => {
-  it('corroborates on client intent alone', () => {
-    expect(isStealCorroborated({
-      hasClientIntent: true,
-      carrierHasFreshHeartbeat: false,
-      candidateHasFreshHeartbeat: false,
-    })).toBe(true)
-  })
-
-  it('corroborates on heartbeat-dual freshness alone', () => {
-    // Closes the "steal doesn't work" playtest bug: a client with fully stalled
-    // flag CRDT never sends requestSteal, but two independent WS heartbeats
-    // agreeing on proximity is still trustworthy — heartbeats aren't
-    // cross-wireable.
-    expect(isStealCorroborated({
-      hasClientIntent: false,
-      carrierHasFreshHeartbeat: true,
-      candidateHasFreshHeartbeat: true,
-    })).toBe(true)
-  })
-
-  it('does NOT corroborate on carrier heartbeat alone (candidate might be a cross-wired ghost)', () => {
-    expect(isStealCorroborated({
-      hasClientIntent: false,
-      carrierHasFreshHeartbeat: true,
-      candidateHasFreshHeartbeat: false,
-    })).toBe(false)
-  })
-
-  it('does NOT corroborate on candidate heartbeat alone (carrier position unverified)', () => {
-    expect(isStealCorroborated({
-      hasClientIntent: false,
-      carrierHasFreshHeartbeat: false,
-      candidateHasFreshHeartbeat: true,
-    })).toBe(false)
-  })
-
-  it('does NOT corroborate when no signal at all', () => {
-    expect(isStealCorroborated({
-      hasClientIntent: false,
-      carrierHasFreshHeartbeat: false,
-      candidateHasFreshHeartbeat: false,
-    })).toBe(false)
-  })
-
-  it('corroborates when both signals are present (belt and suspenders)', () => {
-    expect(isStealCorroborated({
-      hasClientIntent: true,
-      carrierHasFreshHeartbeat: true,
-      candidateHasFreshHeartbeat: true,
-    })).toBe(true)
   })
 })
 

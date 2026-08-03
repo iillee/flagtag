@@ -2,11 +2,9 @@
  * ghostTargeting.ts — Ghost AI nearest-target selection.
  *
  * Pure module (no engine imports) so the selection stays unit-testable under
- * jest, mirroring stealIntent.ts / positionTrust.ts. The ghost system builds
- * candidates from trusted heartbeat-preferred position reads (getPlayerPosition)
- * — ghostTouching fills the victim's scare meter, so targeting off the raw CRDT
- * Transform would phantom-hit cross-wired players just like traps did
- * (docs/BUG_stale-crdt-transform-in-combat.md).
+ * jest, mirroring stealIntent.ts. The ghost system builds candidates from
+ * getPlayerPosition rather than reading player Transforms directly, so every
+ * consequential position read goes through the one lookup.
  */
 
 export interface GhostTargetCandidate {

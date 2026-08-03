@@ -30,7 +30,7 @@ import {
   coinStateEntity,
   holdTimeEntities, knownPlayers, playerBoomerangColors,
   recordPlayerPositions, sweepDuplicateIdentities, getPlayerPosition, isRealName,
-  nameChangeCooldowns, feedbackCooldowns, recordPlayerHeartbeat,
+  nameChangeCooldowns, feedbackCooldowns,
 } from './serverState'
 import { persistPlayerNames, loadPlayerNames, loadVisitorData } from './persistence'
 import {
@@ -157,7 +157,6 @@ export async function setupServer(): Promise<void> {
 
   // ── Register handlers & systems ──
   registerHandlers()
-  registerPositionHeartbeatHandler()
   registerFeedbackHandlers()
   registerFlagHandlers()
   registerEconomyHandlers()
@@ -321,21 +320,6 @@ async function loadMailboxWebhook(): Promise<void> {
   mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || ''
   console.log(mailboxWebhook ? '[Server] ✅ Mailbox webhook loaded from env' : '[Server] ℹ️ No DISCORD_MAILBOX_WEBHOOK set — feedback disabled')
 }
-/**
- * Client position heartbeat (~8Hz). Feeds the trusted position channel that
- * getPlayerPosition prefers over the cross-wire-prone CRDT Transform
- * (docs/BUG_stale-crdt-transform-in-combat.md). Validation and rate limiting
- * live in positionTrust.ts.
- */
-function registerPositionHeartbeatHandler(): void {
-  room.onMessage('posHeartbeat', (data, context) => {
-    try {
-      if (!context) return
-      recordPlayerHeartbeat(context.from, data.x, data.y, data.z)
-    } catch (err) { console.error('[Server] ❌ posHeartbeat handler error:', err) }
-  })
-}
-
 function registerFeedbackHandlers(): void {
   room.onMessage('sendFeedback', async (data, context) => {
     if (!context) return

@@ -12,10 +12,6 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Ghost } from '../shared/components'
 import { room } from '../shared/messages'
 import {
-  parseGhostHeartbeat, decideFallbackAction,
-  type GhostHeartbeatEntry
-} from '../shared/ghostHeartbeat'
-import {
   isTouchingHeld,
   GHOST_TOUCHING_HOLD_MS,
 } from '../shared/ghostContactState'
@@ -140,53 +136,6 @@ export function cancelGhostDeathRespawn(): void {
 // few seconds so we can confirm the hypothesis from live playtest logs.
 let lastInvisibleGhostLogMs = 0
 const INVISIBLE_GHOST_LOG_INTERVAL_MS = 3000
-
-// ── Fallback-visual channel (invisible-ghost bug) ──
-// When the CRDT `Ghost` component fails to replicate, we still get this WS
-// heartbeat and can render a lightweight visual driven purely by it. As soon
-// as CRDT catches up, decideFallbackAction destroys the fallback and the real
-// path takes over. See src/shared/ghostHeartbeat.ts.
-let lastGhostHeartbeat: GhostHeartbeatEntry[] = []
-let lastGhostHeartbeatMs = 0
-interface FallbackVisual { id: number; modelEntity: Entity; renderPos: Vector3; targetPos: Vector3; time: number }
-let fallbackVisual: FallbackVisual | null = null
-
-room.onMessage('ghostHeartbeat', (data) => {
-  lastGhostHeartbeat = parseGhostHeartbeat(data.ghostsJson)
-  lastGhostHeartbeatMs = Date.now()
-})
-
-function createFallbackVisual(entry: GhostHeartbeatEntry): FallbackVisual {
-  const modelEntity = engine.addEntity()
-  Transform.create(modelEntity, {
-    position: Vector3.create(entry.x, entry.y + 1.0, entry.z),
-    scale: Vector3.create(1.2, 1.2, 1.2)
-  })
-  GltfContainer.create(modelEntity, { src: GHOST_MODEL_SRC })
-  AudioSource.create(modelEntity, {
-    audioClipUrl: 'assets/sounds/ghost.mp3',
-    playing: true,
-    loop: true,
-    volume: 0.3,
-    global: false
-  })
-  console.log('[Ghost] 👻 fallback visual created (id=', entry.id,
-    ') — CRDT did not deliver this ghost, rendering from heartbeat')
-  return {
-    id: entry.id,
-    modelEntity,
-    renderPos: Vector3.create(entry.x, entry.y, entry.z),
-    targetPos: Vector3.create(entry.x, entry.y, entry.z),
-    time: Math.random() * 10
-  }
-}
-
-function destroyFallbackVisual(): void {
-  if (!fallbackVisual) return
-  engine.removeEntity(fallbackVisual.modelEntity)
-  console.log('[Ghost] 👻 fallback visual destroyed (id=', fallbackVisual.id, ')')
-  fallbackVisual = null
-}
 
 room.onMessage('ghostTouching', (data) => {
   const me = getPlayerData()?.userId?.toLowerCase()
@@ -495,48 +444,6 @@ export function ghostClientSystem(dt: number): void {
     }
   }
 
-  // ── Fallback-visual reconcile (invisible-ghost bug) ──
-  // Decide whether the heartbeat should own a visual right now. Runs AFTER the
-  // CRDT reconcile above so clientGhosts.size reflects the current CRDT view.
-  const decision = decideFallbackAction({
-    crdtGhostCount: clientGhosts.size,
-    heartbeat: lastGhostHeartbeat,
-    currentFallbackId: fallbackVisual?.id ?? null,
-    nowMs: Date.now(),
-    lastHeartbeatMs: lastGhostHeartbeatMs
-  })
-  if (decision.kind === 'destroy') {
-    destroyFallbackVisual()
-  } else if (decision.kind === 'create') {
-    if (fallbackVisual) destroyFallbackVisual()
-    fallbackVisual = createFallbackVisual(decision.entry)
-  } else if (decision.kind === 'update') {
-    fallbackVisual!.targetPos = Vector3.create(decision.entry.x, decision.entry.y, decision.entry.z)
-  }
-
-  if (fallbackVisual) {
-    fallbackVisual.time += dt
-    // Lerp toward the heartbeat position (500ms cadence — lerp smooths it).
-    const lerp = Math.min(1, 4.0 * dt)
-    fallbackVisual.renderPos = Vector3.lerp(fallbackVisual.renderPos, fallbackVisual.targetPos, lerp)
-    const bobY = Math.sin(fallbackVisual.time * 3.14) * 0.3
-    const t = Transform.getMutable(fallbackVisual.modelEntity)
-    t.position = Vector3.create(
-      fallbackVisual.renderPos.x,
-      fallbackVisual.renderPos.y + 1.0 + bobY,
-      fallbackVisual.renderPos.z
-    )
-    // Face the direction of movement (renderPos → targetPos). Mirrors the CRDT
-    // path's rotation logic so a fallback ghost stalks the player visually
-    // instead of drifting sideways facing a fixed direction. Threshold guards
-    // against Quaternion jitter when the ghost is stationary.
-    const dx = fallbackVisual.targetPos.x - fallbackVisual.renderPos.x
-    const dz = fallbackVisual.targetPos.z - fallbackVisual.renderPos.z
-    if (dx * dx + dz * dz > 0.001) {
-      const angle = Math.atan2(dx, dz) * (180 / Math.PI)
-      t.rotation = Quaternion.fromEulerDegrees(0, angle, 0)
-    }
-  }
 }
 
 function createGhostVisual(serverEntity: Entity, pos: Vector3): ClientGhost {

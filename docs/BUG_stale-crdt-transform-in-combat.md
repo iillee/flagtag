@@ -1,8 +1,8 @@
 # Bug: Phantom trap/projectile hits and false flag steals (leading theory: duplicate PlayerIdentityData entities)
 
-**Status:** open upstream (platform) · scene-side defenses shipped 2026-07-22 (see "Defenses shipped" below)
+**Status:** platform issue reported fixed · position-heartbeat defense REMOVED 2026-08-03 (see "Defenses shipped" below)
 **Filed:** 2026-07-21
-**Updated:** 2026-07-22 (platform-side localization + defenses; previously: second playtest — theory revised, see "Revised leading hypothesis" below)
+**Updated:** 2026-08-03 (heartbeat workaround removed now that the platform CRDT issue is solved; previously 2026-07-22: platform-side localization + defenses)
 **Severity:** high — breaks fair play; wrong player gets stunned, flag "teleports" between players
 **Related:** PR #6 (partial fix — same class of stale-position bugs), PR #8 (aware of "documented saturation class")
 
@@ -73,6 +73,24 @@ narrows where the cross-wire can and cannot live:
 ---
 
 ## Defenses shipped (2026-07-22, branch `fix/crosswire-defenses`)
+
+> **REMOVED 2026-08-03 — defense 1 only.** With the platform CRDT issue reported
+> fixed, the position heartbeat was removed: `src/server/positionTrust.ts`,
+> `src/systems/positionHeartbeat.ts`, the `posHeartbeat` message, the
+> `🔀 CRDT/heartbeat disagreement` logger, and the heartbeat-union victim roster
+> are all gone. `getPlayerPosition` reads the CRDT Transform again, and
+> `getActivePlayerAddresses` enumerates `PlayerIdentityData` entities only.
+> **Defense 2 (steal corroboration) and the duplicate-entity diagnostics were
+> kept.** Two consequences to watch for if the platform bug ever returns:
+> 1. Every authoritative proximity read (trap/bomb/projectile hits, proximity
+>    steal, force-drop position, ghost targeting) is exposed to it again, with no
+>    detection signal in the logs.
+> 2. `isStealCorroborated`'s heartbeat-dual branch died with the heartbeat, so a
+>    client whose flag CRDT is fully stalled never sends `requestSteal` and can no
+>    longer steal through the server-side path (the playtest bug "proximity steal
+>    sometimes doesn't work"). Documented inline at the gate in `flagLogic.ts`.
+>
+> The section below is the original write-up, kept for context.
 
 Two independent scene-side defenses. Neither fixes the platform bug; both remove its
 gameplay impact.

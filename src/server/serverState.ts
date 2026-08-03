@@ -5,10 +5,6 @@
 
 import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import {
-  type HeartbeatStore, recordHeartbeat, getFreshHeartbeat, clearHeartbeat, positionsDisagree,
-  pruneStaleHeartbeats, activeAddressUnion
-} from './positionTrust'
 
 // ── Entity references (set during setupServer) ──
 
@@ -152,24 +148,14 @@ export function isRealName(name: string): boolean {
   return name.length > 0 && !name.startsWith('0x')
 }
 
-// ── Client position heartbeat (the trusted channel — see positionTrust.ts) ──
-
-export const heartbeatPositions: HeartbeatStore = new Map()
-
-export function recordPlayerHeartbeat(address: string, x: number, y: number, z: number): void {
-  recordHeartbeat(heartbeatPositions, address, x, y, z, Date.now())
-}
-
-// Cross-wire detector: when a fresh heartbeat and the CRDT Transform disagree by
-// more than this, the CRDT view is showing the player somewhere their own client
-// says they are not — the bug's signature. Logged (throttled) so production
-// occurrences are visible in `npm run server-logs` without a diagnostic build.
-const CROSSWIRE_DISAGREE_M = 3
-const CROSSWIRE_LOG_INTERVAL_MS = 2000
-const lastCrosswireLogMs = new Map<string, number>()
-
-/** The CRDT-synced Transform for this address, or null. UNTRUSTED under cross-wire. */
-function getCrdtPlayerPosition(needle: string): Vector3 | null {
+/**
+ * Authoritative player position, read from the CRDT-synced Transform. Every
+ * consequential proximity decision goes through here rather than reading the
+ * player entity's Transform directly, so the lookup (including the duplicate-entity
+ * handling below) stays in one place.
+ */
+export function getPlayerPosition(address: string): Vector3 | null {
+  const needle = address.toLowerCase()
   // DIAGNOSTIC (BUG_stale-crdt-transform-in-combat.md, Step 1a):
   // If duplicate PlayerIdentityData entities exist for the same address (mid-round
   // reconnect leaving a corpse entity behind), scan them all and return the newest
@@ -190,46 +176,16 @@ function getCrdtPlayerPosition(needle: string): Vector3 | null {
 }
 
 /**
- * Authoritative player position. Prefers the client's own ~8Hz heartbeat while it
- * is fresh (<1.5s) and falls back to the CRDT Transform otherwise. The CRDT view
- * can be cross-wired to another player's position (see positionTrust.ts), so every
- * consequential proximity decision must go through here rather than reading the
- * player entity's Transform directly.
- */
-export function getPlayerPosition(address: string): Vector3 | null {
-  const needle = address.toLowerCase()
-  const now = Date.now()
-  const hb = getFreshHeartbeat(heartbeatPositions, needle, now)
-  const crdtPos = getCrdtPlayerPosition(needle)
-  if (hb) {
-    if (crdtPos && positionsDisagree(hb, crdtPos, CROSSWIRE_DISAGREE_M)) {
-      const last = lastCrosswireLogMs.get(needle) ?? 0
-      if (now - last >= CROSSWIRE_LOG_INTERVAL_MS) {
-        lastCrosswireLogMs.set(needle, now)
-        console.log('[Server] 🔀 CRDT/heartbeat disagreement for', needle.slice(0, 8),
-          '| crdt=(', crdtPos.x.toFixed(1), ',', crdtPos.y.toFixed(1), ',', crdtPos.z.toFixed(1), ')',
-          '| heartbeat=(', hb.x.toFixed(1), ',', hb.y.toFixed(1), ',', hb.z.toFixed(1), ')',
-          '— trusting heartbeat (cross-wire signature, see BUG_stale-crdt-transform-in-combat.md)')
-      }
-    }
-    return Vector3.create(hb.x, hb.y, hb.z)
-  }
-  return crdtPos
-}
-
-/**
- * Every address that should be considered a live victim candidate: players with a
- * CRDT PlayerIdentityData entity plus players with only a fresh heartbeat (their
- * entity never replicated — documented symptom of the same CRDT bug). Combat and
- * steal loops iterate this instead of getEntitiesWith(PlayerIdentityData, ...) so
- * neither symptom (cross-wired Transform, missing entity) hides a player.
+ * Every address that should be considered a live victim candidate. Combat and
+ * steal loops iterate this instead of getEntitiesWith(PlayerIdentityData, ...)
+ * directly so duplicate entities per address can't double-iterate a victim.
  */
 export function getActivePlayerAddresses(): Set<string> {
-  const crdtAddresses: string[] = []
+  const addresses = new Set<string>()
   for (const [, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    crdtAddresses.push(identity.address)
+    addresses.add(identity.address.toLowerCase())
   }
-  return activeAddressUnion(crdtAddresses, heartbeatPositions, Date.now())
+  return addresses
 }
 
 /** Diagnostic sweep: log any address with >1 PlayerIdentityData entity. Called ~1Hz. */
@@ -256,20 +212,9 @@ interface PosSample { t: number; x: number; y: number; z: number }
 const POS_HISTORY_MAX_MS = 500
 const positionHistory = new Map<string, PosSample[]>()
 
-/**
- * Called each server tick — snapshot every connected player's position.
- * Uses the same source preference as getPlayerPosition (fresh heartbeat first,
- * CRDT Transform as fallback) so wasWithinRadius lookbacks can't be poisoned by
- * a cross-wired CRDT view either.
- */
+/** Called each server tick — snapshot every connected player's position. */
 export function recordPlayerPositions(): void {
   const now = Date.now()
-  // Bound the heartbeat store: leave events (clearPositionHistory) are the primary
-  // cleanup but are unreliable on this platform, so drop entries with no sample in
-  // 30s and their per-address log throttles along with them.
-  for (const addr of pruneStaleHeartbeats(heartbeatPositions, now)) {
-    lastCrosswireLogMs.delete(addr)
-  }
   const cutoff = now - POS_HISTORY_MAX_MS
   const seen = new Set<string>()
   const push = (addr: string, x: number, y: number, z: number) => {
@@ -282,18 +227,8 @@ export function recordPlayerPositions(): void {
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
     const addr = identity.address.toLowerCase()
     seen.add(addr)
-    const hb = getFreshHeartbeat(heartbeatPositions, addr, now)
-    const p = hb ?? Transform.get(entity).position
+    const p = Transform.get(entity).position
     push(addr, p.x, p.y, p.z)
-  }
-  // Players whose PlayerIdentityData entity never replicated (a documented
-  // symptom of the same CRDT reliability bug) still get history from their
-  // heartbeat, so by-address checks keep working for them.
-  for (const [addr, sample] of heartbeatPositions) {
-    if (seen.has(addr)) continue
-    if (now - sample.t > POS_HISTORY_MAX_MS) continue
-    seen.add(addr)
-    push(addr, sample.x, sample.y, sample.z)
   }
   // Clean up disconnected players
   for (const addr of positionHistory.keys()) {
@@ -329,8 +264,5 @@ export function wasWithinRadius(address: string, target: Vector3, radius: number
 }
 
 export function clearPositionHistory(address: string): void {
-  const addr = address.toLowerCase()
-  positionHistory.delete(addr)
-  clearHeartbeat(heartbeatPositions, addr)
-  lastCrosswireLogMs.delete(addr)
+  positionHistory.delete(address.toLowerCase())
 }

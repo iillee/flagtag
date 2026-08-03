@@ -234,8 +234,7 @@ function explodeBomb(bomb: ActiveBomb): void {
   const bombPos = Transform.get(bomb.entity).position
   const victims: string[] = []
 
-  // Check all players in explosion radius (heartbeat-union roster: players whose
-  // PlayerIdentityData entity never replicated are still hittable — see serverState)
+  // Check all players in explosion radius (by-address roster — see serverState)
   for (const addr of getActivePlayerAddresses()) {
     const playerPos = getPlayerPosition(addr)
     if (!playerPos) continue
@@ -598,7 +597,7 @@ export function bananaServerSystem(dt: number): void {
     }
     if (trapConsumed) continue
 
-    // Player-trap collision (heartbeat-union roster)
+    // Player-trap collision (by-address roster)
     for (const addr of getActivePlayerAddresses()) {
       if (addr === trap.droppedBy && (now - trap.droppedAtMs) < 2000) continue
 

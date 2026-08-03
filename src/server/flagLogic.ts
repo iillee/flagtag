@@ -17,8 +17,7 @@ import {
 import { room } from '../shared/messages'
 import {
   type StealIntentStore, type StealCandidate,
-  recordStealIntent, hasRecentStealIntent, pruneStaleIntents, selectStealCandidate,
-  isStealCorroborated
+  recordStealIntent, hasRecentStealIntent, pruneStaleIntents, selectStealCandidate
 } from './stealIntent'
 import {
   flagEntity, setFlagEntity,
@@ -27,10 +26,8 @@ import {
   lastStealTime,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
-  getPlayerPosition, getActivePlayerAddresses,
-  heartbeatPositions
+  getPlayerPosition, getActivePlayerAddresses
 } from './serverState'
-import { getFreshHeartbeat } from './positionTrust'
 import {
   computeFallY,
   computeLandTimeMs
@@ -525,8 +522,6 @@ export function checkProximitySteal(): void {
   const carrierStealTime = lastStealTime.get(carrierId) ?? 0
   if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
 
-  // Heartbeat-union roster: a candidate whose PlayerIdentityData entity never
-  // replicated can still steal (their client corroborates via requestSteal anyway).
   const candidates: StealCandidate[] = []
   for (const addr of getActivePlayerAddresses()) {
     if (addr === carrierId) continue
@@ -535,28 +530,19 @@ export function checkProximitySteal(): void {
     candidates.push({ addr, dist: Vector3.distance(carrierPos, pos) })
   }
 
-  // Corroboration gate (cross-wire defense): only candidates whose client ALSO
-  // believes it is next to the carrier are eligible — that view comes through an
-  // independent position channel, so a cross-wired server view can't teleport the
-  // flag on its own. Legit steals are unaffected in practice: the client predicts
-  // and retries requestSteal every ~500ms while in range, and the requestSteal
-  // handler remains the fast path. Two-track selection (see selectStealCandidate):
-  // an uncorroborated ghost must not shadow a real corroborated stealer.
+  // Corroboration gate: only candidates whose client ALSO believes it is next to
+  // the carrier are eligible — that view comes through an independent position
+  // channel, so the server view can't teleport the flag on its own. Legit steals
+  // are unaffected in practice: the client predicts and retries requestSteal every
+  // ~500ms while in range, and the requestSteal handler remains the fast path.
+  // Two-track selection (see selectStealCandidate): an uncorroborated candidate
+  // must not shadow a real corroborated stealer.
   //
-  // Heartbeat-dual corroboration (playtest bug "proximity steal sometimes
-  // doesn't work"): when BOTH the carrier and the candidate have a fresh
-  // posHeartbeat, two independent per-sender WS position streams agree on the
-  // proximity. That combination cannot be produced by a CRDT cross-wire (each
-  // heartbeat is authenticated to its sender), so it counts as corroboration on
-  // its own. Closes the gap where a client whose flag CRDT is fully stalled
-  // never sends requestSteal, and the server-side path was previously blocked
-  // because there was no client intent to corroborate.
-  const carrierHasFreshHb = getFreshHeartbeat(heartbeatPositions, carrierId, now) !== null
-  const corroborated = (addr: string): boolean => isStealCorroborated({
-    hasClientIntent: hasRecentStealIntent(stealIntents, addr, now),
-    carrierHasFreshHeartbeat: carrierHasFreshHb,
-    candidateHasFreshHeartbeat: getFreshHeartbeat(heartbeatPositions, addr, now) !== null,
-  })
+  // Known gap: a client whose flag CRDT is fully stalled never predicts a steal,
+  // so it never sends requestSteal and this path stays blocked for them (playtest
+  // report "proximity steal sometimes doesn't work"). The posHeartbeat-dual signal
+  // that used to cover that case was removed with the heartbeat workaround.
+  const corroborated = (addr: string): boolean => hasRecentStealIntent(stealIntents, addr, now)
   const { closestId, closestDist, blockedId, blockedDist } = selectStealCandidate(
     candidates,
     corroborated,
