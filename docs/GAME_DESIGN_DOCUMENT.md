@@ -443,7 +443,7 @@ Simple popup showing player inventory (coins, flags), equipped items (projectile
 
 | Sound | File | Trigger |
 |-------|------|---------|
-| Background Music | Configurable via boombox tapes (default: `SpriteSprint_Loop.wav`) | Loops globally, toggleable with key `2` or boombox click |
+| Background Music | Configurable via boombox tapes (default: `SpriteSprint_Loop.mp3`) | Loops globally, toggleable with key `2` or boombox click |
 | Flag Pickup | `assets/sounds/flag-pickup.mp3` | Server sends `pickupSound` |
 | Flag Drop | `assets/sounds/flag-drop.mp3` | Server sends `dropSound` |
 | Boomerang Throw | `assets/sounds/boomerang2.mp3` | Client on E press |
