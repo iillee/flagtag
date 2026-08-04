@@ -90,6 +90,49 @@ narrows where the cross-wire can and cannot live:
 >    longer steal through the server-side path (the playtest bug "proximity steal
 >    sometimes doesn't work"). Documented inline at the gate in `flagLogic.ts`.
 >
+> ### 2026-08-04 — Defense 2 removed as well; consequence (2) above was the reason
+>
+> Regression (2) hit in the field within a day. Playtest logs showed 19 permanent
+> steal failures, at distances down to **0.441 m**, every one of them against the
+> same carrier — the player whose avatar entity was `65568`, i.e. slot **#32 at
+> version 1**, a recycled entity number and therefore exactly the P3 trigger
+> described in this document. Other clients could not resolve that carrier in
+> `getEntitiesWith(PlayerIdentityData, Transform)`, so they never sent
+> `requestSteal`, and the gate then blocked the server-side path too. The gate had
+> inverted: it was denying real steals against precisely the players the cross-wire
+> affected, while never once blocking a false one.
+>
+> So proximity steal became **fully server-authoritative**: `src/server/stealIntent.ts`,
+> the `requestSteal` message and handler, and the client-side steal predictor are all
+> deleted. `checkProximitySteal` now transfers the flag to the closest player inside
+> `PROXIMITY_STEAL_RADIUS` on the server's own view — the same view `handlePickup`,
+> trap triggers, projectile hits and ghost targeting have always trusted without
+> corroboration.
+>
+> **The scene now has no blocking defense against the cross-wire at all.** Protection
+> rests on the platform fix. Detection rests on three EDGE-TRIGGERED logs — each reports once
+> per occurrence, NOT once per second, so grep from before the condition first appeared — swept at 1Hz by
+> `sweepDuplicateIdentities` in `serverState.ts`:
+>
+> - `👥 duplicate PlayerIdentityData` — more than one avatar entity for one address. Reported
+>   once per change to the id set, NOT once per second, so grep from before it first appeared.
+> - `♻️ avatar entity is a RECYCLED slot` / `♻️ avatar entity REISSUED` — the **trigger**,
+>   an entity number handed out again (version > 0 on first sight, or a mid-session id
+>   change). Necessary but not sufficient: on a long-running server most slots eventually
+>   carry version > 0, so this fires on ordinary joins too.
+> - `🔗 position aliasing` — the **symptom**, two distinct addresses moving as one. Requires
+>   the pair to be coincident on consecutive sweeps AND to have moved between them, because
+>   this scene routinely parks players on shared fixed points (all three death respawns share
+>   the literal (385, 96, 392) and freeze the avatar there for ~8.5s; the interior has a single
+>   `ROOM_SPAWN`; ladders and the round-end cinematic have fixed destinations). Coincidence
+>   alone produced a guaranteed false-positive flood and is not usable on its own.
+>   Do not confuse this with the removed `🔀 CRDT/heartbeat disagreement`, which was a
+>   different detector with a different meaning.
+>
+> If phantom steals ever appear, the next step is to make the aliasing check **blocking**
+> (reject a candidate whose position aliases a third address) — **not** to restore client
+> corroboration, which this incident showed to be the more harmful failure mode.
+>
 > The section below is the original write-up, kept for context.
 
 Two independent scene-side defenses. Neither fixes the platform bug; both remove its
@@ -109,6 +152,10 @@ gameplay impact.
    Transform originates from the same client's comms packets), so this opens no new spoofing
    vector; samples are validated (finite, world bounds) and rate-limited.
 2. **Client corroboration for proximity steals** (`src/server/stealIntent.ts`).
+   *(Removed 2026-08-04 — see the update at the top of this document. The claim below that
+   "legitimate steals are unaffected" turned out to be false: a client that cannot resolve
+   the carrier's avatar entity never predicts, so the gate denied every steal against a
+   cross-wired carrier.)*
    `checkProximitySteal` only transfers the flag when the beneficiary's client sent
    `requestSteal` within the last 2s. A cross-wired "victim" never predicts a steal (their
    client sees the true distance), so the server view alone can no longer teleport the flag.
@@ -119,8 +166,10 @@ gameplay impact.
 - `🔀 CRDT/heartbeat disagreement` — the cross-wire firing in production (fresh heartbeat vs
   CRDT view >3m apart), logged unconditionally, throttled per player. This is the evidence
   stream to attach to the Foundation report.
-- `🚫 Proximity steal blocked (no client corroboration)` — a false transfer that the
-  corroboration gate prevented.
+- ~~`🚫 Proximity steal blocked (no client corroboration)`~~ — gone with the gate on
+  2026-08-04. In practice it never logged a false transfer, only real steals it was
+  wrongly denying. Replaced by `♻️ avatar entity is a RECYCLED slot` /
+  `♻️ avatar entity REISSUED` in `serverState.ts`, which report the P3 trigger directly.
 
 **Residual exposure:** a player whose client sends no heartbeats (e.g. a stale cached
 bundle from before this deploy) falls back to the cross-wire-prone CRDT view for position

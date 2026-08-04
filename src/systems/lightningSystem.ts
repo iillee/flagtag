@@ -9,6 +9,7 @@ import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { setLightningRespawning } from '../gameState/lightningState'
 import { exitSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
+import { LIGHTNING_RESPAWN_DURATION_SEC } from '../shared/constants'
 
 
 // Lightning bolt config
@@ -80,7 +81,10 @@ const SPARK_MAX_SPEED = 8.0     // rotations per second right before strike
 const SPARK_COLOR = Color3.create(0.5, 0.7, 1)
 
 // Respawn config
-const LIGHTNING_RESPAWN_DURATION = 10.0
+// Canonical value is shared with the server, which derives its own — deliberately slightly
+// longer — window from it to keep a struck player out of proximity-steal candidacy while this
+// client has them frozen. See LIGHTNING_EXCLUSION_MARGIN_MS in src/server/flagLogic.ts.
+const LIGHTNING_RESPAWN_DURATION = LIGHTNING_RESPAWN_DURATION_SEC
 const LIGHTNING_FADE_IN = 1.5
 const LIGHTNING_FADE_OUT = 0.8 // starts after countdown reaches 1
 const SPAWN_POSITION = Vector3.create(385, 96, 392)

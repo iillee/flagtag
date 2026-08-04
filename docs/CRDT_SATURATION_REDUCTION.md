@@ -9,10 +9,13 @@
 > `src/shared/ghostHeartbeat.ts`. `getPlayerPosition` reads the CRDT Transform
 > again. This removes the single largest stream in the budget table below
 > (`posHeartbeat` at N × 8 Hz), so the MEDIUM priority item (3) and every
-> "don't break the heartbeat" guardrail no longer apply. The retained defenses
-> are the `requestSteal` corroboration gate and the duplicate-entity
-> diagnostics. Sections below are kept as written for historical context —
-> re-measure before acting on the numbers.
+> "don't break the heartbeat" guardrail no longer apply. The retained defense is
+> the duplicate-entity diagnostics, since joined by the entity-reissue and position-aliasing
+> tripwires. (The `requestSteal` corroboration gate was
+> also kept at that point, but was removed on 2026-08-04 when proximity steal
+> became fully server-authoritative — see `BUG_stale-crdt-transform-in-combat.md`.)
+> Sections below are kept as written for historical context — re-measure before
+> acting on the numbers.
 
 **Current branch state (as of the original handoff):** on `main`, clean. Last three PRs merged in order:
 - #17 — Ghost fallback visual channel (invisible-ghost fix)
@@ -98,9 +101,9 @@ Historical context: Flag Tag hit CRDT saturation before, and the fix was moving 
 
 ## Constraints and guardrails
 
-- ~~**The anti-cross-wire mechanism (`positionTrust.ts` + `posHeartbeat`) must remain functionally intact.**~~ Removed 2026-08-03 with the platform fix. The `requestSteal` corroboration gate in `stealIntent.ts` is what the steal path now depends on — keep that.
+- ~~**The anti-cross-wire mechanism (`positionTrust.ts` + `posHeartbeat`) must remain functionally intact.**~~ Removed 2026-08-03 with the platform fix. ~~The `requestSteal` corroboration gate in `stealIntent.ts` is what the steal path now depends on — keep that.~~ Also removed, 2026-08-04: proximity steal is decided entirely by `checkProximitySteal` on the server's own position view, and the scene has **no** blocking cross-wire defense left. The remaining tripwires are three edge-triggered 1Hz logs from `sweepDuplicateIdentities` in `serverState.ts`: `👥 duplicate PlayerIdentityData`, the two `♻️` recycled/reissued lines, and `🔗 position aliasing`.
 - **Don't break `flagHeartbeat`** — it's the live scoreboard's reliable transport when `PlayerFlagHoldTime` CRDT stalls.
-- **Keep the pattern of extractable pure logic + unit tests.** Every meaningful change to server logic in this codebase gets a `test/*.spec.ts` file (see `test/stealIntent.spec.ts`, `test/ghostContactState.spec.ts` for the shape). Don't skip this.
+- **Keep the pattern of extractable pure logic + unit tests.** Every meaningful change to server logic in this codebase gets a `test/*.spec.ts` file (see `test/stealCandidate.spec.ts`, `test/ghostContactState.spec.ts` for the shape). Don't skip this.
 - **Small atomic PRs.** The project's rhythm is one focused change per PR. If (1) and (2) are independent, they can be one PR (both reduce message traffic, same theme). Don't stack unrelated work.
 - **Bump `src/version.ts`** — the pre-commit hook does it automatically. Don't fight it.
 
@@ -110,7 +113,7 @@ Historical context: Flag Tag hit CRDT saturation before, and the fix was moving 
 
 - **Measured:** on server-side, log throttled traffic counters (e.g. "sent 47 `ghostTouching` messages in the last 10s, dropped 250" style). Add a diagnostic on the server that logs approximate `msg/s` fanout every 30s so we can characterize the impact of the reduction in playtest.
 - **Playtest signal:** scoreboard ghost names should stop appearing (or become rare). Ghost/steal reliability holds. No new regressions in visual smoothness.
-- **Regression protection:** existing tests pass (currently 121 across 15 spec files). New pure logic (if any extracted) has its own tests.
+- **Regression protection:** the full suite passes — run `npm test` for the current count. (A hard number used to live here and went stale three times in a single day's work, twice inside the very change that updated it; don't reintroduce one.) New pure logic (if any extracted) has its own tests.
 
 ---
 
@@ -124,7 +127,7 @@ Historical context: Flag Tag hit CRDT saturation before, and the fix was moving 
 - `src/shared/messages.ts` — for any new WS message additions
 
 **Reference:**
-- `src/server/stealIntent.ts` — the retained `requestSteal` corroboration gate (don't break)
+- `src/server/stealCandidate.ts` — pure candidate selection for the server-authoritative proximity steal (replaced `stealIntent.ts`, deleted 2026-08-04)
 - `docs/history/KNOWN_BUGS-2026-06.md` — historical context on the original saturation crisis
 - `docs/BUG_stale-crdt-transform-in-combat.md` — the cross-wire bug that motivated `posHeartbeat` (fixed platform-side; heartbeat removed 2026-08-03)
 

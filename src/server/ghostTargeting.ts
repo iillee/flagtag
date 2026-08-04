@@ -2,7 +2,7 @@
  * ghostTargeting.ts — Ghost AI nearest-target selection.
  *
  * Pure module (no engine imports) so the selection stays unit-testable under
- * jest, mirroring stealIntent.ts. The ghost system builds candidates from
+ * jest, mirroring stealCandidate.ts. The ghost system builds candidates from
  * getPlayerPosition rather than reading player Transforms directly, so every
  * consequential position read goes through the one lookup.
  */

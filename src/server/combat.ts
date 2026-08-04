@@ -21,9 +21,11 @@ import {
   sessionBananasDropped, sessionBoomerangsFired, lastStealTime, STEAL_IMMUNITY_MS,
   playerBoomerangColors,
 } from './serverState'
+import { POS_HISTORY_MAX_MS } from './positionHistory'
 import { handleDrop } from './flagLogic'
 import { consumePendingMushroomBoost } from './mushroomSystem'
 import { canUseBoomerangAbility } from './combatValidation'
+import { isRateLimited } from './cooldownValidation'
 
 // Full combat immunity while the carrier's pickup/steal shield is active.
 // Matches STEAL_IMMUNITY_MS so shield visual = actual protection.
@@ -34,8 +36,13 @@ import { canUseBoomerangAbility } from './combatValidation'
 function isFlagImmune(playerId: string): boolean {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return false
-  const t = lastStealTime.get(playerId) ?? 0
-  return Date.now() - t < STEAL_IMMUNITY_MS
+  // Shares checkProximitySteal's window arithmetic so the two cannot drift, but NOT its fail
+  // direction. isRateLimited denies on a corrupt timestamp, which is safe for a steal gate and
+  // unsafe here: it would grant a permanently un-hittable carrier. Reject the corrupt case
+  // first so this site fails towards "hittable".
+  const last = lastStealTime.get(playerId)
+  if (last !== undefined && !Number.isFinite(last)) return false
+  return isRateLimited(last, Date.now(), STEAL_IMMUNITY_MS)
 }
 
 // Force-drop the flag from a combat victim, isolated so a flag-logic error can't
@@ -380,7 +387,9 @@ function resolveActionPosition(playerId: string, cx: number | undefined, cy: num
   if (cx === 0 && cy === 0 && cz === 0) return serverPos
   const clientPos = Vector3.create(cx as number, cy as number, cz as number)
   if (Vector3.distance(clientPos, serverPos) <= tolerance ||
-      wasWithinRadius(playerId, clientPos, tolerance, 1000)) {
+      // POS_HISTORY_MAX_MS, not a larger number: retention caps the usable lookback, so asking
+      // for more silently gets you this and reads as a bug to anyone comparing the two.
+      wasWithinRadius(playerId, clientPos, tolerance, POS_HISTORY_MAX_MS)) {
     return clientPos
   }
   console.log('[Server] ⚠️ Client action position rejected (too far from server view) for', playerId.slice(0, 8))

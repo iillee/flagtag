@@ -30,7 +30,7 @@ import {
   coinStateEntity,
   holdTimeEntities, knownPlayers, playerBoomerangColors,
   recordPlayerPositions, sweepDuplicateIdentities, getPlayerPosition, isRealName,
-  nameChangeCooldowns, feedbackCooldowns,
+  nameChangeCooldowns, feedbackCooldowns, rejectionCounts,
 } from './serverState'
 import { persistPlayerNames, loadPlayerNames, loadVisitorData } from './persistence'
 import {
@@ -45,6 +45,7 @@ import {
 import { isValidLeaderboardJson } from './leaderboardData'
 import { resetDailyLeaderboardAfterRecovery } from './leaderboardLifecycle'
 import { FEEDBACK_COOLDOWN_MS, NAME_CHANGE_COOLDOWN_MS, isRateLimited } from './cooldownValidation'
+import { formatRejections, clearRejections } from './rejectionStats'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
 import { EnvVar } from '@dcl/sdk/server'
@@ -271,16 +272,31 @@ function registerSystems() {
   engine.addSystem(safe('countdownServerSystem', countdownServerSystem))
   engine.addSystem(safe('visitorTrackingServerSystem', visitorTrackingServerSystem))
   engine.addSystem(safe('nameResolverServerSystem', nameResolverServerSystem))
-  engine.addSystem(safe('proximityStealSystem', checkProximitySteal))
   engine.addSystem(safe('bananaServerSystem', bananaServerSystem))
   engine.addSystem(safe('bombServerSystem', bombServerSystem))
   engine.addSystem(safe('shellServerSystem', shellServerSystem))
   engine.addSystem(safe('orbitServerSystem', orbitServerSystem))
+  // Registered AFTER the combat systems, deliberately. handleFlagSteal re-arms
+  // STEAL_IMMUNITY_MS on the new carrier, so running the steal first meant that on the tick a
+  // carrier's immunity lapsed the flag changed hands before any combat system could act on the
+  // opening — collapsing the hittable window to under one tick. (The old window came from the
+  // deleted client predictor's own immunity check, whose 3s timer started when the flagImmunity
+  // MESSAGE arrived rather than at the server's lastStealTime, so it lagged by roughly one RTT.
+  // It was never the client's 500ms retry throttle: the corroboration window was 2000ms.)
+  //
+  // Consequence worth knowing: a same-frame steal can now become a force-drop instead, and the
+  // stealer is still hittable on the steal frame because they are not yet the carrier when
+  // combat runs. Both are one-frame windows and the intended trade.
+  // A force-drop in the same frame sets the flag to Dropped and checkProximitySteal returns early.
+  engine.addSystem(safe('proximityStealSystem', checkProximitySteal))
   engine.addSystem(safe('updraftServerSystem', updraftServerSystem))
   engine.addSystem(safe('ghostServerSystem', ghostServerSystem))
   engine.addSystem(safe('coinServerSystem', coinServerSystem))
 
-  // Diagnostic: log entity/combat stats every 60s to PostHog
+  // Diagnostic: periodic entity/combat stats to PostHog and the log. Single source of truth for
+  // the cadence — comments elsewhere refer to "the DIAG interval" rather than restating a number,
+  // because restated intervals drift when this one changes.
+  const DIAG_INTERVAL_SEC = 60
   let diagTimer = 0
   let entityCreatedTotal = 0
   let shellDenials = 0
@@ -291,7 +307,7 @@ function registerSystems() {
   ;(globalThis as any).__diagShellDenied = (detail: string) => { shellDenials++; shellDenialDetails.push(detail) }
   engine.addSystem((dt: number) => {
     diagTimer += dt
-    if (diagTimer >= 60) {
+    if (diagTimer >= DIAG_INTERVAL_SEC) {
       diagTimer = 0
       const props: Record<string, any> = {
         traps: activeTraps.length,
@@ -303,8 +319,18 @@ function registerSystems() {
       if (shellDenialDetails.length > 0) {
         props.shellDenialSamples = shellDenialDetails.slice(-5).join(' | ')
       }
+      // Rejected client requests, aggregated by reason. Rides the existing DIAG cadence rather
+      // than logging per rejection: the routine ones (every non-dropper's reportGroundY, one per
+      // observer per drop) would otherwise bury the tripwires this log exists to surface. Folded
+      // into props so PostHog gets it too, and emitted as its own line for greppability.
+      const rejections = formatRejections(rejectionCounts)
+      if (rejections !== null) props.rejections = rejections
       capture('server', 'server_diag', props)
       console.log('[Server] 📊 DIAG —', JSON.stringify(props))
+      if (rejections !== null) {
+        console.log(`[Server] 🚫 rejected requests (${DIAG_INTERVAL_SEC}s):`, rejections)
+      }
+      clearRejections(rejectionCounts)
       shellDenials = 0
       shellDenialDetails = []
     }

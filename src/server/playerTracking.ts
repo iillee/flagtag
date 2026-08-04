@@ -10,7 +10,7 @@ import { engine, PlayerIdentityData, AvatarBase } from '@dcl/sdk/ecs'
 import {
   currentlyConnected, playerNames, visitorSessions, monthlyVisitorSessions,
   playerBoomerangColors, playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache,
-  playerLifetimeHoldTimeCache, lastStealTime, deathPenaltyCooldowns,
+  playerLifetimeHoldTimeCache, lastStealTime, lightningStruckAt, deathPenaltyCooldowns,
   sessionDeaths, sessionBananasDropped, sessionBoomerangsFired,
   isRealName, clearPositionHistory, roundParticipants,
   nameChangeCooldowns, feedbackCooldowns,
@@ -160,6 +160,7 @@ export function playerTrackingSystem(): void {
       playerLifetimeWinsCache.delete(userKey)
       clearCombatCooldowns(userKey)
       lastStealTime.delete(userKey)
+      lightningStruckAt.delete(userKey)
       deathPenaltyCooldowns.delete(userKey)
       sessionDeaths.delete(userKey)
       sessionBananasDropped.delete(userKey)

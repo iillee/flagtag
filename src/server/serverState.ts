@@ -1,10 +1,20 @@
 /**
  * serverState.ts — Shared mutable state, constants, and helpers.
- * This is the foundation module: no imports from other server/ modules.
+ *
+ * This is the foundation module. It imports no other server/ module EXCEPT pure leaf
+ * modules that import nothing themselves (positionHistory.ts, identitySweep.ts) — those
+ * hold logic extracted for unit testing and cannot form a cycle. Nothing else here may
+ * reach sideways into server/.
  */
 
 import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
+import { type PosSample, POS_HISTORY_MAX_MS, pushSample, wasEverWithinRadius } from './positionHistory'
+import { type RejectionCounts } from './rejectionStats'
+import {
+  type IdentityPosition, type AliasTrackEntry,
+  describeEntityId, diffIdentitySweep, trackAliasedPositions, selectNewestPerAddress
+} from './identitySweep'
 
 // ── Entity references (set during setupServer) ──
 
@@ -46,7 +56,15 @@ export const playerLifetimeWinsCache = new Map<string, number>()
 
 export const deathPenaltyCooldowns = new Map<string, number>()
 export const lastStealTime = new Map<string, number>()
+/**
+ * When each player was last struck by lightning (Date.now()). The server picks the victim
+ * itself, so this is authoritative — unlike the client-reported `deathPenaltyCooldowns`. Read by
+ * checkProximitySteal to keep the flag off a player who is frozen and input-disabled.
+ */
+export const lightningStruckAt = new Map<string, number>()
 export const nameChangeCooldowns = new Map<string, number>()
+/** Per-interval counters for rejected client requests; emitted and cleared by the periodic DIAG. */
+export const rejectionCounts: RejectionCounts = new Map()
 export const feedbackCooldowns = new Map<string, number>()
 
 // ── Per-session analytics counters ──
@@ -156,20 +174,20 @@ export function isRealName(name: string): boolean {
  */
 export function getPlayerPosition(address: string): Vector3 | null {
   const needle = address.toLowerCase()
-  // DIAGNOSTIC (BUG_stale-crdt-transform-in-combat.md, Step 1a):
-  // If duplicate PlayerIdentityData entities exist for the same address (mid-round
-  // reconnect leaving a corpse entity behind), scan them all and return the newest
-  // (highest entity ID). Warn once per lookup so we can confirm the hypothesis.
+  // If duplicate PlayerIdentityData entities exist for the same address (mid-round reconnect
+  // leaving a corpse entity behind), scan them all and return the newest (highest entity ID).
+  //
+  // Deliberately does NOT log. This runs on every consequential proximity read — the steal
+  // check, ghost targeting, and once per active trap/bomb/projectile/orbit, every tick — so
+  // warning here produced 60-240 lines/s for a single duplicated address and buried the very
+  // tripwires it was meant to support. sweepDuplicateIdentities reports the same condition ONCE
+  // per change (edge-triggered), so grep the log from before the duplicate appeared —
+  // once per second with every entity id, which is strictly more useful.
   let bestEntity: Entity | null = null
-  let matches = 0
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
     if (identity.address.toLowerCase() === needle) {
-      matches++
       if (bestEntity === null || (entity as number) > (bestEntity as number)) bestEntity = entity
     }
-  }
-  if (matches > 1) {
-    console.log('[Server] ⚠️ getPlayerPosition: address', needle.slice(0, 8), 'has', matches, 'entities — using newest')
   }
   if (bestEntity === null) return null
   return Transform.get(bestEntity).position
@@ -188,51 +206,101 @@ export function getActivePlayerAddresses(): Set<string> {
   return addresses
 }
 
-/** Diagnostic sweep: log any address with >1 PlayerIdentityData entity. Called ~1Hz. */
+/** Last single avatar entity id seen per address — carried across sweeps by diffIdentitySweep. */
+const _lastEntityIdByAddr = new Map<string, number>()
+
+/** Per-pair coincidence state — carried across sweeps by trackAliasedPositions. */
+const _aliasTracking = new Map<string, AliasTrackEntry>()
+
+/** Last reported duplicate id-set per address — edge-triggers the `duplicate` event. */
+const _lastDuplicateSignature = new Map<string, string>()
+
+/**
+ * Diagnostic sweep (~1Hz) for the three observable signatures of the avatar-entity cross-wire
+ * (docs/BUG_stale-crdt-transform-in-combat.md): an address with more than one
+ * PlayerIdentityData entity, a recycled/reissued avatar entity id (the trigger), and two
+ * addresses moving as one (the symptom). All three are edge-triggered.
+ *
+ * Engine iteration and logging only — the branch selection lives in identitySweep.ts so it
+ * can be unit-tested.
+ */
 let _lastDupSweepMs = 0
 export function sweepDuplicateIdentities(): void {
   const now = Date.now()
   if (now - _lastDupSweepMs < 1000) return
   _lastDupSweepMs = now
-  const counts = new Map<string, number>()
-  for (const [, id] of engine.getEntitiesWith(PlayerIdentityData)) {
+
+  const byAddr = new Map<string, number[]>()
+  const positions: IdentityPosition[] = []
+  for (const [entity, id] of engine.getEntitiesWith(PlayerIdentityData)) {
     const a = id.address.toLowerCase()
-    counts.set(a, (counts.get(a) ?? 0) + 1)
+    let ids = byAddr.get(a)
+    if (!ids) { ids = []; byAddr.set(a, ids) }
+    ids.push(entity as number)
+    // Transform read separately (getOrNull, not a second query) so adding the aliasing scan
+    // cannot change which entities the duplicate detection above considers.
+    const t = Transform.getOrNull(entity)
+    if (t) positions.push({ addr: a, x: t.position.x, y: t.position.y, z: t.position.z })
   }
-  for (const [addr, n] of counts) {
-    if (n > 1) console.log('[Server] 👥 duplicate PlayerIdentityData:', addr.slice(0, 8), '×', n)
+
+  // Cross-wire SYMPTOM: two different addresses tracking one player's position. Requires the
+  // pair to MOVE together across sweeps, because this scene parks players on shared fixed
+  // points routinely (see trackAliasedPositions). Edge-triggered, so once per occurrence.
+  for (const pair of trackAliasedPositions(positions, _aliasTracking)) {
+    // dy is the diagnostic half: ~0.85 is the capsule-center anchor fingerprint recorded for
+    // this bug, ~0 means the two streams are aligned.
+    console.log('[Server] 🔗 position aliasing:', pair.a.slice(0, 8), '≡', pair.b.slice(0, 8),
+      '| xzDist=', pair.dist.toFixed(4), '| dy=', pair.dy.toFixed(3),
+      '— two addresses moving as one; proximity reads for them are unreliable')
+  }
+
+  for (const event of diffIdentitySweep(byAddr, _lastEntityIdByAddr, _lastDuplicateSignature)) {
+    switch (event.kind) {
+      case 'duplicate':
+        console.log('[Server] 👥 duplicate PlayerIdentityData:', event.addr.slice(0, 8),
+          '×', event.ids.length, '|', event.ids.map(describeEntityId).join(' , '))
+        break
+      case 'recycled':
+        console.log('[Server] ♻️ avatar entity is a RECYCLED slot:', event.addr.slice(0, 8),
+          '|', describeEntityId(event.id), '— cross-wire risk, positions for this address may be wrong')
+        break
+      case 'reissued':
+        console.log('[Server] ♻️ avatar entity REISSUED:', event.addr.slice(0, 8),
+          '|', describeEntityId(event.prevId), '->', describeEntityId(event.id), '— cross-wire risk')
+        break
+    }
   }
 }
 
-// ── Player position history (rolling ring buffer for lag-forgiving hit checks) ──
+// ── Player position history (rolling time-windowed samples for lag-forgiving hit checks) ──
 // Keeps ~500ms of positions per player. Used by combat to reconcile shooter/victim
 // position lag: a projectile that would have hit the victim ~300ms ago still counts.
+// The per-sample logic lives in positionHistory.ts (pure, unit-tested).
 
-interface PosSample { t: number; x: number; y: number; z: number }
-const POS_HISTORY_MAX_MS = 500
 const positionHistory = new Map<string, PosSample[]>()
 
 /** Called each server tick — snapshot every connected player's position. */
 export function recordPlayerPositions(): void {
   const now = Date.now()
   const cutoff = now - POS_HISTORY_MAX_MS
-  const seen = new Set<string>()
-  const push = (addr: string, x: number, y: number, z: number) => {
+  // Resolve duplicates to ONE entity per address before sampling, using the same newest-wins
+  // rule as getPlayerPosition. Sampling per entity instead put a stale corpse entity's positions
+  // into the live player's history, and wasWithinRadius accepts if ANY sample matches — so the
+  // corpse could keep authorizing projectile hits and client action positions for that player.
+  const entries: { addr: string; id: Entity }[] = []
+  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
+    entries.push({ addr: identity.address.toLowerCase(), id: entity })
+  }
+  const newest = selectNewestPerAddress(entries)
+  for (const [addr, entity] of newest) {
+    const p = Transform.get(entity).position
     let arr = positionHistory.get(addr)
     if (!arr) { arr = []; positionHistory.set(addr, arr) }
-    arr.push({ t: now, x, y, z })
-    // Drop stale samples from front
-    while (arr.length > 0 && arr[0].t < cutoff) arr.shift()
-  }
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    const addr = identity.address.toLowerCase()
-    seen.add(addr)
-    const p = Transform.get(entity).position
-    push(addr, p.x, p.y, p.z)
+    pushSample(arr, { t: now, x: p.x, y: p.y, z: p.z }, cutoff)
   }
   // Clean up disconnected players
   for (const addr of positionHistory.keys()) {
-    if (!seen.has(addr)) positionHistory.delete(addr)
+    if (!newest.has(addr)) positionHistory.delete(addr)
   }
 }
 
@@ -241,26 +309,20 @@ export function recordPlayerPositions(): void {
  * Used for lag-forgiving projectile hit checks: the shooter's client already saw the
  * hit against a slightly-lagged victim position; the server accepts if the victim
  * *was* recently there. If no history exists, falls back to current position.
+ *
+ * `lookbackMs` beyond POS_HISTORY_MAX_MS gains nothing — older samples are already trimmed.
  */
 export function wasWithinRadius(address: string, target: Vector3, radius: number, lookbackMs: number): boolean {
   const addr = address.toLowerCase()
-  const arr = positionHistory.get(addr)
-  const now = Date.now()
-  const cutoff = now - lookbackMs
-  if (arr && arr.length > 0) {
-    const r2 = radius * radius
-    for (let i = arr.length - 1; i >= 0; i--) {
-      const s = arr[i]
-      if (s.t < cutoff) break
-      const dx = s.x - target.x, dy = s.y - target.y, dz = s.z - target.z
-      if (dx * dx + dy * dy + dz * dz < r2) return true
-    }
-    return false
-  }
-  // Fallback: no history — use current position
-  const cur = getPlayerPosition(addr)
-  if (!cur) return false
-  return Vector3.distance(cur, target) < radius
+  // Adapter only — the history/live-position branch selection is unit-tested in
+  // positionHistory.ts. getPlayerPosition is passed lazily because it scans every entity.
+  return wasEverWithinRadius(
+    positionHistory.get(addr),
+    target.x, target.y, target.z,
+    radius,
+    Date.now() - lookbackMs,
+    () => getPlayerPosition(addr)
+  )
 }
 
 export function clearPositionHistory(address: string): void {

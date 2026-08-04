@@ -4,7 +4,9 @@
  * Exports systems (flagServerSystem, holdTimeServerSystem, checkProximitySteal),
  * message handler registration (registerFlagHandlers), and helpers needed by
  * other modules (handleDrop, flushHoldTimeAccum, resetGravityState,
- * getOrCreateHoldTimeEntity, handleFlagSteal).
+ * getOrCreateHoldTimeEntity). handleFlagSteal is exported but module-local in
+ * practice — checkProximitySteal is its only caller now that clients no longer
+ * request steals.
  */
 
 import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
@@ -15,15 +17,15 @@ import {
   FLAG_BASE_POSITION, getRandomSpawnPoint
 } from '../shared/components'
 import { room } from '../shared/messages'
-import {
-  type StealIntentStore, type StealCandidate,
-  recordStealIntent, hasRecentStealIntent, pruneStaleIntents, selectStealCandidate
-} from './stealIntent'
+import { type StealCandidate, selectClosestCandidate } from './stealCandidate'
+import { isRateLimited } from './cooldownValidation'
+import { recordRejection } from './rejectionStats'
+import { LIGHTNING_RESPAWN_DURATION_SEC } from '../shared/constants'
 import {
   flagEntity, setFlagEntity,
   holdTimeEntities, knownPlayers, playerNames,
   currentScoreRoundId,
-  lastStealTime,
+  lastStealTime, lightningStruckAt, rejectionCounts,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
   getPlayerPosition, getActivePlayerAddresses
@@ -496,90 +498,82 @@ export function handleFlagSteal(victimId: string, attackerId: string): void {
 
 // ── Proximity steal system ──
 
-// Client corroboration for server-initiated steals (see stealIntent.ts): the
-// beneficiary's client must have sent requestSteal recently, or the server view
-// alone (cross-wire-prone) cannot transfer the flag.
-const stealIntents: StealIntentStore = new Map()
-// Throttle for the "steal blocked" log — under an active cross-wire the block
-// would otherwise fire every tick.
-let lastBlockedStealLogMs = 0
-const BLOCKED_STEAL_LOG_INTERVAL_MS = 5000
+/**
+ * Exclusion window for a lightning-struck player, deliberately LONGER than the client's freeze.
+ *
+ * The two clocks start at different moments: the server's when it SENDS `lightningStrike`, the
+ * client's when the message ARRIVES and `handleLocalDeath` sets `lightningRespawnDelay`. They are
+ * therefore offset by one-way latency, so a window sized exactly to the freeze reopens while the
+ * victim is still input-disabled — reintroducing the case this exclusion exists to prevent. The
+ * margin covers that offset with slack; the codebase puts RTT at ~100-200ms.
+ *
+ * A heuristic, not a guarantee: the client counts its freeze down by `dt`, so a client whose
+ * frames stall (backgrounded tab) can stay frozen far longer in wall-clock terms. Closing that
+ * completely means the server sending an authoritative expiry and the client honouring it — a
+ * message-schema change plus reworking the client's dt-based countdown onto wall time. Not done,
+ * because the residual is bounded: from 1.5s after the strike the victim sits at the spawn
+ * platform, where a carrier has no reason to be.
+ */
+const LIGHTNING_EXCLUSION_MARGIN_MS = 1500
+const LIGHTNING_RESPAWN_MS = LIGHTNING_RESPAWN_DURATION_SEC * 1000 + LIGHTNING_EXCLUSION_MARGIN_MS
 
+// Deliberately NO position-history lookback here, unlike combat's lag-forgiving hit checks.
+// wasWithinRadius compares a candidate's PAST positions against the carrier's CURRENT one,
+// which inflates the effective radius whenever the carrier moves onto ground the candidate
+// just left: with both running at BASE_RUN (10 m/s), a 150 ms window admits any gap under
+// 3.3 m (4.05 m on a mushroom boost) even though the two were never adjacent. This system
+// runs every tick, so a one-off position spike only postpones a steal by ~33 ms — there is
+// nothing to forgive. (The one-shot requestSteal message did need that forgiveness, which
+// is why it existed; that path is gone.)
 export function checkProximitySteal(): void {
-  // Bound the intent store (one entry per address that ever pressed a steal).
-  // Runs every tick; the map only ever holds recently-active stealers, so the
-  // sweep is a handful of entries.
-  pruneStaleIntents(stealIntents, Date.now())
-
   const flag = Flag.getOrNull(flagEntity)
   if (!flag || flag.state !== FlagState.Carried || !flag.carrierPlayerId) return
 
-  const carrierId = flag.carrierPlayerId
+  // Lowercased at the source, matching every other consequential reader of this field, so the
+  // `addr === carrierId` compare below and the immunity map lookup cannot miss on casing.
+  const carrierId = flag.carrierPlayerId.toLowerCase()
   const carrierPos = getPlayerPosition(carrierId)
   if (!carrierPos) return
 
+  // Steal immunity, via the shared rate-limit helper (unit-tested in
+  // test/cooldownValidation.spec.ts) rather than open-coded arithmetic. It also treats a
+  // non-finite timestamp as still-limited, where `now - NaN < ms` would have evaluated false
+  // and allowed the steal.
   const now = Date.now()
-  const carrierStealTime = lastStealTime.get(carrierId) ?? 0
-  if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
+  if (isRateLimited(lastStealTime.get(carrierId), now, STEAL_IMMUNITY_MS)) return
 
+  // Server-authoritative: the closest player inside the radius takes the flag, decided on
+  // the server's own position view — the same view handlePickup, trap triggers, projectile
+  // hits and ghost touching already act on unconditionally.
   const candidates: StealCandidate[] = []
   for (const addr of getActivePlayerAddresses()) {
+    // Skip the carrier here AND pass them to selectClosestCandidate below — two independent
+    // layers, deliberately. If the carrier ever reached the candidate list they would sit at
+    // distance 0 from themselves and win every tick forever, so this is worth belt and braces:
+    // this filter also saves a redundant full-entity-scan lookup, while the parameter below is
+    // the unit-tested guarantee and is case-insensitive where this compare is not.
     if (addr === carrierId) continue
+    // A lightning-struck player is frozen with input disabled until they respawn — they could
+    // neither run from the flag nor drop it, and the flag would ride them to the spawn platform.
+    // The deleted client predictor enforced this via !isLightningRespawning(); this is the
+    // server-side equivalent, and it is authoritative because the SERVER picks the victim
+    // (roundManager sends lightningStrike). Water and ghost deaths have the same shape but no
+    // server-visible signal — see docs/KNOWN_BUGS.md.
+    if (isRateLimited(lightningStruckAt.get(addr), now, LIGHTNING_RESPAWN_MS)) continue
     const pos = getPlayerPosition(addr)
     if (!pos) continue
     candidates.push({ addr, dist: Vector3.distance(carrierPos, pos) })
   }
 
-  // Corroboration gate: only candidates whose client ALSO believes it is next to
-  // the carrier are eligible — that view comes through an independent position
-  // channel, so the server view can't teleport the flag on its own. Legit steals
-  // are unaffected in practice: the client predicts and retries requestSteal every
-  // ~500ms while in range, and the requestSteal handler remains the fast path.
-  // Two-track selection (see selectStealCandidate): an uncorroborated candidate
-  // must not shadow a real corroborated stealer.
-  //
-  // Known gap: a client whose flag CRDT is fully stalled never predicts a steal,
-  // so it never sends requestSteal and this path stays blocked for them (playtest
-  // report "proximity steal sometimes doesn't work"). The posHeartbeat-dual signal
-  // that used to cover that case was removed with the heartbeat workaround.
-  const corroborated = (addr: string): boolean => hasRecentStealIntent(stealIntents, addr, now)
-  const { closestId, closestDist, blockedId, blockedDist } = selectStealCandidate(
-    candidates,
-    corroborated,
-    PROXIMITY_STEAL_RADIUS
-  )
+  const { closestId, closestDist } = selectClosestCandidate(candidates, PROXIMITY_STEAL_RADIUS, carrierId)
+  if (!closestId) return
 
-  if (!closestId) {
-    if (blockedId && now - lastBlockedStealLogMs >= BLOCKED_STEAL_LOG_INTERVAL_MS) {
-      lastBlockedStealLogMs = now
-      console.log('[Server] 🚫 Proximity steal blocked (no client corroboration):', blockedId.slice(0, 8),
-        'near', carrierId.slice(0, 8), '| dist=', blockedDist.toFixed(3),
-        '— server view says adjacent but the client never predicted a steal (cross-wire signature)')
-    }
-    return
-  }
-
-  {
-    // DIAG (BUG_stale-crdt-transform-in-combat.md, Step 1c):
-    // Dump the raw positions being compared so we can see WHY the distance was small.
-    const cPos = getPlayerPosition(carrierId)
-    const vPos = getPlayerPosition(closestId)
-    console.log('[Server] 🚩 Proximity steal:', closestId.slice(0, 8), '<-', carrierId.slice(0, 8),
-      '| carrierPos=', cPos ? `(${cPos.x.toFixed(1)},${cPos.y.toFixed(1)},${cPos.z.toFixed(1)})` : 'null',
-      '| victimPos=', vPos ? `(${vPos.x.toFixed(1)},${vPos.y.toFixed(1)},${vPos.z.toFixed(1)})` : 'null',
-      '| dist=', closestDist.toFixed(3),
-      '| sameRef=', cPos === vPos)
-    // Also dump every player's position in the current iteration so we can spot aliasing.
-    for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      const a = identity.address.toLowerCase()
-      const t = Transform.get(entity)
-      const parent = (t.parent ?? 0) as number
-      console.log('[Server]   ⤷ entity', entity as number, 'addr', a.slice(0, 8),
-        'pos=(', t.position.x.toFixed(1), ',', t.position.y.toFixed(1), ',', t.position.z.toFixed(1), ')',
-        'parent=', parent)
-    }
-    handleFlagSteal(carrierId, closestId)
-  }
+  const stealerPos = getPlayerPosition(closestId)
+  console.log('[Server] 🚩 Proximity steal:', closestId.slice(0, 8), '<-', carrierId.slice(0, 8),
+    '| carrierPos=', `(${carrierPos.x.toFixed(1)},${carrierPos.y.toFixed(1)},${carrierPos.z.toFixed(1)})`,
+    '| stealerPos=', stealerPos ? `(${stealerPos.x.toFixed(1)},${stealerPos.y.toFixed(1)},${stealerPos.z.toFixed(1)})` : 'null',
+    '| dist=', closestDist.toFixed(3))
+  handleFlagSteal(carrierId, closestId)
 }
 
 // ── Flag heartbeat: periodic WS broadcast so clients can self-correct stale CRDT ──
@@ -610,11 +604,13 @@ export function flagServerSystem(dt: number): void {
     // Broadcast the CARRIER's authoritative world position when carried, not the
     // flag entity's Transform — the flag is parented to the carrier, so its
     // Transform.position is a local offset (a few meters near origin), useless
-    // to any client trying to do a proximity check. Falls back to the flag
-    // Transform for AtBase / Dropped, where it's the real world position.
-    // This lets the client's proximity-steal prediction work even when the
-    // carrier's PlayerIdentityData CRDT hasn't replicated (root cause of
-    // "sometimes running over the carrier doesn't steal the flag").
+    // to any client wanting a world position. Falls back to the flag Transform
+    // for AtBase / Dropped, where it's the real world position.
+    // NOTE: no client currently reads x/y/z. They fed the client-side steal predictor, which
+    // was removed when steals became server-authoritative. Kept because dropping them buys
+    // nothing measurable (3 floats at 1Hz) and would churn a schema shared with the client;
+    // NOT for old-client compatibility, which this change already broke by removing
+    // requestSteal. Delete them freely if the heartbeat is ever reworked.
     let bx: number, by: number, bz: number
     if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
       const cPos = getPlayerPosition(flag.carrierPlayerId)
@@ -876,64 +872,45 @@ export function registerFlagHandlers(): void {
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
 
-  room.onMessage('requestSteal', (data, context) => {
-    try {
-      if (!context) return
-      const attackerId = context.from.toLowerCase()
-      const victimId = (data.victimId || '').toLowerCase()
-      if (!victimId || victimId === attackerId) return
-
-      // Corroboration for checkProximitySteal: the client believes it is within
-      // steal range, whatever this handler decides below. Recorded before any
-      // validation so a request rejected only for immunity/server-view distance
-      // still lets the server-side steal fire once conditions clear.
-      recordStealIntent(stealIntents, attackerId, Date.now())
-
-      const flag = Flag.getOrNull(flagEntity)
-      if (!flag || flag.state !== FlagState.Carried || flag.carrierPlayerId !== victimId) return
-
-      // Check steal immunity
-      const now = Date.now()
-      const carrierStealTime = lastStealTime.get(victimId) ?? 0
-      if (now - carrierStealTime < STEAL_IMMUNITY_MS) return
-
-      // Validate proximity with generous radius (client has fresher positions).
-      const attackerPos = getPlayerPosition(attackerId)
-      const carrierPos = getPlayerPosition(victimId)
-      if (!attackerPos || !carrierPos) {
-        // Missing authoritative position — reject rather than trust the client, or a
-        // hostile client could steal from across the map right after connecting. The
-        // server-side checkProximitySteal still catches legitimate steals once positions replicate.
-        return
-      }
-      const dist = Vector3.distance(attackerPos, carrierPos)
-      // Use 1.5x radius as validation — client already checked at 1x, small slack for lag
-      if (dist > PROXIMITY_STEAL_RADIUS * 1.5) {
-        console.log('[Server] 🚩 requestSteal rejected: server dist', dist.toFixed(1), 'too far (1.5x radius check)')
-        return
-      }
-
-      console.log('[Server] 🚩 Client-requested steal:', attackerId.slice(0, 8), '<-', victimId.slice(0, 8))
-      handleFlagSteal(victimId, attackerId)
-    } catch (err) { console.error('[Server] ❌ requestSteal handler error:', err) }
-  })
+  // No 'requestSteal' handler: proximity steal is decided entirely by
+  // checkProximitySteal on the server's own position view. Clients neither request
+  // nor corroborate a steal — see stealCandidate.ts for why the gate was removed.
 
   room.onMessage('reportGroundY', (data, context) => {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
       const flag = Flag.getOrNull(flagEntity)
-      if (!flag || flag.state !== FlagState.Dropped) return
+      if (!flag || flag.state !== FlagState.Dropped) {
+        // Routine: every observer raycasts on flagFallStart, so late reports land after the flag
+        // has already been picked up. Counted, not logged.
+        recordRejection(rejectionCounts, 'reportGroundY:not-dropped')
+        return
+      }
       // NaN/Infinity are rejected outright (before consuming any one-shot/budget).
-      if (!Number.isFinite(data.y)) return
+      if (!Number.isFinite(data.y)) {
+        // Anomalous: an honest client never sends this. Log immediately, with the sender.
+        console.log('[Server] 🚫 reportGroundY rejected — non-finite y from', from.slice(0, 8), '| y=', String(data.y))
+        recordRejection(rejectionCounts, 'reportGroundY:non-finite')
+        return
+      }
 
       let newTarget: number
       if (lastDropperId) {
         // Dropper-authoritative path: only the recorded dropper's report is trusted,
         // and only ONCE per drop — the legit flow sends a single raycast result, and
         // repeat reports would otherwise retry the raise cap.
-        if (from !== lastDropperId) return
-        if (groundReportUsed) return
+        if (from !== lastDropperId) {
+          // Routine and the interesting one in aggregate: N-1 observers are refused per drop, so a
+          // count far above the player count means clients are retrying. Its ABSENCE alongside a
+          // missing accept is the flag-stranding signature (see docs/KNOWN_BUGS.md).
+          recordRejection(rejectionCounts, 'reportGroundY:not-dropper')
+          return
+        }
+        if (groundReportUsed) {
+          recordRejection(rejectionCounts, 'reportGroundY:already-used')
+          return
+        }
         groundReportUsed = true
         // Clamp the client-reported ground Y to the valid terrain band. Without an
         // upper bound a hostile client could send y=1e6 and hang the flag in the sky,
@@ -957,9 +934,19 @@ export function registerFlagHandlers(): void {
         // below the water line, i.e. a water respawn back to base. Mild, bounded,
         // and better than a flag hanging unreachable for the rest of the round.
         // Budgeted per drop so spammed ε-lower reports can't flood the handler.
-        if (groundLowerReportsLeft <= 0) return
+        if (groundLowerReportsLeft <= 0) {
+          // Anomalous: the budget exists to stop report spam, so exhausting it means someone is
+          // spamming. Log immediately.
+          console.log('[Server] 🚫 reportGroundY rejected — lower-report budget exhausted, from', from.slice(0, 8))
+          recordRejection(rejectionCounts, 'reportGroundY:budget-exhausted')
+          return
+        }
         newTarget = Math.max(FLAG_MIN_Y, data.y + 0.5)
-        if (newTarget >= flagGravityTargetY) return
+        if (newTarget >= flagGravityTargetY) {
+          // Routine: lower-only path, and this report did not improve on the current target.
+          recordRejection(rejectionCounts, 'reportGroundY:no-improvement')
+          return
+        }
         groundLowerReportsLeft--
       }
       flagGravityTargetY = newTarget

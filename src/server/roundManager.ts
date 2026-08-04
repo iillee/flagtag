@@ -14,7 +14,7 @@ import {
   flagEntity, countdownEntity,
   leaderboardEntity,
   holdTimeEntities, knownPlayers, playerNames,
-  lastStealTime, playerLifetimeHoldTimeCache,
+  lastStealTime, lightningStruckAt, playerLifetimeHoldTimeCache,
   SPLASH_DURATION_MS, roundParticipants,
   currentScoreRoundId, scoreRoundSessionId, setCurrentScoreRoundId,
 } from './serverState'
@@ -135,6 +135,10 @@ export function lightningServerSystem(dt: number): void {
 
       console.log('[Server] ⚡ Lightning strike at', strikePos.x.toFixed(1), strikePos.y.toFixed(1), strikePos.z.toFixed(1), 'victim:', victimId || '(none - flag only)')
       room.send('lightningStrike', { x: strikePos.x, y: strikePos.y, z: strikePos.z, victimId })
+      // Record the strike server-side. The victim's client now freezes them with input disabled
+      // for LIGHTNING_RESPAWN_DURATION_SEC, so checkProximitySteal must not hand them the flag
+      // during it — they could neither move away nor drop it.
+      if (victimId) lightningStruckAt.set(victimId.toLowerCase(), Date.now())
 
       if (carried) {
         flushHoldTimeAccum()
@@ -176,7 +180,9 @@ export function lightningServerSystem(dt: number): void {
       _lightningOriginalCarrierId = flag!.carrierPlayerId!
       room.send('lightningWarning', { t: 0 })
     } else if (chance > 0) {
-      console.log(`[Server] ⚡ Lightning roll failed. Score: ${score.toFixed(0)}, Chance: ${(chance * 100).toFixed(1)}%`)
+      // Deliberately NOT logged: this fires every LIGHTNING_ROLL_INTERVAL (5s) forever, ~720
+      // lines/hour of "nothing happened", and the score/chance are recoverable from the success
+      // line and the DIAG snapshot. A failed roll is the absence of an event.
     }
   }
 }
@@ -437,6 +443,7 @@ async function handleRoundEnd(endedRoundEndMs: number, nextScoreRoundId: string)
 
   // ── 3c. Clear combat cooldown maps ──
   lastStealTime.clear()
+  lightningStruckAt.clear()
 
   // ── 3d. Reset lightning state ──
   lightningRollTimer = 0

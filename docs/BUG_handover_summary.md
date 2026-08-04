@@ -148,9 +148,12 @@ Shipped on branch `fix/crosswire-defenses` (see "Defenses shipped" in the full d
    falling back to the CRDT view when stale. **REMOVED 2026-08-03** now that the platform
    CRDT issue is reported fixed — along with the `🔀 CRDT/heartbeat disagreement` logger,
    so we no longer have a production evidence stream for this bug.
-2. **Client corroboration for proximity steals**: the server only transfers the flag when
-   the beneficiary's client independently predicted the steal (`requestSteal`) within 2s.
-   Still in place.
+2. ~~**Client corroboration for proximity steals**~~: the server only transferred the flag
+   when the beneficiary's client independently predicted the steal (`requestSteal`) within
+   2s. **REMOVED 2026-08-04** — it denied every steal against a carrier whose avatar entity
+   had been recycled (the P3 trigger itself), while never blocking a false transfer.
+   Proximity steal is now decided entirely server-side. See
+   `BUG_stale-crdt-transform-in-combat.md` for the incident and what detection replaced it.
 
 The heartbeat was always a workaround, not a fix. It came out once the platform-side fix
 landed; if the cross-wire resurfaces, defense 1 is what needs restoring (see

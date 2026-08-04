@@ -6,7 +6,7 @@ export const Messages = {
   registerName: Schemas.Map({ name: Schemas.String }),
   requestPickup: Schemas.Map({ t: Schemas.Int }),
   requestDrop: Schemas.Map({ t: Schemas.Int }),
-  requestSteal: Schemas.Map({ victimId: Schemas.String }),  // Client-side proximity steal prediction
+  // No requestSteal: proximity steal is decided server-side (checkProximitySteal).
   reportGroundY: Schemas.Map({ y: Schemas.Float }),
   // x/y/z: the sender's own position at action time. The server's replicated avatar
   // transform can lag several meters under load, so items spawned/dropped at the server
