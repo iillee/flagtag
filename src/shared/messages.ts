@@ -6,7 +6,7 @@ export const Messages = {
   registerName: Schemas.Map({ name: Schemas.String }),
   requestPickup: Schemas.Map({ t: Schemas.Int }),
   requestDrop: Schemas.Map({ t: Schemas.Int }),
-  requestSteal: Schemas.Map({ victimId: Schemas.String }),  // Client-side proximity steal prediction
+  // No requestSteal: proximity steal is decided server-side (checkProximitySteal).
   reportGroundY: Schemas.Map({ y: Schemas.Float }),
   // x/y/z: the sender's own position at action time. The server's replicated avatar
   // transform can lag several meters under load, so items spawned/dropped at the server
@@ -124,12 +124,6 @@ export const Messages = {
   ghostKilled: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),  // Server → Client: ghost died (VFX)
   // zombieStagger and ghostDeath removed — replaced by ghostTouching + scare meter
   ghostTouching: Schemas.Map({ victimId: Schemas.String }),     // Server → Client: ghost is touching a player this frame
-  // Ghost heartbeat (server → client, ~2Hz). JSON array of {id,x,y,z} for every
-  // active server-side ghost. Independent of the CRDT `Ghost` component: when
-  // that component fails to replicate (invisible-ghost bug) the client builds a
-  // lightweight fallback visual from this stream so the ghost is at least
-  // visible while it can still kill you. See shared/ghostHeartbeat.ts.
-  ghostHeartbeat: Schemas.Map({ ghostsJson: Schemas.String }),
 
   // Death penalty
   deathPenalty: Schemas.Map({ cause: Schemas.String }),           // Client → Server: player died, deduct coins
@@ -150,13 +144,6 @@ export const Messages = {
   // re-anchor over WS when PlayerFlagHoldTime CRDT updates are stalled (0 when not carried).
   // roundId prevents delayed CRDT values from a completed round being adopted by the next one.
   flagHeartbeat: Schemas.Map({ state: Schemas.String, carrierId: Schemas.String, carrierHoldSeconds: Schemas.Float, roundId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
-
-  // Position heartbeat (client → server, ~8Hz). The sender's own avatar position.
-  // The server's CRDT view of remote-player Transforms can be cross-wired to ANOTHER
-  // player's live position (docs/BUG_stale-crdt-transform-in-combat.md), so authoritative
-  // proximity decisions (trap/bomb/projectile hits, proximity steal, force-drop position)
-  // prefer this channel over the CRDT Transform whenever it is fresh.
-  posHeartbeat: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
 }
 
 export const room = registerMessages(Messages)

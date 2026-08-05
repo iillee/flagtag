@@ -20,7 +20,6 @@ import {
   VisibilityComponent,
   GltfContainer,
   AudioSource,
-  PlayerIdentityData,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Quaternion } from '@dcl/sdk/math'
@@ -28,13 +27,12 @@ import { isMobile } from '@dcl/sdk/platform'
 
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
-import { PROXIMITY_STEAL_RADIUS, SCENE_FLOOR_Y } from '../shared/constants'
+import { SCENE_FLOOR_Y } from '../shared/constants'
 import { room } from '../shared/messages'
 import { computeFallY, FLAG_GRAVITY } from '../shared/flagFall'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
 import { setConfirmedCarrier, clearConfirmedCarrier, applyServerHoldTime } from '../gameState/flagHoldTime'
-import { hasFlagImmunity } from '../gameState/flagImmunityState'
 
 // Visual clone system for smooth flag carrying
 //
@@ -256,9 +254,6 @@ let prevCarrierId: string = ''
 const AUTO_PICKUP_RADIUS = 4.5
 const AUTO_PICKUP_COOLDOWN_MS = 500 // don't spam server
 let lastAutoPickupRequestMs = 0
-// DIAG (proximity-steal-broken bug): throttle for the "carrier known but no Transform" warning.
-let lastMissingCarrierTransformLogMs = 0
-const MISSING_CARRIER_TRANSFORM_LOG_INTERVAL_MS = 3000
 const DROP_PICKUP_COOLDOWN_MS = 2000 // after dropping, can't auto-pickup for 2s
 let lastDropTimeMs = 0
 const WITNESSED_DROP_COOLDOWN_MS = 750 // after seeing anyone drop, brief cooldown to let server settle
@@ -268,9 +263,37 @@ let lastWitnessedDropTimeMs = 0
 let pickupSoundEntity: Entity | null = null
 let dropSoundEntity: Entity | null = null
 
-// Sound dedup — prevent double-play when local action + CRDT both trigger
-let skipNextPickupSound = false
-let skipNextDropSound = false
+// Sound dedup — prevent double-play when local action + CRDT both trigger.
+//
+// Carrier-SCOPED rather than a bare boolean: it names the player whose pickup sound has
+// already been played, '' for nobody. A bare flag had two opposite failure modes and no way
+// to avoid both — left armed it silenced the NEXT carrier's steal ("steal sound sometimes
+// doesn't play"), and cleared eagerly it let the same carrier's late CRDT edge replay the
+// sound. Scoping fixes the cross-player half completely: a value naming carrier X can never
+// suppress Y's genuine pickup.
+//
+// The same-player half is bounded rather than eliminated: two of the four resets require
+// observing a drop (dropForced, and the CRDT not-carried edge), which a stalled Flag CRDT loses
+// for a drop that sends no dropForced (a voluntary drop, or the lightning drop). A third is the
+// pending-pickup rollback timeout. The fourth is the flagHeartbeat handler, which
+// clears the guard whenever the server reports this player is no longer the carrier — so the
+// residual exposure is at most one heartbeat interval (~1s), not that player's next pickup.
+let pickupSoundPlayedForCarrier = ''
+// Suppresses the CRDT-edge drop sound for a manual drop this client already sounded locally.
+//
+// TIME-BOUNDED rather than a sticky boolean, and deliberately not carrier-scoped like
+// pickupSoundPlayedForCarrier: a manual drop is a point-in-time event, not an ongoing "who holds
+// it" state, so the thing to scope by is *when*. As a bare flag it was armed at the two manual
+// drop sites and cleared ONLY by the CRDT not-carried edge, so a stalled Flag CRDT — or a
+// Carried→Dropped→Carried transition that never presented as not-carried on a client frame —
+// left it armed forever and silenced the next drop that client observed, whoever dropped it.
+//
+// Not derived from lastDropTimeMs, which looks equivalent but is also set by `dropForced`; a
+// forced drop takes its sound FROM the CRDT edge, so reusing that timestamp would mute it.
+let skipDropSoundUntil = 0
+// Covers a normal CRDT propagation (RTT is ~100-200ms) with room to spare. Past it the guard
+// lapses, so the worst case degrades to one extra drop sound instead of permanent silence.
+const SKIP_DROP_SOUND_WINDOW_MS = 1500
 
 // Server confirmation fast-path — pickupConfirmed message arrives before CRDT sync
 // Phase 1 (instant): hide flag visual + play sound on auto-pickup
@@ -294,13 +317,23 @@ room.onMessage('pickupConfirmed', (data) => {
   // Also tell the interpolation system who the carrier is so scoreboard doesn't reset
   setConfirmedCarrier(data.playerId)
   // Play pickup sound now that server confirmed (prevents repeated sounds on rejected pickups)
-  // But skip if Phase 1 (auto-pickup) already played it
-  if (!skipNextPickupSound) {
-    playPickupSound('Phase2:pickupConfirmed')
-  } else {
-    console.log('[Flag] 🔇 Phase2:pickupConfirmed skipped (Phase 1 already played)')
+  // But skip if Phase 1 (auto-pickup) already played it.
+  //
+  // This handler is the main source of a steal's sound, so it must not be gated on a stale
+  // is the only thing that sounds a steal now that the client-side predictor is gone (the
+  // predictor used to play the steal sound itself, unconditionally), so this handler is the
+  // only thing that sounds a steal. Suppress only when the sound was already played for THIS
+  // carrier — a leftover value naming someone else must never silence this one.
+  if (pickupSoundPlayedForCarrier === data.playerId) {
+    console.log('[Flag] 🔇 Phase2:pickupConfirmed skipped (Phase 1 already played for this carrier)')
+    // Already recorded against this carrier — nothing to re-arm.
+  } else if (playPickupSound('Phase2:pickupConfirmed')) {
+    // Record only on an audible play, so a cooldown-swallowed sound does not arm the guard.
+    // Note this is belt-and-braces on THIS path: Phase 2 below always calls showClone, so the
+    // CRDT edge would skip on its clone-already-visible branch regardless. It does real work on
+    // the Phase-1 auto-pickup path, which runs before any clone is shown for a remote carrier.
+    pickupSoundPlayedForCarrier = data.playerId
   }
-  skipNextPickupSound = true  // skip the CRDT-triggered sound since we already played it
 })
 
 // ── Fast-path for combat-forced drops (arrives before CRDT) ──
@@ -312,7 +345,7 @@ room.onMessage('dropForced', (data) => {
   confirmedGraceCarrier = ''
   clearConfirmedCarrier()
   pendingPickupUntil = 0
-  skipNextPickupSound = false  // reset for next pickup
+  pickupSoundPlayedForCarrier = ''  // nobody carries — next pickup should sound
   // Hide clone + shield, restore flag visual
   hideClone()
   hideAllShields()
@@ -365,23 +398,6 @@ let heartbeatAuthorityState: FlagState | null = null
 let heartbeatAuthorityCarrier = ''
 let heartbeatStaleState: FlagState | null = null
 let heartbeatStaleCarrier = ''
-// Last heartbeat's authoritative carrier world position (see the flagLogic.ts
-// server change: when carried, flagHeartbeat.x/y/z is the carrier's real
-// world position, not the parented-flag's local Transform). Used as a fallback
-// for the proximity-steal predictor when the carrier's PlayerIdentityData /
-// Transform never replicated to this client (root cause of "running over the
-// carrier sometimes doesn't steal the flag" — without a position we couldn't
-// send requestSteal, and the server's corroboration gate then blocked the
-// server-side path too).
-let heartbeatCarrierX = 0
-let heartbeatCarrierY = 0
-let heartbeatCarrierZ = 0
-let heartbeatCarrierPosCarrier = ''
-let heartbeatCarrierPosAt = 0
-// Fresh window for the cached position. Two heartbeat intervals of tolerance,
-// same reasoning as HEARTBEAT_AUTHORITY_MS: covers a dropped packet without
-// letting a stale position authorize a steal against a carrier who moved.
-const HEARTBEAT_CARRIER_POS_FRESH_MS = 2500
 // Must outlast TWO heartbeat intervals, not one: a re-correction needs 2 consecutive
 // mismatched heartbeats (2s), so a shorter authority window leaves a gap where the
 // safety nets revert to the stale CRDT and the orphaned clone flickers back.
@@ -390,18 +406,9 @@ room.onMessage('flagHeartbeat', (data) => {
   const hbState = data.state as FlagState
   const hbCarrier = (data.carrierId || '').toLowerCase()
 
-  // Cache the carrier's world position for the steal predictor. Only when
-  // Carried — for AtBase/Dropped the x/y/z is the flag itself, not a player,
-  // and the predictor only needs a carrier position.
-  if (hbState === FlagState.Carried && hbCarrier &&
-      typeof data.x === 'number' && typeof data.y === 'number' && typeof data.z === 'number' &&
-      Number.isFinite(data.x) && Number.isFinite(data.y) && Number.isFinite(data.z)) {
-    heartbeatCarrierX = data.x
-    heartbeatCarrierY = data.y
-    heartbeatCarrierZ = data.z
-    heartbeatCarrierPosCarrier = hbCarrier
-    heartbeatCarrierPosAt = Date.now()
-  }
+  // Note: the heartbeat also carries the carrier's authoritative world position in x/y/z.
+  // Nothing on the client reads it since the steal predictor was removed (the server owns
+  // proximity steals now); the fields stay in the payload so the message shape is unchanged.
 
   // Authoritative hold total rides the heartbeat (WS) — feed the scoreboard so it can
   // re-anchor even when PlayerFlagHoldTime CRDT updates are stalled. Reported on EVERY
@@ -410,6 +417,23 @@ room.onMessage('flagHeartbeat', (data) => {
   // without the field is harmless.
   if (typeof data.carrierHoldSeconds === 'number') {
     applyServerHoldTime(hbState === FlagState.Carried ? hbCarrier : '', data.carrierHoldSeconds, data.roundId)
+  }
+
+  // Release the pickup-sound guard when the server says this player is no longer the carrier.
+  // The other resets require the client to OBSERVE a drop, and a stalled Flag CRDT plus a drop
+  // that sends no dropForced (voluntary drop, lightning drop) loses that edge — which would
+  // leave the guard naming a player and silence their own next pickup.
+  //
+  // Skipped while a pickup is in flight. A heartbeat is composed up to a second before it
+  // arrives, so during an optimistic Phase-1 pickup it still reports the PRE-pickup state;
+  // clearing on that would un-arm the guard before pickupConfirmed lands and play the sound a
+  // SECOND time — the exact duplicate this guard exists to prevent. The condition this reset
+  // targets (a drop the client never observed) is by definition at least one heartbeat old, so
+  // deferring past the in-flight window costs it nothing.
+  const hbNow = Date.now()
+  if (pickupSoundPlayedForCarrier && pendingPickupUntil <= hbNow && hbNow >= confirmedGraceUntil &&
+      (hbState !== FlagState.Carried || hbCarrier !== pickupSoundPlayedForCarrier)) {
+    pickupSoundPlayedForCarrier = ''
   }
 
   // Read current CRDT state through getEffectiveFlag (prefers a carried entity — the one
@@ -474,13 +498,14 @@ room.onMessage('flagHeartbeat', (data) => {
 
 let lastPickupSoundMs = 0
 const PICKUP_SOUND_COOLDOWN_MS = 250
-function playPickupSound(caller: string = '?'): void {
+/** Returns whether the sound actually played, so callers don't record a cooldown-swallowed one. */
+function playPickupSound(caller: string = '?'): boolean {
   const now = Date.now()
   const msSinceLast = now - lastPickupSoundMs
   const isFirstEver = !pickupSoundEntity
   if (msSinceLast < PICKUP_SOUND_COOLDOWN_MS) {
     console.log(`[Flag] 🔇 pickup sound SKIPPED (cooldown) caller=${caller} msSinceLast=${msSinceLast}`)
-    return
+    return false
   }
   console.log(`[Flag] 🔊 pickup sound PLAY caller=${caller} isFirstEver=${isFirstEver} msSinceLast=${msSinceLast}`)
   lastPickupSoundMs = now
@@ -489,12 +514,22 @@ function playPickupSound(caller: string = '?'): void {
     Transform.create(pickupSoundEntity, { position: Vector3.Zero() })
     // On first call, create with playing: true directly (avoid create + replace in same frame causing double audio)
     AudioSource.create(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: true, loop: false, volume: 2, global: true })
-    return
+    return true
   }
   AudioSource.createOrReplace(pickupSoundEntity, { audioClipUrl: 'assets/sounds/pickup2.wav', playing: true, loop: false, volume: 2, global: true })
+  return true
 }
 
+let lastDropSoundMs = 0
+// Backstop for the case the time-bounded guard above cannot cover: a CRDT edge arriving in the
+// same frame as, or immediately after, a locally-played drop. Safe at any value here because two
+// LEGITIMATE drop sounds cannot land this close — a drop requires being the carrier, and
+// regaining the flag takes a server round trip. Mirrors PICKUP_SOUND_COOLDOWN_MS.
+const DROP_SOUND_COOLDOWN_MS = 250
 function playDropSound(): void {
+  const nowMs = Date.now()
+  if (nowMs - lastDropSoundMs < DROP_SOUND_COOLDOWN_MS) return
+  lastDropSoundMs = nowMs
   if (!dropSoundEntity) {
     dropSoundEntity = engine.addEntity()
     Transform.create(dropSoundEntity, { position: Vector3.Zero() })
@@ -701,7 +736,7 @@ export function requestManualDrop(): void {
   }
   if (amCarrying) {
     playDropSound()
-    skipNextDropSound = true
+    skipDropSoundUntil = Date.now() + SKIP_DROP_SOUND_WINDOW_MS
     lastDropTimeMs = Date.now()
     confirmedGraceUntil = 0
     confirmedGraceCarrier = ''
@@ -878,8 +913,8 @@ export function flagClientSystem(dt: number): void {
           if (!alreadyOptimistic) {
             if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
             showClone(userId)
-            playPickupSound('Phase1:autoPickup')
-            skipNextPickupSound = true  // suppress duplicate when pickupConfirmed arrives
+            // Record only on an audible play — see the pickupConfirmed handler.
+            if (playPickupSound('Phase1:autoPickup')) pickupSoundPlayedForCarrier = userId
             showShieldForPlayer(userId)
             setShieldAlpha(userId, 1.0)
             pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
@@ -893,101 +928,13 @@ export function flagClientSystem(dt: number): void {
     }
   }
 
-  // ── Client-side proximity steal prediction ──
-  // If flag is carried by someone else and we're within steal radius, send requestSteal
-  // and show optimistic visuals immediately (clone swaps to us, shield, sound).
-  if (userId && Transform.has(engine.PlayerEntity) && !isLightningRespawning()) {
-    const now = Date.now()
-    let amCarrying = false
-    let carrierIdForSteal = ''
-    // getEffectiveFlag prefers a carried entity, so a stale/orphaned Flag entity ordered
-    // first (possible after a server-side flag recreation) can't hide the real carrier.
-    const effFlag = getEffectiveFlag()
-    if (effFlag && effFlag.state === FlagState.Carried && effFlag.carrierPlayerId) {
-      if (effFlag.carrierPlayerId === userId) {
-        amCarrying = true
-      } else {
-        carrierIdForSteal = effFlag.carrierPlayerId
-      }
-    }
-    // Also check grace period — if server confirmed someone else is carrying
-    if (!amCarrying && !carrierIdForSteal && confirmedGraceUntil > now && confirmedGraceCarrier && confirmedGraceCarrier !== userId) {
-      carrierIdForSteal = confirmedGraceCarrier
-    }
-    // Heartbeat-authority fallback: when the Flag CRDT is stalled, the 5s heartbeat is
-    // the only signal that someone is carrying — without this, proximity steal silently
-    // stops working for every client whose CRDT lags ("steal broken/inconsistent").
-    // The server still validates the actual steal, so a stale heartbeat can't cause a
-    // wrong transfer — worst case a rejected request.
-    if (!amCarrying && !carrierIdForSteal && heartbeatAuthorityState === FlagState.Carried &&
-        heartbeatAuthorityCarrier && heartbeatAuthorityCarrier !== userId && now < heartbeatAuthorityUntil) {
-      carrierIdForSteal = heartbeatAuthorityCarrier
-    }
-
-    if (!amCarrying && carrierIdForSteal && !hasFlagImmunity(carrierIdForSteal) && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS) {
-      // Find carrier position among players (skip if the carrier is still in their pickup/steal
-      // immunity window — the server would reject the steal and the failed attempt would apply
-      // a ~2.5s local lockout, which feels like "can't knock it loose").
-      const myPos = Transform.get(engine.PlayerEntity).position
-      let foundCarrierTransform = false
-      let carrierPosSource: 'crdt' | 'heartbeat' | null = null
-      let carrierPosX = 0, carrierPosY = 0, carrierPosZ = 0
-      for (const [, identity, transform] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-        if (identity.address.toLowerCase() === carrierIdForSteal) {
-          foundCarrierTransform = true
-          carrierPosSource = 'crdt'
-          carrierPosX = transform.position.x
-          carrierPosY = transform.position.y
-          carrierPosZ = transform.position.z
-          break
-        }
-      }
-      // Heartbeat fallback: when the carrier's PlayerIdentityData never replicated,
-      // the flagHeartbeat's x/y/z is the carrier's authoritative world position
-      // (see flagLogic.ts). This is what unblocks the "steal doesn't work" bug —
-      // without it the predictor couldn't send requestSteal, and the server's
-      // corroboration gate blocked the server-side path too.
-      if (!foundCarrierTransform &&
-          heartbeatCarrierPosCarrier === carrierIdForSteal &&
-          now - heartbeatCarrierPosAt <= HEARTBEAT_CARRIER_POS_FRESH_MS) {
-        carrierPosSource = 'heartbeat'
-        carrierPosX = heartbeatCarrierX
-        carrierPosY = heartbeatCarrierY
-        carrierPosZ = heartbeatCarrierZ
-      }
-      if (carrierPosSource !== null) {
-        const dist = Vector3.distance(myPos, Vector3.create(carrierPosX, carrierPosY, carrierPosZ))
-        if (dist <= PROXIMITY_STEAL_RADIUS) {
-          // Optimistic steal: show clone immediately AND play sound. Prior design
-          // deferred sound to the pickupConfirmed handler, but that handler is
-          // gated on !skipNextPickupSound — if the flag was left stale-true from
-          // a prior operation, the steal's sound was silenced (playtest report
-          // "steal sound sometimes doesn't play"). Playing optimistically and
-          // setting skipNextPickupSound=true here mirrors the auto-pickup path
-          // and guarantees exactly one sound per steal.
-          if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-          showClone(userId)
-          playPickupSound('Phase1:stealPrediction')
-          skipNextPickupSound = true
-          pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
-
-          room.send('requestSteal', { victimId: carrierIdForSteal })
-          lastAutoPickupRequestMs = now
-          console.log('[Flag] 🚩 Client proximity steal prediction — sending requestSteal for',
-            carrierIdForSteal.slice(0, 8), '| src=', carrierPosSource, '| dist=', dist.toFixed(2))
-        }
-      }
-      // DIAG (proximity-steal-broken bug): heartbeat says X is carrying, but we
-      // don't have their PlayerIdentityData+Transform AND no fresh flagHeartbeat
-      // carrier position either — the last-resort case. Should be extremely rare
-      // now that the heartbeat carries the carrier's world position; if this fires
-      // in playtest the flagHeartbeat itself is stalled, not just the CRDT.
-      if (carrierPosSource === null && now - lastMissingCarrierTransformLogMs >= MISSING_CARRIER_TRANSFORM_LOG_INTERVAL_MS) {
-        lastMissingCarrierTransformLogMs = now
-        console.log('[Flag] ⚠️ Carrier known (', carrierIdForSteal.slice(0, 8), ') but no CRDT Transform AND no fresh flagHeartbeat position — proximity steal disabled')
-      }
-    }
-  }
+  // ── No client-side proximity steal prediction ──
+  // Steals are decided entirely by the server (checkProximitySteal in flagLogic.ts) on its
+  // own position view. This client used to predict a steal and send `requestSteal`, which
+  // the server then required as corroboration — so a client that couldn't resolve the
+  // carrier's avatar entity made the flag unstealable (playtest 2026-08-04). Visuals for a
+  // steal now arrive through the `pickupConfirmed` broadcast: see its handler above and the
+  // Phase 2 consume block below, which retarget the clone, swap shields and play the sound.
 
   // ── Manual drop (3 key) ──
   if (inputSystem.isTriggered(InputAction.IA_ACTION_5, PointerEventType.PET_DOWN) && userId) {
@@ -1011,7 +958,7 @@ export function flagClientSystem(dt: number): void {
     }
     if (amCarrying) {
       playDropSound()
-      skipNextDropSound = true
+      skipDropSoundUntil = Date.now() + SKIP_DROP_SOUND_WINDOW_MS
       lastDropTimeMs = Date.now()
       confirmedGraceUntil = 0
       confirmedGraceCarrier = ''
@@ -1047,7 +994,7 @@ export function flagClientSystem(dt: number): void {
     hideClone()
     if (userId) hideShieldForPlayer(userId)
     if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
-    skipNextPickupSound = false  // reset so next pickup's sound plays correctly
+    pickupSoundPlayedForCarrier = ''  // the pickup never happened — next attempt should sound
     // Apply a longer cooldown to prevent rapid re-pickup attempts when server keeps rejecting
     lastAutoPickupRequestMs = Date.now() + 2000  // won't retry for 2.5s (cooldown is 500ms, so 2000 + 500)
   }
@@ -1086,16 +1033,18 @@ export function flagClientSystem(dt: number): void {
       // Play pickup sound (skip if we already played it in auto-pickup OR
       // if the grace period already handled this pickup via pickupConfirmed)
       if (!isFirstFrame) {
-        // If clone is already showing for the correct carrier (from Phase 1/2),
-        // this is just CRDT catching up — don't replay the sound
-        if (skipNextPickupSound) {
-          console.log('[Flag] 🔇 Phase3:CRDT skipped (skipNextPickupSound)')
-          skipNextPickupSound = false
+        // Suppress when this exact carrier's sound already played in Phase 1/2 — this is just
+        // CRDT catching up. Checked against the carrier rather than clone state because the
+        // per-frame safety nets below can hide or retarget the clone once the 3s grace window
+        // expires, which would let a CRDT edge arriving at ~t+3-5s replay the sound.
+        if (pickupSoundPlayedForCarrier === flag.carrierPlayerId) {
+          console.log('[Flag] 🔇 Phase3:CRDT skipped (already played for this carrier)')
         } else if (cloneVisible && carryCloneCarrierId === flag.carrierPlayerId) {
-          // Clone already showing from pickupConfirmed — suppress duplicate sound
+          // Clone already showing for them — belt and braces on the same conclusion.
           console.log('[Flag] 🔇 Phase3:CRDT skipped (clone already visible for carrier)')
-        } else {
-          playPickupSound('Phase3:CRDT')
+          pickupSoundPlayedForCarrier = flag.carrierPlayerId
+        } else if (playPickupSound('Phase3:CRDT')) {
+          pickupSoundPlayedForCarrier = flag.carrierPlayerId
         }
       }
       
@@ -1118,7 +1067,7 @@ export function flagClientSystem(dt: number): void {
       confirmedGraceUntil = 0
       confirmedGraceCarrier = ''
       clearConfirmedCarrier()
-      skipNextPickupSound = false  // reset so next pickup's sound plays correctly
+      pickupSoundPlayedForCarrier = ''  // nobody carries — next pickup should sound
 
       if (!isFirstFrame) {
         // Check if this drop is caused by round end (flag forced back from carrier)
@@ -1128,8 +1077,10 @@ export function flagClientSystem(dt: number): void {
           break
         }
 
-        if (skipNextDropSound) {
-          skipNextDropSound = false
+        if (Date.now() < skipDropSoundUntil) {
+          // We sounded this drop ourselves a moment ago. Consume the window so a LATER drop,
+          // still inside it, is not also silenced.
+          skipDropSoundUntil = 0
         } else if (!isRoundEndDrop) {
           playDropSound()
         }
@@ -1173,13 +1124,15 @@ export function flagClientSystem(dt: number): void {
     // 1. Flag IS carried — ensure clone is showing for the correct carrier
     if (effState === FlagState.Carried && effCarrier && !needsCloneCreate) {
       const wrongOrMissing = !cloneVisible || carryCloneCarrierId !== effCarrier
-      // Skip while we have an in-flight optimistic pickup/steal for the local
-      // player, OR the server confirmed us via pickupConfirmed but CRDT hasn't
-      // caught up yet. Without these guards the safety net sees the local
-      // clone (userId) alongside a stale CRDT carrier (previous holder) and
-      // yanks the clone back to the previous carrier — playtest report:
-      // "on steal the flag jumps back to the original holder briefly". Safety
-      // Net 2 already respects both gates; parity here is what we want.
+      // Skip while we have an in-flight optimistic auto-pickup for the local player, OR the
+      // server confirmed a carrier via pickupConfirmed but CRDT hasn't caught up yet. Without
+      // these guards the safety net sees the fresh clone alongside a stale CRDT carrier
+      // (previous holder) and yanks the clone back — playtest report: "on steal the flag jumps
+      // back to the original holder briefly". Safety Net 2 respects both gates; parity here is
+      // what we want.
+      //
+      // Note: since client-side steal prediction was removed, only auto-pickup ever sets
+      // pendingPickupUntil, so on a STEAL it is `inGrace` alone that protects the clone.
       const inOptimisticWindow = pendingPickupUntil > Date.now()
       const inGrace = Date.now() < confirmedGraceUntil && confirmedGraceCarrier && confirmedGraceCarrier !== effCarrier
       if (wrongOrMissing && !inOptimisticWindow && !inGrace) {

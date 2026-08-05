@@ -2,7 +2,22 @@
 
 **Purpose:** Context for a fresh session picking up the CRDT / MessageBus traffic reduction work in Flag Tag.
 
-**Current branch state:** on `main`, clean. Last three PRs merged in order:
+> **UPDATE 2026-08-03 — the platform CRDT issue is fixed, and both heartbeat
+> workarounds have been removed.** `posHeartbeat` (client → server position
+> reporting) and `ghostHeartbeat` (ghost fallback visual) are gone, along with
+> `src/server/positionTrust.ts`, `src/systems/positionHeartbeat.ts`, and
+> `src/shared/ghostHeartbeat.ts`. `getPlayerPosition` reads the CRDT Transform
+> again. This removes the single largest stream in the budget table below
+> (`posHeartbeat` at N × 8 Hz), so the MEDIUM priority item (3) and every
+> "don't break the heartbeat" guardrail no longer apply. The retained defense is
+> the duplicate-entity diagnostics, since joined by the entity-reissue and position-aliasing
+> tripwires. (The `requestSteal` corroboration gate was
+> also kept at that point, but was removed on 2026-08-04 when proximity steal
+> became fully server-authoritative — see `BUG_stale-crdt-transform-in-combat.md`.)
+> Sections below are kept as written for historical context — re-measure before
+> acting on the numbers.
+
+**Current branch state (as of the original handoff):** on `main`, clean. Last three PRs merged in order:
 - #17 — Ghost fallback visual channel (invisible-ghost fix)
 - #18 & #19 — Ghost fallback polish (rotation, death flash)
 - (unnumbered on GitHub) — `fix/proximity-steal-heartbeat` merged: reliable proximity steal via heartbeat position + dual-corroboration + three visual/audio consistency fixes
@@ -23,11 +38,11 @@ The auth-server allows **~40 messages/second per room**. Below is a rough steady
 
 | Stream | Approx rate | Notes |
 |---|---|---|
-| `posHeartbeat` inbound | **N × 8 Hz** | Client → server, per-player. 5 players = 40/s. **By itself hits the limit.** |
+| ~~`posHeartbeat` inbound~~ | ~~**N × 8 Hz**~~ | Client → server, per-player. 5 players = 40/s. **By itself hit the limit.** REMOVED 2026-08-03. |
 | `ghostTouching` outbound | **~30 Hz** while touching | Server → all clients, every server tick while ghost contacts anyone |
 | Flag falling CRDT (Transform + `Flag` component) | **~30 Hz** during multi-second falls | Directly saturates the CRDT bus |
 | Ghost CRDT target updates | ~5 Hz | Reasonable |
-| `ghostHeartbeat` (WS fallback) | ~2 Hz | Fine, added in PR #17 |
+| ~~`ghostHeartbeat` (WS fallback)~~ | ~~~2 Hz~~ | Added in PR #17. REMOVED 2026-08-03. |
 | `flagHeartbeat` | 1 Hz | Fine |
 | `PlayerFlagHoldTime` CRDT | 0.5 Hz | Already throttled from 2 Hz historically |
 | Combat MessageBus | Event bursts | Correct pattern; not steady |
@@ -36,6 +51,8 @@ We're demonstrably over budget under normal play. This is what's causing compone
 
 ### The feedback loop
 Historical context: Flag Tag hit CRDT saturation before, and the fix was moving projectiles/traps off `syncEntity` onto MessageBus. Since then, we've added WS fallbacks (`flagHeartbeat`, `ghostHeartbeat`, `posHeartbeat`) to paper over CRDT gaps — those are lightweight, but the *un-throttled event streams* (`ghostTouching`, flag fall) still saturate the bus, and saturation is what forces us to rely on the fallbacks. Vicious cycle. Reducing the event-stream churn should reduce reliance on fallbacks.
+
+(2026-08-03: `ghostHeartbeat` and `posHeartbeat` were removed once the platform CRDT issue was fixed; `flagHeartbeat` remains.)
 
 ---
 
@@ -72,26 +89,21 @@ Historical context: Flag Tag hit CRDT saturation before, and the fix was moving 
      - **(b)** Same pattern as `dropForced`: send fall position via a new `flagFalling` WS message at ~10 Hz, only write CRDT on final rest. Requires client-side interpolation logic parallel to what CRDT would have driven.
    - **(a)** is smaller / lower risk. Start there.
 
-**MEDIUM — defer unless (1) + (2) don't resolve remaining issues:**
-3. **Tune `posHeartbeat` cadence**
-   - Location: `src/systems/positionHeartbeat.ts` — currently ~8 Hz per client.
-   - **Sensitive:** this is the anti-cross-wire mechanism protecting proximity steal / combat correctness. The PR we just merged relies on it.
-   - **If touched:** drop to 5 Hz baseline, NOT movement-gated (breaks cross-wire defense — need heartbeats even when stationary because cross-wire happens between multiple players' Transforms).
-   - Alternative: adaptive — 5 Hz idle, 8 Hz when the local player is within combat range of others.
-   - **Defer** — try (1) + (2) first, measure impact, only touch this if still saturating.
+**MEDIUM — ~~defer unless (1) + (2) don't resolve remaining issues~~ MOOT as of 2026-08-03:**
+3. ~~**Tune `posHeartbeat` cadence**~~ — the stream was removed outright, which recovers the whole N × 8 Hz budget this item was trying to trim. Nothing left to tune.
 
 **DO NOT DO:**
 - Reintroduce projectile/trap `syncEntity`. This was the original saturation source and is correctly off CRDT.
-- Reduce `flagHeartbeat` / `ghostHeartbeat` — both are 1-2 Hz, negligible.
+- Reduce `flagHeartbeat` — 1 Hz, negligible.
 - Reduce `PlayerFlagHoldTime` CRDT below 0.5 Hz — scoreboard smoothness suffers.
 
 ---
 
 ## Constraints and guardrails
 
-- **The anti-cross-wire mechanism (`positionTrust.ts` + `posHeartbeat`) must remain functionally intact.** The steal fix depends on it.
-- **Don't break existing WS fallback paths** (`flagHeartbeat`, `ghostHeartbeat`) — they're what makes the game survive CRDT gaps.
-- **Keep the pattern of extractable pure logic + unit tests.** Every meaningful change to server logic in this codebase gets a `test/*.spec.ts` file (see `test/ghostHeartbeat.spec.ts`, `test/stealIntent.spec.ts` for the shape). Don't skip this.
+- ~~**The anti-cross-wire mechanism (`positionTrust.ts` + `posHeartbeat`) must remain functionally intact.**~~ Removed 2026-08-03 with the platform fix. ~~The `requestSteal` corroboration gate in `stealIntent.ts` is what the steal path now depends on — keep that.~~ Also removed, 2026-08-04: proximity steal is decided entirely by `checkProximitySteal` on the server's own position view, and the scene has **no** blocking cross-wire defense left. The remaining tripwires are three edge-triggered 1Hz logs from `sweepDuplicateIdentities` in `serverState.ts`: `👥 duplicate PlayerIdentityData`, the two `♻️` recycled/reissued lines, and `🔗 position aliasing`.
+- **Don't break `flagHeartbeat`** — it's the live scoreboard's reliable transport when `PlayerFlagHoldTime` CRDT stalls.
+- **Keep the pattern of extractable pure logic + unit tests.** Every meaningful change to server logic in this codebase gets a `test/*.spec.ts` file (see `test/stealCandidate.spec.ts`, `test/ghostContactState.spec.ts` for the shape). Don't skip this.
 - **Small atomic PRs.** The project's rhythm is one focused change per PR. If (1) and (2) are independent, they can be one PR (both reduce message traffic, same theme). Don't stack unrelated work.
 - **Bump `src/version.ts`** — the pre-commit hook does it automatically. Don't fight it.
 
@@ -101,7 +113,7 @@ Historical context: Flag Tag hit CRDT saturation before, and the fix was moving 
 
 - **Measured:** on server-side, log throttled traffic counters (e.g. "sent 47 `ghostTouching` messages in the last 10s, dropped 250" style). Add a diagnostic on the server that logs approximate `msg/s` fanout every 30s so we can characterize the impact of the reduction in playtest.
 - **Playtest signal:** scoreboard ghost names should stop appearing (or become rare). Ghost/steal reliability holds. No new regressions in visual smoothness.
-- **Regression protection:** existing tests pass (currently 121 across 15 spec files). New pure logic (if any extracted) has its own tests.
+- **Regression protection:** the full suite passes — run `npm test` for the current count. (A hard number used to live here and went stale three times in a single day's work, twice inside the very change that updated it; don't reintroduce one.) New pure logic (if any extracted) has its own tests.
 
 ---
 
@@ -115,10 +127,9 @@ Historical context: Flag Tag hit CRDT saturation before, and the fix was moving 
 - `src/shared/messages.ts` — for any new WS message additions
 
 **Reference:**
-- `src/server/positionTrust.ts` — the anti-cross-wire mechanism (don't break)
-- `src/systems/positionHeartbeat.ts` — the 8 Hz sender (don't touch yet)
+- `src/server/stealCandidate.ts` — pure candidate selection for the server-authoritative proximity steal (replaced `stealIntent.ts`, deleted 2026-08-04)
 - `docs/history/KNOWN_BUGS-2026-06.md` — historical context on the original saturation crisis
-- `docs/BUG_stale-crdt-transform-in-combat.md` — the cross-wire bug that motivated `posHeartbeat`
+- `docs/BUG_stale-crdt-transform-in-combat.md` — the cross-wire bug that motivated `posHeartbeat` (fixed platform-side; heartbeat removed 2026-08-03)
 
 ---
 
@@ -141,6 +152,6 @@ Filed with the Foundation via the community-manager bridge. Until fixed, we stay
 5. Add the `msg/s` diagnostic counter alongside so we can measure impact.
 6. Once (1) is clean and tested, add priority (2) — flag-fall CRDT throttle — in the same PR (same theme).
 7. Deploy to `flagtag.dcl.eth`, playtest with 3+ players, verify scoreboard ghosts stop appearing.
-8. If saturation is still evident in logs, THEN consider (3) `posHeartbeat` tuning — but as a separate PR with its own careful validation.
+8. ~~If saturation is still evident in logs, THEN consider (3) `posHeartbeat` tuning~~ — moot; the stream is gone as of 2026-08-03.
 
 Ready when the new session starts.

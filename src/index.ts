@@ -245,12 +245,6 @@ export async function main() {
     pedestalSystem(dt)
   }, 0.1)
 
-  // Position heartbeat (~8Hz): reports our own avatar position so the server
-  // doesn't have to trust its cross-wire-prone CRDT view of us for hits/steals
-  // (docs/BUG_stale-crdt-transform-in-combat.md).
-  const { positionHeartbeatSystem, HEARTBEAT_SEND_INTERVAL_S } = await import('./systems/positionHeartbeat')
-  registerThrottled(positionHeartbeatSystem, HEARTBEAT_SEND_INTERVAL_S)
-
   // Throttled checks (every 0.25s)
   registerThrottled((_elapsed) => {
     mailboxSystem()

@@ -1,7 +1,11 @@
 /**
- * preloadSounds.ts — Silently plays every game sound at volume 0 on scene load
- * so the engine fetches and caches the audio clips. This eliminates the delay
- * on first playback of any sound effect.
+ * preloadSounds.ts — Silently plays every game sound at volume ~0 on scene load so the engine
+ * fetches and caches the audio clips. This eliminates the delay on first playback.
+ *
+ * Includes the default music track. Note `setupMusic()` also creates a playing AudioSource for
+ * it, so the fetch would happen at load regardless — being in this list just starts it earlier
+ * (this runs at index.ts:88, setupMusic at :139) and keeps the list honest about covering every
+ * clip the scene can play unprompted.
  */
 import { engine, AudioSource, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
@@ -21,12 +25,15 @@ const ALL_SOUNDS = [
   'assets/sounds/lighting.mp3',
   'assets/sounds/mailbox.mp3',
   'assets/sounds/miss2.mp3',
-  'assets/sounds/pickup2.mp3',
   'assets/sounds/pickup2.wav',
   'assets/sounds/portals/doorAmb.mp3',
   'assets/sounds/powerup.mp3',
   'assets/sounds/purchase.mp3',
   'assets/sounds/release.mp3',
+  // The default music track. The other three MUSIC_STORE tapes are deliberately absent:
+  // they are ~9.5MB combined for tracks a player only gets after buying them (150 coins,
+  // 3 flags), so forcing them on every scene load costs everyone for a few players.
+  'assets/sounds/SpriteSprint_Loop.mp3',
   'assets/sounds/swoosh.mp3',
   'assets/sounds/teleport.mp3',
   'assets/sounds/terminal.mp3',

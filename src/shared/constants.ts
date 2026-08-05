@@ -33,6 +33,17 @@ export const ROUND_LENGTH_MINUTES = 5
 export const PROXIMITY_STEAL_RADIUS = 1.8
 /** Immunity duration after stealing/picking up flag (ms). */
 export const STEAL_IMMUNITY_MS = 3000
+/**
+ * How long a lightning-struck player is dead: frozen with input disabled, then teleported to
+ * spawn. Shared because the SERVER decides who is struck (roundManager sends `lightningStrike`)
+ * and must keep them out of steal candidacy while their client has them frozen.
+ *
+ * The server's exclusion is deliberately LONGER than this — it adds
+ * `LIGHTNING_EXCLUSION_MARGIN_MS` (see `checkProximitySteal` in `src/server/flagLogic.ts`),
+ * because the server's clock starts when it sends the message and the client's when it arrives,
+ * so windows sized identically would be offset by one-way latency.
+ */
+export const LIGHTNING_RESPAWN_DURATION_SEC = 10.0
 
 // ── Scene floor ──
 

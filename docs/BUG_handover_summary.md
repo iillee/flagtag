@@ -139,21 +139,23 @@ cross-wire.
   - Position/entity dumps in `src/server/flagLogic.ts` (`checkProximitySteal`) and `src/server/combat.ts` (trap hit branch)
 - Screen recordings of the bug reproducing (side-by-side of both clients where possible — victim's client shows them stationary, attacker's client shows the hit landing)
 
-## Our defense (in-scene, shipped 2026-07-22 — until platform fix)
+## Our defense (in-scene, shipped 2026-07-22 — heartbeat removed 2026-08-03)
 
 Shipped on branch `fix/crosswire-defenses` (see "Defenses shipped" in the full doc):
 
-1. **~8Hz client position heartbeat** over WebSocket; the server prefers a fresh (<1.5s)
-   heartbeat over the CRDT Transform for every authoritative proximity decision, falling
-   back to the CRDT view when stale. Mirrors the pattern PR #6 established for shooter
-   position with `resolveActionPosition`, extended to victim-side reads.
-2. **Client corroboration for proximity steals**: the server only transfers the flag when
-   the beneficiary's client independently predicted the steal (`requestSteal`) within 2s.
+1. ~~**~8Hz client position heartbeat**~~ over WebSocket; the server preferred a fresh
+   (<1.5s) heartbeat over the CRDT Transform for every authoritative proximity decision,
+   falling back to the CRDT view when stale. **REMOVED 2026-08-03** now that the platform
+   CRDT issue is reported fixed — along with the `🔀 CRDT/heartbeat disagreement` logger,
+   so we no longer have a production evidence stream for this bug.
+2. ~~**Client corroboration for proximity steals**~~: the server only transferred the flag
+   when the beneficiary's client independently predicted the steal (`requestSteal`) within
+   2s. **REMOVED 2026-08-04** — it denied every steal against a carrier whose avatar entity
+   had been recycled (the P3 trigger itself), while never blocking a false transfer.
+   Proximity steal is now decided entirely server-side. See
+   `BUG_stale-crdt-transform-in-combat.md` for the incident and what detection replaced it.
 
-Our server logs now emit `🔀 CRDT/heartbeat disagreement` (throttled, unconditional) every
-time a player's fresh self-reported position and the server's CRDT view diverge by >3m —
-that stream is production evidence of the cross-wire firing and we can attach it to this
-report on request.
-
-This is a workaround, not a fix — we shipped it because we have to ship, but the
-platform-side fix is what we actually need.
+The heartbeat was always a workaround, not a fix. It came out once the platform-side fix
+landed; if the cross-wire resurfaces, defense 1 is what needs restoring (see
+`BUG_stale-crdt-transform-in-combat.md` for the full shape and the two known regressions
+the removal accepted).
