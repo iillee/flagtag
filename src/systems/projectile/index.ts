@@ -327,7 +327,10 @@ export function triggerProjectileFromUI(): void {
   // cinematic or while spectating.
   if (isCinematicActive() || isSpectatorMode()) return
   if (isDrownRespawning()) return
-  if (!isWinsLoaded() && isServerConnected()) return  // Block firing until profile loaded (skip if no server)
+  // Block firing until server has synced and profile is loaded — prevents
+  // stuck-in-air / stuck-sound projectiles thrown during the first few seconds
+  // after joining, before the game state is ready.
+  if (!isServerConnected() || !isWinsLoaded()) { playErrorSound(); return }
   const now = Date.now()
   const userId = getPlayerData()?.userId
   if (!userId) return
@@ -578,7 +581,7 @@ export function projectileClientSystem(dt: number): void {
 
   // Projectile key — charge on press (blue only), instant fire for other colors
   const projAction = InputAction.IA_PRIMARY
-  if (inputSystem.isTriggered(projAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning() && (isWinsLoaded() || !isServerConnected())) {
+  if (inputSystem.isTriggered(projAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning() && isServerConnected() && isWinsLoaded()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 

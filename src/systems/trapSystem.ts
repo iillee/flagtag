@@ -617,7 +617,9 @@ export function triggerTrapFromUI(): void {
   // cinematic or while spectating.
   if (isCinematicActive() || isSpectatorMode()) return
   if (isDrownRespawning()) return
-  if (!isWinsLoaded() && isServerConnected()) return  // Block traps until profile loaded (skip if no server)
+  // Block trap drops until server has synced and profile is loaded — prevents
+  // orphaned local traps during the first few seconds after joining.
+  if (!isServerConnected() || !isWinsLoaded()) { playErrorSound(); return }
   const now = Date.now()
   const userId = getPlayerData()?.userId
   if (!userId) return
@@ -679,7 +681,7 @@ export function trapClientSystem(dt: number): void {
 
   // Trap key — drop trap (disabled in spectator mode)
   const trapAction = InputAction.IA_SECONDARY
-  if (inputSystem.isTriggered(trapAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning() && (isWinsLoaded() || !isServerConnected())) {
+  if (inputSystem.isTriggered(trapAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning() && isServerConnected() && isWinsLoaded()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
 
