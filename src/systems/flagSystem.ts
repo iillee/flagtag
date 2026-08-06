@@ -279,6 +279,15 @@ let dropSoundEntity: Entity | null = null
 // clears the guard whenever the server reports this player is no longer the carrier — so the
 // residual exposure is at most one heartbeat interval (~1s), not that player's next pickup.
 let pickupSoundPlayedForCarrier = ''
+// Minimum timestamp before flagHeartbeat is allowed to clear the guard.
+// Fixes a mobile-only double chime: high-RTT mobile clients often see the
+// pending-pickup window (700ms) expire BEFORE the server's pickupConfirmed
+// arrives. Once expired, an intervening flagHeartbeat (which still reports
+// the pre-pickup state) satisfies the clear condition and wipes the guard
+// — then pickupConfirmed replays the sound. Extending the local guard past
+// typical mobile RTT (3s) keeps Phase 1 and Phase 2 deduped.
+let pickupSoundGuardMinUntil = 0
+const PICKUP_SOUND_GUARD_MIN_MS = 3000
 // Suppresses the CRDT-edge drop sound for a manual drop this client already sounded locally.
 //
 // TIME-BOUNDED rather than a sticky boolean, and deliberately not carrier-scoped like
@@ -432,6 +441,7 @@ room.onMessage('flagHeartbeat', (data) => {
   // deferring past the in-flight window costs it nothing.
   const hbNow = Date.now()
   if (pickupSoundPlayedForCarrier && pendingPickupUntil <= hbNow && hbNow >= confirmedGraceUntil &&
+      hbNow >= pickupSoundGuardMinUntil &&
       (hbState !== FlagState.Carried || hbCarrier !== pickupSoundPlayedForCarrier)) {
     pickupSoundPlayedForCarrier = ''
   }
@@ -914,7 +924,10 @@ export function flagClientSystem(dt: number): void {
             if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
             showClone(userId)
             // Record only on an audible play — see the pickupConfirmed handler.
-            if (playPickupSound('Phase1:autoPickup')) pickupSoundPlayedForCarrier = userId
+            if (playPickupSound('Phase1:autoPickup')) {
+              pickupSoundPlayedForCarrier = userId
+              pickupSoundGuardMinUntil = now + PICKUP_SOUND_GUARD_MIN_MS
+            }
             showShieldForPlayer(userId)
             setShieldAlpha(userId, 1.0)
             pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
