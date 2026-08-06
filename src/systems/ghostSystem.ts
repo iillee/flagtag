@@ -42,6 +42,8 @@ interface ClientGhost {
   sinkTimer: number      // counts up from 0 to SPAWN_SINK_DURATION (0 = not sinking)
   sinking: boolean       // true when death sink is active
   messageSunkAt: number  // Date.now() when a ghostKilled message set sinking (0 = not message-sunk)
+  lastServerUpdateMs: number // Date.now() of the last time lastServerPos actually changed
+  lastStalledLogMs: number   // throttle for the "CRDT position stalled" diagnostic
 }
 
 const clientGhosts = new Map<Entity, ClientGhost>()
@@ -323,6 +325,21 @@ export function ghostClientSystem(dt: number): void {
     // instead of Transform (which is no longer synced to avoid CRDT saturation)
     const serverPos = Vector3.create(ghost.targetX, ghost.targetY, ghost.targetZ)
 
+    // Sanity guard: a NaN/±Infinity slipping in from a bogus CRDT frame propagates
+    // through velocity → predictedPos → renderPos → modelT.position and the GLB
+    // silently stops rendering (candidate cause of the "ghost fades to invisible"
+    // playtest report). Skip this frame if the server pos is non-finite — the previous
+    // valid renderPos stays put and the ghost remains visible.
+    if (!Number.isFinite(serverPos.x) || !Number.isFinite(serverPos.y) || !Number.isFinite(serverPos.z)) {
+      const nowMs = Date.now()
+      const czExisting = clientGhosts.get(entity)
+      if (czExisting && nowMs - czExisting.lastStalledLogMs >= 3000) {
+        czExisting.lastStalledLogMs = nowMs
+        console.log('[Ghost] ⚠️ Non-finite serverPos on ghost entity', entity, '— skipping frame')
+      }
+      continue
+    }
+
     let cz = clientGhosts.get(entity)
     if (!cz) {
       // Create visual for new ghost
@@ -347,6 +364,30 @@ export function ghostClientSystem(dt: number): void {
       cz.velocity = Vector3.create(dx2 / interval, dy2 / interval, dz2 / interval)
       cz.prevServerPos = Vector3.clone(cz.lastServerPos)
       cz.lastServerPos = serverPos
+      cz.lastServerUpdateMs = Date.now()
+    } else {
+      // Server position unchanged this frame. Decay velocity toward zero so the
+      // dead-reckoning "predicted target" (lastServerPos + velocity*0.1) collapses
+      // onto the actual last-known position instead of holding a stale offset
+      // indefinitely. Without this, a ghost that moved then stopped keeps a fixed
+      // ~last-frame-velocity offset that never resolves — candidate contributor
+      // to the "ghost drifts to somewhere unexpected over time" report.
+      const decay = Math.max(0, 1 - dt * 4)  // ~250ms time-constant
+      cz.velocity = Vector3.create(cz.velocity.x * decay, cz.velocity.y * decay, cz.velocity.z * decay)
+
+      // DIAG: server position hasn't changed in a suspicious amount of time while
+      // the entity is still in the CRDT. If this fires against a ghost the player
+      // reports as invisible, we've confirmed the CRDT sync gap hypothesis and can
+      // add a proper client-side recovery next pass.
+      const nowMs = Date.now()
+      if (cz.lastServerUpdateMs > 0 &&
+          nowMs - cz.lastServerUpdateMs > 5000 &&
+          nowMs - cz.lastStalledLogMs >= 10000) {
+        cz.lastStalledLogMs = nowMs
+        console.log('[Ghost] ⚠️ Ghost CRDT position stalled for',
+          ((nowMs - cz.lastServerUpdateMs) / 1000).toFixed(1), 's on entity', entity,
+          '@ (', cz.lastServerPos.x.toFixed(1), cz.lastServerPos.y.toFixed(1), cz.lastServerPos.z.toFixed(1), ')')
+      }
     }
 
     // Spawn rise animation
@@ -473,7 +514,9 @@ function createGhostVisual(serverEntity: Entity, pos: Vector3): ClientGhost {
     spawnTimer: 0,
     sinkTimer: 0,
     sinking: false,
-    messageSunkAt: 0
+    messageSunkAt: 0,
+    lastServerUpdateMs: Date.now(),
+    lastStalledLogMs: 0
   }
 }
 

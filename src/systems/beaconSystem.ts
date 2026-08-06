@@ -1,6 +1,7 @@
 import {
   engine, Transform, MeshRenderer, Material, Billboard,
-  BillboardMode, MaterialTransparencyMode, PlayerIdentityData
+  BillboardMode, MaterialTransparencyMode, PlayerIdentityData,
+  type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
@@ -85,21 +86,41 @@ export function setupBeacon(): void {
   console.log('[Beacon] Beacon system setup complete - inner and outer beacons created')
 }
 
-/** Find the world position of the flag carrier. */
+/** Find the world position of the flag carrier.
+ *
+ * Duplicate-avatar-entity aware: when a recycled/reissued PlayerIdentityData
+ * lingers on this client (same address on 2+ entities — the P3 pattern from
+ * hammurabi PR #64), taking the first match by iteration order can return a
+ * STALE entity whose Transform is frozen at the old avatar's last position.
+ * That caused the "beacon teleports to spawn for one player" bug: only the
+ * client with the duplicate saw it, only while Carried (the sole branch that
+ * uses this lookup — Dropped/AtBase come from authoritative flag fields).
+ *
+ * Mirrors the selectNewestPerAddress pattern PR #22 established server-side
+ * for the same defect class. Higher entity id == newer version, so we pick
+ * the max id among matches — the live one — and read its Transform.
+ */
 function getCarrierWorldPos(carrierPlayerId: string): Vector3 | null {
   // Check if the local player is the carrier
   const local = getPlayer()
   if (local?.userId?.toLowerCase() === carrierPlayerId && Transform.has(engine.PlayerEntity)) {
     return Transform.get(engine.PlayerEntity).position
   }
-  
-  // Check by wallet address (used in multiplayer)
+
+  // Check by wallet address (used in multiplayer). Take the NEWEST entity id
+  // among all matches — see block comment above.
+  let newestEntity: Entity | null = null
   for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
     if (identity.address.toLowerCase() === carrierPlayerId) {
-      return Transform.get(entity).position
+      if (newestEntity === null || (entity as number) > (newestEntity as number)) {
+        newestEntity = entity
+      }
     }
   }
-  
+  if (newestEntity !== null) {
+    return Transform.get(newestEntity).position
+  }
+
   return null
 }
 
