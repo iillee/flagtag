@@ -12574,7 +12574,7 @@
       }
     },
     {
-      "name": "inspector::SceneMetadata-v4",
+      "name": "inspector::SceneMetadata-v5",
       "jsonSchema": {
         "type": "object",
         "properties": {
@@ -12894,6 +12894,14 @@
             }
           },
           "disableNearbyVoiceChat": {
+            "type": "boolean",
+            "serializationType": "optional",
+            "optionalJsonSchema": {
+              "type": "boolean",
+              "serializationType": "boolean"
+            }
+          },
+          "hideLandscapeTerrain": {
             "type": "boolean",
             "serializationType": "optional",
             "optionalJsonSchema": {
@@ -22963,7 +22971,8 @@
             ],
             "skyboxConfig": {},
             "creator": "0x1E93E534C5E26B01Ed242410b43AE23dD0fAA52b",
-            "disableNearbyVoiceChat": false
+            "disableNearbyVoiceChat": false,
+            "hideLandscapeTerrain": false
           }
         }
       }
