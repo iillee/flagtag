@@ -24,6 +24,7 @@ import { getBoomerangColor } from '../../gameState/boomerangColor'
 import { isCinematicActive } from '../../gameState/cinematicState'
 import { localProjectiles, msgProjectileVisuals } from './state'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
+import { isServerConnected } from '../clientUtils'
 
 export function setHandBoomerangEntity(e: Entity): void {
   hand.entity = e
@@ -107,16 +108,20 @@ export function updateHandBoomerangVisibility(): void {
 
   // `forceShowUntilMs` overrides all hide triggers during the throw emote's
   // windup so the boomerang leaves the hand at the emote release moment.
-  const forceShow = Date.now() < hand.forceShowUntilMs && !isCinematicActive()
+  // Hide hand boomerangs entirely until the server has synced — avoids showing
+  // avatar-attached props during the loading window, where the player also
+  // can't throw yet.
+  const serverReady = isServerConnected()
+  const forceShow = serverReady && Date.now() < hand.forceShowUntilMs && !isCinematicActive()
   const yellowRightAllows = isYellow && (
     ownShellCount === 0 || (ownShellCount === 1 && yellowBothLaunched)
   )
-  const shouldShow = forceShow || (
+  const shouldShow = serverReady && (forceShow || (
     localProjectiles.length === 0 &&
     !hand.emoteActive &&
     !isCinematicActive() &&
     (isYellow ? yellowRightAllows : !localThrow.active)
-  )
+  ))
 
   if (Transform.has(hand.entity)) {
     const t = Transform.getMutable(hand.entity)
@@ -209,9 +214,9 @@ export function updateHandBoomerangVisibility(): void {
     // - `forceShowLeftUntilMs` overrides during the yellow throw emote window.
     // - Otherwise: show only when ALL own yellow shells are done.
     if (hand.leftEntity && Transform.has(hand.leftEntity)) {
-      const forceShowLeft = Date.now() < hand.forceShowLeftUntilMs && !isCinematicActive()
+      const forceShowLeft = serverReady && Date.now() < hand.forceShowLeftUntilMs && !isCinematicActive()
       const leftBaseAllows = localProjectiles.length === 0 && !hand.emoteActive && !isCinematicActive()
-      const showLeft = forceShowLeft || (isYellow && leftBaseAllows && ownShellCount === 0)
+      const showLeft = serverReady && (forceShowLeft || (isYellow && leftBaseAllows && ownShellCount === 0))
       const leftVisible = Transform.get(hand.leftEntity).scale.x > 0
       if (showLeft !== leftVisible) {
         Transform.getMutable(hand.leftEntity).scale = showLeft ? LEFT_HAND_SCALE : Vector3.Zero()

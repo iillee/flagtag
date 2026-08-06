@@ -37,6 +37,14 @@ const BLINK_COUNT = 6      // number of on/off cycles
 let blinkTimer = 0
 let blinkActive = false
 
+// ── Last known carrier position ──
+// On mobile, remote avatars stream in on-demand. When another player picks up
+// the flag, their PlayerIdentityData/Transform may not yet be present on this
+// client — causing getCarrierWorldPos() to return null and the beacon to
+// vanish. Fall back to the beacon's last known world position until the
+// carrier's avatar streams in.
+let lastWorldPos: Vector3 | null = null
+
 export function setupBeacon(): void {
   console.log('[Beacon] Setting up beacon light pillar system')
   const HIDDEN = Vector3.create(0, -200, 0)
@@ -153,14 +161,23 @@ export function beaconClientSystem(dt: number): void {
     // the beacon to the flag entity's stale Transform — different per client,
     // making the beacon appear "detached" until the next steal forced a resync.
     if (flag.carrierPlayerId) {
-      // Flag is carried - use carrier's world position + flag offset
+      // Flag is carried - use carrier's world position + flag offset.
+      // On mobile, remote avatars stream in on-demand, so the carrier's
+      // Transform may not be present yet immediately after a pickup. Fall
+      // back to the last known beacon position so the beacon stays visible
+      // instead of disappearing.
       const carrierPos = getCarrierWorldPos(flag.carrierPlayerId)
-      if (!carrierPos) break // carrier not found yet, skip this frame (beacon hidden)
-      worldPos = Vector3.create(
-        carrierPos.x + FLAG_CARRY_OFFSET.x,
-        carrierPos.y + FLAG_CARRY_OFFSET.y,
-        carrierPos.z + FLAG_CARRY_OFFSET.z
-      )
+      if (carrierPos) {
+        worldPos = Vector3.create(
+          carrierPos.x + FLAG_CARRY_OFFSET.x,
+          carrierPos.y + FLAG_CARRY_OFFSET.y,
+          carrierPos.z + FLAG_CARRY_OFFSET.z
+        )
+      } else if (lastWorldPos) {
+        worldPos = lastWorldPos
+      } else {
+        break // no carrier and no cached position — hide
+      }
     } else {
       // Dropped or at base — ask flagSystem for the authoritative world
       // position (analytic during fall, validated Flag.dropAnchor*/base*
@@ -175,6 +192,7 @@ export function beaconClientSystem(dt: number): void {
   }
 
   if (worldPos) {
+    lastWorldPos = worldPos
     const beaconY = worldPos.y + BEACON_Y_OFFSET + BEACON_HEIGHT / 2
 
     // During blink phase, blinks accelerate for urgency

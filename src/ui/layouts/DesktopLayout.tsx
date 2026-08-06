@@ -34,6 +34,7 @@ import { spectatorState } from '../../shared/clientState'
 
 import { isTrapOnCooldown, getTrapCooldownRemaining } from '../../systems/trapSystem'
 import { isProjectileOnCooldown, getProjectileCooldownRemaining, getChargeFraction, getIsCharging, getBurnoutFlash } from '../../systems/projectile'
+import { isServerConnected } from '../../systems/clientUtils'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 
 import { IconButton } from '../components/IconButton'
@@ -88,18 +89,22 @@ export function DesktopLayout() {
                 return <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: inset, left: inset, right: inset }, height: `${Math.round(cf * 100)}%`, maxHeight: S(_ABILITY_BTN_SIZE) - inset * 2, borderRadius: S(_BORDER_RADIUS) }}
                   uiBackground={{ color: burnout ? Color4.create(1, 0.15, 0.1, 0.9) : cf >= 1.25 / 1.5 ? Color4.create(1, 0.84, 0, 0.85) : Color4.create(1, 1, 1, 0.5) }} />
               })()}
-              <UiEntity uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.4175, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.4175, margin: { top: S(-2) }, positionType: 'absolute' }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
-              {isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
+              {isServerConnected() && (
+                <UiEntity uiTransform={{ width: (S(_ABILITY_ICON_SIZE) - 6) * 1.4175, height: (S(_ABILITY_ICON_SIZE) - 6) * 1.4175, margin: { top: S(-2) }, positionType: 'absolute' }}
+                  uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
+              )}
+              {isServerConnected() && isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
             {/* Trap (F) */}
             <UiEntity uiTransform={{ width: S(_ABILITY_BTN_SIZE), height: S(_ABILITY_BTN_SIZE), flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: S(_BORDER_RADIUS), margin: { left: S(8) } }}
               uiBackground={{ color: PANEL_BG_SEMI }}
             >
               <Label value="F" fontSize={S(16)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ positionType: 'absolute', position: { top: S(2), left: S(8) } }} />
-              <UiEntity uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, height: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, margin: { top: S(2) } }}
-                uiBackground={{ textureMode: 'stretch', texture: { src: getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
-              {isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
+              {isServerConnected() && (
+                <UiEntity uiTransform={{ width: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, height: S(_ABILITY_ICON_SIZE) * 1.3 * 0.675 * 1.1, margin: { top: S(2) } }}
+                  uiBackground={{ textureMode: 'stretch', texture: { src: getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
+              )}
+              {isServerConnected() && isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={S(26)} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
           </UiEntity>
         </UiEntity>
