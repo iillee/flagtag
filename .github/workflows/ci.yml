@@ -30,8 +30,29 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Verify world name
+        run: |
+          node --eval '
+            const scene = require("./scene.json");
+            const actual = (scene.worldConfiguration || {}).name;
+            const expected = "flagtag.dcl.eth";
+            if (actual !== expected) {
+              console.error("scene.json worldConfiguration.name must be " + expected + " but was " + actual);
+              console.error("A local or personal world override must not be committed to main.");
+              process.exit(1);
+            }
+            console.log("World name OK: " + actual);
+          '
+
       - name: Install dependencies
         run: npm ci
+
+      # Report-only for now: a hard gate would fail CI on a pre-existing high-severity
+      # sharp/libvips advisory whose only fix is a breaking sharp@0.35 upgrade.
+      # Drop continue-on-error to make this blocking once sharp is upgraded.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true
 
       - name: Type-check
         run: npm run lint
@@ -41,3 +62,19 @@ jobs:
 
       - name: Run SDK compatibility checks
         run: npm run test:cli
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
