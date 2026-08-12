@@ -3,7 +3,7 @@ import { registerThrottled, removeSystem } from './systemManager'
 import { Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 
-const MAX_CLICK_DISTANCE = 6
+const MAX_CLICK_DISTANCE = 12
 
 const LADDERS = [
   {
@@ -48,33 +48,31 @@ export function setupLadder() {
           }
         }
 
-        // Make ladder mesh clickable
+        // Keep the ladder GLB as a physical collider only — do NOT make it
+        // pointer-clickable. The thin ladder mesh sat in front of our invisible
+        // click box and stole every click, making the ladder frustrating to tap
+        // (especially on mobile). All click handling now goes through the
+        // generous invisible box below.
         const gltf = GltfContainer.getMutable(entity)
-        gltf.visibleMeshesCollisionMask = ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS
-        gltf.invisibleMeshesCollisionMask = ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS
+        gltf.visibleMeshesCollisionMask = ColliderLayer.CL_PHYSICS
+        gltf.invisibleMeshesCollisionMask = ColliderLayer.CL_PHYSICS
 
         const ladderTop = closest.top
         const camTarget = closest.cameraTarget
         const climb = () => climbTo(ladderTop, camTarget)
 
-        pointerEventsSystem.onPointerDown(
-          {
-            entity,
-            opts: {
-              button: InputAction.IA_POINTER,
-              hoverText: 'Climb',
-              maxDistance: MAX_CLICK_DISTANCE
-            }
-          },
-          climb
-        )
-
-        // Generous invisible click box
+        // Generous invisible click box, positioned in WORLD space using the
+        // known ladder config — not parented to the GLB, because the GLB's
+        // local origin is not guaranteed to be at the ladder base (a previous
+        // attempt used a huge parented box to hide that uncertainty). Fat on
+        // both horizontal axes so the ladder is easy to tap from any angle,
+        // especially on mobile.
+        const midY = (closest.base.y + closest.top.y) / 2
+        const height = (closest.top.y - closest.base.y) + 4 // 2m padding above/below
         const clickBox = engine.addEntity()
         Transform.create(clickBox, {
-          position: Vector3.create(0, 17, 0),
-          scale: Vector3.create(1, 70, 30),
-          parent: entity
+          position: Vector3.create(closest.base.x, midY, closest.base.z),
+          scale: Vector3.create(5, height, 5)
         })
         MeshCollider.setBox(clickBox, ColliderLayer.CL_POINTER)
 
@@ -84,8 +82,7 @@ export function setupLadder() {
             opts: {
               button: InputAction.IA_POINTER,
               hoverText: 'Climb',
-              maxDistance: MAX_CLICK_DISTANCE,
-              showFeedback: false
+              maxDistance: MAX_CLICK_DISTANCE
             }
           },
           climb

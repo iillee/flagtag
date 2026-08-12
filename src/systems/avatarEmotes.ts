@@ -11,6 +11,7 @@
 
 import { triggerSceneEmote, stopEmote } from '~system/RestrictedActions'
 import { engine } from '@dcl/sdk/ecs'
+import { isMobile } from '@dcl/sdk/platform'
 
 // Upper-body mask constant. The scene-emote `mask` field is a bitmask where
 // 0 means "no lower-body override" → upper body plays, legs keep locomotion.
@@ -58,6 +59,15 @@ function ensureStopSystem(): void {
   })
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// MOBILE KILL SWITCH
+// ─────────────────────────────────────────────────────────────────────────
+// Avatar-masking scene emotes crash the scene on mobile. Until that's
+// resolved upstream, every public export here short-circuits on mobile.
+// Desktop still plays the full throw / drop / boomerang-charge emotes.
+// Remove this gate (and the isMobile() checks below) once mobile is fixed.
+function emotesDisabled(): boolean { return isMobile() }
+
 /**
  * Play a scene emote on the local player's upper body.
  * Fire-and-forget; safe to call from sync code. Errors are swallowed.
@@ -71,6 +81,7 @@ export function playThrowEmote(
   loop = false,
   stopAfterSec: number = DEFAULT_STOP_SEC
 ): void {
+  if (emotesDisabled()) return
   const src = EMOTE_SRC[kind]
   void triggerSceneEmote({ src, loop, mask: AM_UPPER_BODY }).catch((e) => {
     console.error('[avatarEmotes] triggerSceneEmote failed', kind, e)
@@ -91,6 +102,7 @@ export function playThrowEmote(
  * - 'b'      : (charge sequence — handled separately in slice 4)
  */
 export function playBoomerangThrowEmote(color: 'r' | 'g' | 'y' | 'b'): void {
+  if (emotesDisabled()) return
   if (color === 'y') playThrowEmote('boomerangThrow2')
   else if (color === 'r' || color === 'g') playThrowEmote('boomerangThrow')
   // 'b' intentionally omitted — blue uses Start/Loop/End sequence.
@@ -98,6 +110,7 @@ export function playBoomerangThrowEmote(color: 'r' | 'g' | 'y' | 'b'): void {
 
 /** Stop the currently playing scene emote (e.g. cancel the blue Loop). */
 export function stopThrowEmote(): void {
+  if (emotesDisabled()) return
   stopTimer = -1
   void stopEmote({}).catch(() => {})
 }
@@ -160,6 +173,7 @@ function registerBlueSystem(): void {
 
 /** Call when the blue charge begins (E-key down / UI press-in). */
 export function beginBoomerangCharge(): void {
+  if (emotesDisabled()) return
   registerBlueSystem()
   blueTapWindowTimer = BLUE_TAP_WINDOW_SEC
   blueStartTimer     = -1
@@ -173,6 +187,7 @@ export function beginBoomerangCharge(): void {
  * - Held charges: cut Loop and play End (auto-stop after BLUE_END_SEC).
  */
 export function releaseBoomerangCharge(): void {
+  if (emotesDisabled()) return
   const wasQuickTap = !blueStartFired
   blueTapWindowTimer = -1
   blueStartTimer     = -1
@@ -191,6 +206,7 @@ export function releaseBoomerangCharge(): void {
 
 /** Call to abort the charge sequence without playing End (burnout, cinematic, spectator). */
 export function cancelBoomerangCharge(): void {
+  if (emotesDisabled()) return
   const hadEmote = blueStartFired
   blueTapWindowTimer = -1
   blueStartTimer     = -1
