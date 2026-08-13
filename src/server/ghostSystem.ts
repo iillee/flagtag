@@ -60,6 +60,10 @@ export function registerGhostHandlers(): void {
   // (Removed the client-trusted `ghostHit` handler: no client ever sent it — ghost damage
   // is resolved by authoritative server-side boomerang/ghost collision — and accepting it
   // let any client kill any ghost from across the map by guessing entity ids.)
+
+  // TEMP KILL-SWITCH (2026-08-13): sweep any ghost that survived a deploy — pairs with
+  // GHOST_DISABLED in ghostServerSystem so "temporary removal" also clears live state.
+  try { despawnAllGhosts() } catch (err) { console.error('[Server] 🧟 boot-time despawnAllGhosts failed:', err) }
 }
 
 // ── Despawn all ghosts ──
@@ -152,7 +156,15 @@ export function ghostServerSystem(dt: number): void {
   if (ghostRespawnCooldown > 0) {
     setGhostRespawnCooldown(ghostRespawnCooldown - clampedDt)
   }
-  if (activeGhosts.length === 0 && ghostRespawnCooldown <= 0) {
+  // TEMP KILL-SWITCH (2026-08-13): ghost disabled while hammurabi "Blocked
+  // scene CRDT op on reserved entity" (type=1 Transform on recycled avatar
+  // slots) is unresolved. Symptoms: getMutable(Transform) throws on the ghost
+  // when its entity id collides with a blocked reserved slot, spamming
+  // ghostServerSystem error every tick; separately, a ghost spawned near a
+  // frozen-position player kills-on-sight every joiner assigned that recycled
+  // slot (see logs 2026-08-13 20:54–20:57). Re-enable once platform ships fix.
+  const GHOST_DISABLED = true
+  if (!GHOST_DISABLED && activeGhosts.length === 0 && ghostRespawnCooldown <= 0) {
     ghostSpawnTimer -= clampedDt
     if (ghostSpawnTimer <= 0) {
       spawnGhost()
@@ -220,8 +232,17 @@ export function ghostServerSystem(dt: number): void {
     }
 
     // Update local Transform (used for server-side collision checks only — NOT synced)
-    const t = Transform.getMutable(z.entity)
-    t.position = Vector3.create(z.posX, z.posY, z.posZ)
+    // Guarded: if the ghost's entity id collides with a reserved/blocked avatar slot,
+    // the runtime throws on getMutable(Transform) and the whole tick dies (log-spam +
+    // dropped economy/round work). Skip this ghost's movement update on failure — the
+    // ghost will freeze but the server keeps running. See ghost kill-switch above.
+    try {
+      const t = Transform.getMutable(z.entity)
+      t.position = Vector3.create(z.posX, z.posY, z.posZ)
+    } catch (err) {
+      console.error('[Server] 🧟 Transform.getMutable failed on ghost entity', z.entity, '— skipping frame:', err)
+      continue
+    }
 
     // Throttled CRDT write (~5Hz) — update Ghost.targetX/Y/Z for client interpolation
     const GHOST_CRDT_INTERVAL_MS = 200

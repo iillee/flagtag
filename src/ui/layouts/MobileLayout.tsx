@@ -100,7 +100,7 @@ export function MobileLayout() {
         const AB_SIZE = M_CIRCLE_SIZE * 2.142
         const AB_ICON = 50 * 2.142
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 350, right: 60 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 350, right: 160 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 16 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               onMouseDown={() => { playClickSound(); triggerProjectileFromUI() }}
