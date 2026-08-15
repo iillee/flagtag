@@ -22,6 +22,7 @@ import { triggerEmote } from '~system/RestrictedActions'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { isSpectatorMode } from './spectatorSystem'
 import { triggerHitFlash } from '../gameState/hitFlashState'
+import { registerVfx } from './vfxLifetime'
 
 // ── VFX Constants ──
 const VFX_DURATION_MS = 250
@@ -72,7 +73,8 @@ const missPool: Entity[] = []
 let missPoolIdx = 0
 let poolsReady = false
 const HIDDEN_POS = Vector3.create(0, -100, 0)
-const activeVfx: { entity: Entity; expiresAt: number }[] = []
+// activeVfx / cleanup loop removed — replaced by vfxLifetime registry.
+// See src/systems/vfxLifetime.ts.
 
 export function initPools(): void {
   if (poolsReady) return
@@ -139,7 +141,7 @@ export function showHitEffect(targetPos: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeVfx.push({ entity: spike, expiresAt })
+    registerVfx(spike, VFX_DURATION_MS, () => hideVfxEntity(spike))
   }
 }
 
@@ -177,7 +179,7 @@ export function showMissEffect(targetPos: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeVfx.push({ entity: sphere, expiresAt })
+    registerVfx(sphere, VFX_DURATION_MS, () => hideVfxEntity(sphere))
   }
 }
 
@@ -309,13 +311,7 @@ export function combatClientSystem(_dt: number): void {
   const now = Date.now()
   initPools()
 
-  // Cleanup expired VFX
-  for (let i = activeVfx.length - 1; i >= 0; i--) {
-    if (now >= activeVfx[i].expiresAt) {
-      hideVfxEntity(activeVfx[i].entity)
-      activeVfx.splice(i, 1)
-    }
-  }
+  // Combat VFX cleanup handled by vfxLifetimeSystem (registerVfx above).
 
   // Show VFX from server messages
   for (const pos of pendingHitPositions) { showHitEffect(pos); playHitSound(pos) }

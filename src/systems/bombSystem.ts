@@ -34,6 +34,7 @@ import { dropFloorY } from '../shared/constants'
 
 const BOMB_STAGGER_MS = 1000 // match regular hit stun duration
 import { triggerHitFlash } from '../gameState/hitFlashState'
+import { registerVfx } from './vfxLifetime'
 import { hasLocalFlagImmunity } from '../gameState/flagImmunityState'
 import { showHitEffect, playHitSound } from './combatSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
@@ -139,15 +140,10 @@ function initExplosionPool(): void {
 
 let explosionPoolIdx = 0
 
-interface ActiveExplosionVfx {
-  entity: Entity
-  expiresAt: number
-}
-const activeExplosionVfx: ActiveExplosionVfx[] = []
+// Explosion VFX cleanup handled by vfxLifetime (see src/systems/vfxLifetime.ts).
 
 function showExplosionVFX(position: Vector3): void {
   initExplosionPool()
-  const expiresAt = Date.now() + EXPLOSION_DURATION_MS + 100
 
   // Central fireball — big expanding sphere
   {
@@ -175,7 +171,7 @@ function showExplosionVFX(position: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeExplosionVfx.push({ entity: sphere, expiresAt })
+    registerVfx(sphere, EXPLOSION_DURATION_MS)
   }
 
   // Shockwave ring — flat expanding disc
@@ -205,7 +201,7 @@ function showExplosionVFX(position: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeExplosionVfx.push({ entity: ring, expiresAt })
+    registerVfx(ring, EXPLOSION_DURATION_MS)
   }
 
   // Debris fragments — small spheres flying outward
@@ -245,7 +241,7 @@ function showExplosionVFX(position: Vector3): void {
         easingFunction: EasingFunction.EF_EASEINQUAD,
       }]
     })
-    activeExplosionVfx.push({ entity: frag, expiresAt })
+    registerVfx(frag, EXPLOSION_DURATION_MS)
   }
 }
 
@@ -569,16 +565,5 @@ export function bombClientSystem(dt: number): void {
     }
   }
 
-  // Clean up explosion VFX
-  for (let i = activeExplosionVfx.length - 1; i >= 0; i--) {
-    if (now >= activeExplosionVfx[i].expiresAt) {
-      const e = activeExplosionVfx[i].entity
-      const t = Transform.getMutable(e)
-      t.position = HIDDEN_POS
-      t.scale = Vector3.Zero()
-      if (Tween.has(e)) Tween.deleteFrom(e)
-      if (TweenSequence.has(e)) TweenSequence.deleteFrom(e)
-      activeExplosionVfx.splice(i, 1)
-    }
-  }
+  // Explosion VFX cleanup handled by vfxLifetimeSystem (registerVfx above).
 }

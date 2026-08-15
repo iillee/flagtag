@@ -33,6 +33,7 @@ export async function main() {
   const { setupUi } = await import('./ui')
   const { flagClientSystem } = await import('./systems/flagSystem')
   const { combatClientSystem, initPools: initCombatPools } = await import('./systems/combatSystem')
+  const { vfxLifetimeSystem } = await import('./systems/vfxLifetime')
   const { updateHitFlash } = await import('./gameState/hitFlashState')
   const { trapClientSystem, initTrapPool } = await import('./systems/trapSystem')
   const { bombClientSystem, initBombPool, setupBombMessages } = await import('./systems/bombSystem')
@@ -210,6 +211,9 @@ export async function main() {
     try { bombClientSystem(dt) } catch (e) { console.error('[Bomb] System error:', e) }
     waterSystem(dt)
     ghostClientSystem(dt)
+    // Unconditional VFX cleanup — must run every frame, no game-state gates,
+    // to prevent stuck mid-air explosions / hit clouds on mobile.
+    vfxLifetimeSystem(dt)
   })
 
   // Per-frame smooth animations (coins, beacon, smoke need 60fps to look right)

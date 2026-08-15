@@ -109,8 +109,21 @@ export function MobileLayout() {
         const AB_SIZE = M_CIRCLE_SIZE * AB_SCALE
         const AB_ICON = 50 * AB_SCALE
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 150, right: 0 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
-            <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 24 } }}
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', pointerFilter: 'none' }}>
+            {/* Trap (banana/bomb) — original position, top of stack */}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 150, right: 0 }, width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+              uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+              uiInputBinding={{ actions: [InputAction.IA_SECONDARY] }}
+              onMouseDown={() => { playClickSound() }}
+            >
+              {isServerConnected() && (
+                <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
+                  uiBackground={{ textureMode: 'stretch', texture: { src: getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
+              )}
+              {isServerConnected() && isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={78} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
+            </UiEntity>
+            {/* Boomerang — moved to left of native jump button */}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 3, right: 155 }, width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
               uiInputBinding={{ actions: [InputAction.IA_PRIMARY] }}
               onMouseDown={() => { playClickSound() }}
@@ -128,27 +141,11 @@ export function MobileLayout() {
                     uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/UI_circle_filled.png' }, color: Color4.create(r, g, b, a) }} />
                 )
               })()}
-              {/* Match banana structure exactly: no negative margin, no inner
-                 handlers, no pointerFilter. Previous margin:{top:-8} pushed the
-                 icon 8px above the button bounds and broke hit-testing on the
-                 icon region (only a small strip below the icon was clickable
-                 — the classic 'children outside parent don't bubble' SDK quirk). */}
               {isServerConnected() && (
                 <UiEntity uiTransform={{ width: (AB_ICON - 8) * 1.134, height: (AB_ICON - 8) * 1.134 }}
                   uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: isProjectileOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
               )}
               {isServerConnected() && isProjectileOnCooldown() && getProjectileCooldownRemaining() > 0 && <Label value={`${getProjectileCooldownRemaining()}`} fontSize={78} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute', pointerFilter: 'none' }} />}
-            </UiEntity>
-            <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 0 } }}
-              uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              uiInputBinding={{ actions: [InputAction.IA_SECONDARY] }}
-              onMouseDown={() => { playClickSound() }}
-            >
-              {isServerConnected() && (
-                <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
-                  uiBackground={{ textureMode: 'stretch', texture: { src: getLocalUpgrades().equippedTrap === 'bomb' ? 'assets/images/bomb.png' : 'assets/images/banana.png' }, color: isTrapOnCooldown() ? Color4.create(0.4, 0.4, 0.4, 0.3) : Color4.White() }} />
-              )}
-              {isServerConnected() && isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={78} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
           </UiEntity>
         )
