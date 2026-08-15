@@ -20,12 +20,17 @@ interface CloseButtonProps {
   rightOffset?: number
 }
 
+// Mobile close-X style (matches HowToPlay / Status popups): bold red glyph,
+// centered inside a larger tap target, nudged slightly outside the panel corner.
+const MOBILE_RED = Color4.create(0.9, 0.15, 0.15, 1)
+const MOBILE_RED_HOVER = Color4.create(1, 0.4, 0.4, 1)
+
 export function CloseButton({ hoverKey, onClose, size, fontSize, topOffset, rightOffset }: CloseButtonProps) {
   const mobile = isMobile()
-  const s = size ?? (mobile ? 80 : S(80))
-  const fs = fontSize ?? (mobile ? 52 : S(44))
-  const top = topOffset ?? (mobile ? 4 : S(4))
-  const right = rightOffset ?? (mobile ? 4 : S(4))
+  const s = size ?? (mobile ? 110 : S(80))
+  const fs = fontSize ?? (mobile ? 95 : S(44))
+  const top = topOffset ?? (mobile ? -12 : S(4))
+  const right = rightOffset ?? (mobile ? -15 : S(4))
   return (
     <UiEntity
       uiTransform={{
@@ -41,7 +46,11 @@ export function CloseButton({ hoverKey, onClose, size, fontSize, topOffset, righ
       onMouseLeave={() => { hover[hoverKey] = false }}
       onMouseDown={() => { playClickSound(); onClose(); hover[hoverKey] = false }}
     >
-      <Label value="×" fontSize={fs} color={hover[hoverKey] ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+      {mobile ? (
+        <Label value="×" fontSize={fs} color={hover[hoverKey] ? MOBILE_RED_HOVER : MOBILE_RED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
+      ) : (
+        <Label value="×" fontSize={fs} color={hover[hoverKey] ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+      )}
     </UiEntity>
   )
 }

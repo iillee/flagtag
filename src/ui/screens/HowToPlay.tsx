@@ -94,12 +94,12 @@ export function HowToPlayOverlay() {
           uiBackground={{ color: cardBg }}
         >
           <Label value="Combat" fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: s(12) } }} />
-          <Label value={"Throw boomerang (E)\nto stun rivals and force\nthem to drop the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: mobile ? s(40) : S(8), bottom: s(10) } }} />
+          <Label value={mobile ? "Throw boomerang\nto stun rivals and force\nthem to drop the Flag" : "Throw boomerang (E)\nto stun rivals and force\nthem to drop the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: mobile ? s(40) : S(8), bottom: s(10) } }} />
           <UiEntity
             uiTransform={{ width: s(100), height: s(118), flexShrink: 0, margin: { top: mobile ? s(48) : S(56), bottom: s(2) } }}
             uiBackground={{ textureMode: 'stretch', texture: { src: `assets/images/boomerang.${getBoomerangColor()}.png` }, color: Color4.White() }}
           />
-          <Label value={"Drop bananas (F) to\nblock boomerangs and\nstun pursuers"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: mobile ? 0 : S(20), bottom: s(24) } }} />
+          <Label value={mobile ? "Drop bananas to\nblock boomerangs and\nstun pursuers" : "Drop bananas (F) to\nblock boomerangs and\nstun pursuers"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: mobile ? 0 : S(20), bottom: s(24) } }} />
           <UiEntity
             uiTransform={{ width: s(72), height: s(72), flexShrink: 0, margin: { top: mobile ? s(56) : S(64), bottom: s(20) } }}
             uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/banana.png' }, color: Color4.White() }}
@@ -123,28 +123,46 @@ export function HowToPlayOverlay() {
           onMouseDown={() => {}}
         >
           <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
-            <Label value="Win" fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ height: titleFs * 1.4, margin: { bottom: s(20) } }} />
-            <Label value="Score 1 point for every" fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: bodyFs * 1.2, margin: { bottom: s(8) } }} />
-            <Label value="second you hold the Flag" fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: bodyFs * 1.2, margin: { bottom: s(8) } }} />
-            <Label value="Win the round by" fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: bodyFs * 1.2, margin: { bottom: s(8) } }} />
-            <Label value="holding the Flag" fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: bodyFs * 1.2, margin: { bottom: s(8) } }} />
-            <Label value="the longest!" fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: bodyFs * 1.2, margin: { bottom: s(8) } }} />
-            <Label value="Controls" fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ margin: { top: s(10), bottom: s(22) } }} />
+            <Label value="Win" fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: s(12) } }} />
+            <Label value={"Score 1 point for every\nsecond you hold the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { bottom: mobile ? s(4) : S(24) } }} />
+            <Label value={"Win the round by\nholding the Flag\nthe longest!"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: s(8) } }} />
+            {/* Controls section is desktop-only — mobile uses on-screen
+               buttons for all actions, so listing keyboard shortcuts is
+               useless (and would confuse touch users). */}
+            <Label value={mobile ? "Upgrades" : "Controls"} fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ margin: { top: mobile ? s(32) : s(10), bottom: s(22) } }} />
+            {mobile && (
+              <Label
+                value={"Spend coins earned from\nwinning rounds at the\nchest for better gear!"}
+                fontSize={bodyFs}
+                color={MUTED}
+                font="sans-serif"
+                textAlign="middle-center"
+                uiTransform={{ width: '100%', margin: { bottom: s(8) } }}
+              />
+            )}
+            {mobile && (
+              <UiEntity
+                uiTransform={{ width: s(120), height: s(120), margin: { top: s(12) } }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/chest.png' }, color: Color4.White() }}
+              />
+            )}
           </UiEntity>
-          <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'flex-start', padding: { left: s(32) }, margin: { top: s(4), bottom: s(12) } }}>
-            <KeyBinding keyLabel="E" text="Throw Boomerang" s={s} />
-            <KeyBinding keyLabel="F" text="Drop Banana" s={s} />
-            <KeyBinding keyLabel="3" text="Drop Flag" s={s} />
-            <KeyBinding keyLabel="2" text="Mute" s={s} />
-            {!mobile && <KeyBinding keyLabel="1" text="Toggle UI Size" s={s} last />}
-          </UiEntity>
-          {/* Close X */}
+          {!mobile && (
+            <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'flex-start', padding: { left: s(32) }, margin: { top: s(4), bottom: s(12) } }}>
+              <KeyBinding keyLabel="E" text="Throw Boomerang" s={s} />
+              <KeyBinding keyLabel="F" text="Drop Banana" s={s} />
+              <KeyBinding keyLabel="3" text="Drop Flag" s={s} />
+              <KeyBinding keyLabel="2" text="Mute" s={s} />
+              <KeyBinding keyLabel="1" text="Toggle UI Size" s={s} last />
+            </UiEntity>
+          )}
+          {/* Close X — centered inside its own square, bold red for clarity */}
           <UiEntity
             uiTransform={{
               positionType: 'absolute',
-              position: { top: mobile ? -20 : S(0), right: mobile ? -20 : S(0) },
-              width: mobile ? 88 * M : S(80),
-              height: mobile ? 88 * M : S(80),
+              position: { top: mobile ? -4 : S(0), right: mobile ? 3 : S(0) },
+              width: mobile ? 68 * M : S(80),
+              height: mobile ? 68 * M : S(80),
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
@@ -153,7 +171,18 @@ export function HowToPlayOverlay() {
             onMouseLeave={() => { hover.closeWinCondition = false }}
             onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); hover.closeWinCondition = false; notifyOverlayClosed() }}
           >
-            <Label value="×" fontSize={mobile ? 52 * M : S(44)} color={hover.closeWinCondition ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+            {mobile ? (
+              <Label
+                value="×"
+                fontSize={60 * M}
+                color={hover.closeWinCondition ? Color4.create(1, 0.4, 0.4, 1) : Color4.create(0.9, 0.15, 0.15, 1)}
+                font="sans-serif"
+                textAlign="middle-center"
+                uiTransform={{ width: '100%', height: '100%' }}
+              />
+            ) : (
+              <Label value="×" fontSize={S(44)} color={hover.closeWinCondition ? CLOSE_HOVER : CLOSE_GREY} font="sans-serif" />
+            )}
           </UiEntity>
         </UiEntity>
       </UiEntity>

@@ -302,12 +302,12 @@ function PlayerListUi() {
             onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }}
           >
             {mobile ? (
-              <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 8, right: 8 }, width: 80, height: 80, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', pointerFilter: 'block' }}
+              <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -12, right: -5 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', pointerFilter: 'block' }}
                 onMouseEnter={() => { hover.closeServerDown = true }}
                 onMouseLeave={() => { hover.closeServerDown = false }}
                 onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false; hover.closeServerDown = false }}
               >
-                <Label value="×" fontSize={72} color={hover.closeServerDown ? Color4.create(0.85, 0.85, 0.9, 1) : Color4.create(0.55, 0.55, 0.6, 1)} font="sans-serif" />
+                <Label value="×" fontSize={76} color={hover.closeServerDown ? Color4.create(1, 0.4, 0.4, 1) : Color4.create(0.9, 0.15, 0.15, 1)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
               </UiEntity>
             ) : (
               <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />
@@ -332,10 +332,8 @@ function PlayerListUi() {
             <CloseButton
               hoverKey="closeMailbox"
               onClose={() => { hideMailboxPopup(); notifyOverlayClosed() }}
-              size={mobile ? 88 * MB : undefined}
-              fontSize={mobile ? 52 * MB : undefined}
-              topOffset={mobile ? -20 : undefined}
-              rightOffset={mobile ? -4 : undefined}
+              topOffset={mobile ? -22 : undefined}
+              rightOffset={mobile ? -5 : undefined}
             />
             <Label value="Leave a Message" fontSize={mobile ? mb(42) : S(28)} color={Color4.create(0.2, 0.6, 1, 1)} font="sans-serif" uiTransform={{ margin: { bottom: mobile ? mb(8) : S(8) } }} />
             <Label value="Leave feedback, report a bug, or just say hi!" fontSize={mobile ? mb(24) : S(16)} color={LIGHT_GREY} uiTransform={{ margin: { top: mobile ? mb(6) : S(4), bottom: mobile ? mb(16) : S(12) }, width: mobile ? '95%' : S(420), height: mobile ? mb(65) : S(28) }} textAlign="middle-center" />
@@ -369,7 +367,7 @@ function PlayerListUi() {
           <UiEntity uiTransform={{ width: mobile ? 480 : S(340), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 36, bottom: 36, left: 28, right: 28 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <CloseButton hoverKey="closeWinCondition" onClose={() => { hideGravestonePopup(); notifyOverlayClosed() }} />
+            <CloseButton hoverKey="closeWinCondition" onClose={() => { hideGravestonePopup(); notifyOverlayClosed() }} topOffset={mobile ? -25 : undefined} rightOffset={mobile ? -5 : undefined} />
             <Label value="Here Lies" fontSize={mobile ? 38 : S(24)} color={LIGHT_GREY} font="sans-serif" uiTransform={{ margin: { top: mobile ? 12 : S(8) } }} />
             <Label value="Schneeflocke1" fontSize={mobile ? 42 : S(28)} color={WHITE} font="sans-serif" uiTransform={{ margin: { top: mobile ? 8 : S(4), bottom: mobile ? 12 : S(8) } }} />
           </UiEntity>
@@ -527,7 +525,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
                   }
                 }}
               >
-                <Label value={m.label} fontSize={isExit ? sm(60) : sm(26)} color={isActive ? Color4.Black() : Color4.White()} font="sans-serif" uiTransform={isExit ? { margin: { top: sm(-10) } } : undefined} />
+                <Label value={m.label} fontSize={isExit ? sm(60) : sm(26)} color={isExit ? Color4.create(0.9, 0.15, 0.15, 1) : (isActive ? Color4.Black() : Color4.White())} font="sans-serif" uiTransform={isExit ? { margin: { top: sm(-12) } } : undefined} />
               </UiEntity>
             )
           })}
@@ -594,7 +592,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
                 onMouseLeave={() => { hover.closeSpectator = false }}
                 onMouseDown={() => { playClickSound(); exitSpectatorMode(); hover.closeSpectator = false }}
               >
-                <Label value="×" fontSize={S(28)} color={hover.closeSpectator ? Color4.create(0.85, 0.85, 0.9, 1) : CLOSE_GREY} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: '100%', margin: { top: S(-4), left: S(2) } }} />
+                <Label value="×" fontSize={S(28)} color={hover.closeSpectator ? Color4.create(1, 0.4, 0.4, 1) : Color4.create(0.9, 0.15, 0.15, 1)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: '100%', margin: { top: S(-4), left: S(2) } }} />
               </UiEntity>
             </UiEntity>
 

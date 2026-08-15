@@ -36,6 +36,7 @@ import { spectatorState } from '../../shared/clientState'
 
 import { HowToPlayOverlay } from '../screens/HowToPlay'
 import { RoundEndSplash } from '../screens/RoundEndSplash'
+import { getEquippedTape, toggleMusic } from '../screens/boomboxState'
 
 export function MobileLayout() {
   const players = getCinematicSnapshot() ?? getPlayersWithHoldTimes()
@@ -49,7 +50,10 @@ export function MobileLayout() {
 
   const M_CIRCLE_SIZE = 68
   const M_CIRCLE_TEXTURE = 'assets/images/UI_circle.png'
-  const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 0.8)
+  const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 1)
+  // Ability bar (boomerang/trap) buttons use a semi-transparent background
+  // so the world shows through slightly.
+  const M_CIRCLE_OPACITY_ABILITY = Color4.create(1, 1, 1, 0.8)
 
   // Single knob for scaling the whole mobile HUD (top bar + ability bar).
   // Bump up to make everything larger, down to shrink. The top-HUD and ability-bar
@@ -70,13 +74,13 @@ export function MobileLayout() {
         return (
           <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 8 * T }, width: '100%', height: 68 * T, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
-              <UiEntity uiTransform={{ height: 68 * T, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28 * T, right: 28 * T }, borderRadius: 34 * T, margin: { right: 10 * T }, borderWidth: 3 * T, borderColor: Color4.create(1, 1, 1, 0.8) }}
-                uiBackground={{ color: Color4.create(0, 0, 0, 0.8) }}
+              <UiEntity uiTransform={{ height: 68 * T, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28 * T, right: 28 * T }, borderRadius: 34 * T, margin: { right: 10 * T }, borderWidth: 3 * T, borderColor: Color4.create(1, 1, 1, 1) }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 1) }}
               >
                 <Label value={formatCountdown(countdownSeconds)} fontSize={32 * T} color={countdownSeconds <= 10 ? GOLD : WHITE} font="sans-serif" />
               </UiEntity>
-              <UiEntity uiTransform={{ height: 68 * T, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18 * T, right: 30 * T }, borderRadius: 34 * T, borderWidth: 3 * T, borderColor: Color4.create(1, 1, 1, 0.8) }}
-                uiBackground={{ color: Color4.create(0, 0, 0, 0.8) }}
+              <UiEntity uiTransform={{ height: 68 * T, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 18 * T, right: 30 * T }, borderRadius: 34 * T, borderWidth: 3 * T, borderColor: Color4.create(1, 1, 1, 1) }}
+                uiBackground={{ color: Color4.create(0, 0, 0, 1) }}
                 onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); setLeaderboardOverlayVisible(false); mobileState.scoreboardVisible = !mobileState.scoreboardVisible }}
               >
                 <UiEntity uiTransform={{ width: 34 * T, height: 34 * T, margin: { right: 8 * T } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/expand.png' }, color: Color4.White() }} />
@@ -97,6 +101,13 @@ export function MobileLayout() {
               >
                 <UiEntity uiTransform={{ width: 52 * T, height: 52 * T }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: leaderboardVisible ? GOLD : WHITE }} />
               </UiEntity>
+              {/* Mute/unmute button — shows current state (speaker icon when playing, muted icon when silent). */}
+              <UiEntity uiTransform={{ width: M_CIRCLE_SIZE * T, height: M_CIRCLE_SIZE * T, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { left: 6 * T } }}
+                uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+                onMouseDown={() => { playClickSound(); toggleMusic() }}
+              >
+                <UiEntity uiTransform={{ width: 32 * T, height: 32 * T }} uiBackground={{ textureMode: 'stretch', texture: { src: getEquippedTape() !== null ? 'assets/images/unmute.png' : 'assets/images/muted.png' }, color: WHITE }} />
+              </UiEntity>
             </UiEntity>
           </UiEntity>
         )
@@ -112,7 +123,7 @@ export function MobileLayout() {
           <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', pointerFilter: 'none' }}>
             {/* Trap (banana/bomb) — original position, top of stack */}
             <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 150, right: 0 }, width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-              uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+              uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY_ABILITY }}
               uiInputBinding={{ actions: [InputAction.IA_SECONDARY] }}
               onMouseDown={() => { playClickSound() }}
             >
@@ -124,7 +135,7 @@ export function MobileLayout() {
             </UiEntity>
             {/* Boomerang — moved to left of native jump button */}
             <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 3, right: 155 }, width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-              uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
+              uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY_ABILITY }}
               uiInputBinding={{ actions: [InputAction.IA_PRIMARY] }}
               onMouseDown={() => { playClickSound() }}
             >
@@ -159,10 +170,11 @@ export function MobileLayout() {
           <UiEntity uiTransform={{ positionType: 'relative', width: '46%', height: '62%', flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, overflow: 'hidden', borderRadius: 40 }}
             uiBackground={{ color: PANEL_BG }}
           >
-            <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 8, right: 8 }, width: 52 * M, height: 52 * M, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+            {/* Scoreboard close X — matches HowToPlay / Status style (bold red, centered). */}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -4, right: 3 }, width: 68 * M, height: 68 * M, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               onMouseDown={() => { playClickSound(); mobileState.scoreboardVisible = false; notifyOverlayClosed() }}
             >
-              <Label value="×" fontSize={52 * M} color={CLOSE_GREY} font="sans-serif" />
+              <Label value="×" fontSize={60 * M} color={Color4.create(0.9, 0.15, 0.15, 1)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
             </UiEntity>
             <UiEntity uiTransform={{ height: 52 * M, flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               <Label value="Scoreboard" fontSize={32 * M} color={GOLD} font="sans-serif" textAlign="middle-center" />
@@ -233,10 +245,11 @@ function MobileStatusPopup() {
       >
         <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 52 * M, alignItems: 'center', justifyContent: 'center', margin: { bottom: 10 * M } }}>
           <Label value="Status" fontSize={32 * M} color={GOLD} font="sans-serif" textAlign="middle-center" />
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -50, right: -35 }, width: 52 * M, height: 52 * M, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+          {/* Size matches HowToPlay X: 88×88 tap target, 76pt bold red glyph. HowToPlay uses M=1.25*MOBILE_POPUP_SCALE, so we hard-code that scale here (this popup's local M=1.6 would over-size it). */}
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -28, right: -20 }, width: 68 * 1.25 * MOBILE_POPUP_SCALE, height: 68 * 1.25 * MOBILE_POPUP_SCALE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
             onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
           >
-            <Label value="×" fontSize={52 * M} color={CLOSE_GREY} font="sans-serif" />
+            <Label value="×" fontSize={60 * 1.25 * MOBILE_POPUP_SCALE} color={Color4.create(0.9, 0.15, 0.15, 1)} font="sans-serif" textAlign="middle-center" uiTransform={{ width: '100%', height: '100%' }} />
           </UiEntity>
         </UiEntity>
         <UiEntity uiTransform={{ height: 24 * M, flexShrink: 0 }} />

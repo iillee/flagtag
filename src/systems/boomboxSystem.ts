@@ -5,7 +5,7 @@
 import {
   engine, Entity, Transform, MeshRenderer, Material,
   GltfContainer, PointerEvents, PointerEventType, InputAction,
-  inputSystem
+  pointerEventsSystem
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { getEquippedTape, toggleMusic } from '../ui/screens/boomboxState'
@@ -85,16 +85,22 @@ function setupBoombox(): void {
         invisibleMeshesCollisionMask: 3
       })
 
-      PointerEvents.create(entity, {
-        pointerEvents: [{
-          eventType: PointerEventType.PET_DOWN,
-          eventInfo: {
+      // Use pointerEventsSystem.onPointerDown (same pattern as chest/mailbox/
+      // ladder) instead of inputSystem.isTriggered polling. The polling path
+      // did not fire reliably on mobile — boombox clicks registered visually
+      // (hover text appeared) but toggleMusic() was never invoked, so music
+      // wouldn't mute.
+      pointerEventsSystem.onPointerDown(
+        {
+          entity,
+          opts: {
             button: InputAction.IA_POINTER,
             hoverText: getEquippedTape() ? '♪ Mute' : '♪ Unmute',
-            maxDistance: 12
-          }
-        }]
-      })
+            maxDistance: 12,
+          },
+        },
+        () => { toggleMusic() }
+      )
 
       console.log('[Boombox] Found boombox at', boomboxPos.x.toFixed(1), boomboxPos.y.toFixed(1), boomboxPos.z.toFixed(1))
       initialized = true
@@ -113,10 +119,8 @@ export function boomboxSystem(dt: number): void {
 
   const silent = getEquippedTape() === null
 
-  // Handle click
-  if (boomboxEntity !== null && inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN, boomboxEntity)) {
-    toggleMusic()
-  }
+  // Click handling is now via pointerEventsSystem.onPointerDown callback
+  // registered in setupBoombox() — no per-frame polling needed.
 
   // Update tooltip
   if (boomboxEntity !== null && PointerEvents.has(boomboxEntity)) {

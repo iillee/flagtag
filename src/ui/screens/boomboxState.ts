@@ -88,7 +88,9 @@ export function toggleMusic(): void {
         const audio = AudioSource.getMutable(musicEntity) as {
           volume: number; playing: boolean; currentTime?: number
         }
-        audio.volume = 0.1
+        // Do NOT reassign volume here — preserve whatever musicSetup / user
+        // has configured. (Old code hardcoded 0.1 which made resume inaudible
+        // after we bumped the setup volume to 0.6.)
         // Seek BEFORE setting playing=true. The SDK reads currentTime at the
         // playing=false → true transition; setting it after has no effect until
         // the next such transition.

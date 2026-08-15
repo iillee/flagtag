@@ -96,7 +96,8 @@ function handleEquip(tab: StoreCategory, itemId: string): void {
         audio.audioClipUrl = tape.audioSrc
         audio.playing = true
         audio.loop = true
-        audio.volume = 0.1
+        // Do NOT reset volume to 0.1 — preserve setupMusic()'s 0.6 default so
+        // equipping a new tape doesn't silently drop the volume.
       } catch (e) {
         console.error('[Chest] Failed to equip tape:', e)
       }
@@ -152,10 +153,8 @@ export function ChestPopup() {
         <CloseButton
           hoverKey="closeChest"
           onClose={() => { hideChestPopup(); hoveredItemId = null; hoveredTab = null }}
-          size={mobile ? 88 * MS : undefined}
-          fontSize={mobile ? 52 * MS : undefined}
-          topOffset={mobile ? -20 : undefined}
-          rightOffset={mobile ? -4 : undefined}
+          topOffset={mobile ? -22 : undefined}
+          rightOffset={mobile ? -5 : undefined}
         />
 
         {/* Title */}
