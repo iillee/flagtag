@@ -124,8 +124,8 @@ export function HowToPlayOverlay() {
         >
           <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
             <Label value="Win" fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: s(12) } }} />
-            <Label value={"Score 1 point for every\nsecond you hold the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { bottom: mobile ? s(4) : S(24) } }} />
-            <Label value={"Win the round by\nholding the Flag\nthe longest!"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', margin: { top: s(8) } }} />
+            <Label value={"Score 1 point for every\nsecond you hold the Flag"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', height: bodyFs * 2 * 1.2, margin: { bottom: mobile ? s(4) : S(24) } }} />
+            <Label value={"Win the round by\nholding the Flag\nthe longest!"} fontSize={bodyFs} color={MUTED} font="sans-serif" textAlign="top-center" uiTransform={{ width: '100%', height: bodyFs * 3 * 1.2, margin: { top: s(8) } }} />
             {/* Controls section is desktop-only — mobile uses on-screen
                buttons for all actions, so listing keyboard shortcuts is
                useless (and would confuse touch users). */}

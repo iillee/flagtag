@@ -141,7 +141,18 @@ function acquireProjectileEntity(): Entity | null {
     }
     return e
   }
-  console.error('[Server] 🎯 Projectile entity pool exhausted!')
+  // Diagnostic: dump full pool state on exhaustion so we can figure out why
+  // slots are stuck (recycled entity IDs colliding with pool? stale array?
+  // ghost projectiles never returning?).
+  const activeIds = activeProjectiles.map(p => `${p.entity}(fb=${p.firedBy.slice(0,6)},age=${((Date.now()-p.firedAtMs)/1000).toFixed(1)}s,ret=${p.returning})`).join(',')
+  const poolState = projectileEntityPool.map((e, i) => `[${i}]${e}${Transform.has(e) ? '' : '!NOTX'}${inUse.has(e) ? '!USE' : ''}`).join(',')
+  console.error('[Server] 🎯 Projectile entity pool exhausted!',
+    'poolLen=', projectileEntityPool.length,
+    'ready=', projectilePoolReady,
+    'activeProjectiles.length=', activeProjectiles.length,
+    'inUseSetSize=', inUse.size,
+    'active=[', activeIds, ']',
+    'pool=[', poolState, ']')
   return null
 }
 
