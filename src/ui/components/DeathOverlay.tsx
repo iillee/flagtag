@@ -21,11 +21,14 @@ export function DeathOverlay({ visible, message, fadeOpacity, showText, respawnC
   const mobile = isMobile()
   return (
     <UiEntity
+      // Oversized + negative offset so the black fill bleeds past the platform's
+      // safe-area border and covers the whole physical screen. justifyContent/
+      // alignItems still center the child labels at the physical center.
       uiTransform={{
         positionType: 'absolute',
-        position: { top: S(0), left: S(0) },
-        width: '100%',
-        height: '100%',
+        position: { top: '-10%', left: '-10%' },
+        width: '120%',
+        height: '120%',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',

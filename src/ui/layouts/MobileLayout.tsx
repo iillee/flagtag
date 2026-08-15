@@ -1,3 +1,4 @@
+import { InputAction } from '@dcl/sdk/ecs'
 import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
@@ -7,6 +8,7 @@ import {
   WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY, GOLD,
   PANEL_BG,
   formatCountdown,
+  MOBILE_POPUP_SCALE,
 } from '../uiConstants'
 import { playClickSound } from '../uiSounds'
 import {
@@ -49,6 +51,12 @@ export function MobileLayout() {
   const M_CIRCLE_TEXTURE = 'assets/images/UI_circle.png'
   const M_CIRCLE_OPACITY = Color4.create(1, 1, 1, 0.8)
 
+  // Single knob for scaling the whole mobile HUD (top bar + ability bar).
+  // Bump up to make everything larger, down to shrink. The top-HUD and ability-bar
+  // multipliers below both derive from this. 1.0 = current baseline after the
+  // 2026-08-14 mobile pass.
+  const MOBILE_UI_SCALE = 0.8
+
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {/* Top bar */}
@@ -58,9 +66,9 @@ export function MobileLayout() {
         const isLeader = localPlayer && leaderUserId !== null && localPlayer.userId === leaderUserId
         const hasFlag = localPlayer && carrierUserId !== null && localPlayer.userId === carrierUserId
         const scoreColor = isLeader ? GOLD : WHITE
-        const T = 1.2 // top HUD scale multiplier (was 1.5, rendered too large on mobile after Foundation's virtual-screen revert 2026-07-30)
+        const T = 1.2 * MOBILE_UI_SCALE // top HUD scale (baseline 1.2, scaled by MOBILE_UI_SCALE)
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 20 * T }, width: '100%', height: 68 * T, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 8 * T }, width: '100%', height: 68 * T, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
               <UiEntity uiTransform={{ height: 68 * T, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28 * T, right: 28 * T }, borderRadius: 34 * T, margin: { right: 10 * T }, borderWidth: 3 * T, borderColor: Color4.create(1, 1, 1, 0.8) }}
                 uiBackground={{ color: Color4.create(0, 0, 0, 0.8) }}
@@ -97,14 +105,15 @@ export function MobileLayout() {
       {/* Mobile Ability Bar */}
       {!spectatorState.active && (() => {
         // Ability bar scaled by 0.8 alongside top HUD (2026-07-30 mobile pass)
-        const AB_SIZE = M_CIRCLE_SIZE * 2.142
-        const AB_ICON = 50 * 2.142
+        const AB_SCALE = 2.142 * 0.82  // ability bar uses its own scale (0.82) — slightly larger than the rest of the HUD for thumb reach
+        const AB_SIZE = M_CIRCLE_SIZE * AB_SCALE
+        const AB_ICON = 50 * AB_SCALE
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 350, right: 160 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
-            <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 16 } }}
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 150, right: 0 }, flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 24 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { playClickSound(); triggerProjectileFromUI() }}
-              onMouseUp={() => { triggerProjectileReleaseFromUI() }}
+              uiInputBinding={{ actions: [InputAction.IA_PRIMARY] }}
+              onMouseDown={() => { playClickSound() }}
             >
               {/* Blue charge circle glow — over black bg, under boomerang icon */}
               {getBoomerangColor() === 'b' && getChargeFraction() > 0 && (() => {
@@ -132,7 +141,8 @@ export function MobileLayout() {
             </UiEntity>
             <UiEntity uiTransform={{ width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', margin: { bottom: 0 } }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY }}
-              onMouseDown={() => { playClickSound(); triggerTrapFromUI() }}
+              uiInputBinding={{ actions: [InputAction.IA_SECONDARY] }}
+              onMouseDown={() => { playClickSound() }}
             >
               {isServerConnected() && (
                 <UiEntity uiTransform={{ width: Math.round(AB_ICON * 1.25 * 0.675 * 1.1), height: Math.round(AB_ICON * 1.25 * 0.675 * 1.1) }}
@@ -145,7 +155,7 @@ export function MobileLayout() {
       })()}
 
       {/* Mobile Scoreboard Overlay */}
-      {mobileState.scoreboardVisible && (() => { const M = 1.6; return (
+      {mobileState.scoreboardVisible && (() => { const M = 1.6 * MOBILE_POPUP_SCALE; return (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
           onMouseDown={() => { playClickSound(); mobileState.scoreboardVisible = false; notifyOverlayClosed() }}
           >
@@ -204,7 +214,7 @@ function MobileStatusPopup() {
   const boomerang = getBoomerangColor()
   const boomerangLabel = boomerang === 'r' ? 'Base' : boomerang === 'y' ? 'Dubs' : boomerang === 'b' ? 'Charge' : 'Orbit'
 
-  const M = 1.6 // match HowToPlay mobile scale (scaled 2 -> 1.6 in mobile pass 2026-07-30)
+  const M = 1.6 * MOBILE_POPUP_SCALE // match HowToPlay mobile scale (baseline 1.6, scaled by MOBILE_POPUP_SCALE)
   const iconRow = (label: string, value: string, iconSrc: string, valueColor: Color4 = WHITE, iconColor: Color4 = Color4.White(), iconScale: number = 1) => {
     const icoSize = Math.round(30 * iconScale * M)
     const rowH = 48 * M
@@ -221,7 +231,7 @@ function MobileStatusPopup() {
     <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
       onMouseDown={() => { playClickSound(); setLeaderboardOverlayVisible(false); notifyOverlayClosed() }}
       >
-      <UiEntity uiTransform={{ width: '24%', height: 600, flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, borderRadius: 40, margin: { top: 50 } }}
+      <UiEntity uiTransform={{ width: '24%', height: 500, flexDirection: 'column', alignItems: 'stretch', padding: 22 * M, borderRadius: 40, margin: { top: 50 } }}
         uiBackground={{ color: PANEL_BG }}
       >
         <UiEntity uiTransform={{ flexDirection: 'row', width: '100%', height: 52 * M, alignItems: 'center', justifyContent: 'center', margin: { bottom: 10 * M } }}>
