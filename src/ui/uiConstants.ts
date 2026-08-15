@@ -6,6 +6,11 @@ import { registerSystem, registerThrottled } from '../systems/systemManager'
 // ═══════════════════════════════════════════════════════════
 // COLOR PALETTE
 // ═══════════════════════════════════════════════════════════
+// Global multiplier for the per-popup mobile scale (`M`) values in HowToPlay,
+// ChestPopup, MobileStatusPopup, Scoreboard, etc. Baseline 1.0 = each popup uses
+// its own tuned M value; lower this to shrink every mobile popup at once.
+export const MOBILE_POPUP_SCALE = 0.85
+
 export const WHITE = Color4.create(1, 1, 1, 1)
 export const BRIGHT_WHITE = Color4.create(1, 1, 1, 1)
 export const MUTED = Color4.create(0.82, 0.82, 0.85, 1)

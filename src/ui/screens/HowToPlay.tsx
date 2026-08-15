@@ -6,7 +6,7 @@ import { GAME_VERSION } from '../../version'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
-import { S, GOLD, MUTED, WHITE, CLOSE_GREY, PANEL_BG } from '../uiConstants'
+import { S, GOLD, MUTED, WHITE, CLOSE_GREY, PANEL_BG, MOBILE_POPUP_SCALE } from '../uiConstants'
 import { playClickSound } from '../uiSounds'
 import { hover, notifyOverlayClosed } from '../uiState'
 import { setWinConditionOverlayVisible } from '../../gameState/overlayState'
@@ -17,7 +17,7 @@ const CLOSE_HOVER = Color4.create(0.85, 0.85, 0.9, 1)
 
 export function HowToPlayOverlay() {
   const mobile = isMobile()
-  const M = 1.25 // mobile scale multiplier (2 -> 1.25 in mobile pass 2026-07-30)
+  const M = 1.25 * MOBILE_POPUP_SCALE // mobile scale (baseline 1.25, scaled by MOBILE_POPUP_SCALE)
   const s = mobile ? (v: number) => Math.round(v * M) : S
   const cardW = mobile ? '24%' : S(320)
   const cardH = mobile ? 480 * M : S(520) // scales with M (was raw 860 at M=2 -> base 480 after visual tune)

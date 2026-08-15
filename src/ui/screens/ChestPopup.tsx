@@ -5,7 +5,7 @@
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
-import { S, GOLD, GREY, LIGHT_GREY, BRIGHT_WHITE, CORAL_RED, PANEL_BG } from '../uiConstants'
+import { S, GOLD, GREY, LIGHT_GREY, BRIGHT_WHITE, CORAL_RED, PANEL_BG, MOBILE_POPUP_SCALE } from '../uiConstants'
 import { playClickSound } from '../uiSounds'
 import { hideChestPopup } from '../uiState'
 import { CloseButton } from '../components/CloseButton'
@@ -117,7 +117,7 @@ export function ChestPopup() {
 
   const SLOTS = 4
   // Mobile scale multiplier — bump this to grow the whole chest UI on mobile.
-  const MS = 1.5 // 2 -> 1.5 (25% reduction, mobile pass 2026-07-30)
+  const MS = 1.5 * MOBILE_POPUP_SCALE // baseline 1.5, scaled by MOBILE_POPUP_SCALE
   const m = (v: number) => Math.round(v * MS)
   const panelWidth = mobile ? m(500) : S(620)
   const pad = mobile ? m(20) : S(20)

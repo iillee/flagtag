@@ -11,7 +11,7 @@ import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label, Input } from '@dcl/sdk/react-ecs'
 import { getHitFlashAlpha } from './gameState/hitFlashState'
 import { getPlayer } from '@dcl/sdk/players'
-import { executeTask } from '@dcl/sdk/ecs'
+import { executeTask, TouchScreenControls, InputAction } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
 import { room } from './shared/messages'
 
@@ -24,6 +24,7 @@ import {
   PANEL_BG, PANEL_BG_SEMI,
   getUIScaleLabel,
   formatCountdown,
+  MOBILE_POPUP_SCALE,
 } from './ui/uiConstants'
 import {
   cinematicState, setCinematicFade,
@@ -99,6 +100,28 @@ export function setupUi() {
   registerOverlayChecks(getWinConditionOverlayVisible, getLeaderboardOverlayVisible)
   registerUiSystems()
 
+  // Hide the native mobile E (IA_PRIMARY) and F (IA_SECONDARY) buttons — our
+  // custom MobileLayout boomerang/banana buttons drive those actions via
+  // uiInputBinding, so we don't want a duplicate native button on the HUD.
+  // No-op on desktop.
+  try {
+    // Keep IA_JUMP visible (essential for chimney climbs / updrafts). Hide the
+    // interaction/pointer button and all numbered buttons — our custom UI
+    // provides the projectile + trap buttons via uiInputBinding, and the
+    // "tap to drop flag" popup replaces the need for a visible IA_ACTION_5.
+    TouchScreenControls.hide([
+      InputAction.IA_POINTER,
+      InputAction.IA_PRIMARY,
+      InputAction.IA_SECONDARY,
+      InputAction.IA_ACTION_3,
+      InputAction.IA_ACTION_4,
+      InputAction.IA_ACTION_5,
+      InputAction.IA_ACTION_6,
+    ])
+  } catch (err) {
+    console.log('[UI] TouchScreenControls.hide failed:', err)
+  }
+
   ReactEcsRenderer.setUiRenderer(PlayerListUi)
 }
 
@@ -128,14 +151,14 @@ function DrownBar() {
   const mobile = isMobile()
   const fraction = getDrownFraction()
   const fillColor = fraction < 0.25 ? Color4.create(1, 0.3, 0.3, 0.95) : Color4.create(0.2, 0.5, 1.0, 0.95)
-  return <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={mobile ? 50 : S(110)} />
+  return <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={mobile ? 20 : S(110)} />
 }
 
 function ScareBar() {
   const mobile = isMobile()
   const fraction = getScareFraction()
   const fillColor = fraction > 0.75 ? Color4.create(1, 0.3, 0.3, 0.95) : Color4.create(0.55, 0.55, 0.55, 0.95)
-  const bottomOffset = isDrownBarVisible() ? (mobile ? 80 : S(128)) : (mobile ? 50 : S(110))
+  const bottomOffset = isDrownBarVisible() ? (mobile ? 50 : S(128)) : (mobile ? 20 : S(110))
   return <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={bottomOffset} />
 }
 
@@ -159,10 +182,11 @@ function PlayerListUi() {
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
       {mobile ? <MobileLayout /> : <DesktopLayout />}
 
-      {/* Hit flash overlay */}
+      {/* Hit flash overlay — oversized + negative offset so it bleeds past the
+         platform's safe-area border and covers the whole physical screen. */}
       {getHitFlashAlpha() > 0 && (
         <UiEntity
-          uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', pointerFilter: 'none' }}
+          uiTransform={{ positionType: 'absolute', position: { top: '-10%', left: '-10%' }, width: '120%', height: '120%', pointerFilter: 'none' }}
           uiBackground={{ color: Color4.create(0.8, 0, 0, getHitFlashAlpha()) }}
         />
       )}
@@ -175,10 +199,10 @@ function PlayerListUi() {
         />
       )}
 
-      {/* Cinematic fade overlay */}
+      {/* Cinematic fade overlay — oversized + negative offset (same reason as hit flash). */}
       {cinematicFadeOpacity > 0 && (
         <UiEntity
-          uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
+          uiTransform={{ positionType: 'absolute', position: { top: '-10%', left: '-10%' }, width: '120%', height: '120%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
           uiBackground={{ color: Color4.create(0, 0, 0, cinematicFadeOpacity) }}
           onMouseDown={() => {}}
         >
@@ -409,7 +433,7 @@ function PlayerListUi() {
       {/* Title Splash */}
       {cinematicState.titleSplashVisible && (() => {
         const mobile = isMobile()
-        const M = 1.5 // mobile scale (2 -> 1.5, 25% reduction, 2026-07-30)
+        const M = 1.5 * MOBILE_POPUP_SCALE // mobile scale (baseline 1.5, scaled by MOBILE_POPUP_SCALE)
         const s = mobile ? (v: number) => Math.round(v * M) : S
         const radius = mobile ? 40 : S(16)
         return (
