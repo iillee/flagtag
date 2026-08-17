@@ -105,8 +105,26 @@ export function setupBeacon(): void {
  * uses this lookup — Dropped/AtBase come from authoritative flag fields).
  *
  * Mirrors the selectNewestPerAddress pattern PR #22 established server-side
- * for the same defect class. Higher entity id == newer version, so we pick
- * the max id among matches — the live one — and read its Transform.
+ * for the same defect class: pick the max id among matches and read its
+ * Transform.
+ *
+ * CORRECTION to what this comment used to claim. "Higher entity id == newer
+ * version" is false, so max-id is NOT reliably "the live one". The version sits
+ * in the high 16 bits and counts how many times that SLOT was recycled, not
+ * when its current occupant was assigned — the runtime hands a reconnecting
+ * player whichever slot is free, so an address can move to a lower raw id and
+ * this returns the corpse. 37 of 103 reallocations did exactly that in a 3 h
+ * production log.
+ *
+ * Kept on purpose. Because the rule is a pure function of the entity set, this
+ * client, every other client, and the server all resolve identically — so the
+ * beacon still agrees with hit detection even when both are wrong. A per-client
+ * recency signal would break that: what a client can observe is avatar
+ * STREAMING order, which is proximity-driven on mobile (see the note above on
+ * on-demand streaming), so it could point the beacon at a corpse while the
+ * server tracks the live carrier — reproducing the very symptom this lookup
+ * exists to fix. See `selectNewestPerAddress` in src/server/identitySweep.ts
+ * for the full argument and what a real fix would require.
  */
 function getCarrierWorldPos(carrierPlayerId: string): Vector3 | null {
   // Check if the local player is the carrier
