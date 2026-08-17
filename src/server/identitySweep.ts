@@ -18,9 +18,21 @@ export function entityNumberOf(eid: number): number { return eid & 0xffff }
 
 /**
  * A version above 0 means this entity NUMBER was deleted and handed out again. That is the
- * cross-wire trigger: @dcl/ecs preserves LWW timestamps for numbers < 512 across
- * entityDeleted, so the one-shot PlayerIdentityData PUT can lose to the 30Hz Transform PUTs
- * and the entity ends up tracking one player's movement under another player's address.
+ * cross-wire trigger — but NOT for the reason this comment used to give.
+ *
+ * The old explanation — "@dcl/ecs preserves LWW timestamps for numbers < 512 across
+ * entityDeleted, so the one-shot PlayerIdentityData PUT loses to the 30Hz Transform PUTs" —
+ * is impossible. Every component owns its own `timestamps` map, so Transform's timestamps can
+ * never arbitrate a PlayerIdentityData PUT. Verified by execution: an identity PUT at
+ * timestamp 1 lands normally on an entity whose Transform the scene already owns.
+ *
+ * The real trigger: `@dcl/ecs`'s allocator recycles ids from a free list keyed by entity
+ * NUMBER, seeded by every inbound DELETE_ENTITY — including the runtime's tombstones for
+ * departed peers — with no reserved-range filter. So `engine.addEntity()` can return an id
+ * that belongs to a live remote player, and both allocators derive it as
+ * `toEntityId(number, storedVersion + 1)` from the same stored version, producing the
+ * identical 32-bit value. The identity is not outraced; it is DELETED, by this scene, when it
+ * releases what it believes is its own entity. See docs/BUG_reserved_entity_transform_block.md.
  */
 export function entityVersionOf(eid: number): number { return eid >>> 16 }
 
@@ -32,6 +44,40 @@ export function describeEntityId(eid: number): string {
 /**
  * Resolve duplicate avatar entities down to one per address: highest entity id wins, matching
  * `getPlayerPosition`'s rule.
+ *
+ * ## The rule is UNSOUND, and is kept deliberately anyway. Read this before "fixing" it.
+ *
+ * "Highest id == newest" is false. An id packs the version into the high 16 bits, so ordering
+ * by raw id sorts by version first and entity number second — but the version counts how many
+ * times that SLOT has been recycled, which says nothing about when its current occupant was
+ * assigned. The runtime hands a reconnecting player whichever slot happens to be free, so a
+ * player can move from a heavily-recycled slot to a fresh one and see their raw id go DOWN.
+ * Measured on a 3 h production log: **37 of 103 consecutive reallocations moved an address to a
+ * lower raw id**, e.g. `#35 v21` (1376291) -> `#37 v8` (524325). In each of those, this function
+ * returns the corpse. `test/identitySweep.spec.ts` pins that case as a known limitation.
+ *
+ * Recency is not derivable from the id at all — it has to be observed — so any real fix needs
+ * per-entity state (when it was first seen, or when its Transform last changed) maintained on
+ * both the server and every client.
+ *
+ * Kept regardless, for three reasons that a replacement has to beat:
+ *
+ * 1. **It is wrong SYMMETRICALLY.** The result is a pure function of the entity set, so the
+ *    server and every client agree. A per-VM recency signal can make them disagree — the
+ *    client's would measure avatar STREAMING order, which is proximity-driven on mobile — and
+ *    the beacon pointing somewhere hit detection does not is harder to diagnose than both being
+ *    wrong together. An attempted first-sighting fix was rejected for exactly this.
+ * 2. **The trigger is vanishingly rare.** A duplicate needs a lost DELETE_ENTITY tombstone,
+ *    which the runtime bounds at 4096+ departures during a single VM stall and explicitly
+ *    accepts as cosmetic. The `👥 duplicate PlayerIdentityData` tripwire fired ZERO times in
+ *    that 3 h log.
+ * 3. **Ties would fall back here anyway.** Any recency scheme has no information about a
+ *    duplicate that predates the observer — the common case, since a client discovers one on
+ *    load — and would degrade to precisely this rule while adding state and divergence.
+ *
+ * So: if the duplicate tripwire starts firing in the field, fix it with an observed-liveness
+ * signal applied at EVERY address lookup (there are ~12, nine of which still take first-match
+ * by iteration order) — not by changing this comparison alone.
  *
  * Every consequential read of a player's position MUST go through this same resolution.
  * `recordPlayerPositions` previously sampled per ENTITY into a per-ADDRESS history, so with a

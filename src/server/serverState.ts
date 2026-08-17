@@ -175,7 +175,14 @@ export function isRealName(name: string): boolean {
 export function getPlayerPosition(address: string): Vector3 | null {
   const needle = address.toLowerCase()
   // If duplicate PlayerIdentityData entities exist for the same address (mid-round reconnect
-  // leaving a corpse entity behind), scan them all and return the newest (highest entity ID).
+  // leaving a corpse entity behind), scan them all and return the highest entity ID.
+  //
+  // "Highest" is NOT "newest" — the version lives in the high 16 bits and counts recycles of
+  // that slot, not when its occupant was assigned, so an address that moves to a fresher slot
+  // can see its raw id drop and this returns the corpse (37 of 103 reallocations in a 3 h log).
+  // Kept knowingly: the rule is wrong symmetrically, so this and every client agree, and the
+  // duplicate condition needs a lost tombstone that never occurred in that log. The full
+  // argument, and what a real fix would have to do, is on `selectNewestPerAddress`.
   //
   // Deliberately does NOT log. This runs on every consequential proximity read — the steal
   // check, ghost targeting, and once per active trap/bomb/projectile/orbit, every tick — so

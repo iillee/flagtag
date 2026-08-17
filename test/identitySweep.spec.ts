@@ -829,6 +829,34 @@ describe('resolving duplicate avatar entities to one per address', () => {
     it('should collapse them to exactly one entry', () => {
       expect(newest.size).toBe(1)
     })
+  })
+
+  // KNOWN LIMITATION, pinned deliberately rather than fixed. "Highest id == newest" is false:
+  // the version occupies the high 16 bits and counts recycles of that SLOT, not when its
+  // occupant was assigned, so an address moving to a fresher slot sees its raw id DROP and this
+  // returns the corpse. 37 of 103 reallocations did so in the 2026-08-15 production log. The
+  // rule is kept because it is wrong symmetrically — server and every client agree — and the
+  // duplicate condition needs a lost tombstone that has never been observed. See
+  // selectNewestPerAddress for the full argument. If this test ever needs changing, the fix
+  // has to cover every address lookup, not just this comparison.
+  describe('when a corpse sits on a higher-versioned slot than the live entity', () => {
+    const CORPSE_35_V21 = (35 | (21 << 16)) >>> 0 // 1376291
+    const LIVE_37_V8 = (37 | (8 << 16)) >>> 0 // 524325
+
+    beforeEach(() => {
+      newest = selectNewestPerAddress([
+        { addr: '0xalice', id: CORPSE_35_V21 },
+        { addr: '0xalice', id: LIVE_37_V8 },
+      ])
+    })
+
+    it('should confirm the live entity really does have the lower raw id', () => {
+      expect(LIVE_37_V8).toBeLessThan(CORPSE_35_V21)
+    })
+
+    it('should return the CORPSE, which is the accepted limitation of the max-id rule', () => {
+      expect(newest.get('0xalice')).toBe(CORPSE_35_V21)
+    })
 
     describe('and the duplicates arrive in the opposite order', () => {
       beforeEach(() => {
