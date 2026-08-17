@@ -112,7 +112,18 @@ Once a scene entity and a live avatar share an ID:
      PlayerIdentityData -> STILL GONE
 ```
 
-`Transform` recovers because the runtime restreams it at 30 Hz. `PlayerIdentityData` is sent **once per peer** (`dumpCrdtDeltas` skips entities whose `updatedAtTick <= fromTick`, `last-write-win-element-set.ts:246-248`), so it never returns. The player becomes a moving Transform with no identity — invisible to every `getEntitiesWith(PlayerIdentityData, …)` query for the rest of their session. In a scene where all proximity decisions run through one such lookup, that player can no longer pick up, steal, be hit, or anchor a beacon, and **nothing recovers short of them reconnecting**.
+`PlayerIdentityData` is sent **once per peer** (`dumpCrdtDeltas` skips entities whose `updatedAtTick <= fromTick`, `last-write-win-element-set.ts:246-248`), so it never returns. The player becomes a moving Transform with no identity — invisible to every `getEntitiesWith(PlayerIdentityData, …)` query. In a scene where all proximity decisions run through one such lookup, that player can no longer pick up, steal, be hit, or anchor a beacon. Recovery needs either that peer reconnecting (they are allocated a fresh packed id the scene holds no purged state for) or the scene's subscription being recreated (`createSubscription` seeds every component cursor at `-1`, so the next `getUpdates` pushes a full snapshot). Neither happens on its own during a session.
+
+**Which component dies depends on the interleaving, and `Transform` is not always the lucky one.** `entityDeleted` clears `data` and `lastSentData` but never `timestamps`, so if the scene held the id *first* and wrote it before the runtime reissued it, the runtime's `Transform` PUTs lose until its own timestamp climbs past the one the scene left behind — roughly one host packet per scene write. Measured, with 7 scene writes:
+
+```
+scene allocated 655395 (#35 v10)   <- 7 writes, retained timestamp = 7
+  host Transform ts=1 -> ABSENT
+  host Transform ts=3 -> ABSENT
+  host Transform ts=9 -> 59        <- recovers only here
+```
+
+That is ~270 ms of blank position for 7 writes, and the ratio is ~1:1 — an in-flight projectile writing at 30 Hz for ten seconds blanks that player's position for ~ten seconds, and a scene that keeps writing the id blanks it indefinitely. Either ordering surfaces as `no position for <addr>`, which is the 84-occurrence rejection in the log above.
 
 ---
 
@@ -182,7 +193,14 @@ Regression coverage is in `test/ecs/reserved-entity-range.spec.ts` (11 tests). I
 
 ### Scene-side mitigation we shipped
 
-`src/shared/reservedEntityGuard.ts` wraps `engine.addEntity`/`engine.removeEntity` and is imported first in `src/index.ts`. A reserved ID is **abandoned, never removed** — removing it would re-arm the slot at version+1 via defect (3) and make things worse; abandoning it leaves the ID in `usedEntities`, permanently retiring that `(number, version)` pair. Counters surface in our 60 s `DIAG` line as `reservedIdsAbandoned` / `reservedRemovalsBlocked`; both staying at zero across a long session is how we will know a fixed SDK has landed and this file can be deleted.
+`src/shared/reservedEntityGuard.ts` wraps `engine.addEntity`/`engine.removeEntity` and is imported first in `src/index.ts`. A reserved ID is **abandoned, never removed** — removing it would re-arm the slot at version+1 via defect (3) and make things worse. Counters surface in our 60 s `DIAG` line as `reservedIdsAbandoned` / `reservedRemovalsBlocked`, reported per interval.
+
+**This is mitigation, not a fix, and we want to be precise about why — it bears on how urgent the SDK change is.** `Engine()` assigns `addEntity: partialEngine.addEntity`, a copied function reference, and hands `partialEngine` (not the public object) to `crdtSceneSystem`. So when an inbound `PUT_COMPONENT_NETWORK` names a network entity the VM has not seen, `systems/crdt/index.ts:145` calls `engine.addEntity()` and writes to the result at `:147`, entirely behind any property patch a scene can install. Every client hits that path for every `syncEntity`'d entity. **There is no reachable reference for a scene to wrap, so only the SDK fix closes it.**
+
+Two corrections to earlier drafts of this section, in case they were read:
+
+- Abandoning an ID does **not** permanently retire that `(number, version)` pair. The next inbound `DELETE_ENTITY` for that number deletes `usedEntities` entries for versions `0..v`, so the slot can be offered again at a higher version. The retry bound is sound for a different reason — it covers the whole reserved number space in one call.
+- **"Counters at zero" is not a valid signal that the SDK was fixed.** The allocator only misbehaves while `entityCounter - 512 - usedEntities.size > 0`, and that quantity saturates to zero on its own once enough distinct slots have been consumed. A broken SDK and a fixed one both report zero from then on. The guard should be deleted on the installed `@dcl/ecs` version, not on a quiet counter.
 
 ---
 

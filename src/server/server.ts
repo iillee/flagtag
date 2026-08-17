@@ -56,7 +56,7 @@ import {
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, SyncIds,
 } from '../shared/components'
 import { room } from '../shared/messages'
-import { isReservedEntity, getReservedEntityGuardStats } from '../shared/reservedEntityGuard'
+import { isReservedEntity, takeReservedEntityGuardStats } from '../shared/reservedEntityGuard'
 import { CoinState, COIN_STATE_SYNC_ID } from '../shared/coins'
 import { registerEconomyHandlers, coinServerSystem } from './economy'
 import { flagServerSystem, holdTimeServerSystem, checkProximitySteal, registerFlagHandlers } from './flagLogic'
@@ -320,12 +320,19 @@ function registerSystems() {
       if (shellDenialDetails.length > 0) {
         props.shellDenialSamples = shellDenialDetails.slice(-5).join(' | ')
       }
-      // Reserved-entity guard counters. Only emitted when non-zero, so a clean session
-      // stays quiet and any appearance is the signal that the SDK allocator handed this
-      // scene a renderer-owned id. Both going permanently to zero is how we will know a
-      // fixed @dcl/ecs has landed and src/shared/reservedEntityGuard.ts can be deleted.
-      const guard = getReservedEntityGuardStats()
-      if (guard.abandoned > 0) props.reservedIdsAbandoned = guard.abandoned
+      // Reserved-entity guard, PER INTERVAL (the read resets them). Emitted only when
+      // non-zero so a clean interval stays quiet, and reported as a delta because a
+      // cumulative counter that stops rising prints the same number forever, which reads as
+      // "still happening" when it means "nothing new". `Total` rides along for context.
+      //
+      // These going quiet is NOT proof the SDK was fixed — the allocator only misbehaves
+      // while it has a hole to recycle into, and that saturates on its own. Check the
+      // installed @dcl/ecs before deleting the guard.
+      const guard = takeReservedEntityGuardStats()
+      if (guard.abandoned > 0) {
+        props.reservedIdsAbandoned = guard.abandoned
+        props.reservedIdsAbandonedTotal = guard.abandonedTotal
+      }
       if (guard.blockedRemovals > 0) props.reservedRemovalsBlocked = guard.blockedRemovals
       // Rejected client requests, aggregated by reason. Rides the existing DIAG cadence rather
       // than logging per rejection: the routine ones (every non-dropper's reportGroundY, one per
