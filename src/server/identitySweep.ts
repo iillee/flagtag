@@ -32,7 +32,12 @@ export function entityNumberOf(eid: number): number { return eid & 0xffff }
  * that belongs to a live remote player, and both allocators derive it as
  * `toEntityId(number, storedVersion + 1)` from the same stored version, producing the
  * identical 32-bit value. The identity is not outraced; it is DELETED, by this scene, when it
- * releases what it believes is its own entity. See docs/BUG_reserved_entity_transform_block.md.
+ * releases what it believes is its own entity.
+ *
+ * Mitigated scene-side by `src/shared/reservedEntityGuard.ts`, which refuses reserved ids at
+ * `engine.addEntity`/`removeEntity`. That is mitigation only — the SDK allocates network
+ * entities behind any property patch — so the real fix is upstream. Full write-up in
+ * docs/BUG_reserved_entity_transform_block.md. This module only reports the condition.
  */
 export function entityVersionOf(eid: number): number { return eid >>> 16 }
 
