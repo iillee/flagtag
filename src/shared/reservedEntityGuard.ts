@@ -33,6 +33,24 @@
  * before any module that allocates at top level. The range test itself lives in the pure,
  * unit-tested `entityRange.ts` and is re-exported here.
  *
+ * ## What it does NOT cover, and why that is still safe
+ *
+ * `engine.removeEntityWithChildren` is unreachable from here: it closes over the SDK's
+ * INTERNAL `removeEntity`, not the `engine.removeEntity` property this module replaces, so
+ * patching the property cannot intercept it. `portalSystem.ts` uses it.
+ *
+ * That is not a hole, because of the ordering: with `addEntity` guarded, no entity this
+ * scene OWNS can hold a reserved id in the first place, so any removal of a scene-owned
+ * entity — through either entry point — is already safe. The `removeEntity` guard exists
+ * for the other source of ids: entities read back out of a `getEntitiesWith` query, where
+ * the id came from the runtime rather than from us. `reconcileHoldTimeEntities` and
+ * `handleRoundEnd`'s hold-time cleanup are exactly that case, and they go through
+ * `engine.removeEntity`, which IS patched.
+ *
+ * So: keep using `engine.removeEntity` for anything whose id came from a query. If a
+ * future caller needs `removeEntityWithChildren` on a query-sourced id, check
+ * `isReservedEntity` at that call site — the property patch will not save it.
+ *
  * A reserved id handed to us is **abandoned, never removed**. Calling
  * `engine.removeEntity()` on it would re-arm that slot at version+1 (the SDK's
  * `removeEntity` compares the packed id against 512, so a reserved number with
@@ -45,7 +63,7 @@
  */
 
 import { engine, Entity } from '@dcl/sdk/ecs'
-import { isReservedEntity, describeEntityId } from './entityRange'
+import { isReservedEntity, describeEntityId, RESERVED_ENTITY_NUMBERS } from './entityRange'
 
 // Re-exported so callers have one import site for the guard and its predicate.
 export { isReservedEntity, describeEntityId, RESERVED_ENTITY_NUMBERS } from './entityRange'
@@ -60,11 +78,20 @@ export function getReservedEntityGuardStats(): { abandoned: number; blockedRemov
 }
 
 /**
- * Bound on retries per call. The free list holds at most one entry per avatar slot the
- * runtime has vacated, so in practice one or two retries suffice; the cap only exists so
- * a pathological container state degrades into a loud log rather than a hung tick.
+ * Bound on retries per call, set so the throw below is provably unreachable.
+ *
+ * Each discarded id is retired: the allocator has already added it to its `usedEntities`
+ * set, so it cannot come back. The free list holds at most one entry per entity NUMBER,
+ * and there are `RESERVED_ENTITY_NUMBERS` reserved numbers, so at most that many
+ * consecutive reserved returns are possible before the supply is exhausted.
+ *
+ * This was 64, which is NOT sufficient: the runtime allocates remote players from
+ * `[32, 256)` — 224 distinct slots — so a busy world can poison well past 64 and the
+ * guard would have thrown while the allocator still had good ids to give. A 3 h
+ * production log only ever touched 11 distinct slots, which is exactly the kind of
+ * observation that makes a too-small bound look fine.
  */
-const MAX_RETRIES = 64
+const MAX_RETRIES = RESERVED_ENTITY_NUMBERS
 
 const originalAddEntity = engine.addEntity.bind(engine)
 const originalRemoveEntity = engine.removeEntity.bind(engine)
@@ -93,14 +120,16 @@ const originalRemoveEntity = engine.removeEntity.bind(engine)
   return entity
 }
 
-;(engine as any).removeEntity = (entity: Entity): void => {
+// Returns boolean, matching the real signature. Returning void would make the SDK's own
+// .d.ts lie about the runtime value for any future caller that branches on the result.
+;(engine as any).removeEntity = (entity: Entity): boolean => {
   if (isReservedEntity(entity as number)) {
     blockedRemovalCount++
     console.log(
       `[EntityGuard] blocked engine.removeEntity on renderer-reserved ${describeEntityId(entity as number)}` +
       ` — would have erased a live player's PlayerIdentityData. Total blocked: ${blockedRemovalCount}`
     )
-    return
+    return false
   }
-  originalRemoveEntity(entity)
+  return originalRemoveEntity(entity) as unknown as boolean
 }
