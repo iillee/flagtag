@@ -5,7 +5,6 @@ const esbuild = require('esbuild')
 const protobuf = require('protobufjs/minimal')
 const deepmerge = require('ts-deepmerge')
 const undici = require('undici')
-const uuid = require('uuid')
 const inspector = require('@dcl/inspector/dist/tooling-entrypoint.js')
 const { fetchEntityByPointer } = require('@dcl/sdk-commands/dist/logic/catalyst-requests.js')
 
@@ -27,8 +26,6 @@ async function main() {
     { list: [2], nested: { a: 1, b: 2 } }
   )
 
-  const generatedUuid = uuid.v4()
-  assert.equal(uuid.validate(generatedUuid), true)
   assert.equal(cookie.parse(cookie.serialize('session', 'ok')).session, 'ok')
 
   const storage = inspector.createInMemoryStorage()
