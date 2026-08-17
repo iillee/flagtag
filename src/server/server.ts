@@ -56,6 +56,7 @@ import {
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, SyncIds,
 } from '../shared/components'
 import { room } from '../shared/messages'
+import { isReservedEntity, getReservedEntityGuardStats } from '../shared/reservedEntityGuard'
 import { CoinState, COIN_STATE_SYNC_ID } from '../shared/coins'
 import { registerEconomyHandlers, coinServerSystem } from './economy'
 import { flagServerSystem, holdTimeServerSystem, checkProximitySteal, registerFlagHandlers } from './flagLogic'
@@ -235,7 +236,7 @@ function reconcileHoldTimeEntities() {
     // goes stale the instant the host recycles the slot (getMutable() then throws
     // "... for <id> not found"), and removeEntity() on it would delete the avatar.
     // Leave it untouched; getOrCreateHoldTimeEntity owns the real hold-time entities.
-    if (((entity as number) & 0xffff) < 512) {
+    if (isReservedEntity(entity)) {
       console.log('[Server] Skipped reserved-range hold-time entity', entity, 'for', data.playerId.slice(0, 8))
       continue
     }
@@ -319,6 +320,13 @@ function registerSystems() {
       if (shellDenialDetails.length > 0) {
         props.shellDenialSamples = shellDenialDetails.slice(-5).join(' | ')
       }
+      // Reserved-entity guard counters. Only emitted when non-zero, so a clean session
+      // stays quiet and any appearance is the signal that the SDK allocator handed this
+      // scene a renderer-owned id. Both going permanently to zero is how we will know a
+      // fixed @dcl/ecs has landed and src/shared/reservedEntityGuard.ts can be deleted.
+      const guard = getReservedEntityGuardStats()
+      if (guard.abandoned > 0) props.reservedIdsAbandoned = guard.abandoned
+      if (guard.blockedRemovals > 0) props.reservedRemovalsBlocked = guard.blockedRemovals
       // Rejected client requests, aggregated by reason. Rides the existing DIAG cadence rather
       // than logging per rejection: the routine ones (every non-dropper's reportGroundY, one per
       // observer per drop) would otherwise bury the tripwires this log exists to surface. Folded
