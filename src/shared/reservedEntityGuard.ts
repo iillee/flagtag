@@ -2,6 +2,13 @@
  * reservedEntityGuard.ts — refuse to let this scene own or destroy a renderer-reserved
  * entity id.
  *
+ * ## Status — redundant as of `@dcl/ecs@7.26.1-32160793830.commit-0b97733`
+ *
+ * That release fixes every allocator defect described below, including the two this module
+ * called unreachable from scene code. It should never fire on that SDK; zero counters are the
+ * expected result there, not evidence about anything. Kept as a tripwire — removing it is a
+ * separate change.
+ *
  * ## Why this exists
  *
  * `@dcl/ecs`'s entity container recycles ids from a free list keyed by entity NUMBER,

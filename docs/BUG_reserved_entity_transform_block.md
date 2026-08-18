@@ -2,7 +2,8 @@
 
 **Filed by:** Flag Tag team (ile)
 **Original filing:** 2026-08-15 · **Root cause corrected:** 2026-08-17
-**Confirmed on SDK:** `@dcl/ecs@7.24.6-29505165911.commit-d270434` (installed) and `7.26.1-31714079767.commit-96e9a29` (`auth-server`). `packages/@dcl/ecs/src/engine/entity.ts` is byte-identical between the two — `git diff d270434..96e9a29` on that file is empty.
+**Confirmed on SDK:** `@dcl/ecs@7.24.6-29505165911.commit-d270434` and `7.26.1-31714079767.commit-96e9a29` — the two versions `auth-server` pointed at while this was open. `packages/@dcl/ecs/src/engine/entity.ts` is byte-identical between them — `git diff d270434..96e9a29` on that file is empty.
+**Fixed upstream:** `@dcl/ecs@7.26.1-32160793830.commit-0b97733` (`auth-server` as of 2026-08-18, now installed) carries all four changes in [The fix](#the-fix). Everything below describes the pre-fix versions.
 **Runtime:** `hammurabi-headless@main` (274b256)
 **Severity:** High — permanently and silently removes a live player from the authoritative scene's world model.
 
@@ -180,6 +181,8 @@ The scene wrote `Transform` to `#32 v21` **5.7 seconds before the runtime ever a
 
 ## The fix
 
+**Shipped in `@dcl/ecs@7.26.1-32160793830.commit-0b97733`** — all four items, plus a refinement we had missed: the three named static entities (`RootEntity`/`PlayerEntity`/`CameraEntity`) must still purge locally, because the renderer *does* apply scene deletes on those — that is how `InputModifier.deleteFrom(engine.PlayerEntity)` clears an input lock. The shipped `removeEntity` skips the purge for the avatar range only.
+
 Patch in `packages/@dcl/ecs/src/engine/`:
 
 1. **`entity.ts` — `generateEntity()`**: skip free-list entries whose number is `< reservedStaticEntities`.
@@ -196,6 +199,8 @@ Regression coverage is in `test/ecs/reserved-entity-range.spec.ts` (11 tests). I
 `src/shared/reservedEntityGuard.ts` wraps `engine.addEntity`/`engine.removeEntity` and is imported first in `src/index.ts`. A reserved ID is **abandoned, never removed** — removing it would re-arm the slot at version+1 via defect (3) and make things worse. Counters surface in our 60 s `DIAG` line as `reservedIdsAbandoned` / `reservedRemovalsBlocked`, reported per interval.
 
 **This is mitigation, not a fix, and we want to be precise about why — it bears on how urgent the SDK change is.** `Engine()` assigns `addEntity: partialEngine.addEntity`, a copied function reference, and hands `partialEngine` (not the public object) to `crdtSceneSystem`. So when an inbound `PUT_COMPONENT_NETWORK` names a network entity the VM has not seen, `systems/crdt/index.ts:145` calls `engine.addEntity()` and writes to the result at `:147`, entirely behind any property patch a scene can install. Every client hits that path for every `syncEntity`'d entity. **There is no reachable reference for a scene to wrap, so only the SDK fix closes it.**
+
+That fix is now installed, so the guard is redundant on this SDK and both counters should read zero. It is kept for one release as a tripwire; removing it is a separate change.
 
 Two corrections to earlier drafts of this section, in case they were read:
 
