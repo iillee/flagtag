@@ -16,12 +16,14 @@ import { dropFloorY } from '../shared/constants'
 import { loadPlayerUpgrades } from './economy'
 import { room } from '../shared/messages'
 import {
-  flagEntity, getPlayerPosition, getActivePlayerAddresses, wasWithinRadius, FLAG_GRAVITY, SCENE_FLOOR_Y,
+  flagEntity, getPlayerPosition, getActivePlayerAddresses, wasWithinRadius, distanceWithinLookback,
+  FLAG_GRAVITY, SCENE_FLOOR_Y,
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   sessionBananasDropped, sessionBoomerangsFired, lastStealTime, STEAL_IMMUNITY_MS,
   playerBoomerangColors, rejectionCounts,
 } from './serverState'
 import { recordRejection } from './rejectionStats'
+import { type StealCandidate, selectClosestCandidate } from './stealCandidate'
 import { POS_HISTORY_MAX_MS } from './positionHistory'
 import { handleDrop } from './flagLogic'
 import { consumePendingMushroomBoost } from './mushroomSystem'
@@ -953,31 +955,34 @@ export function shellServerSystem(dt: number): void {
     // speed (30 m/s at 30Hz = 1m/tick < 2m radius), so pass 2 only needs to cover lag.
     const hitRadius = PROJECTILE_HIT_RADIUS * projectile.chargeScale
     const LOOKBACK_MS = 100
-    let hitAddr: string | null = null
     let hitMode: 'current' | 'lookback' = 'current'
-    // Pass 1 is closest-wins, not first-in-iteration-order: with two players in radius the
-    // Set's insertion order used to pick the victim. Immunity is checked per candidate
-    // INSIDE both scans — a flag-immune player near the path must not swallow the hit for
-    // everyone else in radius that tick. The lookback pass below deliberately still takes
-    // the FIRST in-window match by roster order: history samples carry no comparable
-    // "distance now", and the 100ms window makes multi-candidate ties rare. Known trade.
-    let bestDist = Infinity
+    // BOTH passes are closest-wins, through the same unit-tested selector the proximity steal
+    // uses (selectClosestCandidate): with two players in range the Set's insertion order used
+    // to decide the victim. Its exclude-address parameter is REQUIRED by design, which is what
+    // structurally guarantees the shooter can never be their own victim — this loop previously
+    // hand-rolled that check. Immunity is filtered while building each candidate list, so a
+    // flag-immune player near the path cannot swallow the hit for everyone else that tick.
+    const currentCandidates: StealCandidate[] = []
     for (const addr of getActivePlayerAddresses()) {
       if (addr === projectile.firedBy) continue
       if (isFlagImmune(addr)) continue
       const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
-      const dist = Vector3.distance(playerPos, projectilePos)
-      if (dist < hitRadius && dist < bestDist) { hitAddr = addr; bestDist = dist }
+      currentCandidates.push({ addr, dist: Vector3.distance(playerPos, projectilePos) })
     }
+    let hitAddr = selectClosestCandidate(currentCandidates, hitRadius, projectile.firedBy).closestId
     if (!hitAddr) {
+      // Lag-forgiving pass on the same footing: distanceWithinLookback returns the smallest
+      // distance over the window, so `< hitRadius` accepts exactly the set the old boolean
+      // wasWithinRadius accepted while also ranking the candidates.
+      const lookbackCandidates: StealCandidate[] = []
       for (const addr of getActivePlayerAddresses()) {
         if (addr === projectile.firedBy) continue
         if (isFlagImmune(addr)) continue
-        if (wasWithinRadius(addr, projectilePos, hitRadius, LOOKBACK_MS)) {
-          hitAddr = addr; hitMode = 'lookback'; break
-        }
+        lookbackCandidates.push({ addr, dist: distanceWithinLookback(addr, projectilePos, LOOKBACK_MS) })
       }
+      hitAddr = selectClosestCandidate(lookbackCandidates, hitRadius, projectile.firedBy).closestId
+      if (hitAddr) hitMode = 'lookback'
     }
     if (hitAddr) {
       const addr = hitAddr

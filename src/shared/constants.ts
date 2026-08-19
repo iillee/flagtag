@@ -45,6 +45,19 @@ export const STEAL_IMMUNITY_MS = 3000
  */
 export const LIGHTNING_RESPAWN_DURATION_SEC = 10.0
 
+/**
+ * How long a drowned player is dead: frozen with input disabled, then teleported to spawn.
+ * Owned by `waterSystem.ts` (which counts it down by `dt`) and shared for the same reason as
+ * the lightning duration above — the server must keep a frozen player out of steal candidacy,
+ * and here it learns of the death only from the client's `deathPenalty` report.
+ *
+ * Lives here rather than as a module-local in `waterSystem.ts` because it is now read from two
+ * files: a local copy is what produced the 8.5s-vs-10s mismatch that let the server re-admit a
+ * still-frozen player. `DEATH_STEAL_EXCLUSION_MS` in `src/server/flagLogic.ts` derives from
+ * this, so changing the freeze moves the exclusion with it.
+ */
+export const DROWN_RESPAWN_DURATION_SEC = 10.0
+
 // ── Scene floor ──
 
 /** Y of the invisible collider plane below the lifted scene (players can walk on it).

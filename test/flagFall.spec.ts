@@ -3,7 +3,7 @@
  * (pickup validation, landing detection, water-hit detection) and client
  * (local visual interpolation) for the message-driven flag fall pattern.
  */
-import { computeFallY, computeLandTimeMs } from '../src/shared/flagFall'
+import { computeFallY, computeLandTimeMs, fastForwardElapsedSec } from '../src/shared/flagFall'
 
 const G = 20  // arbitrary but stable across tests; production uses FLAG_GRAVITY
 
@@ -69,5 +69,59 @@ describe('computeLandTimeMs', () => {
     const t1 = computeLandTimeMs(10, 0, G)
     const t4 = computeLandTimeMs(40, 0, G)
     expect(t4 / t1).toBeCloseTo(2, 3)
+  })
+})
+
+// The late-start fast-forward, extracted from the flagFallStart handler 2026-08-19 so the
+// discount rule is pinned: dropTimeMs is SERVER wall clock and this scene estimates no clock
+// offset, so raw elapsed bundles latency and skew with genuine lateness. Wrong sign or a
+// missing clamp here silently warps every fall on a client.
+describe('fast-forward elapsed seconds for a late fall start', () => {
+  const DROP_MS = 1_000_000
+  const DEAD_BAND = 1.5
+  const MAX = 10
+
+  describe('when the message arrives promptly', () => {
+    it('should not fast-forward at all, so the fall renders from the top', () => {
+      expect(fastForwardElapsedSec(DROP_MS + 200, DROP_MS, DEAD_BAND, MAX)).toBe(0)
+    })
+  })
+
+  describe('when elapsed time sits just inside the dead band', () => {
+    it('should still render from the top', () => {
+      expect(fastForwardElapsedSec(DROP_MS + DEAD_BAND * 1000 - 1, DROP_MS, DEAD_BAND, MAX)).toBe(0)
+    })
+  })
+
+  describe('when elapsed time exceeds the dead band', () => {
+    it('should fast-forward only the excess', () => {
+      expect(fastForwardElapsedSec(DROP_MS + 4000, DROP_MS, DEAD_BAND, MAX)).toBeCloseTo(2.5, 5)
+    })
+  })
+
+  // A client clock BEHIND the server produces negative elapsed. Fast-forwarding by a negative
+  // amount would start the visual ABOVE the drop point and make the flag rise.
+  describe('when the client clock is behind the server', () => {
+    it('should clamp to zero rather than start the fall above the drop point', () => {
+      expect(fastForwardElapsedSec(DROP_MS - 5000, DROP_MS, DEAD_BAND, MAX)).toBe(0)
+    })
+  })
+
+  describe('when elapsed time is absurdly large', () => {
+    it('should cap the fast-forward', () => {
+      expect(fastForwardElapsedSec(DROP_MS + 600_000, DROP_MS, DEAD_BAND, MAX)).toBe(MAX)
+    })
+  })
+
+  describe('when the timestamps are not finite', () => {
+    it('should fast-forward nothing', () => {
+      expect(fastForwardElapsedSec(NaN, DROP_MS, DEAD_BAND, MAX)).toBe(0)
+    })
+  })
+
+  describe('when called with the production defaults', () => {
+    it('should treat a one-second-late arrival as a fresh drop', () => {
+      expect(fastForwardElapsedSec(DROP_MS + 1000, DROP_MS)).toBe(0)
+    })
   })
 })

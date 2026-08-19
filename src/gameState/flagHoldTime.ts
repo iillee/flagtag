@@ -4,7 +4,9 @@ import { PlayerFlagHoldTime, Flag, FlagState, CountdownTimer } from '../shared/c
 import { room } from '../shared/messages'
 import {
   mergeMonotonicHoldTimes,
-  resolveInterpolationCarrier
+  resolveInterpolationCarrier,
+  cappedInterpolationSeconds,
+  isTrueScoreReset
 } from './holdTimeScores'
 
 /** Players in the scene (userId -> display name). Updated via onEnterScene / onLeaveScene. */
@@ -166,11 +168,8 @@ let prevRoundEndTriggered = false
 let confirmedCarrierIdForInterpolation = ''
 let confirmedCarrierTimestamp = 0
 
-// Max seconds the display may run ahead of the last CRDT-anchored value. Normal flow
-// re-anchors every HOLD_TIME_SYNC_INTERVAL (~2s), so honest interpolation never nears this;
-// only a stalled CRDT or a stale-CRDT phantom carrier does, and both should freeze rather
-// than fabricate. See the interpolation block in getPlayersWithHoldTimes.
-const INTERPOLATION_UNANCHORED_CAP_SEC = 12
+// The interpolation cap and the true-reset rule live in holdTimeScores.ts (pure, unit-tested)
+// alongside their siblings; see INTERPOLATION_UNANCHORED_CAP_SEC there for the reasoning.
 
 /** Called by flagSystem when pickupConfirmed message arrives. */
 export function setConfirmedCarrier(carrierId: string): void {
@@ -244,15 +243,13 @@ export function updateHoldTimeInterpolation(): void {
     // Detect round reset: if server synced value drops below our last known value,
     // the round was reset. Re-anchor interpolation to the new (lower) value.
     if (maxSynced < lastCarrierSyncedSeconds) {
+      // Clear the display clamp only on a PROVEN reset — see isTrueScoreReset for why a zero
+      // must not qualify. Re-anchor either way: the interpolation baseline should follow the
+      // replicated value even when we cannot tell a reset from a stall.
+      const trueReset = isTrueScoreReset(maxSynced, lastCarrierSyncedSeconds)
       lastCarrierSyncedSeconds = maxSynced
       interpolationStartTime = Date.now()
-      // Clear the display clamp ONLY when a lower NONZERO value actually arrived — the
-      // true-reset backstop for a client that missed the respawnPlayers round-end signal.
-      // maxSynced === 0 is indistinguishable from the carrier's entity being ABSENT for a
-      // frame (entity churn) or stalled at zero, and wiping the clamp on that collapses
-      // every row the clamp is holding up — the clamp's own rule above says it clears only
-      // on round-end signals, never on CRDT zero-detection.
-      if (maxSynced > 0) lastShownSeconds.clear()
+      if (trueReset) lastShownSeconds.clear()
     }
     // When server sends a new value, re-anchor our interpolation
     if (maxSynced > lastCarrierSyncedSeconds) {
@@ -351,7 +348,7 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
   // stall case to a few sync intervals; past it the row freezes — freeze over fabricate.
   if (lastCarrierId) {
     const carrierSynced = synced.get(lastCarrierId) ?? 0
-    const elapsedSec = Math.min((Date.now() - interpolationStartTime) / 1000, INTERPOLATION_UNANCHORED_CAP_SEC)
+    const elapsedSec = cappedInterpolationSeconds((Date.now() - interpolationStartTime) / 1000)
     const interpolated = lastCarrierSyncedSeconds + elapsedSec
     // Only apply if we haven't been reset to 0 by the server mid-round
     if (carrierSynced > 0 || lastCarrierSyncedSeconds === 0) {

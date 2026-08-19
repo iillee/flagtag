@@ -20,7 +20,7 @@ import { room } from '../shared/messages'
 import { type StealCandidate, selectClosestCandidate } from './stealCandidate'
 import { isRateLimited } from './cooldownValidation'
 import { recordRejection } from './rejectionStats'
-import { LIGHTNING_RESPAWN_DURATION_SEC } from '../shared/constants'
+import { LIGHTNING_RESPAWN_DURATION_SEC, DROWN_RESPAWN_DURATION_SEC } from '../shared/constants'
 import {
   flagEntity, setFlagEntity, countdownEntity,
   holdTimeEntities, knownPlayers, playerNames,
@@ -542,11 +542,13 @@ const LIGHTNING_RESPAWN_MS = LIGHTNING_RESPAWN_DURATION_SEC * 1000 + LIGHTNING_E
 /**
  * Exclusion window after a client-reported death (`deathPenalty`), covering water and ghost
  * deaths, which — unlike lightning — the server does not decide itself. The longest client
- * freeze is the water sequence: RESPAWN_DURATION = 10.0s (waterSystem.ts), dt-counted, so it
- * ends no EARLIER than 10s wall clock after the report was sent. The margin covers the
- * one-way latency offset, same reasoning as LIGHTNING_EXCLUSION_MARGIN_MS. (An earlier
- * version used 8.5s — a misread of the freeze — which spent the whole margin and could
- * re-admit a still-frozen player.)
+ * freeze is the water sequence (DROWN_RESPAWN_DURATION_SEC), dt-counted, so it ends no
+ * EARLIER than that many seconds of wall clock after the report was sent. The margin covers
+ * the one-way latency offset, same reasoning as LIGHTNING_EXCLUSION_MARGIN_MS.
+ *
+ * DERIVED from the shared freeze constant, never a literal: this window was briefly hardcoded
+ * at 8.5s against a 10s freeze, which spent the entire latency margin and could re-admit a
+ * still-frozen player — the exact bug the exclusion exists to prevent.
  *
  * Client-reported, so weaker than the lightning signal — but the trust is asymmetric in our
  * favor: reporting a death only EXCLUDES the reporter from stealing (no gain to fake), and
@@ -554,7 +556,7 @@ const LIGHTNING_RESPAWN_MS = LIGHTNING_RESPAWN_DURATION_SEC * 1000 + LIGHTNING_E
  * Playtest 2026-08-19 recorded the gap this closes: a freshly-dead player was handed the flag
  * while input-frozen on the respawn platform.
  */
-const DEATH_STEAL_EXCLUSION_MS = 10_000 + LIGHTNING_EXCLUSION_MARGIN_MS
+const DEATH_STEAL_EXCLUSION_MS = DROWN_RESPAWN_DURATION_SEC * 1000 + LIGHTNING_EXCLUSION_MARGIN_MS
 
 /**
  * No possession changes in the final stretch of a round — gates BOTH checkProximitySteal and

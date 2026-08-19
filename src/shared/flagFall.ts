@@ -72,3 +72,42 @@ export function computeLandTimeMs(
  * imports; new code should import from here.
  */
 export const FLAG_GRAVITY = 15
+
+/**
+ * Dead band (seconds) applied before a client fast-forwards a fall it joined late.
+ *
+ * `dropTimeMs` is the SERVER's wall clock and this scene estimates no clock offset anywhere,
+ * so a client's raw `now - dropTimeMs` bundles one-way latency and ordinary clock skew in with
+ * genuine lateness. Anything inside the band renders as a fresh drop — the common case, even
+ * for a client a second off — and only the excess fast-forwards.
+ */
+export const FALL_SKEW_DEAD_BAND_SEC = 1.5
+
+/** Hard ceiling (seconds) on a fast-forward, so a wildly wrong clock cannot warp a fall. */
+export const FALL_FAST_FORWARD_MAX_SEC = 10
+
+/**
+ * How far into a fall a client that just received `flagFallStart` should start rendering.
+ *
+ * Zero means "render from the top", which is what a fresh drop and any negative/near-zero
+ * elapsed both collapse to. A late join (first packet lost and recovered by the 250ms
+ * rebroadcast, fresh scene load, hot reload) instead resumes mid-flight, because starting such
+ * a client at `startY` leaves its visual seconds behind the server's analytic position — and a
+ * player grabbing that visibly mid-air flag gets distance-rejected against a flag the server
+ * has already landed.
+ *
+ * Pure so the discount rule is unit-tested: the numbers here decide whether a fall renders
+ * from the top or mid-flight, and the wrong sign or a missing clamp is invisible in review.
+ */
+export function fastForwardElapsedSec(
+  nowMs: number,
+  dropTimeMs: number,
+  deadBandSec: number = FALL_SKEW_DEAD_BAND_SEC,
+  maxSec: number = FALL_FAST_FORWARD_MAX_SEC
+): number {
+  const rawSec = (nowMs - dropTimeMs) / 1000
+  if (!Number.isFinite(rawSec)) return 0
+  const discounted = rawSec - deadBandSec
+  if (!(discounted > 0)) return 0
+  return discounted > maxSec ? maxSec : discounted
+}

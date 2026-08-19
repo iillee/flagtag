@@ -29,7 +29,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { SCENE_FLOOR_Y } from '../shared/constants'
 import { room } from '../shared/messages'
-import { computeFallY, FLAG_GRAVITY } from '../shared/flagFall'
+import { computeFallY, fastForwardElapsedSec, FLAG_GRAVITY } from '../shared/flagFall'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
 import { setConfirmedCarrier, clearConfirmedCarrier } from '../gameState/flagHoldTime'
@@ -516,14 +516,6 @@ interface FlagVisualFall {
 let flagVisualFall: FlagVisualFall | null = null
 const FLAG_LOCAL_GRAVITY = 15  // matches server FLAG_GRAVITY for pickup timing parity
 const FLAG_GROUND_OFFSET = 0.2  // rest this far above ground so idle bob doesn't clip terrain
-// Dead band for the late-start fast-forward below. dropTimeMs is SERVER wall clock and no
-// clock-offset estimation exists anywhere in this codebase, so raw (client now − dropTimeMs)
-// bundles RTT and ordinary clock skew with genuine lateness. Elapsed time inside the band
-// renders as a fresh drop — the common case, even for clients a second ahead — and only the
-// excess fast-forwards. Residual: a clock ahead by MORE than this still fast-forwards every
-// fall by the excess (capped at 10s); fixing that fully needs a server-time offset estimate.
-const FALL_SKEW_DEAD_BAND_SEC = 1.5
-
 /** Downward ground probe for the flag fall — one shape for the initial ray and retries. */
 function fireFallGroundRay(x: number, y: number, z: number): Entity {
   const ray = engine.addEntity()
@@ -557,14 +549,9 @@ room.onMessage('flagFallStart', (data) => {
   // Fire a downward raycast from just above the drop point (bomb does +0.5).
   const rayEntity = fireFallGroundRay(data.startX, data.startY, data.startZ)
 
-  // Fast-forward a late start: this handler used to begin every fall at startY with zero
-  // velocity, so a client that got the message late (dropped first packet recovered by the
-  // 250ms rebroadcast, fresh join, hot reload) rendered the whole fall seconds behind the
-  // server — and a player grabbing that visible mid-air flag was distance-rejected because
-  // the server's flag already landed below. See FALL_SKEW_DEAD_BAND_SEC for why raw elapsed
-  // is discounted before use.
-  const rawElapsedSec = (Date.now() - data.dropTimeMs) / 1000
-  const elapsedSec = Math.min(10, Math.max(0, rawElapsedSec - FALL_SKEW_DEAD_BAND_SEC))
+  // Fast-forward a late start — rule and clamps live in the shared, unit-tested flagFall
+  // module (see fastForwardElapsedSec for why raw elapsed is discounted first).
+  const elapsedSec = fastForwardElapsedSec(Date.now(), data.dropTimeMs)
   flagVisualFall = {
     serverDropTimeMs: data.dropTimeMs,
     x: data.startX,

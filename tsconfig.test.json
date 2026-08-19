@@ -15,6 +15,8 @@
     "src/server/positionHistory.ts",
     "src/server/identitySweep.ts",
     "src/gameState/holdTimeScores.ts",
+    "src/shared/flagFall.ts",
+    "src/shared/syncIdPool.ts",
     "src/shared/coinIds.ts",
     "src/shared/coinLocations.ts",
     "src/shared/interiorGeometry.ts",

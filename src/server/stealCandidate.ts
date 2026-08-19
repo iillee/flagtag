@@ -1,5 +1,9 @@
 /**
- * stealCandidate.ts — Candidate selection for server-authoritative proximity steals.
+ * stealCandidate.ts — Closest-candidate selection for server-authoritative proximity
+ * decisions: the flag steal (this module's original purpose) and, since 2026-08-19, the
+ * projectile hit check in combat.ts, which used to hand-roll the same min-distance loop.
+ * `StealCandidate` is just an (address, distance) pair — the name records where the rule came
+ * from, not a restriction on who may use it.
  *
  * The server owns the proximity steal outright: checkProximitySteal compares its own
  * player positions and transfers the flag, on the same position view handlePickup, trap

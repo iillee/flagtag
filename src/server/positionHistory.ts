@@ -87,6 +87,61 @@ export function anySampleWithinRadius(
 }
 
 /**
+ * Smallest distance from (tx, ty, tz) to any sample at or after `cutoffT`, or `Infinity` when
+ * the window holds no sample (or `cutoffT` is non-finite — fail closed, since `Infinity < r`
+ * is false for every radius).
+ *
+ * The distance-returning sibling of anySampleWithinRadius, and equivalent as an acceptance
+ * test: `nearestSampleDistance(...) < r` holds exactly when some in-window sample lies within
+ * `r`. Callers that must choose BETWEEN several in-window players need the magnitude, not just
+ * the boolean — a projectile crossing two players should stagger the nearer one rather than
+ * whichever the roster happened to yield first.
+ *
+ * Cannot break early like anySampleWithinRadius does on the radius test: the nearest sample may
+ * be anywhere in the window, so the whole window is scanned. It still breaks out of the window
+ * itself, which time-ordered samples make safe.
+ */
+export function nearestSampleDistance(
+  samples: readonly PosSample[],
+  tx: number, ty: number, tz: number,
+  cutoffT: number
+): number {
+  if (!Number.isFinite(cutoffT)) return Infinity
+  let best2 = Infinity
+  for (let i = samples.length - 1; i >= 0; i--) {
+    const s = samples[i]
+    if (s.t < cutoffT) break
+    const dx = s.x - tx, dy = s.y - ty, dz = s.z - tz
+    const d2 = dx * dx + dy * dy + dz * dz
+    if (d2 < best2) best2 = d2
+  }
+  return best2 === Infinity ? Infinity : Math.sqrt(best2)
+}
+
+/**
+ * Distance-returning counterpart of wasEverWithinRadius: history when there is any, otherwise
+ * the live position, and `Infinity` when neither is available.
+ *
+ * Same laziness contract as wasEverWithinRadius — `currentPos` is a THUNK because resolving a
+ * live position scans every entity, and the common path (history exists) must not pay for it.
+ */
+export function nearestDistanceEver(
+  samples: readonly PosSample[] | undefined,
+  tx: number, ty: number, tz: number,
+  cutoffT: number,
+  currentPos: () => Point3 | null
+): number {
+  if (!Number.isFinite(cutoffT)) return Infinity
+  if (samples && samples.length > 0) {
+    return nearestSampleDistance(samples, tx, ty, tz, cutoffT)
+  }
+  const cur = currentPos()
+  if (!cur) return Infinity
+  const dx = cur.x - tx, dy = cur.y - ty, dz = cur.z - tz
+  return Math.sqrt(dx * dx + dy * dy + dz * dz)
+}
+
+/**
  * Full lag-forgiving proximity test: consult position history when there is any, otherwise
  * fall back to the player's live position.
  *

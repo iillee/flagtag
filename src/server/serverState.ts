@@ -9,7 +9,7 @@
 
 import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { type PosSample, POS_HISTORY_MAX_MS, pushSample, wasEverWithinRadius } from './positionHistory'
+import { type PosSample, POS_HISTORY_MAX_MS, pushSample, wasEverWithinRadius, nearestDistanceEver } from './positionHistory'
 import { type RejectionCounts } from './rejectionStats'
 import {
   type IdentityPosition, type AliasTrackEntry,
@@ -343,6 +343,24 @@ export function wasWithinRadius(address: string, target: Vector3, radius: number
     positionHistory.get(addr),
     target.x, target.y, target.z,
     radius,
+    Date.now() - lookbackMs,
+    () => getPlayerPosition(addr)
+  )
+}
+
+/**
+ * Smallest distance between `target` and the player's position over the last `lookbackMs`
+ * (falling back to their live position when no history exists), or Infinity if unknown.
+ *
+ * The distance-returning form of wasWithinRadius, for callers that must pick the NEAREST of
+ * several lag-forgiven candidates rather than merely ask whether one qualifies. Same
+ * retention caveat: a `lookbackMs` beyond POS_HISTORY_MAX_MS gains nothing.
+ */
+export function distanceWithinLookback(address: string, target: Vector3, lookbackMs: number): number {
+  const addr = address.toLowerCase()
+  return nearestDistanceEver(
+    positionHistory.get(addr),
+    target.x, target.y, target.z,
     Date.now() - lookbackMs,
     () => getPlayerPosition(addr)
   )
