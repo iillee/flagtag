@@ -6,7 +6,7 @@
  * and client-reported hit validation.
  */
 
-import { engine, Transform } from '@dcl/sdk/ecs'
+import { engine, Transform, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import {
@@ -73,6 +73,20 @@ export function despawnAllGhosts(): void {
     engine.removeEntity(z.entity); recycleGhostSyncId(z.syncId)
   }
   activeGhosts.length = 0
+  // activeGhosts alone cannot be the sweep: it is module-local and always empty in a fresh
+  // VM, so the boot-time kill-switch call was provably a no-op — a ghost that survived a
+  // deploy comes back as a CRDT-REPLAYED entity that never enters the array, hovering frozen
+  // and unkillable (no server combat loop iterates it). Sweep by component query as well.
+  // Collect first, then remove: mutating the entity set while iterating its query is UB.
+  // No syncId recycle for these — the replayed entity's network id is unknown to this VM's
+  // pool, and the removal's DELETE_ENTITY is what actually clears it from clients.
+  const replayed: Entity[] = []
+  for (const [entity] of engine.getEntitiesWith(Ghost)) replayed.push(entity)
+  for (const entity of replayed) {
+    console.log('[Server] 🧟 Sweeping CRDT-replayed ghost entity', entity)
+    Ghost.deleteFrom(entity)
+    engine.removeEntity(entity)
+  }
 }
 
 // Backoff after a syncEntity failure so we don't retry every frame (~30Hz)
@@ -81,6 +95,15 @@ const GHOST_SPAWN_FAILURE_BACKOFF_S = 5
 
 // ── Spawn a single ghost ──
 function spawnGhost(): void {
+  // Reserve the sync id BEFORE creating anything: an exhausted pool (every slot tainted or
+  // live) means no safe network identity exists, so skip this spawn and back off — the old
+  // random-fallback id could collide with a LIVE entity and cross their CRDT streams.
+  const ghostSyncId = getNextGhostSyncId()
+  if (ghostSyncId === null) {
+    console.error('[Server] 🧟 spawnGhost skipped — sync-id pool exhausted, backing off', GHOST_SPAWN_FAILURE_BACKOFF_S, 's')
+    setGhostRespawnCooldown(GHOST_SPAWN_FAILURE_BACKOFF_S)
+    return
+  }
   const entity = engine.addEntity()
   const pos = GHOST_SPAWN_POS
   Transform.create(entity, {
@@ -97,7 +120,6 @@ function spawnGhost(): void {
   // Writing Transform every frame (~30 CRDT writes/s) saturates the CRDT buffer
   // and freezes all other synced components (scoreboard, flag state, hold time).
   // Clients interpolate toward Ghost.targetX/Y/Z which is updated at 5Hz.
-  const ghostSyncId = getNextGhostSyncId()
   try {
     syncEntity(entity, [Ghost.componentId], ghostSyncId)
   } catch (err) {
@@ -173,9 +195,10 @@ export function ghostServerSystem(dt: number): void {
   }
 
   // ── Update each ghost ──
-  // Candidate positions once per tick, from trusted heartbeat-preferred reads:
-  // ghostTouching fills the victim's scare meter, so targeting off the raw CRDT
-  // Transform would phantom-hit cross-wired players just like traps did
+  // Candidate positions once per tick, through getPlayerPosition (the shared
+  // duplicate-aware resolution): ghostTouching fills the victim's scare meter,
+  // so targeting off a raw per-entity Transform read would phantom-hit
+  // duplicate/cross-wired players just like traps did
   // (BUG_stale-crdt-transform-in-combat.md). Selection itself is pure and tested
   // (ghostTargeting.ts).
   const targetCandidates: GhostTargetCandidate[] = []
@@ -314,7 +337,10 @@ export function ghostServerSystem(dt: number): void {
           proj.returnX = projPos.x
           proj.returnY = projPos.y
           proj.returnZ = projPos.z
-          room.send('shellTriggered', { x: projPos.x, y: projPos.y, z: projPos.z, victimId: '', peak: true, firedBy: proj.firedBy })
+          // shellId included, matching every other shellTriggered emission: without it the
+          // client's shellId=0 legacy path picks the NEAREST visual by this thrower, so with
+          // two yellow shells in flight the wrong one turned around.
+          room.send('shellTriggered', { x: projPos.x, y: projPos.y, z: projPos.z, victimId: '', peak: true, firedBy: proj.firedBy, shellId: proj.shellId })
           console.log('[Server] 🧟 Projectile rebounding off ghost')
         }
         break

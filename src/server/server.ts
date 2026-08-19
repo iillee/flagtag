@@ -45,7 +45,7 @@ import {
 import { isValidLeaderboardJson } from './leaderboardData'
 import { resetDailyLeaderboardAfterRecovery } from './leaderboardLifecycle'
 import { FEEDBACK_COOLDOWN_MS, NAME_CHANGE_COOLDOWN_MS, isRateLimited } from './cooldownValidation'
-import { formatRejections, clearRejections } from './rejectionStats'
+import { formatRejections, clearRejections, recordRejection } from './rejectionStats'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
 import { EnvVar } from '@dcl/sdk/server'
@@ -424,14 +424,17 @@ function registerHandlers(): void {
       if (!context || !data.name) return
       const from = context.from.toLowerCase()
       const name = sanitizePlayerName(data.name)
-      if (!name) return
+      if (!name) { recordRejection(rejectionCounts, 'registerName:empty'); return }
       const now = Date.now()
       const existing = playerNames.get(from) || ''
       // Always allow the initial placeholder -> real-name upgrade. Once a real name is
       // known, cap client-driven changes so one peer cannot hammer global Storage and
       // all-time leaderboard read-modify-writes by alternating names.
       if (isRealName(existing) && existing !== name
-        && isRateLimited(nameChangeCooldowns.get(from), now, NAME_CHANGE_COOLDOWN_MS)) return
+        && isRateLimited(nameChangeCooldowns.get(from), now, NAME_CHANGE_COOLDOWN_MS)) {
+        recordRejection(rejectionCounts, 'registerName:rate-limited')
+        return
+      }
       if (updatePlayerName(from, name)) {
         nameChangeCooldowns.set(from, now)
         console.log('[Server] registerName: updated', from.slice(0, 8), '->', name)
@@ -463,9 +466,13 @@ function registerHandlers(): void {
     if (!context) return
     const from = context.from.toLowerCase()
     const now = Date.now()
-    if (now - lastWaterLeverPullMs < WATER_LEVER_COOLDOWN_MS) return
+    // Routine: multiple players pull during the same cycle; only the first counts.
+    if (now - lastWaterLeverPullMs < WATER_LEVER_COOLDOWN_MS) { recordRejection(rejectionCounts, 'waterLever:cooldown'); return }
     const playerPos = getPlayerPosition(from)
-    if (!playerPos || Vector3.distance(playerPos, WATER_LEVER_POS) > WATER_LEVER_RADIUS) return
+    if (!playerPos || Vector3.distance(playerPos, WATER_LEVER_POS) > WATER_LEVER_RADIUS) {
+      recordRejection(rejectionCounts, 'waterLever:too-far')
+      return
+    }
     lastWaterLeverPullMs = now
     room.send('waterLeverPulled', { t: Date.now() })
   })

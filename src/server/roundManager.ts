@@ -17,6 +17,7 @@ import {
   lastStealTime, lightningStruckAt, playerLifetimeHoldTimeCache,
   SPLASH_DURATION_MS, roundParticipants,
   currentScoreRoundId, scoreRoundSessionId, setCurrentScoreRoundId,
+  getPlayerPosition,
 } from './serverState'
 import { persistLeaderboard } from './persistence'
 import {
@@ -120,14 +121,15 @@ export function lightningServerSystem(dt: number): void {
 
       let strikePos = { x: 378, y: 53, z: 350 }
       if (carried && victimId) {
-        for (const [entity] of engine.getEntitiesWith(PlayerIdentityData)) {
-          const identity = PlayerIdentityData.get(entity)
-          if (identity.address.toLowerCase() === victimId.toLowerCase()) {
-            const t = Transform.getOrNull(entity)
-            if (t) strikePos = { x: t.position.x, y: t.position.y, z: t.position.z }
-            break
-          }
-        }
+        // Through getPlayerPosition, NOT a first-match iteration over PlayerIdentityData:
+        // this position becomes the flag's authoritative drop anchor below, and first-match
+        // was the one consequential server position read that bypassed the shared
+        // duplicate-entity resolution — with a corpse duplicate ordered first, the bolt and
+        // the flag landed at a frozen stale position (audit 2026-08-19, found independently
+        // by three reviewers). getPlayerPosition applies the same max-id rule as every other
+        // proximity read, so at worst the strike is wrong CONSISTENTLY with hit detection.
+        const victimPos = getPlayerPosition(victimId)
+        if (victimPos) strikePos = { x: victimPos.x, y: victimPos.y, z: victimPos.z }
       } else {
         const flagT = Transform.getOrNull(flagEntity)
         if (flagT) strikePos = { x: flagT.position.x, y: flagT.position.y, z: flagT.position.z }
@@ -247,6 +249,20 @@ export function countdownServerSystem(): void {
         lightningStrikeScheduled = false
         lightningWarningTimer = 0
         _lightningOriginalCarrierId = ''
+        // Combat state must reset here too: recovery used to leave old-round traps, bombs and
+        // projectiles live — the one path that genuinely produced "instant trap trigger right
+        // after round start" — plus stale steal immunity and lightning exclusions.
+        for (const trap of activeTraps) removeTrap(trap)
+        activeTraps.length = 0
+        for (const bomb of activeBombs) removeBomb(bomb)
+        activeBombs.length = 0
+        for (const projectile of activeProjectiles) removeProjectile(projectile)
+        activeProjectiles.length = 0
+        for (const orbit of activeOrbits) room.send('orbitEnded', { playerId: orbit.playerId })
+        activeOrbits.length = 0
+        clearAllCombatCooldowns()
+        lastStealTime.clear()
+        lightningStruckAt.clear()
         room.send('respawnPlayers', { t: 0, winnersJson: '[]' })
         console.log('[Server] ⚠️ Emergency round-end recovery executed')
       } catch (recoveryErr) {
@@ -463,21 +479,34 @@ async function handleRoundEnd(endedRoundEndMs: number, nextScoreRoundId: string)
   // All synchronous state mutations done. Safe to await now.
   // ══════════════════════════════════════════════════════════════════════
 
+  // Everything from here on is guarded per step: the round's state is already fully reset
+  // above, so a failure below must be logged and CONTAINED — rethrowing would reject this
+  // promise and fire the caller's emergency recovery on a round that ended fine, whose
+  // second respawnPlayers restarts every client's cinematic and whose flag force-reset
+  // yanks a flag already picked up in the new round.
+
   // ── 4. Set timer: splash + winner data ──
-  const timerMutable = CountdownTimer.getMutable(countdownEntity)
-  timerMutable.roundEndTriggered = true
-  timerMutable.roundEndDisplayUntilMs = now + SPLASH_DURATION_MS
-  timerMutable.roundWinnerJson = winnersJson
-  
-  console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
+  try {
+    const timerMutable = CountdownTimer.getMutable(countdownEntity)
+    timerMutable.roundEndTriggered = true
+    timerMutable.roundEndDisplayUntilMs = now + SPLASH_DURATION_MS
+    timerMutable.roundWinnerJson = winnersJson
+    console.log('[Server] Round end splash set, displayUntil:', new Date(timerMutable.roundEndDisplayUntilMs).toISOString())
+  } catch (err) {
+    console.error('[Server] ❌ Round-end splash update failed (countdown entity stale?) — round state already reset, continuing:', err)
+  }
 
   // ── 5b. Award coins ──
-  await awardRoundCoins(awardPlayers)
-  // Awards re-create per-player economy state (balance chains, pending persists) for
-  // players who disconnected mid-round; clean it up or those maps leak an entry per
-  // departed player. Also force-flushes their awarded balance.
-  for (const p of awardPlayers) {
-    if (!connectedNow.has(p.userId.toLowerCase())) clearPlayerEconomyState(p.userId)
+  try {
+    await awardRoundCoins(awardPlayers)
+    // Awards re-create per-player economy state (balance chains, pending persists) for
+    // players who disconnected mid-round; clean it up or those maps leak an entry per
+    // departed player. Also force-flushes their awarded balance.
+    for (const p of awardPlayers) {
+      if (!connectedNow.has(p.userId.toLowerCase())) clearPlayerEconomyState(p.userId)
+    }
+  } catch (err) {
+    console.error('[Server] ❌ Round coin awards failed — round state already reset, continuing:', err)
   }
 
   // Steps 6–7d are isolated per step (and per player where it matters): storage reads

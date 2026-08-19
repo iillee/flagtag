@@ -146,8 +146,36 @@ export const ALIAS_Y_TOLERANCE = 1.0
  */
 export const ALIAS_MOVE_THRESHOLD = 0.5
 
-/** Per-pair state carried across sweeps by trackAliasedPositions. */
-export interface AliasTrackEntry { x: number; y: number; z: number; reported: boolean }
+/**
+ * XZ window for the LAGGED-copy tier of the detector. ALIAS_EPSILON above can only catch a
+ * cross-wire whose two streams carry the SAME tick's value: a copy that lags its source by
+ * even one comms snapshot (~100ms) sits 0.3–1m behind at run speed — 6–20× the exact
+ * window — so that detector is structurally blind to a moving lagged copy, which is exactly
+ * what the 2026-08-19 playtest presented (victims 0.5–0.7m XZ from a trap dropped at the
+ * dropper's feet 130ms earlier, and zero 🔗 lines all session). 1.0m covers a one-snapshot
+ * lag at boosted run speed. This window alone would fire on every tight chase, which is why
+ * the lagged tier ALSO requires movement-vector lockstep — see ALIAS_LOCKSTEP_TOLERANCE.
+ */
+export const ALIAS_LAG_EPSILON = 1.0
+
+/**
+ * Max divergence between the two sides' per-sweep movement vectors for the lagged tier.
+ * A lagged copy replays its source's walk, so across a ~1s sweep the two displacement
+ * vectors are near-identical; two players merely near each other turn and throttle
+ * independently. NOT zero-false-positive: a stealer glued to an immune carrier for a full
+ * sweep while both run straight can match. Accepted — this is an edge-triggered diagnostic
+ * log line, and triage has the dy fingerprint and duration to work with. The alternative
+ * (staying blind to the moving cross-wire) is what this tier exists to end.
+ */
+export const ALIAS_LOCKSTEP_TOLERANCE = 0.5
+
+/**
+ * Per-pair state carried across sweeps by trackAliasedPositions.
+ * `x/y/z` is the first entry's position (legacy exact tier reads only these); `bx/bz` is the
+ * OTHER side's position, stored by the lockstep tier so each side's own movement can be
+ * measured — present only when that tier is active.
+ */
+export interface AliasTrackEntry { x: number; y: number; z: number; reported: boolean; bx?: number; bz?: number }
 
 /** Stable key for an unordered pair of addresses. */
 function pairKey(a: string, b: string): string {
@@ -185,12 +213,17 @@ export function trackAliasedPositions(
   state: Map<string, AliasTrackEntry>,
   epsilon: number = ALIAS_EPSILON,
   moveThreshold: number = ALIAS_MOVE_THRESHOLD,
-  yTolerance: number = ALIAS_Y_TOLERANCE
+  yTolerance: number = ALIAS_Y_TOLERANCE,
+  // Non-null activates the LAGGED-copy tier: coincidence may be loose (pass ALIAS_LAG_EPSILON),
+  // but BOTH sides must move ≥ moveThreshold with near-identical displacement vectors — see
+  // ALIAS_LOCKSTEP_TOLERANCE. Null keeps the original exact-tier semantics untouched.
+  lockstepTolerance: number | null = null
 ): AliasedPair[] {
   const pairs: AliasedPair[] = []
   if (!Number.isFinite(epsilon) || epsilon < 0) { state.clear(); return pairs }
   if (!Number.isFinite(moveThreshold) || moveThreshold < 0) { state.clear(); return pairs }
   if (!Number.isFinite(yTolerance) || yTolerance < 0) { state.clear(); return pairs }
+  if (lockstepTolerance !== null && (!Number.isFinite(lockstepTolerance) || lockstepTolerance < 0)) { state.clear(); return pairs }
 
   const seen = new Set<string>()
   for (let i = 0; i < entries.length; i++) {
@@ -207,13 +240,41 @@ export function trackAliasedPositions(
       if (seen.has(key)) continue   // duplicate entities for one address — same logical pair
       seen.add(key)
 
+      // Lockstep tier stores each side under a STABLE assignment (lexicographic, matching
+      // pairKey) so a swap in entity iteration order between sweeps cannot cross the two
+      // sides' movement measurements. The exact tier keeps its original iteration-order
+      // storage — its behavior (including the documented swap artifact) is pinned by tests.
+      const aSide = p.addr < q.addr ? p : q
+      const bSide = p.addr < q.addr ? q : p
+
       const prev = state.get(key)
       if (prev === undefined) {
         // First sighting: no movement history yet, so we cannot tell a cross-wire from two
         // players standing on the same spot. Wait for the next sweep.
-        state.set(key, { x: p.x, y: p.y, z: p.z, reported: false })
+        if (lockstepTolerance !== null) {
+          state.set(key, { x: aSide.x, y: aSide.y, z: aSide.z, bx: bSide.x, bz: bSide.z, reported: false })
+        } else {
+          state.set(key, { x: p.x, y: p.y, z: p.z, reported: false })
+        }
         continue
       }
+
+      if (lockstepTolerance !== null) {
+        // Both sides must have moved, and moved TOGETHER. Measured horizontally, same
+        // rationale as the exact tier below.
+        const max_ = aSide.x - prev.x, maz = aSide.z - prev.z
+        const mbx = bSide.x - (prev.bx ?? bSide.x), mbz = bSide.z - (prev.bz ?? bSide.z)
+        const aMoved = max_ * max_ + maz * maz >= moveThreshold * moveThreshold
+        const bMoved = mbx * mbx + mbz * mbz >= moveThreshold * moveThreshold
+        const ddx = max_ - mbx, ddz = maz - mbz
+        const lockstep = ddx * ddx + ddz * ddz <= lockstepTolerance * lockstepTolerance
+        const qualifies = aMoved && bMoved && lockstep
+        const report = qualifies && !prev.reported
+        state.set(key, { x: aSide.x, y: aSide.y, z: aSide.z, bx: bSide.x, bz: bSide.z, reported: prev.reported || qualifies })
+        if (report) pairs.push({ a: p.addr, b: q.addr, dist: Math.sqrt(dxz2), dy })
+        continue
+      }
+
       // Movement is measured HORIZONTALLY only, matching the coincidence test. Including Y
       // would let vertical motion supply the "it is moving, so it must be a cross-wire"
       // evidence while the 1m Y window supplies the coincidence — two players riding the same

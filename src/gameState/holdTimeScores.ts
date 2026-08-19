@@ -1,8 +1,8 @@
 /**
- * Merge replicated hold-time values with the highest authoritative values seen
- * this round. The authoritative map may introduce a missing key because dynamic
- * CRDT entities can arrive late or stall while the websocket heartbeat remains
- * current.
+ * Merge replicated hold-time values with the highest displayed values seen this
+ * round (the monotonic display clamp). The clamp map may introduce a missing key
+ * because a player's dynamic CRDT entity can arrive late or stall while their
+ * best displayed value should hold.
  */
 export function mergeMonotonicHoldTimes(
   synced: Map<string, number>,
@@ -46,7 +46,6 @@ export function resolveInterpolationCarrier(
   }
 }
 
-/** Until the first heartbeat arrives, accept boot-time CRDT data for compatibility. */
-export function isScoreFromActiveRound(scoreRoundId: string, activeRoundId: string): boolean {
-  return activeRoundId.length === 0 || scoreRoundId === activeRoundId
-}
+// (isScoreFromActiveRound removed 2026-08-19 with the flagHeartbeat, its only round-id
+// source. Cross-round filtering now relies on the server zeroing + re-stamping every
+// PlayerFlagHoldTime entity at round end.)

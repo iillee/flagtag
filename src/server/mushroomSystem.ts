@@ -3,8 +3,9 @@
 import { room } from '../shared/messages'
 import {
   MUSHROOM_CX, MUSHROOM_CZ, MUSHROOM_RADIUS, MUSHROOM_CANDIDATES,
-  getPlayerPosition,
+  getPlayerPosition, rejectionCounts,
 } from './serverState'
+import { recordRejection } from './rejectionStats'
 
 const MUSHROOM_COUNT = 1
 const MUSHROOM_PICKUP_COOLDOWN_MS = 2000
@@ -98,12 +99,16 @@ export function registerMushroomHandlers(): void {
       // Require a replicated server position and rate-limit, so a bot can't claim every
       // mushroom the instant it spawns from anywhere on the map.
       const playerPos = getPlayerPosition(from)
-      if (!playerPos) return
+      if (!playerPos) { recordRejection(rejectionCounts, 'pickupMushroom:no-position'); return }
       const now = Date.now()
-      if (now - (lastMushroomPickup.get(from) ?? 0) < MUSHROOM_PICKUP_COOLDOWN_MS) return
+      if (now - (lastMushroomPickup.get(from) ?? 0) < MUSHROOM_PICKUP_COOLDOWN_MS) {
+        recordRejection(rejectionCounts, 'pickupMushroom:rate-limited')
+        return
+      }
       const mid = (data as any).id as number
       const mushroom = activeMushrooms.find(m => m.id === mid)
-      if (!mushroom || mushroom.pickedUp) return
+      // Routine: two players race the same mushroom; the loser's claim lands here.
+      if (!mushroom || mushroom.pickedUp) { recordRejection(rejectionCounts, 'pickupMushroom:gone'); return }
       // The exact placed position is resolved client-side, but it's always one of the
       // candidates this server generated — require X/Z proximity to at least one, so
       // the mushroom is only claimable by players actually at it (see
@@ -115,7 +120,8 @@ export function registerMushroomHandlers(): void {
         return dx * dx + dz * dz <= MUSHROOM_CLAIM_RADIUS * MUSHROOM_CLAIM_RADIUS
       })
       if (!nearCandidate) {
-        console.log('[Server] 🍄 Pickup rejected — not near any candidate of mushroom', mid, 'from', from.slice(0, 8))
+        // Routine under replication lag (see MUSHROOM_CLAIM_RADIUS) — counted only.
+        recordRejection(rejectionCounts, 'pickupMushroom:too-far')
         return
       }
       lastMushroomPickup.set(from, now)

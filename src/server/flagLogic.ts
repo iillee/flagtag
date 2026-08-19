@@ -13,7 +13,7 @@ import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs
 import { Vector3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import {
-  Flag, FlagState, PlayerFlagHoldTime,
+  Flag, FlagState, PlayerFlagHoldTime, CountdownTimer,
   FLAG_BASE_POSITION, getRandomSpawnPoint
 } from '../shared/components'
 import { room } from '../shared/messages'
@@ -22,10 +22,10 @@ import { isRateLimited } from './cooldownValidation'
 import { recordRejection } from './rejectionStats'
 import { LIGHTNING_RESPAWN_DURATION_SEC } from '../shared/constants'
 import {
-  flagEntity, setFlagEntity,
+  flagEntity, setFlagEntity, countdownEntity,
   holdTimeEntities, knownPlayers, playerNames,
   currentScoreRoundId,
-  lastStealTime, lightningStruckAt, rejectionCounts,
+  lastStealTime, lightningStruckAt, deathPenaltyCooldowns, rejectionCounts,
   PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
   getPlayerPosition, getActivePlayerAddresses
@@ -324,8 +324,8 @@ function beginFall(startX: number, startY: number, startZ: number, targetY: numb
   // Euler gravity from the flagFallStart coords — bomb pattern — and doesn't
   // consult dropAnchor during a fall. Server writes dropAnchor to landY in
   // endFall as before, for post-landing at-rest position.)
-  // Every client (and any late-joiner via flagHeartbeat piggyback) will now
-  // compute the same Y for the same `now`. No CRDT writes during the fall.
+  // Every client (and any late-joiner, via the 250ms rebroadcast below) will
+  // now compute the same Y for the same `now`. No CRDT writes during the fall.
   room.send('flagFallStart', {
     startX, startY, startZ, targetY, dropTimeMs: now
   })
@@ -391,11 +391,22 @@ export function ensureFlagEntity(): boolean {
 export function handlePickup(playerId: string): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) {
+    recordRejection(rejectionCounts, 'requestPickup:no-flag')
     console.log('[Server] ⚠️ handlePickup REJECT: no flag entity for', playerId.slice(0, 8))
     return
   }
   if (flag.state !== FlagState.AtBase && flag.state !== FlagState.Dropped) {
-    console.log('[Server] ⚠️ handlePickup REJECT: flag state is', flag.state, '(not AtBase/Dropped) for', playerId.slice(0, 8), 'carrier=', flag.carrierPlayerId?.slice(0, 8) || 'none')
+    // Routine: contested drops race — one pickup wins, the losers' in-flight requests
+    // land tens of ms later and refuse here (playtest 2026-08-19 showed 3-player bursts).
+    // Counted only, per the rejectionStats doctrine.
+    recordRejection(rejectionCounts, 'requestPickup:already-carried')
+    return
+  }
+
+  // Round-end possession freeze — same gate as checkProximitySteal, or a flag force-dropped
+  // in the final seconds gets auto-picked by a player already frozen in the cinematic box.
+  if (isRoundEndingSoon(Date.now())) {
+    recordRejection(rejectionCounts, 'requestPickup:round-ending')
     return
   }
 
@@ -404,12 +415,17 @@ export function handlePickup(playerId: string): void {
     // No authoritative position yet (avatar Transform not replicated) — reject rather
     // than trust the client, or a hostile client could pick up from anywhere. Legitimate
     // pickups self-heal once the position replicates a moment later.
-    console.log('[Server] ⚠️ handlePickup REJECT: no position for', playerId.slice(0, 8))
+    recordRejection(rejectionCounts, 'requestPickup:no-position')
     return
   }
   const flagPos = authoritativeFlagPos(flag)
   const dist = Vector3.distance(playerPos, flagPos)
   if (dist > PICKUP_RADIUS) {
+    // The pickup-side "movement the server does not accept": the client believed it was
+    // at the flag; the server's view disagrees by more than PICKUP_RADIUS. Counted AND
+    // logged — the log's payload (both positions) is the position-desync diagnostic the
+    // counter can't carry, and volume is bounded by the client's pickup retry cadence.
+    recordRejection(rejectionCounts, 'requestPickup:too-far')
     console.log('[Server] ⚠️ handlePickup REJECT: distance', dist.toFixed(2), '> PICKUP_RADIUS', PICKUP_RADIUS,
       '| player=(', playerPos.x.toFixed(1), playerPos.y.toFixed(1), playerPos.z.toFixed(1), ')',
       '| flag=(', flagPos.x.toFixed(1), flagPos.y.toFixed(1), flagPos.z.toFixed(1), ')',
@@ -433,10 +449,15 @@ export function handlePickup(playerId: string): void {
   room.send('pickupSound', { t: 0 })
 }
 
-export function handleDrop(playerId: string, forced: boolean = false): void {
+/**
+ * Returns whether the drop actually happened, so the requestDrop message handler can count
+ * refusals. Internal callers (force-drop paths, carrier-death drop) ignore the return —
+ * for them a refusal is the normal same-frame double-drop case, not a rejected request.
+ */
+export function handleDrop(playerId: string, forced: boolean = false): boolean {
   const flag = Flag.getOrNull(flagEntity)
-  if (!flag) return
-  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return
+  if (!flag) return false
+  if (flag.state !== FlagState.Carried || flag.carrierPlayerId !== playerId) return false
 
   // Flush accumulated hold time to the carrier BEFORE dropping
   flushHoldTimeAccum()
@@ -474,6 +495,7 @@ export function handleDrop(playerId: string, forced: boolean = false): void {
   if (forced) {
     room.send('dropForced', { playerId, x: dropPos.x, y: dropPos.y, z: dropPos.z })
   }
+  return true
 }
 
 export function handleFlagSteal(victimId: string, attackerId: string): void {
@@ -517,6 +539,47 @@ export function handleFlagSteal(victimId: string, attackerId: string): void {
 const LIGHTNING_EXCLUSION_MARGIN_MS = 1500
 const LIGHTNING_RESPAWN_MS = LIGHTNING_RESPAWN_DURATION_SEC * 1000 + LIGHTNING_EXCLUSION_MARGIN_MS
 
+/**
+ * Exclusion window after a client-reported death (`deathPenalty`), covering water and ghost
+ * deaths, which — unlike lightning — the server does not decide itself. The longest client
+ * freeze is the water sequence: RESPAWN_DURATION = 10.0s (waterSystem.ts), dt-counted, so it
+ * ends no EARLIER than 10s wall clock after the report was sent. The margin covers the
+ * one-way latency offset, same reasoning as LIGHTNING_EXCLUSION_MARGIN_MS. (An earlier
+ * version used 8.5s — a misread of the freeze — which spent the whole margin and could
+ * re-admit a still-frozen player.)
+ *
+ * Client-reported, so weaker than the lightning signal — but the trust is asymmetric in our
+ * favor: reporting a death only EXCLUDES the reporter from stealing (no gain to fake), and
+ * withholding it only skips their own coin penalty, which was already true before this read.
+ * Playtest 2026-08-19 recorded the gap this closes: a freshly-dead player was handed the flag
+ * while input-frozen on the respawn platform.
+ */
+const DEATH_STEAL_EXCLUSION_MS = 10_000 + LIGHTNING_EXCLUSION_MARGIN_MS
+
+/**
+ * No possession changes in the final stretch of a round — gates BOTH checkProximitySteal and
+ * handlePickup. Clients start the round-end cinematic on their OWN clock —
+ * getCountdownSeconds() floors to 0 for the entire last second, plus skew — and teleport
+ * everyone (carrier included) into the shared audience box ~0.6s into the fade, up to ~1s
+ * before the server processes round end. Without this gate the server happily hands the flag
+ * between cinematic-frozen players piled in that box (playtest 2026-08-19, 15:19:59.8Z: a
+ * steal at the audience box 234ms before "Round ended"), and a flag force-dropped in the
+ * final seconds gets auto-picked by a frozen player through the pickup path. 2s covers the
+ * floor() second plus generous client clock skew; combat hits in the final seconds stay live
+ * — only possession changes are frozen, because those are the scoring-relevant nonsense.
+ */
+const ROUND_END_POSSESSION_FREEZE_MS = 2000
+
+/**
+ * True during the last ROUND_END_POSSESSION_FREEZE_MS of a round. Reads the authoritative
+ * boundary from the countdown entity rather than recomputing the 5-min boundary, so a
+ * drifted/reset timer and this gate can never disagree about when the round ends.
+ */
+function isRoundEndingSoon(now: number): boolean {
+  const timer = CountdownTimer.getOrNull(countdownEntity)
+  return timer !== null && timer.roundEndTimeMs - now < ROUND_END_POSSESSION_FREEZE_MS
+}
+
 // Deliberately NO position-history lookback here, unlike combat's lag-forgiving hit checks.
 // wasWithinRadius compares a candidate's PAST positions against the carrier's CURRENT one,
 // which inflates the effective radius whenever the carrier moves onto ground the candidate
@@ -542,6 +605,9 @@ export function checkProximitySteal(): void {
   const now = Date.now()
   if (isRateLimited(lastStealTime.get(carrierId), now, STEAL_IMMUNITY_MS)) return
 
+  // Round-end possession freeze — see ROUND_END_POSSESSION_FREEZE_MS.
+  if (isRoundEndingSoon(now)) return
+
   // Server-authoritative: the closest player inside the radius takes the flag, decided on
   // the server's own position view — the same view handlePickup, trap triggers, projectile
   // hits and ghost touching already act on unconditionally.
@@ -557,9 +623,14 @@ export function checkProximitySteal(): void {
     // neither run from the flag nor drop it, and the flag would ride them to the spawn platform.
     // The deleted client predictor enforced this via !isLightningRespawning(); this is the
     // server-side equivalent, and it is authoritative because the SERVER picks the victim
-    // (roundManager sends lightningStrike). Water and ghost deaths have the same shape but no
-    // server-visible signal — see docs/KNOWN_BUGS.md.
+    // (roundManager sends lightningStrike).
     if (isRateLimited(lightningStruckAt.get(addr), now, LIGHTNING_RESPAWN_MS)) continue
+    // Water and ghost deaths have the same frozen-player shape but are only client-reported —
+    // the `deathPenalty` message stamps deathPenaltyCooldowns on EVERY death, so use it as the
+    // exclusion signal. (An earlier version of this comment claimed those deaths had "no
+    // server-visible signal"; that predates the deathPenalty handler.) See
+    // DEATH_STEAL_EXCLUSION_MS for the window and why trusting the client here is safe.
+    if (isRateLimited(deathPenaltyCooldowns.get(addr), now, DEATH_STEAL_EXCLUSION_MS)) continue
     const pos = getPlayerPosition(addr)
     if (!pos) continue
     candidates.push({ addr, dist: Vector3.distance(carrierPos, pos) })
@@ -576,16 +647,18 @@ export function checkProximitySteal(): void {
   handleFlagSteal(carrierId, closestId)
 }
 
-// ── Flag heartbeat: periodic WS broadcast so clients can self-correct stale CRDT ──
-// This is also the live scoreboard's reliable transport when dynamic
-// PlayerFlagHoldTime entities stall. Match the displayed score cadence.
-const FLAG_HEARTBEAT_INTERVAL_MS = 1000
-let lastHeartbeatMs = 0
-// During an active analytic fall we re-broadcast flagFallStart on a MUCH
-// faster cadence (250ms) so a client that dropped the initial packet only
-// stares at a stuck flag for a quarter second before catching up, not a
-// whole heartbeat. Idempotent — same dropTimeMs is a no-op on clients
-// already tracking this fall.
+// The flagHeartbeat broadcast was removed 2026-08-19 — the last heartbeat channel, after
+// the position and ghost heartbeats went on 2026-08-03. The CRDT Flag component plus the
+// pickupConfirmed/dropForced fast paths are the only flag-state transports now. ACCEPTED
+// REGRESSIONS: clients have no corrector for a stalled Flag CRDT, and the live scoreboard
+// loses its WS re-anchor for stalled PlayerFlagHoldTime values (the "score resets to 0 on
+// steal/drop" report can recur under CRDT saturation).
+//
+// During an active analytic fall we re-broadcast flagFallStart on a fast
+// cadence (250ms) so a client that dropped the initial packet only
+// stares at a stuck flag for a quarter second before catching up.
+// Idempotent — same dropTimeMs is a no-op on clients already tracking this fall.
+// (Not a heartbeat: it re-sends one drop event until the fall lands, then stops.)
 const FLAG_FALL_REBROADCAST_INTERVAL_MS = 250
 let lastFallRebroadcastMs = 0
 
@@ -596,59 +669,11 @@ export function flagServerSystem(dt: number): void {
   const flag = Flag.getOrNull(flagEntity)
   if (!flag) return
 
-  // Heartbeat: broadcast flag state every second so clients can fix stale visuals
-  // and keep every player's live score authoritative.
-  const nowForHb = Date.now()
-  if (nowForHb - lastHeartbeatMs >= FLAG_HEARTBEAT_INTERVAL_MS) {
-    lastHeartbeatMs = nowForHb
-    // Broadcast the CARRIER's authoritative world position when carried, not the
-    // flag entity's Transform — the flag is parented to the carrier, so its
-    // Transform.position is a local offset (a few meters near origin), useless
-    // to any client wanting a world position. Falls back to the flag Transform
-    // for AtBase / Dropped, where it's the real world position.
-    // NOTE: no client currently reads x/y/z. They fed the client-side steal predictor, which
-    // was removed when steals became server-authoritative. Kept because dropping them buys
-    // nothing measurable (3 floats at 1Hz) and would churn a schema shared with the client;
-    // NOT for old-client compatibility, which this change already broke by removing
-    // requestSteal. Delete them freely if the heartbeat is ever reworked.
-    let bx: number, by: number, bz: number
-    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
-      const cPos = getPlayerPosition(flag.carrierPlayerId)
-      if (cPos) { bx = cPos.x; by = cPos.y; bz = cPos.z }
-      else { const p = Transform.get(flagEntity).position; bx = p.x; by = p.y; bz = p.z }
-    } else {
-      const p = Transform.get(flagEntity).position; bx = p.x; by = p.y; bz = p.z
-    }
-    // Piggyback the carrier's authoritative hold total (synced component + unflushed
-    // accumulator). PlayerFlagHoldTime rides the CRDT, which historically stalls under
-    // load — this WS copy lets clients re-anchor the live scoreboard even when the
-    // CRDT value is frozen (the "score resets to 0 on steal/drop" report).
-    let carrierHoldSeconds = 0
-    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
-      const carrierKey = flag.carrierPlayerId.toLowerCase()
-      const holdEntity = holdTimeEntities.get(carrierKey)
-      const syncedSeconds = holdEntity !== undefined
-        ? (PlayerFlagHoldTime.getOrNull(holdEntity)?.seconds ?? 0)
-        : 0
-      carrierHoldSeconds = syncedSeconds + getHoldTimeAccumFor(carrierKey)
-    }
-    room.send('flagHeartbeat', {
-      state: flag.state as string,
-      carrierId: flag.carrierPlayerId || '',
-      carrierHoldSeconds,
-      roundId: currentScoreRoundId,
-      x: bx,
-      y: by,
-      z: bz
-    })
-
-  }
-
-  // Fast fall-rebroadcast loop — independent of heartbeat cadence.
+  // Fast fall-rebroadcast loop.
   // Reason: the initial flagFallStart at drop-time can be lost to packet
   // drops or arrive at a client that hadn't registered its handler yet
-  // (fresh join / hot reload). Waiting a full heartbeat (1s) to recover
-  // is the exact symptom playtest showed: flag stays stuck then teleports.
+  // (fresh join / hot reload). The symptom without it, per playtest:
+  // flag stays stuck then teleports.
   // Re-firing every 250ms bounds the worst-case stuck-visual to ~250ms.
   const nowForFallRebroadcast = Date.now()
   if (flagFallInfo.active &&
@@ -868,7 +893,11 @@ export function registerFlagHandlers(): void {
   room.onMessage('requestDrop', (_data, context) => {
     try {
       if (!context) return
-      handleDrop(context.from.toLowerCase())
+      // Routine: a drop can race a steal/force-drop that already took the flag, and the
+      // client's drop-fallback path sends on visual state alone. Counted, not logged.
+      if (!handleDrop(context.from.toLowerCase())) {
+        recordRejection(rejectionCounts, 'requestDrop:not-carrier')
+      }
     } catch (err) { console.error('[Server] ❌ requestDrop handler error:', err) }
   })
 
