@@ -1,214 +1,235 @@
-# Bug: Runtime blocks Transform writes on recycled avatar entity slots, freezing server-side view of new occupant
+# Bug: `@dcl/ecs` hands scenes renderer-reserved entity IDs, which collide exactly with remote-player avatar entities
 
 **Filed by:** Flag Tag team (ile)
-**Date:** 2026-08-15
-**Confirmed on SDK:** `@dcl/sdk@7.26.1-31714079767.commit-96e9a29` (auth-server dist-tag)
-**Also observed on:** `@dcl/sdk@7.24.6-29505165911.commit-d270434`
-**Severity:** High — breaks position-based gameplay (proximity damage, targeting, action origin) for any player assigned a recycled avatar slot.
+**Original filing:** 2026-08-15 · **Root cause corrected:** 2026-08-17
+**Confirmed on SDK:** `@dcl/ecs@7.24.6-29505165911.commit-d270434` and `7.26.1-31714079767.commit-96e9a29` — the two versions `auth-server` pointed at while this was open. `packages/@dcl/ecs/src/engine/entity.ts` is byte-identical between them — `git diff d270434..96e9a29` on that file is empty.
+**Fixed upstream:** `@dcl/ecs@7.26.1-32160793830.commit-0b97733` (`auth-server` as of 2026-08-18, now installed) carries all four changes in [The fix](#the-fix). Everything below describes the pre-fix versions.
+**Runtime:** `hammurabi-headless@main` (274b256)
+**Severity:** High — permanently and silently removes a live player from the authoritative scene's world model.
+
+---
+
+> ## ⚠️ This document supersedes its first version. Two central claims in v1 were wrong.
+>
+> **v1 said:** "the runtime marks the avatar entity as reserved on peer disconnect and starts blocking scene CRDT ops against it… the new peer's Transform writes are silently dropped by the runtime."
+>
+> **That is backwards.** Remote-player Transforms are written by the host's avatar system, which is not `sceneSourced` and is *never* touched by the write guard (`scene-context.ts:462`). Every blocked op in our logs is **our own scene's write**. The guard is working correctly; it is refusing writes we should never have been able to address in the first place.
+>
+> **v1 also said** the one-shot `PlayerIdentityData` PUT loses an LWW race to the 30 Hz `Transform` PUTs. **Impossible** — every component owns a separate `timestamps` map (`lww-element-set-component-definition.ts:282`), so `Transform`'s timestamp cannot arbitrate a `PlayerIdentityData` PUT. Verified: an identity PUT at timestamp 1 lands normally on an entity whose `Transform` the scene already owns. The identity does not lose a race; it is **deleted**, by us, and never re-sent.
+>
+> v1's two suspected root causes ("reserved-entity accounting bug", "ownership handoff race") are both incorrect. The real cause is in the SDK's entity allocator and is reproducible in isolation with no runtime involved.
 
 ---
 
 ## TL;DR
 
-When a peer disconnects, the runtime begins emitting `[SceneContext] Blocked scene CRDT op on reserved entity: type=1 entity=<id> component=1` at 30 Hz against that peer's avatar entity slot, and continues emitting it **after the slot is reassigned to a new peer**. The new peer's Transform writes are silently dropped by the runtime. The authoritative server-side scene code reads the frozen last-known Transform for the new peer, so every position-based system (proximity triggers, damage, targeting, action-origin validation) treats them as a phantom at the previous occupant's last coordinates.
+`@dcl/ecs`'s entity container recycles entity IDs from a free list keyed by entity **number**, and that free list is fed by *every* inbound `DELETE_ENTITY` — including the runtime's own tombstones for departed remote players. Neither the recycling loop nor the function that records the tombstone filters the renderer-reserved range. So after any peer disconnects, `engine.addEntity()` returns an ID inside the avatar range `[32, 256)`.
 
-`type=1 component=1` = Transform. The block persists across sessions (the same reserved entity id can carry the frozen Transform through multiple round-trips of the address).
+The collision is **exact, not merely overlapping**. Both allocators compute the same recurrence from the same stored version:
 
----
+| | | |
+|---|---|---|
+| Runtime | `player-entity-manager.ts:92` | `toEntityId(number, storedVersion + 1)` |
+| SDK | `entity.ts:147` | `toEntityId(number, storedVersion + 1)` |
 
-## Repro (minimum viable)
-
-1. Player A joins the scene. Runtime assigns avatar entity slot `E` (e.g. `65568`, `262177`).
-2. Player A moves around, then disconnects.
-3. From the moment A disconnects, `Blocked scene CRDT op on reserved entity: type=1 entity=E component=1` starts firing at 30 Hz.
-4. Player B joins. Runtime logs `Reused entity <n> version <v> (id: E) for <B_address>` — B is assigned the **same** slot `E`.
-5. B's client sends Transform updates for their real position, but the runtime's block continues; the scene's local CRDT view of entity `E` remains frozen at A's last known Transform.
-6. Any position-based gameplay against B now uses A's frozen coordinates.
-
-In our scene we detect step 4 with a tripwire that fires once per address on join:
-
-```
-[Server] ♻️ avatar entity is a RECYCLED slot: 0x874b9d | 262177 (#33 v4) — cross-wire risk, positions for this address may be wrong
-```
-
-`#33 v4` = version 4 of entity slot 33 → this slot has been recycled at least 4 times.
+They produce the identical 32-bit value at every version. The version bits that were supposed to separate scene entities from avatar slots are precisely what synchronises them.
 
 ---
 
-## Observable symptoms in gameplay
+## Root cause — three defects in `packages/@dcl/ecs/src/engine/entity.ts`
 
-All of the following have been observed in production sessions. Each one traces to a server-side proximity check (or client-side visual read) against the recycled-slot player's frozen phantom Transform.
+Line numbers are pre-patch (`96e9a29`).
 
-- **"Invisible ghost" kills anyone who joins.** A ghost NPC spawned near the phantom position of a recycled-slot player triggers proximity damage against every new joiner who inherits that slot — because the server sees them standing on top of the ghost, regardless of where they actually are.
-- **Bombs proximity-trigger against phantoms.** A bomb dropped anywhere on the map is instantly triggered "by" the recycled-slot player, from ~30 ms after the drop, regardless of the ~real distance between attacker and phantom.
-- **Traps/bananas dropped by the phantom.** When the recycled-slot player themself tries to act, our server-side `Client action position rejected (too far from server view)` fires because the client-reported position (real) doesn't match the server-view Transform (phantom). We fall back to a sentinel `(0, -500, 0)` drop, which is harmless-but-visible in logs.
-- **Projectiles targeting phantoms.** Same class — auto-aim or proximity-hit checks land on the phantom instead of the real player.
-- **Beacon (client-side visual) anchors to phantom.** Observers see the flag beacon disconnected from the actual flag carrier, drifting to some far coordinate, then snapping back when the carrier drops the flag (the drop path reads authoritative flag fields, not the carrier lookup).
-- **`ghostServerSystem error: [mutable] Component core::Transform for <reserved_id>`** — when the ghost's own entity id collides with a reserved/blocked slot, `Transform.getMutable` throws every tick and log-spams thousands of stack traces.
-- **Projectile / trap / bomb entity pools silently exhaust after long uptime (added 2026-08-15).** Server pre-creates a fixed pool of 30 projectile entities (and similar for traps/bombs) at startup, holding entity id references for the world's lifetime. Every peer reconnect burns a new version of the same avatar slot ids (`Reused entity 32 version 1 → v2 → v3 …`). After enough version churn, a recycled avatar's packed `(slot, version)` `Entity` id numerically **collides** with a pool-held id. From then on, `Transform.has(poolEntity)` still returns true (it's now pointing at the live avatar), so the self-heal path never triggers — but scene-side `Transform.getMutable(poolEntity).position = spawnPos` writes are dropped by the reservation block, so the projectile never moves. The pool slot appears "in use" forever from the pool's perspective, `activeProjectiles.length` stays at 0, and eventually every acquire returns null with `🎯 Projectile entity pool exhausted!` — no player can throw a boomerang until the server process is restarted. Same failure mode almost certainly applies to the trap and bomb pools on long-uptime worlds. Diagnostic dump added in `acquireProjectileEntity` on 2026-08-15 to capture the pool state (per-slot entity id, Transform-present flag, in-use flag) the next time it recurs.
+**(1) `generateEntity()`'s recycling loop has no reserved-range filter — load-bearing.**
+`entity.ts:145`. The only guard is `version < MAX_U16`. It returns `toEntityId(number, version + 1)` for whatever number sits first in the free list's insertion order, including avatar numbers.
 
-The recovery window is typically 15–30 seconds after join, during which the new peer's actions are all rejected and any incoming proximity fires against the phantom. In some sessions the block never clears within the peer's session lifetime. **Pool-exhaustion class symptoms do not self-recover — they require a server restart.**
+**(2) `updateRemovedEntity()` records reserved numbers — the feed.**
+`entity.ts:187`, called unconditionally from the CRDT receive path at `systems/crdt/index.ts:153` for every `DELETE_ENTITY`. Note `crdt/index.ts:100` pushes the ID into `entitiesShouldBeCleaned` *before* any entity-state check, so the `DELETE_ENTITY` branch never consults entity state at all — there is no `Reserved` check to skip it.
+
+**(3) `removeEntity()` compares the packed ID, not the entity number — turns a collision into a player wipe.**
+`entity.ts:161`: `if (entity < reservedStaticEntities) return false`. The version lives in the high 16 bits, so this only catches version 0. Entity number 32 at version 1 packs to **65568** and sails straight through. Contrast `getEntityState` at `entity.ts:218`, which decomposes correctly. This also makes each poisoned slot **renewable**: removing it re-arms the same number at version+1, forever.
+
+**(4) `engine.removeEntity()` purges components before asking the container.**
+`engine/index.ts:51-61` runs `component.entityDeleted(entity, true)` for every component and *then* calls `entityContainer.removeEntity`. So even with defect (3) fixed, the component purge still happens on a refused removal.
+
+### Why the free list is reachable at all
+
+`generateEntity()` only scans the free list when `usedEntities.size + reservedStaticEntities < entityCounter`. Two things put us there:
+
+- **A standing deficit from the composite build.** `assets/scene/main.composite` has max entity number 745, so `sdk-commands` injects `DCL_MAX_COMPOSITE_ENTITY=745` (`sdk-commands/src/logic/bundle.ts:323`) and `entityCounter` starts at 746 while `main.crdt` populates only 230 entities. That is a permanent deficit of 4, present with zero scene-side removals. Confirmed in the **deployed** `bin/index.js`, which contains the minified container with the define already substituted (`let n=…,l=745,t=Math.max(n,l>0?l+1:0)`).
+- **One further slot per scene-side removal** thereafter.
+
+Measured against the real installed allocator:
+
+```
+phase 1 (no scene removals): 4 reserved of 20   <- the standing head start
+phase 2 (10 removals, 30 allocations): 7 reserved of 30
+```
 
 ---
 
-## Log snippets
+## Minimal executable repro
 
-### 1. Ghost death-loop (2026-08-13, pre-mitigation)
-
-Two players joined, one disconnected, ghost spawned near their frozen position, second joiner was assigned the same slot and died on repeat:
+No runtime, no world — just the SDK:
 
 ```
-20:54:20  Schneeflocke (0x5c61f3) joins → gets avatar entity 65568
-20:54:27  Schneeflocke disconnects (6s session)
-20:54:30  🧟 Ghost spawned at 347 49.25 381
-20:54:30  [STDERR] [SceneContext] Blocked scene CRDT op on reserved entity: type=1 entity=65568 component=1
-20:54:30  [STDERR] [SceneContext] Blocked scene CRDT op on reserved entity: type=1 entity=65568 component=1 (+30 suppressed since last log)
-          ... [continues at 30 Hz for 17 seconds while nobody owns 65568] ...
-20:54:47  ile (0x1e93e5) joins → Reused entity 32 version 1 (id: 65568) for 0x1e93e5
-20:54:47  ♻️ RECYCLED slot: 0x1e93e5 | 65568 (#32 v1) — cross-wire risk
-20:54:51  ⚠️ Client action position rejected (too far from server view) for 0x1e93e5
-20:54:51+ 💀 Death penalty: 0x1e93e5 lost 10 coins  ← every 3–8 seconds, forever
-20:54:51+ 👻 ghostTouching diag (30s): sent= 130 | throttled= 781 | activeVictims= 1
+scene pool at boot:        512 (#512 v0), 513 (#513 v0), 514 (#514 v0)
+after host DELETE_ENTITY(#32 v0) + one scene-side removeEntity:
+>>> engine.addEntity() ->  65568 (#32 v1)
+>>> in host reserved range (<512)? true
+>>> in host AVATAR range [32,256)? true
+player B gets host avatar entity 65568 (#32 v1) === scene entity? true
 ```
 
-ile took 20+ death penalties in ~90s while standing still. Every `sceneRuntime.sendMessage` for a real action was rejected as `too far from server view`.
+`65568` is the exact ID from our original field report (`Reused entity 32 version 1 (id: 65568)`).
 
-### 2. Same class, on latest `auth-server` SDK (2026-08-15)
-
-Confirmed the platform bug is unchanged after upgrading from `commit-d270434` (months old) to `commit-96e9a29` (current `auth-server` tag).
-
-Bomb dropped by ile, triggered 33 ms later "by" tester (recycled-slot player) at a location tester was not standing at:
+Defect (3) as its own repro — note zero CRDT involvement:
 
 ```
-01:30:34  💣 Bomb dropped by 0x1e93e5 at 368.0 98.5 384.7
-          [STDERR] [SceneContext] Blocked scene CRDT op on reserved entity: type=1 entity=262177 component=1
-          [STDERR] (+30 suppressed since last log)   ← 30Hz block continues
-01:30:55  Reused entity 33 version 4 (id: 262177) for 0x874b9d062b060e004c3167974c42f5e6878fae0c
-01:30:55  ♻️ RECYCLED slot: 0x874b9d | 262177 (#33 v4) — cross-wire risk
-01:30:59  🪤 requestBanana from 0x874b9d
-01:30:59  ⚠️ Client action position rejected (too far from server view) for 0x874b9d
-01:30:59  🪤 Trap dropped by 0x874b9d at 0.0 -500.2 0.0   ← sentinel fallback
-01:31:02  ⚠️ Client action position rejected (too far from server view) for 0x874b9d
-01:31:05  ⚠️ Client action position rejected (too far from server view) for 0x874b9d
-01:31:11  ⚠️ Client action position rejected (too far from server view) for 0x874b9d
-01:31:21  🪤 Trap dropped by 0x874b9d at 328.0 68.1 385.4   ← 22s after join, real pos finally lands
+removeEntity(196640 (n=32, v=3)) -> true
+   guard is `packed < 512`; packed = 196640 -> guard PASSES
+>>> generateEntity() -> 262176 (n=32, v=4) | RESERVED? true
+>>> reserved number entered the free list with ZERO inbound CRDT
 ```
 
-Later in the same session, bombs proximity-fire on the phantom:
-
-```
-01:32:53.195  💣 Bomb dropped by 0x1e93e5 at 384.7 55.4 343.8
-01:32:53.228  💣 Bomb proximity triggered by 0x874b9d           ← 33ms after drop
-01:32:53.228  🛡️ Bomb ignored — player has flag immunity
-01:32:53.228  💣 Bomb exploded at 384.7 55.4 343.8 — victims: 1
-
-01:33:03.647  💣 Bomb dropped by 0x1e93e5 at 337.3 60.4 362.0
-01:33:03.679  💣 Bomb proximity triggered by 0x874b9d           ← 32ms after drop
-01:33:03.679  💣 Bomb victim was carrying flag — forcing drop!
-01:33:03.679  💣 Bomb exploded at 337.3 60.4 362.0 — victims: 2
-```
-
-The `Blocked scene CRDT op on reserved entity: type=1 entity=262177` warnings continue firing throughout both events.
-
-### 3. `ghostServerSystem` crash from reserved-slot collision
-
-When a ghost entity's own id lands on a reserved/blocked slot:
-
-```
-[STDERR] [09:12:30 PM] ❌ [Server] ❌ ghostServerSystem error: Error: [mutable] Component core::Transform for 6556…
-[STDERR]     at Object.getMutable (bin/index.js:1:240258)
-[STDERR]     at cH (bin/index.js:2:175121)
-[STDERR]     at Object.fn (bin/index.js:2:192071)
-[STDERR]     at Object.o [as update] (bin/index.js:1:249188)
-[STDERR]     at async r9e (bin/index.js:22:111974)
-```
-
-Fires every frame until the ghost is removed.
+Over 5000 randomized alloc/remove ops, 7 seeded reserved numbers produced **244** reserved-range allocations, versions climbing to 24–45.
 
 ---
 
-## What we tried on the scene side
+## Consequences, by component
 
-### `selectNewestPerAddress` in `getPlayerPosition`
+Once a scene entity and a live avatar share an ID:
 
-The scene-side `getPlayerPosition(address)` iterates `PlayerIdentityData` entities matching an address and returns the newest by entity id (highest = latest reissue). This handles the case where the CRDT holds duplicate identity entities for the same address; it does **not** help when there is only one identity for the address (the recycled slot) and its Transform is frozen by the runtime block.
+**Scene → host writes are dropped with no correction.** `isDeniedSceneCrdtOp` (`scene-crdt-guard.ts:33-39`) denies component ops on `[32, 256)` and `DELETE_ENTITY` on `[0, 512)`. Unlike a normal LWW rejection, nothing is written back, so the scene is never told and never re-converges. The object exists and ticks server-side while being **invisible on every client**.
 
-```ts
-let bestEntity: Entity | null = null
-for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-  if (identity.address.toLowerCase() === needle) {
-    if (bestEntity === null || (entity as number) > (bestEntity as number)) bestEntity = entity
-  }
-}
-if (bestEntity === null) return null
-return Transform.get(bestEntity).position
+**`engine.removeEntity()` on such an ID erases a live player from the scene's world model.** Verified end-to-end:
+
+```
+=== scene calls engine.removeEntity( 65571 (#35 v1) ) on the LIVE player ===
+   outbound: type=2 entity=65571 component=1, type=2 entity=65571 component=1089, type=3 entity=65571
+   players visible to getEntitiesWith(PlayerIdentityData, Transform): 0
+   after 8 more host Transform packets:
+     Transform          -> back (y=82)
+     PlayerIdentityData -> STILL GONE
 ```
 
-### Tripwire diagnostics
+`PlayerIdentityData` is sent **once per peer** (`dumpCrdtDeltas` skips entities whose `updatedAtTick <= fromTick`, `last-write-win-element-set.ts:246-248`), so it never returns. The player becomes a moving Transform with no identity — invisible to every `getEntitiesWith(PlayerIdentityData, …)` query. In a scene where all proximity decisions run through one such lookup, that player can no longer pick up, steal, be hit, or anchor a beacon. Recovery needs either that peer reconnecting (they are allocated a fresh packed id the scene holds no purged state for) or the scene's subscription being recreated (`createSubscription` seeds every component cursor at `-1`, so the next `getUpdates` pushes a full snapshot). Neither happens on its own during a session.
 
-We added a 1 Hz sweep (`sweepDuplicateIdentities`) that edge-triggers on three signatures:
-- Address with more than one `PlayerIdentityData` entity
-- Recycled/reissued avatar entity id (the trigger)
-- Two addresses whose Transforms move as one (the symptom)
+**Which component dies depends on the interleaving, and `Transform` is not always the lucky one.** `entityDeleted` clears `data` and `lastSentData` but never `timestamps`, so if the scene held the id *first* and wrote it before the runtime reissued it, the runtime's `Transform` PUTs lose until its own timestamp climbs past the one the scene left behind — roughly one host packet per scene write. Measured, with 7 scene writes:
 
-These give us hard timestamps for when the runtime bug fires vs. when downstream gameplay breaks.
-
-### Ghost kill-switch + `Transform.getMutable` try/catch
-
-To stop the "invisible ghost kills everyone" symptom and the tick-crash log-spam:
-
-```ts
-const GHOST_DISABLED = true   // temporary until platform fix
-// ...
-try {
-  const t = Transform.getMutable(z.entity)
-  t.position = Vector3.create(z.posX, z.posY, z.posZ)
-} catch (err) {
-  console.error('[Server] 🧟 Transform.getMutable failed on ghost entity', z.entity, '— skipping frame:', err)
-  continue
-}
+```
+scene allocated 655395 (#35 v10)   <- 7 writes, retained timestamp = 7
+  host Transform ts=1 -> ABSENT
+  host Transform ts=3 -> ABSENT
+  host Transform ts=9 -> 59        <- recovers only here
 ```
 
-Deployed 2026-08-13. Since then no ghost-related deaths, no `ghostServerSystem error` spam. Bomb / projectile / beacon symptoms remain because they don't go through this code path.
-
-### Client-action position guard
-
-Server-side `too far from server view` rejection prevents phantom-origin traps and bombs from the *acting* recycled-slot player, but does not help when the recycled-slot player is a *victim* of another player's action (bomb proximity, projectile hit search, etc.).
+That is ~270 ms of blank position for 7 writes, and the ratio is ~1:1 — an in-flight projectile writing at 30 Hz for ten seconds blanks that player's position for ~ten seconds, and a scene that keeps writing the id blanks it indefinitely. Either ordering surfaces as `no position for <addr>`, which is the 84-occurrence rejection in the log above.
 
 ---
 
-## What we deliberately did NOT patch
+## Reading the `Blocked scene CRDT op` log lines
 
-We considered adding a "staleness guard" to `getPlayerPosition` — return `null` if the chosen identity's Transform hasn't changed in >N seconds while the identity is present. We chose **not** to ship this because:
+Useful taxonomy, because the three types carry very different evidential weight. All are throttled to 1/s globally with a suppressed count (`scene-context.ts:410-424`).
 
-1. It's a symptom fix that would hide the exact platform behavior you need to see.
-2. It converts wrong-target damage into silent "action denied" behavior, which is harder to diagnose in the wild.
-3. We'd rather leave the raw failure visible so we (and you) can verify a fix at the platform level actually lands.
+| Type | Meaning | What it proves |
+|---|---|---|
+| **`type=3`** DELETE_ENTITY | Only the scene's own `engine.removeEntity()` can emit this. Host `DELETE_ENTITY`s are echo-suppressed (`crdt/index.ts:215`), and reserved IDs at version 0 fail the container guard so emit nothing. | **Conclusive** — the scene owns an avatar-range ID. |
+| **`type=1`** PUT_COMPONENT | The scene wrote a component to an ID it believes it owns. | **Conclusive.** |
+| **`type=2`** DELETE_COMPONENT | *Ambiguous — do not use as evidence.* A host `DELETE_ENTITY` for a departing peer makes the scene auto-emit these: `crdt/index.ts:151` calls `entityDeleted(entity, markAsDirty=true)`, dirtying every component that held data, and the same tick flushes a `DELETE_COMPONENT` for each. Reproduced: a host `DELETE_ENTITY` on avatar `#35 v0` yields `type=2 … component=1, component=1089, component=1087` with the scene doing nothing at all. | Nothing. Ordinary disconnect noise. |
 
-We're happy to add this at any point if you'd like a temporary mitigation while a proper fix is in flight.
-
----
-
-## Suspected root cause (guess, please correct)
-
-Two hypotheses, not mutually exclusive:
-
-1. **Reserved-entity accounting bug.** The runtime marks the avatar entity as "reserved" on peer disconnect and starts blocking scene CRDT ops against it. When the slot is reused for a new peer, the reservation isn't cleared, so writes from the new peer's Transform stream are dropped by the same block.
-2. **Ownership handoff race.** New peer's `PlayerIdentityData` is created on the reused entity id before the previous owner's Transform ownership is released. The scene sees the address change but reads the Transform that was locked in by the previous owner and never overwritten.
-
-The 30 Hz cadence of the block message is suspicious — it looks like a per-tick CRDT reconciliation loop that keeps rejecting the same op class rather than clearing state and moving on.
+`component=1` is `Transform`, `1087` is `AvatarBase`, `1089` is `PlayerIdentityData`. `entity=` prints the **packed** ID, not the entity number, so a large value is not evidence of a scene-range entity: `#32 v21` prints as `1376288`.
 
 ---
 
-## Environment / reproducibility
+## Production evidence (`flagtag.dcl.eth`, 2026-08-15, 2 h 55 m)
 
-- **World:** `flagtag.dcl.eth` (production) and `baskervill.dcl.eth` (test)
-- **Client:** Both native Windows explorer and web (`play.decentraland.org`) observed the same server-side symptoms.
-- **Peers:** Both desktop and mobile peers trigger the recycled-slot condition. Mobile peers appeared *more* likely to hit it in our sessions, possibly due to shorter/flakier session lifetimes.
-- **Frequency:** In multi-session testing, roughly 30–50% of reconnects into an active world assign a recycled slot with the block already in flight. Once assigned, the phantom-position window lasts 15–30s typically, sometimes for the entire session.
+**1. Direction of causation — the scene allocated the ID before the runtime minted it.**
+
+```
+22:00:21.417  Reused entity 32 version 20 (id: 1310752) for 0xac28e3…   <- runtime: #32 is at v20
+22:01:50.006  💣⚠️ Replaced dead bomb pool entity at slot 0             <- scene: engine.addEntity()
+22:01:50.006  💣 Bomb dropped by 0x1e93e5 at 361.7 50.4 298.6
+22:01:53.063  [STDERR] Blocked scene CRDT op … type=1 entity=1376288 component=1
+22:01:53.063  💣 Bomb exploded at 361.7 50.5 298.6 — victims: 1
+22:01:58.820  Reused entity 32 version 21 (id: 1376288) for 0x5c61f3…   <- runtime mints THE SAME ID, 5.7s LATER
+22:02:09.126  [PEER_DISCONNECTED] { address: '0x5c61f3…' }
+22:02:44.142  💣⚠️ Replaced dead bomb pool entity at slot 0             <- pool entity dead again
+```
+
+The scene wrote `Transform` to `#32 v21` **5.7 seconds before the runtime ever allocated that ID**. This cannot be the scene reacting to an avatar. The bomb dealt damage server-side while no client received its Transform. Then the peer's departure deleted the shared ID, killing the pool entity again.
+
+**2. Silent player removal, at population scale.** Of 223 `Player left` events, 16 have no `[PEER_DISCONNECTED]` within the preceding 3 s. **15 of those 16 land in the same millisecond as a blocked CRDT op** (the 16th is the first line after a log-capture blackout). **Zero occur without one.** Dose-response on the round-end cleanup that calls `engine.removeEntity`: boundaries producing a blocked op cleaned a mean of 2.86 entities vs 1.75 for those that didn't; 6/6 boundaries cleaning ≥4 produced one, 2/7 cleaning exactly 1 did.
+
+**3. The breakage is total and permanent.** 13 identifiable victims. **13/13 had zero position-dependent successes after their wipe** — no trap drop, no pickup accept, no steal, no coin — over windows up to **1438 s**. **0/13 recovered.** Of the 7 who kept playing, 7/7 broke. Example:
+
+```
+21:39:59.163  🚩 Proximity steal: 0xe19d6d <- 0x9b9c1c | carrierPos= (416.9,52.4,363.7)   <- last good position
+21:40:00.020  ⏰ Round end!
+21:40:00.021  Cleaned up 6 hold-time entities for disconnected players
+21:40:00.054  [STDERR] Blocked scene CRDT op … type=2 entity=589860 component=1 (+4 suppressed)
+21:40:00.054  Player left: Sage Raveneye session: 956 s        <- server drops them; client keeps playing
+21:40:25.480  ⚠️ handlePickup REJECT: no position for 0xe19d6d  <- and never works again
+21:42:59.107  [PEER_DISCONNECTED] { address: '0xe19d6d…' }      <- REAL disconnect, 2m59s later
+```
+
+`0xe19d6d` was the round winner. Entity `589860` = `#36 v9` — the entity in the blocked op.
+
+**4. Slot churn.** 208 recycles across only 11 distinct slot numbers (`#32`–`#42`), versions to 40 — slot `#33` burned 40 generations in under 2 h. 222 disconnects; one flaky client contributed 42 % of them in 94 sessions of 8–13 s each.
+
+---
+
+## The fix
+
+**Shipped in `@dcl/ecs@7.26.1-32160793830.commit-0b97733`** — all four items, plus a refinement we had missed: the three named static entities (`RootEntity`/`PlayerEntity`/`CameraEntity`) must still purge locally, because the renderer *does* apply scene deletes on those — that is how `InputModifier.deleteFrom(engine.PlayerEntity)` clears an input lock. The shipped `removeEntity` skips the purge for the avatar range only.
+
+Patch in `packages/@dcl/ecs/src/engine/`:
+
+1. **`entity.ts` — `generateEntity()`**: skip free-list entries whose number is `< reservedStaticEntities`.
+2. **`entity.ts` — `removeEntity()`**: decompose before comparing; reject any reserved entity **number**, at any version.
+3. **`entity.ts` — `updateRemovedEntity()` / `updateUsedEntity()`**: refuse reserved numbers, so the free list only ever holds numbers the container owns. Reserved numbers need no tombstone — `getEntityState` reports them as `Reserved` before it consults `removedEntities`, so `Removed` is unreachable for them.
+4. **`engine/index.ts` — `removeEntity()`**: ask the container **first** and purge components only if it accepts. Without this, a refused removal still wipes the live player's components.
+
+Fixing (2) alone is not sufficient — defect (1) is the load-bearing one, and (4) is what actually stops the player wipe.
+
+Regression coverage is in `test/ecs/reserved-entity-range.spec.ts` (11 tests). It fails 5/11 against unpatched source and passes 11/11 patched, with no change to the rest of the suite (61 → 72 passing).
+
+### Scene-side mitigation we shipped
+
+`src/shared/reservedEntityGuard.ts` wraps `engine.addEntity`/`engine.removeEntity` and is imported first in `src/index.ts`. A reserved ID is **abandoned, never removed** — removing it would re-arm the slot at version+1 via defect (3) and make things worse. Counters surface in our 60 s `DIAG` line as `reservedIdsAbandoned` / `reservedRemovalsBlocked`, reported per interval.
+
+**This is mitigation, not a fix, and we want to be precise about why — it bears on how urgent the SDK change is.** `Engine()` assigns `addEntity: partialEngine.addEntity`, a copied function reference, and hands `partialEngine` (not the public object) to `crdtSceneSystem`. So when an inbound `PUT_COMPONENT_NETWORK` names a network entity the VM has not seen, `systems/crdt/index.ts:145` calls `engine.addEntity()` and writes to the result at `:147`, entirely behind any property patch a scene can install. Every client hits that path for every `syncEntity`'d entity. **There is no reachable reference for a scene to wrap, so only the SDK fix closes it.**
+
+That fix is now installed, so the guard is redundant on this SDK and both counters should read zero. It is kept for one release as a tripwire; removing it is a separate change.
+
+Two corrections to earlier drafts of this section, in case they were read:
+
+- Abandoning an ID does **not** permanently retire that `(number, version)` pair. The next inbound `DELETE_ENTITY` for that number deletes `usedEntities` entries for versions `0..v`, so the slot can be offered again at a higher version. The retry bound is sound for a different reason — it covers the whole reserved number space in one call.
+- **"Counters at zero" is not a valid signal that the SDK was fixed.** The allocator only misbehaves while `entityCounter - 512 - usedEntities.size > 0`, and that quantity saturates to zero on its own once enough distinct slots have been consumed. A broken SDK and a fixed one both report zero from then on. The guard should be deleted on the installed `@dcl/ecs` version, not on a quiet counter.
+
+---
+
+## Scope: what this bug does *not* explain
+
+Stated explicitly so nobody over-attributes to it.
+
+- **Beacon detaching from the flag carrier.** Not decidable from a server log — the beacon is client-side and appears zero times. A likely independent cause is **ours**: `getCarrierWorldPos()` and `selectNewestPerAddress` pick the maximum *raw* entity ID, which is version-dominant rather than recency-dominant, so a corpse at `#40 v3` (196648) beats the live entity at `#32 v1` (65568). Since the runtime hands reconnecting players an arbitrary vacated slot, that misfires routinely. Filed separately; a client log would discriminate.
+- **"Ghost turned invisible."** Not present in this session. `activeGhosts = 0` in **295/295** samples across both restarts on a single scene CID; `GHOST_DISABLED` has been set since 2026-08-13. If a ghost were live, the same mechanism would apply — `spawnGhost` uses `engine.addEntity()` with no range check — but this log cannot support that.
+- **Entity-pool exhaustion.** Not present in this session either: `shellDenials = 0` across all 147 `DIAG` samples, and no exhaustion line of any kind. Earlier notes framing exhaustion as a symptom of this bug are not supported by this log.
+
+---
+
+## Instrumentation asks
+
+Two changes would have turned our last inferential step into a direct observation:
+
+1. **`HAMMURABI_DEBUG_ENTITY_PROVENANCE` should be on by default in world servers, or at least documented.** `scene-context.ts:83-103` logs `[ENTITY-PROVENANCE]` for every op on an entity number `< 512`. It was off; with it on, "the allocator returned an avatar ID" is logged rather than inferred.
+2. **The 1 s guard-log throttle hid 69 of 92 ops** in this session. A per-batch entity-ID histogram, or a higher cap, would let us enumerate which components were wiped per victim instead of attributing some wipes to a suppressed op.
+
+Also worth considering upstream: when the write guard denies a scene op on a reserved entity, consider writing a corrective message back the way a normal LWW rejection does. Silent denial is what lets a scene diverge from the host indefinitely with no signal.
 
 ---
 
 ## Contact
 
-Ping ile in Discord or drop a comment on the PR when you have a repro on your side. Happy to jump on a call and reproduce live with server logs streaming.
+Ping ile in Discord or comment on the PR. Happy to reproduce live with server logs streaming.

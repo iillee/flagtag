@@ -1,3 +1,7 @@
+// MUST be the first import in the scene: it patches engine.addEntity/removeEntity to
+// refuse renderer-reserved entity ids, and several modules below allocate entities at
+// top level (uiSounds, playerUpgradeState, …). See src/shared/reservedEntityGuard.ts.
+import './shared/reservedEntityGuard'
 import { engine } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 // Shared modules (safe for both client and server)

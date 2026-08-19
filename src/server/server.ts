@@ -56,6 +56,7 @@ import {
   FLAG_BASE_POSITION, FLAG_SPAWN_POINTS, SyncIds,
 } from '../shared/components'
 import { room } from '../shared/messages'
+import { isReservedEntity, takeReservedEntityGuardStats } from '../shared/reservedEntityGuard'
 import { CoinState, COIN_STATE_SYNC_ID } from '../shared/coins'
 import { registerEconomyHandlers, coinServerSystem } from './economy'
 import { flagServerSystem, holdTimeServerSystem, checkProximitySteal, registerFlagHandlers } from './flagLogic'
@@ -235,7 +236,7 @@ function reconcileHoldTimeEntities() {
     // goes stale the instant the host recycles the slot (getMutable() then throws
     // "... for <id> not found"), and removeEntity() on it would delete the avatar.
     // Leave it untouched; getOrCreateHoldTimeEntity owns the real hold-time entities.
-    if (((entity as number) & 0xffff) < 512) {
+    if (isReservedEntity(entity)) {
       console.log('[Server] Skipped reserved-range hold-time entity', entity, 'for', data.playerId.slice(0, 8))
       continue
     }
@@ -319,6 +320,20 @@ function registerSystems() {
       if (shellDenialDetails.length > 0) {
         props.shellDenialSamples = shellDenialDetails.slice(-5).join(' | ')
       }
+      // Reserved-entity guard, PER INTERVAL (the read resets them). Emitted only when
+      // non-zero so a clean interval stays quiet, and reported as a delta because a
+      // cumulative counter that stops rising prints the same number forever, which reads as
+      // "still happening" when it means "nothing new". `Total` rides along for context.
+      //
+      // These going quiet is NOT proof the SDK was fixed — the allocator only misbehaves
+      // while it has a hole to recycle into, and that saturates on its own. Check the
+      // installed @dcl/ecs before deleting the guard.
+      const guard = takeReservedEntityGuardStats()
+      if (guard.abandoned > 0) {
+        props.reservedIdsAbandoned = guard.abandoned
+        props.reservedIdsAbandonedTotal = guard.abandonedTotal
+      }
+      if (guard.blockedRemovals > 0) props.reservedRemovalsBlocked = guard.blockedRemovals
       // Rejected client requests, aggregated by reason. Rides the existing DIAG cadence rather
       // than logging per rejection: the routine ones (every non-dropper's reportGroundY, one per
       // observer per drop) would otherwise bury the tripwires this log exists to surface. Folded
