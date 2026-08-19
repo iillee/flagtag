@@ -139,11 +139,8 @@ export const Messages = {
   requestBlessing: Schemas.Map({ t: Schemas.Int }),                                         // Client → Server (claim after ritual)
   blessingResult: Schemas.Map({ success: Schemas.Boolean, reason: Schemas.String, newBalance: Schemas.Int }),  // Server → Client
 
-  // Flag heartbeat (server → client, every second, read-only visual correction).
-  // carrierHoldSeconds: the carrier's authoritative hold total — lets the scoreboard
-  // re-anchor over WS when PlayerFlagHoldTime CRDT updates are stalled (0 when not carried).
-  // roundId prevents delayed CRDT values from a completed round being adopted by the next one.
-  flagHeartbeat: Schemas.Map({ state: Schemas.String, carrierId: Schemas.String, carrierHoldSeconds: Schemas.Float, roundId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+  // (flagHeartbeat removed 2026-08-19 — the last heartbeat channel. Flag state travels via
+  // the CRDT Flag component plus the pickupConfirmed/dropForced fast paths only.)
 }
 
 export const room = registerMessages(Messages)

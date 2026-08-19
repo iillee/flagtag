@@ -3,9 +3,10 @@ import { getPlayer } from '@dcl/sdk/players'
 import { PlayerFlagHoldTime, Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
 import {
-  isScoreFromActiveRound,
   mergeMonotonicHoldTimes,
-  resolveInterpolationCarrier
+  resolveInterpolationCarrier,
+  cappedInterpolationSeconds,
+  isTrueScoreReset
 } from './holdTimeScores'
 
 /** Players in the scene (userId -> display name). Updated via onEnterScene / onLeaveScene. */
@@ -151,74 +152,24 @@ let interpolationStartTime = 0
 // Cleared ONLY on the WS round-end signal (cinematic snapshot), never on CRDT
 // zero-detection, which cannot distinguish "reset to 0" from "stalled at 0".
 const lastShownSeconds = new Map<string, number>()
-// When the flagHeartbeat last re-anchored interpolation with an authoritative total.
-// Guards the round-reset detection below from misreading a stalled CRDT (0) as a reset.
-let lastAuthoritativeAnchorMs = 0
-// While set (Date.now() < this), the server's heartbeat reported NO carrier — a
-// CRDT-derived carrier within this window is a stale Flag entity, and interpolating
-// for it would inflate their row (and the clamp would lock the overshoot in).
-let serverReportsNoCarrierUntil = 0
 // Edge detection for the synced countdown's round-end flag (round-end clamp backstop).
 let prevRoundEndTriggered = false
 
 // Server-confirmed carrier — used as fallback when CRDT Flag state is stale.
-// Refreshed by both pickupConfirmed and the authoritative heartbeat.
+// Refreshed by pickupConfirmed. (The flagHeartbeat, this module's second authoritative
+// feed, was removed 2026-08-19 — with it went the WS re-anchor of stalled CRDT hold
+// totals, the no-carrier interpolation suppression, and the heartbeat-taught round-id
+// filter. ACCEPTED REGRESSIONS: under a stalled PlayerFlagHoldTime CRDT the scoreboard
+// can freeze or under-count until CRDT flows again; for up to one round after a
+// mid-server-restart a phantom entity's stale score can inflate a row — round-end
+// zeroing re-stamps every entity, which bounds it; and a carrier only a STALE Flag CRDT
+// claims exists — a voluntary drop with the Flag CRDT stalled at Carried — accrues
+// interpolated seconds nothing corrects, bounded to INTERPOLATION_UNANCHORED_CAP_SEC.)
 let confirmedCarrierIdForInterpolation = ''
 let confirmedCarrierTimestamp = 0
-// Learned from the authoritative heartbeat. Score entities from other round ids
-// are ignored even if their delayed CRDT values remain non-zero.
-let activeScoreRoundId = ''
 
-function beginScoreRound(roundId: string): void {
-  if (!roundId || roundId === activeScoreRoundId) return
-  activeScoreRoundId = roundId
-  lastShownSeconds.clear()
-  lastCarrierId = ''
-  lastCarrierSyncedSeconds = 0
-  interpolationStartTime = Date.now()
-  lastAuthoritativeAnchorMs = 0
-  serverReportsNoCarrierUntil = 0
-  confirmedCarrierIdForInterpolation = ''
-  confirmedCarrierTimestamp = 0
-  _holdTimeCacheTime = 0
-}
-
-/**
- * Called by flagSystem on every flagHeartbeat with the server's authoritative view:
- * the carrier ('' when nobody carries) and their hold total (WS path — works even
- * when the PlayerFlagHoldTime CRDT is stalled).
- */
-export function applyServerHoldTime(carrierId: string, seconds: number, roundId: string = ''): void {
-  beginScoreRound(roundId)
-  const key = (carrierId || '').toLowerCase()
-  if (!key) {
-    // Server says nobody is carrying: suppress interpolation for any stale
-    // CRDT-derived carrier until the next heartbeat can say otherwise.
-    serverReportsNoCarrierUntil = Date.now() + 6000
-    confirmedCarrierIdForInterpolation = ''
-    confirmedCarrierTimestamp = 0
-    lastCarrierId = ''
-    lastCarrierSyncedSeconds = 0
-    return
-  }
-  serverReportsNoCarrierUntil = 0
-  if (!Number.isFinite(seconds) || seconds < 0) return
-  const now = Date.now()
-  confirmedCarrierIdForInterpolation = key
-  confirmedCarrierTimestamp = now
-  if ((lastShownSeconds.get(key) ?? 0) < seconds) lastShownSeconds.set(key, seconds)
-  // Establish the carrier from the heartbeat even when the Flag CRDT entity is
-  // absent or stale. Otherwise remote players can count briefly after pickup and
-  // collapse to zero when the short pickup-confirmation fallback expires.
-  if (lastCarrierId !== key) {
-    lastCarrierId = key
-    lastCarrierSyncedSeconds = seconds
-  } else {
-    lastCarrierSyncedSeconds = Math.max(lastCarrierSyncedSeconds, seconds)
-  }
-  interpolationStartTime = now
-  lastAuthoritativeAnchorMs = now
-}
+// The interpolation cap and the true-reset rule live in holdTimeScores.ts (pure, unit-tested)
+// alongside their siblings; see INTERPOLATION_UNANCHORED_CAP_SEC there for the reasoning.
 
 /** Called by flagSystem when pickupConfirmed message arrives. */
 export function setConfirmedCarrier(carrierId: string): void {
@@ -240,8 +191,6 @@ function getResolvedCarrierId(now: number): string {
       break
     }
   }
-
-  if (crdtCarrierId && now < serverReportsNoCarrierUntil) crdtCarrierId = ''
 
   const resolution = resolveInterpolationCarrier(
     crdtCarrierId,
@@ -287,24 +236,20 @@ export function updateHoldTimeInterpolation(): void {
     // Read the latest synced seconds for the carrier
     let maxSynced = 0
     for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
-      if (!isScoreFromActiveRound(data.roundId, activeScoreRoundId)) continue
       if (data.playerId.toLowerCase() === currentCarrierId) {
         maxSynced = Math.max(maxSynced, data.seconds)
       }
     }
     // Detect round reset: if server synced value drops below our last known value,
     // the round was reset. Re-anchor interpolation to the new (lower) value.
-    // Skip while a recent heartbeat anchor is active: with a stalled CRDT, maxSynced
-    // is 0 while the heartbeat anchored us to the real total — that's a stall, not a
-    // reset, and true round resets are handled by the WS respawnPlayers path anyway.
-    if (maxSynced < lastCarrierSyncedSeconds && Date.now() - lastAuthoritativeAnchorMs > 6000) {
+    if (maxSynced < lastCarrierSyncedSeconds) {
+      // Clear the display clamp only on a PROVEN reset — see isTrueScoreReset for why a zero
+      // must not qualify. Re-anchor either way: the interpolation baseline should follow the
+      // replicated value even when we cannot tell a reset from a stall.
+      const trueReset = isTrueScoreReset(maxSynced, lastCarrierSyncedSeconds)
       lastCarrierSyncedSeconds = maxSynced
       interpolationStartTime = Date.now()
-      // A LOWER value actually arrived (CRDT is flowing, not stalled) with no recent
-      // heartbeat contradicting it — treat as a true reset: also drop the display
-      // clamp so rows can fall to the new server truth. Backstop for a client that
-      // missed the respawnPlayers round-end signal.
-      lastShownSeconds.clear()
+      if (trueReset) lastShownSeconds.clear()
     }
     // When server sends a new value, re-anchor our interpolation
     if (maxSynced > lastCarrierSyncedSeconds) {
@@ -378,7 +323,6 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
   const entityCount = new Map<string, number>()
   const zeroCount = new Map<string, number>()
   for (const [, data] of engine.getEntitiesWith(PlayerFlagHoldTime)) {
-    if (!isScoreFromActiveRound(data.roundId, activeScoreRoundId)) continue
     const key = data.playerId.toLowerCase()
     entityCount.set(key, (entityCount.get(key) ?? 0) + 1)
     if (data.seconds === 0) zeroCount.set(key, (zeroCount.get(key) ?? 0) + 1)
@@ -397,9 +341,14 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
   // Start interpolating from 0 immediately on pickup so the scoreboard counts from 1, not 2.
   // Skip interpolation only if the server has reset scores to 0 (round end) AND we had a
   // non-zero synced value before (meaning a true reset, not just a fresh pickup).
+  //
+  // Capped: with the heartbeat re-anchor gone, unbounded interpolation would let a carrier
+  // only a STALE Flag CRDT claims exists accrue wall-clock seconds forever (and the monotonic
+  // clamp would lock the fabricated score in). The cap bounds both that over-count and the
+  // stall case to a few sync intervals; past it the row freezes — freeze over fabricate.
   if (lastCarrierId) {
     const carrierSynced = synced.get(lastCarrierId) ?? 0
-    const elapsedSec = (Date.now() - interpolationStartTime) / 1000
+    const elapsedSec = cappedInterpolationSeconds((Date.now() - interpolationStartTime) / 1000)
     const interpolated = lastCarrierSyncedSeconds + elapsedSec
     // Only apply if we haven't been reset to 0 by the server mid-round
     if (carrierSynced > 0 || lastCarrierSyncedSeconds === 0) {
@@ -407,9 +356,10 @@ export function getPlayersWithHoldTimes(): { userId: string; name: string; secon
     }
   }
 
-  // Per-player monotonic clamp for the round (see lastShownSeconds). A heartbeat
-  // must also introduce a MISSING synced entry: under load a remote player's
-  // dynamic CRDT entity can be absent entirely, not merely stuck at zero.
+  // Per-player monotonic clamp for the round (see lastShownSeconds). The clamp must
+  // also introduce a MISSING synced entry: under load a remote player's dynamic CRDT
+  // entity can be absent entirely, not merely stuck at zero, and their best shown
+  // value should hold rather than vanish.
   mergeMonotonicHoldTimes(synced, lastShownSeconds)
 
   // Build result ONLY from players currently in the scene.

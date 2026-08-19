@@ -16,11 +16,14 @@ import { dropFloorY } from '../shared/constants'
 import { loadPlayerUpgrades } from './economy'
 import { room } from '../shared/messages'
 import {
-  flagEntity, getPlayerPosition, getActivePlayerAddresses, wasWithinRadius, FLAG_GRAVITY, SCENE_FLOOR_Y,
+  flagEntity, getPlayerPosition, getActivePlayerAddresses, wasWithinRadius, distanceWithinLookback,
+  FLAG_GRAVITY, SCENE_FLOOR_Y,
   activeGhosts, ghostRespawnCooldown, setGhostRespawnCooldown, GHOST_RESPAWN_COOLDOWN,
   sessionBananasDropped, sessionBoomerangsFired, lastStealTime, STEAL_IMMUNITY_MS,
-  playerBoomerangColors,
+  playerBoomerangColors, rejectionCounts,
 } from './serverState'
+import { recordRejection } from './rejectionStats'
+import { type StealCandidate, selectClosestCandidate } from './stealCandidate'
 import { POS_HISTORY_MAX_MS } from './positionHistory'
 import { handleDrop } from './flagLogic'
 import { consumePendingMushroomBoost } from './mushroomSystem'
@@ -204,6 +207,11 @@ function releaseBombEntity(entity: Entity): void {
 // ══════════════════════════════════════════════════════════════════════
 
 // ── Trap state ──
+
+// Traps and bombs ignore player proximity until this long after the drop — see the comment
+// at the trap player-collision loop. NOT the dropper grace (2000ms): this one covers every
+// player and exists to absorb replication lag, not to protect the dropper.
+const PROXIMITY_ARM_DELAY_MS = 300
 
 const lastTrapDropTime = new Map<string, number>()
 
@@ -389,8 +397,15 @@ const ACTION_POS_TOLERANCE_DROP = 8
  * otherwise fall back to the server position — never reject the action outright.
  * Returns null only when the player has no replicated position at all (kept as a
  * bot/pre-sync rejection, same as before).
+ *
+ * `allowHistorySlack` widens plausibility to "within tolerance of ANY of the sender's
+ * last-500ms positions". FIRE keeps it: the position is only a spawn origin, and a laggy
+ * shooter whose server view snapped should not have shells spawn behind them. DROP must
+ * NOT: a mover's 500ms trail adds up to ~7.5m of reach on top of the tolerance, which
+ * silently undoes the deliberate 16→8 halving above — a hostile client could once again
+ * pin an explosive onto a victim it was never adjacent to (audit 2026-08-19).
  */
-function resolveActionPosition(playerId: string, cx: number | undefined, cy: number | undefined, cz: number | undefined, tolerance: number): Vector3 | null {
+function resolveActionPosition(playerId: string, cx: number | undefined, cy: number | undefined, cz: number | undefined, tolerance: number, allowHistorySlack: boolean): Vector3 | null {
   const serverPos = getPlayerPosition(playerId)
   if (!serverPos) return null
   if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(cz)) return serverPos
@@ -400,10 +415,16 @@ function resolveActionPosition(playerId: string, cx: number | undefined, cy: num
   if (Vector3.distance(clientPos, serverPos) <= tolerance ||
       // POS_HISTORY_MAX_MS, not a larger number: retention caps the usable lookback, so asking
       // for more silently gets you this and reads as a bug to anyone comparing the two.
-      wasWithinRadius(playerId, clientPos, tolerance, POS_HISTORY_MAX_MS)) {
+      (allowHistorySlack && wasWithinRadius(playerId, clientPos, tolerance, POS_HISTORY_MAX_MS))) {
     return clientPos
   }
-  console.log('[Server] ⚠️ Client action position rejected (too far from server view) for', playerId.slice(0, 8))
+  // The "movement the server does not accept" signal: the client's self-reported action
+  // position diverged from the server's replicated view beyond tolerance, so the action was
+  // placed at the server view instead. Counted per tier, not logged per event — under a
+  // position desync (the one time this fires a lot) per-event lines would bury the DIAG,
+  // and a rising drop-rejected count already means players' drops are landing where the
+  // SERVER thinks they are, not where they are.
+  recordRejection(rejectionCounts, allowHistorySlack ? 'actionPos:fire-rejected' : 'actionPos:drop-rejected')
   return serverPos
 }
 
@@ -420,7 +441,10 @@ const TRAP_DROP_IN_FLIGHT_MAX_MS = 10_000
 async function handleTrapDrop(playerId: string, cx?: number, cy?: number, cz?: number): Promise<void> {
   const now = Date.now()
   const since = trapDropInFlight.get(playerId)
-  if (since !== undefined && now - since < TRAP_DROP_IN_FLIGHT_MAX_MS) return
+  if (since !== undefined && now - since < TRAP_DROP_IN_FLIGHT_MAX_MS) {
+    recordRejection(rejectionCounts, 'requestBanana:in-flight')
+    return
+  }
   trapDropInFlight.set(playerId, now)
   try {
     await handleTrapDropInner(playerId, cx, cy, cz)
@@ -440,16 +464,19 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
   const trapType = upgrades?.equippedTrap || 'banana'
   const cooldown = trapType === 'bomb' ? BOMB_COOLDOWN_SEC : TRAP_COOLDOWN_SEC
 
+  // Routine denials: counted (🚫 line) + answered via bananaDenied so the client's cooldown
+  // resets — no per-event log (rejectionStats doctrine). Pool exhaustion below stays logged:
+  // that one is a server-side resource anomaly, not a client race.
   const lastDrop = lastTrapDropTime.get(playerId) ?? 0
   if (now - lastDrop < cooldown * 1000) {
-    console.log('[Server] Trap denied: cooldown active, wait', ((cooldown * 1000 - (now - lastDrop)) / 1000).toFixed(1), 's')
+    recordRejection(rejectionCounts, 'requestBanana:cooldown')
     room.send('bananaDenied', { reason: 'cooldown' }, { to: [playerId] })
     return
   }
 
-  const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_DROP)
+  const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_DROP, false)
   if (!playerPos) {
-    console.log('[Server] Trap denied: player position not found')
+    recordRejection(rejectionCounts, 'requestBanana:no-position')
     room.send('bananaDenied', { reason: 'no_position' }, { to: [playerId] })
     return
   }
@@ -458,7 +485,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     // Bomb: count active bombs toward the same max
     const playerBombs = activeBombs.filter(b => b.droppedBy === playerId)
     if (playerBombs.length >= TRAP_MAX_ACTIVE) {
-      console.log('[Server] Bomb denied: max active reached (', TRAP_MAX_ACTIVE, ')')
+      recordRejection(rejectionCounts, 'requestBanana:max-active')
       room.send('bananaDenied', { reason: 'max_active' }, { to: [playerId] })
       return
     }
@@ -468,6 +495,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
 
     const bombEntity = acquireBombEntity()
     if (!bombEntity) {
+      recordRejection(rejectionCounts, 'requestBanana:pool-exhausted')
       console.log('[Server] Bomb denied: pool exhausted')
       room.send('bananaDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
       return
@@ -513,7 +541,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
   // Default: banana trap
   const playerTraps = activeTraps.filter(b => b.droppedBy === playerId)
   if (playerTraps.length >= TRAP_MAX_ACTIVE) {
-    console.log('[Server] Trap denied: max active traps reached (', TRAP_MAX_ACTIVE, ')')
+    recordRejection(rejectionCounts, 'requestBanana:max-active')
     room.send('bananaDenied', { reason: 'max_active' }, { to: [playerId] })
     return
   }
@@ -522,6 +550,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
 
   const trapEntity = acquireTrapEntity()
   if (!trapEntity) {
+    recordRejection(rejectionCounts, 'requestBanana:pool-exhausted')
     console.log('[Server] Trap denied: pool exhausted')
     room.send('bananaDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
     return
@@ -617,7 +646,14 @@ export function bananaServerSystem(dt: number): void {
     }
     if (trapConsumed) continue
 
-    // Player-trap collision (by-address roster)
+    // Player-trap collision (by-address roster). Gated behind a short arming delay: the drop
+    // was placed at the dropper's FRESH client position while victims are judged on their
+    // LAGGED replicated view, so with no delay a trap can stagger a player the same tick it
+    // lands — where they stood a few hundred ms ago, with zero counterplay (playtest
+    // 2026-08-19: 14 of 24 triggers fired <1s after the drop). 300ms lets the replicated
+    // views catch up to roughly the same wall-clock moment; a real walk-in arrives later
+    // than that anyway. Ghost collision above stays instant — ghosts have no comms lag.
+    if (now - trap.droppedAtMs < PROXIMITY_ARM_DELAY_MS) continue
     for (const addr of getActivePlayerAddresses()) {
       if (addr === trap.droppedBy && (now - trap.droppedAtMs) < 2000) continue
 
@@ -699,7 +735,10 @@ export function bombServerSystem(dt: number): void {
       continue
     }
 
-    // Proximity trigger — any player walks into it (1s grace for dropper)
+    // Proximity trigger — any player walks into it (2s grace for dropper). Same arming
+    // delay as traps (see bananaServerSystem): without it a proximity-pinned bomb explodes
+    // the tick it lands, bypassing the fuse that is the victim's counterplay window.
+    if (ageMs < PROXIMITY_ARM_DELAY_MS) continue
     const bombPos = Transform.get(bomb.entity).position
     for (const addr of getActivePlayerAddresses()) {
       if (addr === bomb.droppedBy && ageMs < 2000) continue  // grace period for dropper
@@ -724,10 +763,13 @@ export function bombServerSystem(dt: number): void {
 function handleProjectileFire(playerId: string, dirX: number, dirZ: number, color: string = 'r', chargeSpeed: number = PROJECTILE_SPEED, chargeRange: number = 20, chargeScale: number = 1, cx?: number, cy?: number, cz?: number): void {
   const now = Date.now()
 
+  // Routine denials: counted (🚫 line) + answered via shellDenied — no per-event log
+  // (rejectionStats doctrine). invalid_direction below stays logged: an honest client
+  // never sends a NaN/zero direction.
   const lastFire = lastProjectileFireTime.get(playerId) ?? 0
   const effectiveCd = color === 'y' ? 0.2 : PROJECTILE_COOLDOWN_SEC
   if (now - lastFire < effectiveCd * 1000) {
-    console.log('[Server] Projectile denied: cooldown active')
+    recordRejection(rejectionCounts, 'requestShell:cooldown')
     room.send('shellDenied', { reason: 'cooldown' }, { to: [playerId] })
     return
   }
@@ -735,16 +777,19 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   const playerProjectiles = activeProjectiles.filter(s => s.firedBy === playerId)
   const maxActive = color === 'y' ? 2 : PROJECTILE_MAX_ACTIVE
   if (playerProjectiles.length >= maxActive) {
+    // Counted in the 🚫 line; the per-shell detail (ids, ages, return state — the
+    // pool-exhaustion diagnostic) still reaches the DIAG via __diagShellDenied's
+    // shellDenialSamples, so dropping the per-event log loses nothing.
     const detail = playerId.slice(0, 8) + ' ' + color + ' ' + playerProjectiles.map(p => 'id=' + p.shellId + ' age=' + ((Date.now() - p.firedAtMs) / 1000).toFixed(1) + 's ret=' + p.returning).join(',')
-    console.log('[Server] ⚠️ Projectile denied: max active reached (' + playerProjectiles.length + '/' + maxActive + ') —', detail)
+    recordRejection(rejectionCounts, 'requestShell:max-active')
     if (typeof (globalThis as any).__diagShellDenied === 'function') (globalThis as any).__diagShellDenied(detail)
     room.send('shellDenied', { reason: 'max_active' }, { to: [playerId] })
     return
   }
 
-  const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_FIRE)
+  const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_FIRE, true)
   if (!playerPos) {
-    console.log('[Server] Projectile denied: player position not found')
+    recordRejection(rejectionCounts, 'requestShell:no-position')
     room.send('shellDenied', { reason: 'no_position' }, { to: [playerId] })
     return
   }
@@ -754,6 +799,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
   // would slip past the magnitude check and produce a NaN spawn position + rotation that
   // gets broadcast to every client.
   if (!Number.isFinite(dirX) || !Number.isFinite(dirZ) || len < 0.01) {
+    recordRejection(rejectionCounts, 'requestShell:invalid-direction')
     console.log('[Server] Projectile denied: invalid direction')
     room.send('shellDenied', { reason: 'invalid_direction' }, { to: [playerId] })
     return
@@ -769,6 +815,8 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
 
   const projectileEntity = acquireProjectileEntity()
   if (!projectileEntity) {
+    // Server-side resource anomaly — logged AND counted, like the trap/bomb pool cases.
+    recordRejection(rejectionCounts, 'requestShell:pool-exhausted')
     console.log('[Server] Projectile denied: pool exhausted')
     room.send('shellDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
     return
@@ -893,31 +941,48 @@ export function shellServerSystem(dt: number): void {
     let shellConsumed = false
 
     // Lag-forgiving hit check: first pass uses current position (cheap, exact).
-    // Second pass checks the last ~300ms of positions per player — the shooter's
-    // client predicted a hit against a slightly-lagged victim Transform, so if
-    // the victim *was* within radius recently, we count it. Prevents "red star
+    // Second pass checks recent positions per player — the shooter's client
+    // predicted a hit against a slightly-lagged victim Transform, so if the
+    // victim *was* within radius recently, we count it. Prevents "red star
     // but no stagger/drop" from position desync during chases.
+    //
+    // 100ms, down from 300: the window is a union over every rewind in [0, LOOKBACK_MS],
+    // so it must match the shooter's actual view delay (~one-way latency, 50-100ms per the
+    // RTT estimate in flagLogic), not exceed it. At 300ms a victim who had cleared the
+    // path by 3m (base run) to 4.5m (boosted) was still "hit", and because this runs every
+    // tick of an up-to-8s flight, it swept a trail along the whole trajectory — the
+    // "(lookback) hits I dodged" playtest reports. Pass 1 already can't tunnel at default
+    // speed (30 m/s at 30Hz = 1m/tick < 2m radius), so pass 2 only needs to cover lag.
     const hitRadius = PROJECTILE_HIT_RADIUS * projectile.chargeScale
-    const LOOKBACK_MS = 300
-    let hitAddr: string | null = null
+    const LOOKBACK_MS = 100
     let hitMode: 'current' | 'lookback' = 'current'
+    // BOTH passes are closest-wins, through the same unit-tested selector the proximity steal
+    // uses (selectClosestCandidate): with two players in range the Set's insertion order used
+    // to decide the victim. Its exclude-address parameter is REQUIRED by design, which is what
+    // structurally guarantees the shooter can never be their own victim — this loop previously
+    // hand-rolled that check. Immunity is filtered while building each candidate list, so a
+    // flag-immune player near the path cannot swallow the hit for everyone else that tick.
+    const currentCandidates: StealCandidate[] = []
     for (const addr of getActivePlayerAddresses()) {
       if (addr === projectile.firedBy) continue
+      if (isFlagImmune(addr)) continue
       const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
-      if (Vector3.distance(playerPos, projectilePos) < hitRadius) { hitAddr = addr; break }
+      currentCandidates.push({ addr, dist: Vector3.distance(playerPos, projectilePos) })
     }
+    let hitAddr = selectClosestCandidate(currentCandidates, hitRadius, projectile.firedBy).closestId
     if (!hitAddr) {
+      // Lag-forgiving pass on the same footing: distanceWithinLookback returns the smallest
+      // distance over the window, so `< hitRadius` accepts exactly the set the old boolean
+      // wasWithinRadius accepted while also ranking the candidates.
+      const lookbackCandidates: StealCandidate[] = []
       for (const addr of getActivePlayerAddresses()) {
         if (addr === projectile.firedBy) continue
-        if (wasWithinRadius(addr, projectilePos, hitRadius, LOOKBACK_MS)) {
-          hitAddr = addr; hitMode = 'lookback'; break
-        }
+        if (isFlagImmune(addr)) continue
+        lookbackCandidates.push({ addr, dist: distanceWithinLookback(addr, projectilePos, LOOKBACK_MS) })
       }
-    }
-    if (hitAddr && isFlagImmune(hitAddr)) {
-      console.log('[Server] 🛡️ Projectile ignored — player has flag immunity')
-      hitAddr = null
+      hitAddr = selectClosestCandidate(lookbackCandidates, hitRadius, projectile.firedBy).closestId
+      if (hitAddr) hitMode = 'lookback'
     }
     if (hitAddr) {
       const addr = hitAddr
@@ -1012,31 +1077,33 @@ export function shellServerSystem(dt: number): void {
 function handleOrbitRequest(playerId: string, startAngle: number = 0): void {
   const now = Date.now()
 
+  // Routine denials below are counted only (rejectionStats doctrine: count the routine,
+  // log the anomalous) — each shows up in the per-minute 🚫 line keyed requestOrbit:*.
   if (!canUseBoomerangAbility(playerBoomerangColors.get(playerId), 'g')) {
-    console.log('[Server] Orbit denied: green boomerang not equipped')
+    recordRejection(rejectionCounts, 'requestOrbit:not-equipped')
     return
   }
   if (!Number.isFinite(startAngle)) startAngle = 0
 
   const lastOrb = lastOrbitTime.get(playerId) ?? 0
   if (now - lastOrb < ORBIT_COOLDOWN_SEC * 1000) {
-    console.log('[Server] Orbit denied: cooldown active')
+    recordRejection(rejectionCounts, 'requestOrbit:cooldown')
     return
   }
 
   if (activeOrbits.some(o => o.playerId === playerId)) {
-    console.log('[Server] Orbit denied: already orbiting')
+    recordRejection(rejectionCounts, 'requestOrbit:already-active')
     return
   }
 
   if (activeProjectiles.some(p => p.firedBy === playerId)) {
-    console.log('[Server] Orbit denied: projectile in flight')
+    recordRejection(rejectionCounts, 'requestOrbit:shell-in-flight')
     return
   }
 
   const playerPos = getPlayerPosition(playerId)
   if (!playerPos) {
-    console.log('[Server] Orbit denied: player position not found')
+    recordRejection(rejectionCounts, 'requestOrbit:no-position')
     return
   }
 
@@ -1167,8 +1234,14 @@ export function registerCombatHandlers(): void {
       if (!context) return
       // Math.min propagates NaN — an unchecked NaN maxDist would make the shell's
       // travel-distance termination check permanently false.
-      if (!Number.isFinite(data.maxDist)) return
+      if (!Number.isFinite(data.maxDist)) {
+        // Anomalous: an honest client never sends a non-finite distance. Log immediately.
+        recordRejection(rejectionCounts, 'reportShellWallDist:non-finite')
+        console.log('[Server] 🚫 reportShellWallDist rejected — non-finite from', context.from.slice(0, 8))
+        return
+      }
       const from = context.from.toLowerCase()
+      let matched = false
       for (const projectile of activeProjectiles) {
         if (projectile.firedBy === from && !projectile.wallDistReported) {
           const oldMax = projectile.maxDistance
@@ -1176,9 +1249,12 @@ export function registerCombatHandlers(): void {
           if (projectile.maxDistance < oldMax) projectile.hitWall = true
           projectile.wallDistReported = true
           console.log('[Server] 🎯 Projectile wall distance updated:', data.maxDist.toFixed(1), 'm')
+          matched = true
           break
         }
       }
+      // Routine: the shell can return/expire while the report is in flight.
+      if (!matched) recordRejection(rejectionCounts, 'reportShellWallDist:no-match')
     } catch (err) { console.error('[Server] ❌ reportShellWallDist handler error:', err) }
   })
   room.onMessage('reportShellGroundY', (data, context) => {
@@ -1186,7 +1262,12 @@ export function registerCombatHandlers(): void {
       if (!context) return
       // Finite-check every client float: Math.max propagates NaN, and a NaN groundY
       // makes the landing comparison permanently false — the shell would never land.
-      if (!Number.isFinite(data.shellX) || !Number.isFinite(data.shellZ) || !Number.isFinite(data.groundY)) return
+      if (!Number.isFinite(data.shellX) || !Number.isFinite(data.shellZ) || !Number.isFinite(data.groundY)) {
+        // Anomalous: an honest client never sends non-finite floats. Log immediately.
+        recordRejection(rejectionCounts, 'reportShellGroundY:non-finite')
+        console.log('[Server] 🚫 reportShellGroundY rejected — non-finite from', context.from.slice(0, 8))
+        return
+      }
       const from = context.from.toLowerCase()
       let closest: ActiveProjectile | null = null
       let closestDist = 5
@@ -1209,6 +1290,9 @@ export function registerCombatHandlers(): void {
         // it — cap the raise or a hostile report could park the shell in the sky.
         const shellY = Transform.get(closest.entity).position.y
         closest.groundY = Math.min(shellY + 1, Math.max(0, data.groundY))
+      } else {
+        // Routine: every observer raycasts the broadcast shells; only the owner matches.
+        recordRejection(rejectionCounts, 'reportShellGroundY:no-match')
       }
     } catch (err) { console.error('[Server] ❌ reportShellGroundY handler error:', err) }
   })
@@ -1217,7 +1301,12 @@ export function registerCombatHandlers(): void {
       if (!context) return
       // Finite-check every client float — a NaN targetY poisons the fall loop's
       // comparison (never true) and the trap falls forever, neutralized.
-      if (!Number.isFinite(data.bananaX) || !Number.isFinite(data.bananaZ) || !Number.isFinite(data.groundY)) return
+      if (!Number.isFinite(data.bananaX) || !Number.isFinite(data.bananaZ) || !Number.isFinite(data.groundY)) {
+        // Anomalous: an honest client never sends non-finite floats. Log immediately.
+        recordRejection(rejectionCounts, 'reportBananaGroundY:non-finite')
+        console.log('[Server] 🚫 reportBananaGroundY rejected — non-finite from', context.from.slice(0, 8))
+        return
+      }
       const from = context.from.toLowerCase()
       let closest: ActiveTrap | null = null
       let closestDist = 3
@@ -1235,9 +1324,11 @@ export function registerCombatHandlers(): void {
           closest = trap
         }
       }
-      // Finite-check the client float — a NaN targetY would poison the fall loop
-      if (!Number.isFinite(data.groundY)) return
-      if (closest && !closest.groundResolved) {
+      // Routine: every observer's client raycasts on bananaDropped, but only the owner's
+      // trap matches — N-1 refusals per drop, same shape as reportGroundY:not-dropper.
+      if (!closest || closest.groundResolved) {
+        recordRejection(rejectionCounts, 'reportBananaGroundY:no-match')
+      } else {
         // Clamp BOTH ways: floor via dropFloorY (interior-aware — a missed client
         // raycast reports groundY=0, which is ~50m under the lifted main-terrain map
         // but valid for interior-room drops), and cap the raise just above the
@@ -1262,11 +1353,13 @@ export function registerCombatHandlers(): void {
       if (!Number.isFinite(data.groundY)) return
       const from = context.from.toLowerCase()
       const bombId = data.bombId
-      if (!Number.isFinite(data.groundY)) return
       const bomb = activeBombs.find(b => b.bombId === bombId)
-      if (bomb && !bomb.groundResolved) {
+      // Routine: late reports after the bomb exploded, or a repeat after first-report-wins.
+      if (!bomb || bomb.groundResolved) {
+        recordRejection(rejectionCounts, 'reportBombGroundY:no-match')
+      } else {
         // Owner-only: bomb ids are broadcast, and groundResolved is first-report-wins.
-        if (bomb.droppedBy !== from) return
+        if (bomb.droppedBy !== from) { recordRejection(rejectionCounts, 'reportBombGroundY:not-owner'); return }
         // Clamp BOTH ways: floor via dropFloorY (interior-aware — a missed client
         // raycast reports groundY=0, which for main-terrain drops both sinks the bomb
         // under the map AND fakes a 50m "impact explosion" drop), and cap the raise
@@ -1309,7 +1402,9 @@ export function registerCombatHandlers(): void {
       if (!context) return
       const from = context.from.toLowerCase()
       const idx = activeOrbits.findIndex(o => o.playerId === from)
-      if (idx === -1) return
+      // Routine: the orbit can expire or hit a player server-side while the client's
+      // wall report is in flight. Counted so a silent refusal is still visible.
+      if (idx === -1) { recordRejection(rejectionCounts, 'orbitHitWall:no-orbit'); return }
       console.log('[Server] 🌀 Orbit hit wall for', from.slice(0, 8), '— ending orbit')
       room.send('orbitEnded', { playerId: from })
       activeOrbits.splice(idx, 1)
@@ -1318,25 +1413,46 @@ export function registerCombatHandlers(): void {
   room.onMessage('chargeBurnout', (data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
-    if (!canUseBoomerangAbility(playerBoomerangColors.get(from), 'b') || Date.now() - (lastChargeStopTime.get(from) ?? 0) > 1000) return
+    // Not-armed covers both halves (not entitled, or no chargeStop within the 1s window) —
+    // routine when the stop relay races the burnout, hostile when the sender never charged.
+    if (!canUseBoomerangAbility(playerBoomerangColors.get(from), 'b') || Date.now() - (lastChargeStopTime.get(from) ?? 0) > 1000) {
+      recordRejection(rejectionCounts, 'chargeBurnout:not-armed')
+      return
+    }
     lastChargeStopTime.delete(from)
-    if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.z)) return
+    if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.z)) {
+      // Anomalous: an honest client never sends non-finite coords. Log immediately.
+      recordRejection(rejectionCounts, 'chargeBurnout:non-finite')
+      console.log('[Server] 🚫 chargeBurnout rejected — non-finite coords from', from.slice(0, 8))
+      return
+    }
     const playerPos = getPlayerPosition(from)
-    if (!playerPos || Vector3.distance(playerPos, Vector3.create(data.x, data.y, data.z)) > 10) return
+    if (!playerPos || Vector3.distance(playerPos, Vector3.create(data.x, data.y, data.z)) > 10) {
+      recordRejection(rejectionCounts, 'chargeBurnout:too-far')
+      return
+    }
     room.send('hitVfx', { x: data.x, y: data.y, z: data.z })
   })
   room.onMessage('reportBoost', (_data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
-    if (!consumePendingMushroomBoost(from)) return
+    // Routine on a duplicate report; a sustained count with no mushroom pickups alongside
+    // means a client is fabricating boosts.
+    if (!consumePendingMushroomBoost(from)) { recordRejection(rejectionCounts, 'reportBoost:no-grant'); return }
     room.send('playerBoosted', { playerId: from, tier: 'mushroom', duration: 20 })
   })
   room.onMessage('chargeStart', (data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
     const now = Date.now()
-    if (!canUseBoomerangAbility(playerBoomerangColors.get(from), 'b') || chargingPlayers.has(from)) return
-    if (now - (lastChargeRelayTime.get(from) ?? 0) < CHARGE_RELAY_MIN_INTERVAL_MS) return
+    if (!canUseBoomerangAbility(playerBoomerangColors.get(from), 'b') || chargingPlayers.has(from)) {
+      recordRejection(rejectionCounts, 'chargeStart:refused')
+      return
+    }
+    if (now - (lastChargeRelayTime.get(from) ?? 0) < CHARGE_RELAY_MIN_INTERVAL_MS) {
+      recordRejection(rejectionCounts, 'chargeStart:rate-limited')
+      return
+    }
     chargingPlayers.add(from)
     lastChargeRelayTime.set(from, now)
     room.send('playerChargeStart', { playerId: from, t: data.t || 0 })
@@ -1345,7 +1461,7 @@ export function registerCombatHandlers(): void {
     if (!context) return
     const from = context.from.toLowerCase()
     const now = Date.now()
-    if (!chargingPlayers.has(from)) return
+    if (!chargingPlayers.has(from)) { recordRejection(rejectionCounts, 'chargeStop:not-charging'); return }
     chargingPlayers.delete(from)
     lastChargeRelayTime.set(from, now)
     lastChargeStopTime.set(from, now)

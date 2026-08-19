@@ -2,6 +2,7 @@ import { engine, Transform, InputModifier, AudioSource } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
+import { DROWN_RESPAWN_DURATION_SEC } from '../shared/constants'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { isSpectatorMode, exitSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
@@ -51,7 +52,9 @@ let drownBarVisible = false
 let drownCooldown = 0
 let drownSoundEntity: ReturnType<typeof engine.addEntity> | null = null
 let respawnDelay = 0
-const RESPAWN_DURATION = 10.0 // total respawn time
+// Shared, not module-local: the server derives its steal exclusion from this (see
+// DROWN_RESPAWN_DURATION_SEC) and a local copy is what let the two drift apart.
+const RESPAWN_DURATION = DROWN_RESPAWN_DURATION_SEC // total respawn time
 const DROWN_FADE_IN = 1.5 // seconds to fade to black
 const DROWN_FADE_OUT = 0.8 // seconds to fade back at end (starts after countdown reaches 1)
 let outOfWaterTimer = 3.0 // time spent out of water (start fully charged so no delay at scene load)

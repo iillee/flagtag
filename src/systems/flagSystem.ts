@@ -29,10 +29,10 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { SCENE_FLOOR_Y } from '../shared/constants'
 import { room } from '../shared/messages'
-import { computeFallY, FLAG_GRAVITY } from '../shared/flagFall'
+import { computeFallY, fastForwardElapsedSec, FLAG_GRAVITY } from '../shared/flagFall'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
-import { setConfirmedCarrier, clearConfirmedCarrier, applyServerHoldTime } from '../gameState/flagHoldTime'
+import { setConfirmedCarrier, clearConfirmedCarrier } from '../gameState/flagHoldTime'
 
 // Visual clone system for smooth flag carrying
 //
@@ -272,22 +272,14 @@ let dropSoundEntity: Entity | null = null
 // sound. Scoping fixes the cross-player half completely: a value naming carrier X can never
 // suppress Y's genuine pickup.
 //
-// The same-player half is bounded rather than eliminated: two of the four resets require
+// The same-player half is bounded rather than eliminated: two of the three resets require
 // observing a drop (dropForced, and the CRDT not-carried edge), which a stalled Flag CRDT loses
-// for a drop that sends no dropForced (a voluntary drop, or the lightning drop). A third is the
-// pending-pickup rollback timeout. The fourth is the flagHeartbeat handler, which
-// clears the guard whenever the server reports this player is no longer the carrier — so the
-// residual exposure is at most one heartbeat interval (~1s), not that player's next pickup.
+// for a drop that sends no dropForced (a voluntary drop, or the lightning drop). The third is
+// the pending-pickup rollback timeout. ACCEPTED REGRESSION of the 2026-08-19 flagHeartbeat
+// removal: the handler that cleared this guard when the server reported the player was no
+// longer the carrier is gone, so a voluntary/lightning drop under a fully stalled Flag CRDT
+// can leave the guard armed and silence that one player's next pickup chime. Sound-only.
 let pickupSoundPlayedForCarrier = ''
-// Minimum timestamp before flagHeartbeat is allowed to clear the guard.
-// Fixes a mobile-only double chime: high-RTT mobile clients often see the
-// pending-pickup window (700ms) expire BEFORE the server's pickupConfirmed
-// arrives. Once expired, an intervening flagHeartbeat (which still reports
-// the pre-pickup state) satisfies the clear condition and wipes the guard
-// — then pickupConfirmed replays the sound. Extending the local guard past
-// typical mobile RTT (3s) keeps Phase 1 and Phase 2 deduped.
-let pickupSoundGuardMinUntil = 0
-const PICKUP_SOUND_GUARD_MIN_MS = 3000
 // Suppresses the CRDT-edge drop sound for a manual drop this client already sounded locally.
 //
 // TIME-BOUNDED rather than a sticky boolean, and deliberately not carrier-scoped like
@@ -317,8 +309,24 @@ let confirmedGraceUntil = 0                      // Timestamp: don't let safety 
 let confirmedGraceCarrier = ''                   // Who the server confirmed as carrier
 const CONFIRMED_GRACE_MS = 3000                  // 3s grace — CRDT should arrive well within this
 
+// A pickupConfirmed naming SOMEONE ELSE briefly suppresses our own auto-pickup: the server
+// just accepted a pickup, so the flag our CRDT still shows as Dropped is already carried,
+// and every request we fire in that window is a guaranteed "flag state is carried" reject
+// (playtest 2026-08-19: 3-player reject bursts within 67ms of each contested pickup).
+// Deliberately SHORTER than CONFIRMED_GRACE_MS: a carrier who voluntarily re-drops right
+// after picking up must not find everyone else's auto-pickup parked for the full 3s grace.
+// A CRDT stalled past this window resumes retrying at the throttled cadence (500ms requests,
+// 2.5s penalty after each rollback) until the CRDT catches up — with the flagHeartbeat
+// removed (2026-08-19) there is no server-truth channel left to suppress those retries.
+let lastOtherPickupConfirmedMs = 0
+const OTHER_PICKUP_SUPPRESS_MS = 1500
+
 // Listen for fast server confirmation (arrives before CRDT sync)
 room.onMessage('pickupConfirmed', (data) => {
+  const localUserId = getPlayerData()?.userId?.toLowerCase()
+  if (data.playerId && data.playerId !== localUserId) {
+    lastOtherPickupConfirmedMs = Date.now()
+  }
   confirmedCarrierId = data.playerId
   // Start grace period — trust this over CRDT until CRDT catches up
   confirmedGraceUntil = Date.now() + CONFIRMED_GRACE_MS
@@ -354,6 +362,10 @@ room.onMessage('dropForced', (data) => {
   confirmedGraceCarrier = ''
   clearConfirmedCarrier()
   pendingPickupUntil = 0
+  // A force-drop is broadcast proof the flag is free again — clear the someone-else-picked-up
+  // suppression too, or a carrier force-dropped within OTHER_PICKUP_SUPPRESS_MS of their
+  // pickup (the carrier-death drop can do this) leaves everyone needlessly parked on a timer.
+  lastOtherPickupConfirmedMs = 0
   pickupSoundPlayedForCarrier = ''  // nobody carries — next pickup should sound
   // Hide clone + shield, restore flag visual
   hideClone()
@@ -382,7 +394,7 @@ room.onMessage('dropForced', (data) => {
  * a carried one (with a carrier id) over whatever happens to iterate first: after a
  * server-side flag recreation a stale/orphaned Flag entity can be ordered first, and a
  * Carried entity is the one actually driving clone visuals. Every order-sensitive reader
- * (heartbeat, drop cooldown, steal check, clone state machine) must go through this so
+ * (drop cooldown, steal check, clone state machine) must go through this so
  * they all agree on which entity is authoritative.
  */
 function getEffectiveFlag(): ReturnType<typeof Flag.get> | null {
@@ -394,117 +406,12 @@ function getEffectiveFlag(): ReturnType<typeof Flag.get> | null {
   return first
 }
 
-// ── Flag heartbeat: periodic server broadcast to fix stale CRDT visuals ──
-let heartbeatMismatchCount = 0
-// After the heartbeat corrects a stale-CRDT visual, it becomes the authority for a short
-// window. Without this, the per-frame safety nets below read CRDT directly and revert the
-// correction on the very next frame (the heartbeat's whole purpose is defeated — this is the
-// client half of the "flag clone stuck above head, survives round resets" bug). The authority
-// yields the instant CRDT moves away from the stale value it was correcting (i.e. CRDT is
-// fresh again — either it caught up, or a new legitimate pickup/drop happened).
-let heartbeatAuthorityUntil = 0
-let heartbeatAuthorityState: FlagState | null = null
-let heartbeatAuthorityCarrier = ''
-let heartbeatStaleState: FlagState | null = null
-let heartbeatStaleCarrier = ''
-// Must outlast TWO heartbeat intervals, not one: a re-correction needs 2 consecutive
-// mismatched heartbeats (2s), so a shorter authority window leaves a gap where the
-// safety nets revert to the stale CRDT and the orphaned clone flickers back.
-const HEARTBEAT_AUTHORITY_MS = 2500
-room.onMessage('flagHeartbeat', (data) => {
-  const hbState = data.state as FlagState
-  const hbCarrier = (data.carrierId || '').toLowerCase()
-
-  // Note: the heartbeat also carries the carrier's authoritative world position in x/y/z.
-  // Nothing on the client reads it since the steal predictor was removed (the server owns
-  // proximity steals now); the fields stay in the payload so the message shape is unchanged.
-
-  // Authoritative hold total rides the heartbeat (WS) — feed the scoreboard so it can
-  // re-anchor even when PlayerFlagHoldTime CRDT updates are stalled. Reported on EVERY
-  // heartbeat (empty carrier = "nobody carries") so a stale CRDT Carried entity can't
-  // keep inflating the ex-carrier's interpolated row. Guarded so an older server
-  // without the field is harmless.
-  if (typeof data.carrierHoldSeconds === 'number') {
-    applyServerHoldTime(hbState === FlagState.Carried ? hbCarrier : '', data.carrierHoldSeconds, data.roundId)
-  }
-
-  // Release the pickup-sound guard when the server says this player is no longer the carrier.
-  // The other resets require the client to OBSERVE a drop, and a stalled Flag CRDT plus a drop
-  // that sends no dropForced (voluntary drop, lightning drop) loses that edge — which would
-  // leave the guard naming a player and silence their own next pickup.
-  //
-  // Skipped while a pickup is in flight. A heartbeat is composed up to a second before it
-  // arrives, so during an optimistic Phase-1 pickup it still reports the PRE-pickup state;
-  // clearing on that would un-arm the guard before pickupConfirmed lands and play the sound a
-  // SECOND time — the exact duplicate this guard exists to prevent. The condition this reset
-  // targets (a drop the client never observed) is by definition at least one heartbeat old, so
-  // deferring past the in-flight window costs it nothing.
-  const hbNow = Date.now()
-  if (pickupSoundPlayedForCarrier && pendingPickupUntil <= hbNow && hbNow >= confirmedGraceUntil &&
-      hbNow >= pickupSoundGuardMinUntil &&
-      (hbState !== FlagState.Carried || hbCarrier !== pickupSoundPlayedForCarrier)) {
-    pickupSoundPlayedForCarrier = ''
-  }
-
-  // Read current CRDT state through getEffectiveFlag (prefers a carried entity — the one
-  // actually driving clone visuals), so the heartbeat compares against the same entity
-  // every other order-sensitive reader uses.
-  const effFlag = getEffectiveFlag()
-  const crdtState: FlagState | null = effFlag ? effFlag.state : null
-  const crdtCarrier = effFlag ? effFlag.carrierPlayerId : ''
-
-  // Only act if CRDT disagrees with the heartbeat (stale)
-  if (crdtState === null) return
-  const stateMatch = crdtState === hbState
-  const carrierMatch = crdtCarrier === hbCarrier
-  if (stateMatch && carrierMatch) {
-    // CRDT matches server — reset mismatch counter and drop any authority. Clearing it here
-    // is what lets a legitimate event that recreates the exact stale value recover: value-based
-    // yield can't distinguish "stuck at X" from "changed back to X", but a heartbeat that finds
-    // CRDT already correct proves the override is no longer needed.
-    heartbeatMismatchCount = 0
-    heartbeatAuthorityState = null
-    return
-  }
-
-  // Don't override during pending pickup or grace period
-  if (pendingPickupUntil > 0 || Date.now() < confirmedGraceUntil) return
-
-  // Require 2 consecutive mismatches (about 2s) before correcting —
-  // brief CRDT propagation delays are normal, don't fight them.
-  heartbeatMismatchCount++
-  if (heartbeatMismatchCount < 2) {
-    console.log('[Flag] 💓 Heartbeat mismatch #' + heartbeatMismatchCount + ': CRDT says', crdtState, '/', crdtCarrier.slice(0, 8),
-      '— server says', hbState, '/', hbCarrier.slice(0, 8), '— waiting for next heartbeat')
-    return
-  }
-
-  console.log('[Flag] 💓 Heartbeat correction (stale ' + heartbeatMismatchCount + 'x): CRDT says', crdtState, '/', crdtCarrier.slice(0, 8),
-    '— server says', hbState, '/', hbCarrier.slice(0, 8))
-  heartbeatMismatchCount = 0
-
-  // Become authoritative so the per-frame safety nets defer to the server value instead of
-  // reverting this correction. Remember the stale CRDT value so we can yield once CRDT moves.
-  heartbeatAuthorityUntil = Date.now() + HEARTBEAT_AUTHORITY_MS
-  heartbeatAuthorityState = hbState
-  heartbeatAuthorityCarrier = hbCarrier
-  heartbeatStaleState = crdtState
-  heartbeatStaleCarrier = crdtCarrier
-
-  // Fix clone + flag visibility only — shield is driven by CRDT state changes
-  if (hbState === FlagState.Carried && hbCarrier) {
-    if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: false })
-    if (carryCloneCarrierId !== hbCarrier || !cloneVisible) {
-      showClone(hbCarrier)
-    }
-  } else {
-    // Server says not carried — clear any stale clone
-    if (cloneVisible) {
-      hideClone()
-    }
-    if (flagVisualEntity) VisibilityComponent.createOrReplace(flagVisualEntity, { visible: true })
-  }
-})
+// The flagHeartbeat broadcast, its handler, and the heartbeat-authority machinery were
+// removed 2026-08-19 (the last surviving heartbeat channel, after the position and ghost
+// heartbeats went on 2026-08-03). The CRDT Flag component and the pickupConfirmed /
+// dropForced fast-path messages are the only flag-state inputs now. ACCEPTED REGRESSIONS:
+// a Flag CRDT stall has no corrector — a stale clone/banner stays wrong until CRDT flows
+// again — and the scoreboard loses its WS re-anchor (see gameState/flagHoldTime.ts).
 
 let lastPickupSoundMs = 0
 const PICKUP_SOUND_COOLDOWN_MS = 250
@@ -591,16 +498,36 @@ interface FlagVisualFall {
   serverDropTimeMs: number  // idempotency key — rebroadcasts share this
   x: number
   z: number
+  // Drop-origin Y, kept so raycast RETRIES probe from the drop point. Retrying from
+  // currentY put the ray under the terrain in the exact case retries exist for: a late
+  // join whose fast-forwarded currentY already sits at the SCENE_FLOOR_Y fallback.
+  startY: number
   currentY: number
   velocity: number
   targetY: number
   falling: boolean
   groundRayEntity: Entity | null
   groundResolved: boolean
+  // Raycast retries left after an empty result (colliders still streaming in). Retrying
+  // beats accepting the SCENE_FLOOR_Y fallback: the fallback sinks the visual under the
+  // map while the server keeps validating pickups at drop height.
+  rayRetriesLeft: number
 }
 let flagVisualFall: FlagVisualFall | null = null
 const FLAG_LOCAL_GRAVITY = 15  // matches server FLAG_GRAVITY for pickup timing parity
 const FLAG_GROUND_OFFSET = 0.2  // rest this far above ground so idle bob doesn't clip terrain
+/** Downward ground probe for the flag fall — one shape for the initial ray and retries. */
+function fireFallGroundRay(x: number, y: number, z: number): Entity {
+  const ray = engine.addEntity()
+  Transform.create(ray, { position: Vector3.create(x, y + 0.5, z) })
+  Raycast.create(ray, {
+    direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
+    maxDistance: 200,
+    queryType: RaycastQueryType.RQT_HIT_FIRST,
+    continuous: false
+  })
+  return ray
+}
 
 room.onMessage('flagFallStart', (data) => {
   // Bomb-pattern: use this as the drop trigger + coords. Ignore data.targetY
@@ -620,31 +547,30 @@ room.onMessage('flagFallStart', (data) => {
   }
 
   // Fire a downward raycast from just above the drop point (bomb does +0.5).
-  const rayEntity = engine.addEntity()
-  Transform.create(rayEntity, {
-    position: Vector3.create(data.startX, data.startY + 0.5, data.startZ)
-  })
-  Raycast.create(rayEntity, {
-    direction: { $case: 'globalDirection', globalDirection: Vector3.create(0, -1, 0) },
-    maxDistance: 200,
-    queryType: RaycastQueryType.RQT_HIT_FIRST,
-    continuous: false
-  })
+  const rayEntity = fireFallGroundRay(data.startX, data.startY, data.startZ)
 
+  // Fast-forward a late start — rule and clamps live in the shared, unit-tested flagFall
+  // module (see fastForwardElapsedSec for why raw elapsed is discounted first).
+  const elapsedSec = fastForwardElapsedSec(Date.now(), data.dropTimeMs)
   flagVisualFall = {
     serverDropTimeMs: data.dropTimeMs,
     x: data.startX,
+    startY: data.startY,
     z: data.startZ,
-    currentY: data.startY,
-    velocity: 0,
+    // Through the shared analytic helper — the same formula the server validates mid-fall
+    // pickups with (authoritativeFlagPos → computeFallY) — so the two cannot drift.
+    currentY: computeFallY(data.startY, SCENE_FLOOR_Y, 0, elapsedSec * 1000, FLAG_LOCAL_GRAVITY),
+    velocity: FLAG_LOCAL_GRAVITY * elapsedSec,
     // Fallback target until raycast returns — SCENE_FLOOR_Y is the safe minimum.
     // If raycast returns before we fall this far, targetY gets refined upward.
     targetY: SCENE_FLOOR_Y,
     falling: true,
     groundRayEntity: rayEntity,
-    groundResolved: false
+    groundResolved: false,
+    rayRetriesLeft: 2
   }
-  console.log('[Flag] 🚩⬇️ local fall started at Y=', data.startY.toFixed(1))
+  console.log('[Flag] 🚩⬇️ local fall started at Y=', data.startY.toFixed(1),
+    elapsedSec > 0.5 ? `(fast-forwarded ${elapsedSec.toFixed(1)}s)` : '')
 })
 
 room.onMessage('flagLanded', (_data) => {
@@ -689,17 +615,33 @@ function updateFlagVisualFall(dt: number): void {
   if (flagVisualFall.groundRayEntity !== null) {
     const result = RaycastResult.getOrNull(flagVisualFall.groundRayEntity)
     if (result) {
-      if (result.hits.length > 0) {
+      const hit = result.hits.length > 0
+      try { engine.removeEntity(flagVisualFall.groundRayEntity) } catch { /* already gone */ }
+      flagVisualFall.groundRayEntity = null
+      if (!hit && flagVisualFall.rayRetriesLeft > 0) {
+        // Empty result usually means colliders were still streaming in — re-fire before
+        // accepting the under-the-map fallback. From the DROP ORIGIN, not currentY: by the
+        // time a retry fires on a late join, currentY has often already fallen to the
+        // SCENE_FLOOR_Y fallback, and a ray from under the terrain misses by construction.
+        flagVisualFall.rayRetriesLeft--
+        flagVisualFall.groundRayEntity = fireFallGroundRay(flagVisualFall.x, flagVisualFall.startY, flagVisualFall.z)
+        return
+      }
+      if (hit) {
         // Lift slightly above ground so the flag's base doesn't clip through
         // terrain during the idle bob (amplitude 0.15m, so 0.2m clears it).
         flagVisualFall.targetY = Math.max(SCENE_FLOOR_Y, result.hits[0].position!.y) + FLAG_GROUND_OFFSET
+        // Report ground Y to server for pickup validation (same message the old
+        // system used; server accepts it as a target-lowering hint).
+        //
+        // ONLY on a real hit. A missed raycast used to report the SCENE_FLOOR_Y fallback
+        // (y=48), which the server clamps to 49.5 — below its 49.58 water line — so a
+        // spurious miss (collider gap, still-streaming geometry) "drowned" a flag sitting
+        // on dry land and respawned it at base 3s later. On a miss the server keeps its
+        // own dropY-derived target, which is strictly less wrong than a fabricated floor.
+        room.send('reportGroundY', { y: flagVisualFall.targetY })
       }
       flagVisualFall.groundResolved = true
-      try { engine.removeEntity(flagVisualFall.groundRayEntity) } catch { /* already gone */ }
-      flagVisualFall.groundRayEntity = null
-      // Report ground Y to server for pickup validation (same message the old
-      // system used; server accepts it as a target-lowering hint).
-      room.send('reportGroundY', { y: flagVisualFall.targetY })
       // If we've already fallen past the ground (raycast came late), snap up.
       if (flagVisualFall.currentY <= flagVisualFall.targetY) {
         flagVisualFall.currentY = flagVisualFall.targetY
@@ -880,7 +822,7 @@ export function flagClientSystem(dt: number): void {
   if (userId && prevFlagState === FlagState.Carried && prevCarrierId === userId) {
     // "No longer carried" must mean NO Flag entity is carried. getEffectiveFlag prefers a
     // carried entity, so it returns one iff any exists — a stale/orphaned entity ordered
-    // first can't decide this (same duplicate-entity hazard as the heartbeat).
+    // first can't decide this (the duplicate-entity hazard getEffectiveFlag exists for).
     const eff = getEffectiveFlag()
     if (!(eff && eff.state === FlagState.Carried && eff.carrierPlayerId)) {
       lastDropTimeMs = Date.now()
@@ -897,8 +839,19 @@ export function flagClientSystem(dt: number): void {
         break
       }
     }
+    // The server already confirmed US as carrier but CRDT hasn't caught up — same trust the
+    // manual-drop path extends. Without it we keep re-requesting our own completed pickup.
+    if (!amCarrying && now < confirmedGraceUntil && confirmedGraceCarrier === userId) {
+      amCarrying = true
+    }
 
-    if (!amCarrying && !isLightningRespawning() && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS && now - lastWitnessedDropTimeMs >= WITNESSED_DROP_COOLDOWN_MS) {
+    // Server-truth suppression on top of the CRDT view: someone else's pickup was just
+    // confirmed (see OTHER_PICKUP_SUPPRESS_MS), so every request in this window is a
+    // guaranteed reject against a flag someone provably carries. (This used to have a second
+    // layer — the heartbeat authority — removed with the flagHeartbeat on 2026-08-19.)
+    const otherPickupJustConfirmed = now - lastOtherPickupConfirmedMs < OTHER_PICKUP_SUPPRESS_MS
+
+    if (!amCarrying && !otherPickupJustConfirmed && !isLightningRespawning() && now - lastAutoPickupRequestMs >= AUTO_PICKUP_COOLDOWN_MS && now - lastDropTimeMs >= DROP_PICKUP_COOLDOWN_MS && now - lastWitnessedDropTimeMs >= WITNESSED_DROP_COOLDOWN_MS) {
       const myPos = Transform.get(engine.PlayerEntity).position
       for (const [flagEnt, flag] of engine.getEntitiesWith(Flag, Transform)) {
         if (flag.state === FlagState.Carried) continue
@@ -926,7 +879,6 @@ export function flagClientSystem(dt: number): void {
             // Record only on an audible play — see the pickupConfirmed handler.
             if (playPickupSound('Phase1:autoPickup')) {
               pickupSoundPlayedForCarrier = userId
-              pickupSoundGuardMinUntil = now + PICKUP_SOUND_GUARD_MIN_MS
             }
             showShieldForPlayer(userId)
             setShieldAlpha(userId, 1.0)
@@ -1014,8 +966,7 @@ export function flagClientSystem(dt: number): void {
 
   // Handle flag state changes with clone system. Read the flag through getEffectiveFlag so
   // a stale/orphaned duplicate Flag entity can't drive clone create/remove, sounds, or
-  // prev-state tracking — and so the heartbeat-authority yield below compares against the
-  // same entity the heartbeat handler read when it recorded the stale value.
+  // prev-state tracking.
   const flag = getEffectiveFlag()
   if (flag) {
     const stateChanged = prevFlagState !== null && prevFlagState !== flag.state
@@ -1119,20 +1070,11 @@ export function flagClientSystem(dt: number): void {
 
     // ── Safety nets (unconditional, run every frame) ──
 
-    // Prefer the heartbeat authority over raw CRDT while it's active. The authority yields
-    // the instant CRDT moves away from the stale value it was correcting — so a fresh
-    // pickup/drop (CRDT changes) immediately wins, but a *stuck* CRDT value can't keep
-    // re-showing an orphaned clone the heartbeat already cleared.
-    if (heartbeatAuthorityState !== null && Date.now() >= heartbeatAuthorityUntil) {
-      heartbeatAuthorityState = null
-    }
-    if (heartbeatAuthorityState !== null &&
-        (flag.state !== heartbeatStaleState || flag.carrierPlayerId !== heartbeatStaleCarrier)) {
-      // CRDT is no longer stuck at the stale value — it's fresh again, drop the authority.
-      heartbeatAuthorityState = null
-    }
-    const effState = heartbeatAuthorityState !== null ? heartbeatAuthorityState : flag.state
-    const effCarrier = heartbeatAuthorityState !== null ? heartbeatAuthorityCarrier : flag.carrierPlayerId
+    // Raw CRDT (via getEffectiveFlag above) is the only state source since the flagHeartbeat
+    // removal (2026-08-19) — there is no authority override left. A stuck CRDT value now
+    // drives the safety nets unchallenged until it flows again; that's the accepted trade.
+    const effState = flag.state
+    const effCarrier = flag.carrierPlayerId
 
     // 1. Flag IS carried — ensure clone is showing for the correct carrier
     if (effState === FlagState.Carried && effCarrier && !needsCloneCreate) {
@@ -1191,9 +1133,10 @@ export function flagClientSystem(dt: number): void {
       if (rayResult.hits.length > 0) {
         const groundY = rayResult.hits[0].position!.y
         room.send('reportGroundY', { y: groundY })
-      } else {
-        room.send('reportGroundY', { y: 0 })
       }
+      // No report on a miss. y=0 clamps server-side to 49.5 — below the 49.58 water line —
+      // so a missed raycast force-drowned the flag and respawned it at base. The server's
+      // own dropY-derived target is the better answer when this client saw no ground.
       engine.removeEntity(groundRayEntity)
       groundRayEntity = null
     }
@@ -1217,23 +1160,25 @@ export function flagClientSystem(dt: number): void {
     bt.scale = Vector3.create(scale, scale, scale)
   }
 
-  // Particle effects based on flag state and movement
-  for (const [flagEntity, flag] of engine.getEntitiesWith(Flag, Transform)) {
-    if (flag.state === FlagState.Carried && flag.carrierPlayerId) {
-      beaconSpawnAccum = 0 // No beacon particles when carried
-      
-    } else if (flag.state === FlagState.AtBase || flag.state === FlagState.Dropped) {
-      // Beacon particles floating up from flag when idle
-      const flagPos = Transform.get(flagEntity).position
-      beaconSpawnAccum += clampedDt
-      while (beaconSpawnAccum >= BEACON_SPAWN_INTERVAL) {
-        beaconSpawnAccum -= BEACON_SPAWN_INTERVAL
-        spawnBeaconPuff(flagPos)
+  // Particle effects based on flag state and movement. Through getEffectiveFlag (NOT the
+  // first-iterated entity — a stale duplicate ordered first must not drive this) and
+  // getFlagAuthoritativeWorldPos (NOT the synced entity's Transform, which the server
+  // deliberately freezes at drop-start for the whole analytic fall — puffs erupting
+  // mid-air at the drop point while the flag visibly fell away was one of the
+  // "beacon detached from the flag" sightings).
+  {
+    const flag = getEffectiveFlag()
+    if (flag && !flag.carrierPlayerId && (flag.state === FlagState.AtBase || flag.state === FlagState.Dropped)) {
+      const flagPos = getFlagAuthoritativeWorldPos()
+      if (flagPos) {
+        beaconSpawnAccum += clampedDt
+        while (beaconSpawnAccum >= BEACON_SPAWN_INTERVAL) {
+          beaconSpawnAccum -= BEACON_SPAWN_INTERVAL
+          spawnBeaconPuff(flagPos)
+        }
       }
-      
     } else {
-      beaconSpawnAccum = 0
+      beaconSpawnAccum = 0 // Carried (or no flag yet) — no beacon particles
     }
-    break
   }
 }

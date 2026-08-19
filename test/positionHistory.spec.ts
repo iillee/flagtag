@@ -5,6 +5,8 @@ import {
   pushSample,
   anySampleWithinRadius,
   wasEverWithinRadius,
+  nearestSampleDistance,
+  nearestDistanceEver,
 } from '../src/server/positionHistory'
 
 describe('position history time-windowed sample buffer', () => {
@@ -411,6 +413,107 @@ describe('choosing between position history and a live position', () => {
     it('should resolve the live position exactly once', () => {
       wasEverWithinRadius([], 0, 0, 0, RADIUS, 900, currentPos)
       expect(currentPos).toHaveBeenCalledTimes(1)
+    })
+  })
+})
+
+// The distance-returning siblings, added 2026-08-19 so combat's lag-forgiving pass can pick
+// the NEAREST in-window victim instead of whichever address the roster yielded first. The
+// acceptance contract must stay identical to the boolean form: `nearest < r` exactly when some
+// in-window sample lies within `r`.
+describe('nearest sample distance over a lookback window', () => {
+  let samples: PosSample[]
+
+  beforeEach(() => {
+    samples = [
+      { t: 1000, x: 10, y: 0, z: 0 },
+      { t: 1100, x: 3, y: 0, z: 0 },
+      { t: 1200, x: 7, y: 0, z: 0 },
+    ]
+  })
+
+  afterEach(() => {
+    samples = []
+  })
+
+  describe('when several samples sit inside the window', () => {
+    it('should report the smallest distance, not the newest sample', () => {
+      expect(nearestSampleDistance(samples, 0, 0, 0, 1000)).toBeCloseTo(3, 5)
+    })
+  })
+
+  describe('when the closest sample sits behind the cutoff', () => {
+    it('should ignore it and report the closest one still in the window', () => {
+      expect(nearestSampleDistance(samples, 0, 0, 0, 1200)).toBeCloseTo(7, 5)
+    })
+  })
+
+  describe('when the window holds no samples at all', () => {
+    it('should report Infinity so no radius can accept it', () => {
+      expect(nearestSampleDistance(samples, 0, 0, 0, 5000)).toBe(Infinity)
+    })
+  })
+
+  describe('when the cutoff is not a finite number', () => {
+    it('should fail closed with Infinity rather than scanning the whole buffer', () => {
+      expect(nearestSampleDistance(samples, 0, 0, 0, NaN)).toBe(Infinity)
+    })
+  })
+
+  // Distance is full 3D in the boolean form; the magnitude form must agree, or a player on a
+  // roof would rank as adjacent to someone below them.
+  describe('when a sample is directly above the target', () => {
+    beforeEach(() => {
+      samples = [{ t: 1000, x: 0, y: 6, z: 0 }]
+    })
+
+    it('should include the vertical offset in the distance', () => {
+      expect(nearestSampleDistance(samples, 0, 0, 0, 900)).toBeCloseTo(6, 5)
+    })
+  })
+})
+
+describe('nearest distance with live-position fallback', () => {
+  const CUTOFF = 900
+  let currentPos: jest.Mock<Point3 | null, []>
+
+  beforeEach(() => {
+    currentPos = jest.fn<Point3 | null, []>(() => ({ x: 4, y: 0, z: 0 }))
+  })
+
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  describe('when history exists', () => {
+    let distance: number
+
+    beforeEach(() => {
+      distance = nearestDistanceEver([{ t: 1000, x: 2, y: 0, z: 0 }], 0, 0, 0, CUTOFF, currentPos)
+    })
+
+    it('should measure against the history', () => {
+      expect(distance).toBeCloseTo(2, 5)
+    })
+
+    it('should not pay for resolving the live position', () => {
+      expect(currentPos).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('when no history exists', () => {
+    it('should fall back to the live position', () => {
+      expect(nearestDistanceEver(undefined, 0, 0, 0, CUTOFF, currentPos)).toBeCloseTo(4, 5)
+    })
+  })
+
+  describe('when neither history nor a live position is available', () => {
+    beforeEach(() => {
+      currentPos = jest.fn<Point3 | null, []>(() => null)
+    })
+
+    it('should report Infinity', () => {
+      expect(nearestDistanceEver(undefined, 0, 0, 0, CUTOFF, currentPos)).toBe(Infinity)
     })
   })
 })

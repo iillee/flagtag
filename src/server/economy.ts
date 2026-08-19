@@ -10,8 +10,11 @@ import {
 import {
   playerCoinBalances, playerUpgradeData, playerLifetimeWinsCache, playerLifetimeHoldTimeCache,
   playerBoomerangColors, deathPenaltyCooldowns, sessionDeaths,
-  coinStateEntity, getPlayerPosition
+  coinStateEntity, flagEntity, getPlayerPosition, rejectionCounts
 } from './serverState'
+import { recordRejection } from './rejectionStats'
+import { Flag, FlagState } from '../shared/components'
+import { handleDrop } from './flagLogic'
 import {
   CoinState, COIN_RESPAWN_INTERVAL_SEC,
   ROUND_PARTICIPATION_COINS, ROUND_PLACEMENT_BONUS, COINS_PER_HOLD_SECOND, MAX_COINS,
@@ -649,16 +652,19 @@ export function registerEconomyHandlers(): void {
 
     // Reject malformed ids — only deterministic position-hash ids are real coins.
     // Blocks arbitrary-string spam that would otherwise bloat the synced cooldown JSON.
-    if (!COIN_ID_RE.test(coinId)) return
+    // Counted, deliberately NOT logged: log lines are exactly what id spam would flood.
+    if (!COIN_ID_RE.test(coinId)) { recordRejection(rejectionCounts, 'requestCoinPickup:bad-id'); return }
 
+    // Routine: two players race the same coin, or a client retries before coinRespawned
+    // arrives. Counted only.
     if (coinCooldowns.has(coinId)) {
-      console.log('[Coins] Pickup rejected — coin already picked up:', coinId)
+      recordRejection(rejectionCounts, 'requestCoinPickup:already-picked')
       return
     }
 
     // Require a replicated server position — a bot spamming before its avatar syncs is rejected.
     const playerPos = getPlayerPosition(from)
-    if (!playerPos) return
+    if (!playerPos) { recordRejection(rejectionCounts, 'requestCoinPickup:no-position'); return }
 
     // Per-player sliding-window rate limit: a walking player picks up well under this,
     // but it caps both coin farming speed and CRDT write volume from a hostile client.
@@ -670,7 +676,7 @@ export function registerEconomyHandlers(): void {
     let times = coinPickupTimes.get(from)
     if (!times) { times = []; coinPickupTimes.set(from, times) }
     while (times.length > 0 && nowMs - times[0] > COIN_PICKUP_WINDOW_MS) times.shift()
-    if (times.length >= COIN_PICKUP_MAX_IN_WINDOW) return
+    if (times.length >= COIN_PICKUP_MAX_IN_WINDOW) { recordRejection(rejectionCounts, 'requestCoinPickup:rate-limited'); return }
     times.push(nowMs)
 
     // Validate against the real placed coins + require rough proximity. FAIL CLOSED
@@ -679,11 +685,16 @@ export function registerEconomyHandlers(): void {
     // for the whole init window. The client retries a rejected pickup on its own timer.
     const registry = getKnownCoinPositions()
     if (!registry) {
-      console.log('[Coins] Pickup rejected — coin registry not ready yet:', coinId, 'from', from.slice(0, 8))
+      // Boot-window transient (fail-closed by design); a registry that NEVER readies shows
+      // as this counter persisting across intervals, which is signal enough.
+      recordRejection(rejectionCounts, 'requestCoinPickup:registry-not-ready')
       return
     }
     const coinPos = registry.get(coinId)
     if (!coinPos) {
+      // Anomalous: shape-valid id that no placed coin owns — fabrication or registry drift.
+      // Log immediately, with the id, so the offending coin/client is identifiable.
+      recordRejection(rejectionCounts, 'requestCoinPickup:unknown-id')
       console.log('[Coins] Pickup rejected — unknown coin id:', coinId, 'from', from.slice(0, 8))
       return
     }
@@ -691,7 +702,9 @@ export function registerEconomyHandlers(): void {
     const dy = playerPos.y - coinPos.y
     const dz = playerPos.z - coinPos.z
     if (dx * dx + dy * dy + dz * dz > COIN_SERVER_PICKUP_RADIUS * COIN_SERVER_PICKUP_RADIUS) {
-      console.log('[Coins] Pickup rejected — too far from coin:', coinId, 'from', from.slice(0, 8))
+      // The coin-side "movement the server does not accept" — client at the coin, server
+      // view elsewhere. Counted only; the 16m radius already absorbs honest lag.
+      recordRejection(rejectionCounts, 'requestCoinPickup:too-far')
       return
     }
 
@@ -857,9 +870,23 @@ export function registerEconomyHandlers(): void {
       const from = context.from.toLowerCase()
       const now = Date.now()
       const lastDeath = deathPenaltyCooldowns.get(from) ?? 0
-      if (now - lastDeath < 3000) return
+      // Routine: duplicate reports within one death sequence. Counted so a client
+      // hammering fake deaths is still visible in aggregate.
+      if (now - lastDeath < 3000) { recordRejection(rejectionCounts, 'deathPenalty:duplicate'); return }
       deathPenaltyCooldowns.set(from, now)
       sessionDeaths.set(from, (sessionDeaths.get(from) ?? 0) + 1)
+
+      // A dead carrier can neither run nor drop, so without this the flag rides their respawn
+      // teleport to the shared platform (lightning already force-drops in roundManager; water
+      // and ghost deaths reach the server only through this message). Safe to trust: a carrier
+      // gains nothing by faking their own death — they lose the flag. Drops at the carrier's
+      // current server position, which at message-arrival time is still the death spot (the
+      // client teleports after the death sequence, well past one RTT).
+      const flagNow = Flag.getOrNull(flagEntity)
+      if (flagNow && flagNow.state === FlagState.Carried && flagNow.carrierPlayerId.toLowerCase() === from) {
+        console.log('[Server] 💀 Carrier reported death — force-dropping flag')
+        handleDrop(from, true)
+      }
 
       const { penalty, newBalance } = await serializePerPlayer(from, async () => {
         const current = await loadPlayerCoinBalance(from)
@@ -993,6 +1020,7 @@ export function registerEconomyHandlers(): void {
       const color = (data.color || 'r') as BoomerangColor
       const upgrades = await loadPlayerUpgrades(from)
       if (!upgrades.boomerangs.includes(color)) {
+        recordRejection(rejectionCounts, 'colorChanged:not-owned')
         console.log(`[Server] colorChanged rejected — ${from.slice(0, 8)} doesn't own ${color}`)
         room.send('playerColorChanged', { playerId: from, color: upgrades.equipped })
         return

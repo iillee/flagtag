@@ -10,6 +10,8 @@ import {
   ALIAS_EPSILON,
   ALIAS_MOVE_THRESHOLD,
   ALIAS_Y_TOLERANCE,
+  ALIAS_LAG_EPSILON,
+  ALIAS_LOCKSTEP_TOLERANCE,
   selectNewestPerAddress,
 } from '../src/server/identitySweep'
 
@@ -785,6 +787,144 @@ describe('position aliasing detection', () => {
 
     it('should report nothing', () => {
       expect(pairs).toEqual([])
+    })
+  })
+})
+
+// The LAGGED tier: a cross-wired stream that trails its source by a comms snapshot sits
+// 0.3-1m behind at run speed, so the exact tier above is structurally blind to it while
+// moving (the 2026-08-19 playtest: cross-wire symptoms, zero 🔗 lines). This tier trades a
+// loose coincidence window for a movement-vector lockstep requirement.
+describe('lagged-tier position aliasing detection', () => {
+  const AT = (addr: string, x: number, y = 0, z = 0) => ({ addr, x, y, z })
+  const lagTrack = (entries: { addr: string; x: number; y: number; z: number }[], s: Map<string, AliasTrackEntry>) =>
+    trackAliasedPositions(entries, s, ALIAS_LAG_EPSILON, ALIAS_MOVE_THRESHOLD, ALIAS_Y_TOLERANCE, ALIAS_LOCKSTEP_TOLERANCE)
+  let state: Map<string, AliasTrackEntry>
+  let pairs: AliasedPair[]
+
+  beforeEach(() => {
+    state = new Map()
+    pairs = []
+  })
+
+  afterEach(() => {
+    state.clear()
+    pairs = []
+  })
+
+  // THE case this tier exists for: a copy trailing its source by ~0.6m, both replaying the
+  // same walk. The exact tier never even starts tracking it (0.6 > ALIAS_EPSILON).
+  describe('when a copy trails its source by half a meter and both move in lockstep', () => {
+    beforeEach(() => {
+      lagTrack([AT('0xalice', 10), AT('0xbob', 9.4)], state)
+      pairs = lagTrack([AT('0xalice', 15), AT('0xbob', 14.4)], state)
+    })
+
+    it('should report the pair', () => {
+      expect(pairs).toHaveLength(1)
+    })
+
+    it('should surface the offset distance for triage', () => {
+      expect(pairs[0].dist).toBeCloseTo(0.6, 3)
+    })
+
+    describe('and the exact tier sees the same sweeps', () => {
+      let exactState: Map<string, AliasTrackEntry>
+      let exactPairs: AliasedPair[]
+
+      beforeEach(() => {
+        exactState = new Map()
+        trackAliasedPositions([AT('0xalice', 10), AT('0xbob', 9.4)], exactState)
+        exactPairs = trackAliasedPositions([AT('0xalice', 15), AT('0xbob', 14.4)], exactState)
+      })
+
+      afterEach(() => {
+        exactState.clear()
+      })
+
+      it('should report nothing, which is the blind spot this tier closes', () => {
+        expect(exactPairs).toEqual([])
+      })
+    })
+
+    describe('and they keep moving in lockstep on later sweeps', () => {
+      beforeEach(() => {
+        pairs = lagTrack([AT('0xalice', 20), AT('0xbob', 19.4)], state)
+      })
+
+      it('should not report the same pair again', () => {
+        expect(pairs).toEqual([])
+      })
+    })
+  })
+
+  // A chase is the false positive this tier must reject: nearby, both moving, but steering
+  // independently — the displacement vectors diverge past the lockstep tolerance.
+  describe('when a chaser stays within the window but steers a diverging path', () => {
+    beforeEach(() => {
+      lagTrack([AT('0xalice', 10, 0, 10), AT('0xbob', 10.9, 0, 10)], state)
+      pairs = lagTrack([AT('0xalice', 15, 0, 10), AT('0xbob', 15.5, 0, 10.7)], state)
+    })
+
+    it('should report nothing', () => {
+      expect(pairs).toEqual([])
+    })
+  })
+
+  describe('when only one side of a nearby pair moves', () => {
+    beforeEach(() => {
+      lagTrack([AT('0xalice', 10, 0, 10), AT('0xbob', 10.6, 0, 10)], state)
+      pairs = lagTrack([AT('0xalice', 10.8, 0, 10), AT('0xbob', 10.6, 0, 10)], state)
+    })
+
+    it('should report nothing', () => {
+      expect(pairs).toEqual([])
+    })
+  })
+
+  describe('when two addresses move in lockstep but sit outside the lag window', () => {
+    beforeEach(() => {
+      lagTrack([AT('0xalice', 10), AT('0xbob', 11.5)], state)
+      pairs = lagTrack([AT('0xalice', 15), AT('0xbob', 16.5)], state)
+    })
+
+    it('should report nothing', () => {
+      expect(pairs).toEqual([])
+    })
+
+    it('should not track the pair at all', () => {
+      expect(state.size).toBe(0)
+    })
+  })
+
+  // Sides are keyed by address, not by iteration order: a naive slot assignment would measure
+  // alice-now against bob-prev when the entry order swaps between sweeps, and this genuinely
+  // lockstepped pair would be missed.
+  describe('when the entry order swaps between sweeps of a lockstepped pair', () => {
+    beforeEach(() => {
+      lagTrack([AT('0xalice', 10), AT('0xbob', 9.4)], state)
+      pairs = lagTrack([AT('0xbob', 14.4), AT('0xalice', 15)], state)
+    })
+
+    it('should still report the pair', () => {
+      expect(pairs).toHaveLength(1)
+    })
+  })
+
+  describe('when the lockstep tolerance is not a finite number', () => {
+    beforeEach(() => {
+      trackAliasedPositions([AT('0xalice', 10), AT('0xbob', 9.4)], state,
+        ALIAS_LAG_EPSILON, ALIAS_MOVE_THRESHOLD, ALIAS_Y_TOLERANCE, NaN)
+      pairs = trackAliasedPositions([AT('0xalice', 15), AT('0xbob', 14.4)], state,
+        ALIAS_LAG_EPSILON, ALIAS_MOVE_THRESHOLD, ALIAS_Y_TOLERANCE, NaN)
+    })
+
+    it('should report nothing', () => {
+      expect(pairs).toEqual([])
+    })
+
+    it('should not accumulate state', () => {
+      expect(state.size).toBe(0)
     })
   })
 })

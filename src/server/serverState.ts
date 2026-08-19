@@ -9,11 +9,12 @@
 
 import { engine, Transform, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { type PosSample, POS_HISTORY_MAX_MS, pushSample, wasEverWithinRadius } from './positionHistory'
+import { type PosSample, POS_HISTORY_MAX_MS, pushSample, wasEverWithinRadius, nearestDistanceEver } from './positionHistory'
 import { type RejectionCounts } from './rejectionStats'
 import {
   type IdentityPosition, type AliasTrackEntry,
-  describeEntityId, diffIdentitySweep, trackAliasedPositions, selectNewestPerAddress
+  describeEntityId, diffIdentitySweep, trackAliasedPositions, selectNewestPerAddress,
+  ALIAS_LAG_EPSILON, ALIAS_MOVE_THRESHOLD, ALIAS_Y_TOLERANCE, ALIAS_LOCKSTEP_TOLERANCE
 } from './identitySweep'
 
 // ── Entity references (set during setupServer) ──
@@ -219,6 +220,9 @@ const _lastEntityIdByAddr = new Map<string, number>()
 /** Per-pair coincidence state — carried across sweeps by trackAliasedPositions. */
 const _aliasTracking = new Map<string, AliasTrackEntry>()
 
+/** Separate per-pair state for the lagged tier — the two tiers must not share streaks. */
+const _aliasLagTracking = new Map<string, AliasTrackEntry>()
+
 /** Last reported duplicate id-set per address — edge-triggers the `duplicate` event. */
 const _lastDuplicateSignature = new Map<string, string>()
 
@@ -259,6 +263,18 @@ export function sweepDuplicateIdentities(): void {
     console.log('[Server] 🔗 position aliasing:', pair.a.slice(0, 8), '≡', pair.b.slice(0, 8),
       '| xzDist=', pair.dist.toFixed(4), '| dy=', pair.dy.toFixed(3),
       '— two addresses moving as one; proximity reads for them are unreliable')
+  }
+
+  // Lagged tier: a cross-wired stream that trails its source by a comms snapshot never
+  // satisfies the 5cm window above while moving (0.3–1m offset at run speed), which is why
+  // the 2026-08-19 playtest showed cross-wire symptoms with a silent 🔗 line. Loose window +
+  // movement-vector lockstep instead — see ALIAS_LAG_EPSILON / ALIAS_LOCKSTEP_TOLERANCE for
+  // the tuning and the accepted false-positive (a stealer glued to an immune carrier).
+  for (const pair of trackAliasedPositions(positions, _aliasLagTracking,
+    ALIAS_LAG_EPSILON, ALIAS_MOVE_THRESHOLD, ALIAS_Y_TOLERANCE, ALIAS_LOCKSTEP_TOLERANCE)) {
+    console.log('[Server] 🔗≈ position aliasing (lagged):', pair.a.slice(0, 8), '≈', pair.b.slice(0, 8),
+      '| xzDist=', pair.dist.toFixed(4), '| dy=', pair.dy.toFixed(3),
+      '— two addresses moving in lockstep at offset; possible lagged cross-wire (or a glued chase)')
   }
 
   for (const event of diffIdentitySweep(byAddr, _lastEntityIdByAddr, _lastDuplicateSignature)) {
@@ -327,6 +343,24 @@ export function wasWithinRadius(address: string, target: Vector3, radius: number
     positionHistory.get(addr),
     target.x, target.y, target.z,
     radius,
+    Date.now() - lookbackMs,
+    () => getPlayerPosition(addr)
+  )
+}
+
+/**
+ * Smallest distance between `target` and the player's position over the last `lookbackMs`
+ * (falling back to their live position when no history exists), or Infinity if unknown.
+ *
+ * The distance-returning form of wasWithinRadius, for callers that must pick the NEAREST of
+ * several lag-forgiven candidates rather than merely ask whether one qualifies. Same
+ * retention caveat: a `lookbackMs` beyond POS_HISTORY_MAX_MS gains nothing.
+ */
+export function distanceWithinLookback(address: string, target: Vector3, lookbackMs: number): number {
+  const addr = address.toLowerCase()
+  return nearestDistanceEver(
+    positionHistory.get(addr),
+    target.x, target.y, target.z,
     Date.now() - lookbackMs,
     () => getPlayerPosition(addr)
   )
