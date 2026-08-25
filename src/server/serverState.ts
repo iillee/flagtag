@@ -13,9 +13,10 @@ import { type PosSample, POS_HISTORY_MAX_MS, pushSample, wasEverWithinRadius, ne
 import { type RejectionCounts } from './rejectionStats'
 import {
   type IdentityPosition, type AliasTrackEntry,
-  describeEntityId, diffIdentitySweep, trackAliasedPositions, selectNewestPerAddress,
+  describeEntityId, diffIdentitySweep, trackAliasedPositions,
   ALIAS_LAG_EPSILON, ALIAS_MOVE_THRESHOLD, ALIAS_Y_TOLERANCE, ALIAS_LOCKSTEP_TOLERANCE
 } from './identitySweep'
+import { getPlayerEntityPosition, resolveNewestPerAddress, sampleAvatarLiveness } from '../shared/playerEntities'
 
 // ── Entity references (set during setupServer) ──
 
@@ -171,34 +172,22 @@ export function isRealName(name: string): boolean {
  * Authoritative player position, read from the CRDT-synced Transform. Every
  * consequential proximity decision goes through here rather than reading the
  * player entity's Transform directly, so the lookup (including the duplicate-entity
- * handling below) stays in one place.
+ * handling) stays in one place.
+ *
+ * Now a thin alias over the scene-wide resolver in `shared/playerEntities`. It stays as a
+ * named server export because ~15 server call sites read as proximity logic, not as entity
+ * bookkeeping, and because the client had grown its own copies of this same rule — the whole
+ * point of the shared module is that there is one implementation for both runtimes.
+ *
+ * Deliberately does NOT log. This runs on every consequential proximity read — the steal
+ * check, ghost targeting, and once per active trap/bomb/projectile/orbit, every tick — so
+ * warning here produced 60-240 lines/s for a single duplicated address and buried the very
+ * tripwires it was meant to support. sweepDuplicateIdentities reports the same condition ONCE
+ * per change (edge-triggered), so grep the log from before the duplicate appeared —
+ * once per second with every entity id, which is strictly more useful.
  */
 export function getPlayerPosition(address: string): Vector3 | null {
-  const needle = address.toLowerCase()
-  // If duplicate PlayerIdentityData entities exist for the same address (mid-round reconnect
-  // leaving a corpse entity behind), scan them all and return the highest entity ID.
-  //
-  // "Highest" is NOT "newest" — the version lives in the high 16 bits and counts recycles of
-  // that slot, not when its occupant was assigned, so an address that moves to a fresher slot
-  // can see its raw id drop and this returns the corpse (37 of 103 reallocations in a 3 h log).
-  // Kept knowingly: the rule is wrong symmetrically, so this and every client agree, and the
-  // duplicate condition needs a lost tombstone that never occurred in that log. The full
-  // argument, and what a real fix would have to do, is on `selectNewestPerAddress`.
-  //
-  // Deliberately does NOT log. This runs on every consequential proximity read — the steal
-  // check, ghost targeting, and once per active trap/bomb/projectile/orbit, every tick — so
-  // warning here produced 60-240 lines/s for a single duplicated address and buried the very
-  // tripwires it was meant to support. sweepDuplicateIdentities reports the same condition ONCE
-  // per change (edge-triggered), so grep the log from before the duplicate appeared —
-  // once per second with every entity id, which is strictly more useful.
-  let bestEntity: Entity | null = null
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === needle) {
-      if (bestEntity === null || (entity as number) > (bestEntity as number)) bestEntity = entity
-    }
-  }
-  if (bestEntity === null) return null
-  return Transform.get(bestEntity).position
+  return getPlayerEntityPosition(address)
 }
 
 /**
@@ -306,15 +295,15 @@ const positionHistory = new Map<string, PosSample[]>()
 export function recordPlayerPositions(): void {
   const now = Date.now()
   const cutoff = now - POS_HISTORY_MAX_MS
-  // Resolve duplicates to ONE entity per address before sampling, using the same newest-wins
-  // rule as getPlayerPosition. Sampling per entity instead put a stale corpse entity's positions
-  // into the live player's history, and wasWithinRadius accepts if ANY sample matches — so the
+  // Refresh avatar liveness + the address->entity index FIRST, sharing this tick's clock
+  // reading. Registered before the combat systems (see registerSystems), so every proximity
+  // read in this tick resolves against an index sampled this tick.
+  sampleAvatarLiveness(now)
+  // Resolve duplicates to ONE entity per address before sampling, through the same resolver as
+  // getPlayerPosition. Sampling per entity instead put a stale corpse entity's positions into
+  // the live player's history, and wasWithinRadius accepts if ANY sample matches — so the
   // corpse could keep authorizing projectile hits and client action positions for that player.
-  const entries: { addr: string; id: Entity }[] = []
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    entries.push({ addr: identity.address.toLowerCase(), id: entity })
-  }
-  const newest = selectNewestPerAddress(entries)
+  const newest = resolveNewestPerAddress()
   for (const [addr, entity] of newest) {
     const p = Transform.get(entity).position
     let arr = positionHistory.get(addr)

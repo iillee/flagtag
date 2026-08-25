@@ -1,14 +1,14 @@
 import {
   engine, Transform, inputSystem, InputAction, PointerEventType,
   GltfContainer, AudioSource,
-  VirtualCamera, MainCamera, InputModifier, pointerEventsSystem,
-  PlayerIdentityData
+  VirtualCamera, MainCamera, InputModifier, pointerEventsSystem
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 
 import { spectatorState, type SpectatorMode } from '../shared/clientState'
 import { registerSystem } from './systemManager'
 import { Flag, FlagState } from '../shared/components'
+import { getPlayerEntityPosition } from '../shared/playerEntities'
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId } from '../gameState/flagHoldTime'
 
 // ── Constants ──
@@ -188,15 +188,14 @@ function getFlagPosition(): { x: number; y: number; z: number } | null {
   return null
 }
 
+/**
+ * Was a first-match scan, which resolved to the corpse entity under a duplicate — the
+ * spectator camera then tracked a frozen position. See shared/playerEntityResolution.ts.
+ */
 function getPlayerAvatarPosition(userId: string): { x: number; y: number; z: number } | null {
-  for (const [entity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    const pid = PlayerIdentityData.get(entity)
-    if (pid.address.toLowerCase() === userId.toLowerCase()) {
-      const t = Transform.get(entity)
-      return { x: t.position.x, y: t.position.y, z: t.position.z }
-    }
-  }
-  return null
+  const pos = getPlayerEntityPosition(userId)
+  if (!pos) return null
+  return { x: pos.x, y: pos.y, z: pos.z }
 }
 
 // ── Camera transform helpers ──

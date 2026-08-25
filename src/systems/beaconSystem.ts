@@ -1,12 +1,12 @@
 import {
   engine, Transform, MeshRenderer, Material, Billboard,
-  BillboardMode, MaterialTransparencyMode, PlayerIdentityData,
-  type Entity
+  BillboardMode, MaterialTransparencyMode
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4, Color3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
 import { getFlagAuthoritativeWorldPos } from './flagSystem'
 import { Flag, FlagState } from '../shared/components'
+import { getPlayerEntityPosition } from '../shared/playerEntities'
 
 // ── Configuration ──
 const BEACON_HEIGHT = 110
@@ -96,58 +96,29 @@ export function setupBeacon(): void {
 
 /** Find the world position of the flag carrier.
  *
- * Duplicate-avatar-entity aware: when a recycled/reissued PlayerIdentityData
- * lingers on this client (same address on 2+ entities — the P3 pattern from
- * hammurabi PR #64), taking the first match by iteration order can return a
- * STALE entity whose Transform is frozen at the old avatar's last position.
- * That caused the "beacon teleports to spawn for one player" bug: only the
- * client with the duplicate saw it, only while Carried (the sole branch that
- * uses this lookup — Dropped/AtBase come from authoritative flag fields).
+ * This lookup is where the duplicate-avatar-entity problem was first diagnosed: a lingering
+ * recycled/reissued PlayerIdentityData (same address on 2+ entities — the P3 pattern from
+ * hammurabi PR #64) made a first-match scan return a STALE entity frozen at the old avatar's
+ * last position. That was the "beacon teleports to spawn for one player" bug — only the client
+ * holding the duplicate saw it, and only while Carried, the sole branch that uses this lookup
+ * (Dropped/AtBase come from authoritative flag fields).
  *
- * Mirrors the selectNewestPerAddress pattern PR #22 established server-side
- * for the same defect class: pick the max id among matches and read its
- * Transform.
- *
- * CORRECTION to what this comment used to claim. "Higher entity id == newer
- * version" is false, so max-id is NOT reliably "the live one". The version sits
- * in the high 16 bits and counts how many times that SLOT was recycled, not
- * when its current occupant was assigned — the runtime hands a reconnecting
- * player whichever slot is free, so an address can move to a lower raw id and
- * this returns the corpse. 37 of 103 reallocations did exactly that in a 3 h
- * production log.
- *
- * Kept on purpose. Because the rule is a pure function of the entity set, this
- * client, every other client, and the server all resolve identically — so the
- * beacon still agrees with hit detection even when both are wrong. A per-client
- * recency signal would break that: what a client can observe is avatar
- * STREAMING order, which is proximity-driven on mobile (see the note above on
- * on-demand streaming), so it could point the beacon at a corpse while the
- * server tracks the live carrier — reproducing the very symptom this lookup
- * exists to fix. See `selectNewestPerAddress` in src/server/identitySweep.ts
- * for the full argument and what a real fix would require.
+ * The max-id rule that fixed it is no longer written out here; it now lives behind
+ * `resolvePlayerEntity`, alongside the seven other lookups that were still taking first match
+ * and therefore still resolving to the corpse. That module's header carries the full argument,
+ * including why max-id is itself unsound and what a real fix requires.
  */
 function getCarrierWorldPos(carrierPlayerId: string): Vector3 | null {
-  // Check if the local player is the carrier
+  // Check if the local player is the carrier. Must stay ahead of the resolver: the local
+  // avatar is engine.PlayerEntity, whose position this client knows exactly, rather than
+  // through a comms-replicated copy of it.
   const local = getPlayer()
   if (local?.userId?.toLowerCase() === carrierPlayerId && Transform.has(engine.PlayerEntity)) {
     return Transform.get(engine.PlayerEntity).position
   }
 
-  // Check by wallet address (used in multiplayer). Take the NEWEST entity id
-  // among all matches — see block comment above.
-  let newestEntity: Entity | null = null
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === carrierPlayerId) {
-      if (newestEntity === null || (entity as number) > (newestEntity as number)) {
-        newestEntity = entity
-      }
-    }
-  }
-  if (newestEntity !== null) {
-    return Transform.get(newestEntity).position
-  }
-
-  return null
+  // Otherwise by wallet address (multiplayer).
+  return getPlayerEntityPosition(carrierPlayerId)
 }
 
 export function startBeaconBlink(): void {
