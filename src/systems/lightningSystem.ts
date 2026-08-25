@@ -10,6 +10,7 @@ import { setLightningRespawning } from '../gameState/lightningState'
 import { exitSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
 import { LIGHTNING_RESPAWN_DURATION_SEC } from '../shared/constants'
+import { resolvePlayerEntity } from '../shared/playerEntities'
 
 
 // Lightning bolt config
@@ -44,12 +45,11 @@ function getCarrierEntity(carrierPlayerId: string): Entity | null {
     }
   }
 
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === needle) {
-      return entity as Entity
-    }
-  }
-  return null
+  // Was a first-match scan, which resolved to the corpse entity under a duplicate — the bolt
+  // and its VFX then struck a frozen position while the server's own lightningStrike targeted
+  // the live one (roundManager.ts already resolves through getPlayerPosition for that reason).
+  // See shared/playerEntityResolution.ts.
+  return resolvePlayerEntity(needle)
 }
 
 function getStrikeTarget(): { x: number; y: number; z: number } {

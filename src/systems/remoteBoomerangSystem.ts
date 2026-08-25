@@ -19,6 +19,7 @@ import {
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { room } from '../shared/messages'
+import { getPlayerEntityPosition } from '../shared/playerEntities'
 import { BoomerangColor, onBoomerangColorChange } from '../gameState/boomerangColor'
 import { registerSystem } from './systemManager'
 
@@ -260,16 +261,15 @@ function remoteChargeAnimSystem(_dt: number): void {
     }
     const cf = Math.min(1, (now - rb.charge.startTime) / 1000 / REMOTE_CHARGE_TIME_SEC)
 
-    // Proximity check — find remote player position
+    // Proximity check — find remote player position. Resolved through the shared resolver
+    // rather than first-match, which returned the corpse entity under a duplicate and so
+    // gated the charge VFX on a frozen position. See shared/playerEntityResolution.ts.
     let inRange = false
     if (localPos) {
-      for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-        if (identity.address.toLowerCase() === playerId) {
-          const rp = Transform.get(entity).position
-          const dx = localPos.x - rp.x, dy = localPos.y - rp.y, dz = localPos.z - rp.z
-          inRange = (dx * dx + dy * dy + dz * dz) <= REMOTE_CHARGE_PROXIMITY * REMOTE_CHARGE_PROXIMITY
-          break
-        }
+      const rp = getPlayerEntityPosition(playerId)
+      if (rp) {
+        const dx = localPos.x - rp.x, dy = localPos.y - rp.y, dz = localPos.z - rp.z
+        inRange = (dx * dx + dy * dy + dz * dz) <= REMOTE_CHARGE_PROXIMITY * REMOTE_CHARGE_PROXIMITY
       }
     }
 
@@ -446,14 +446,9 @@ function remoteOrbitAnimSystem(_dt: number): void {
       return
     }
 
-    // Find remote player position via PlayerIdentityData
-    let playerPos: Vector3 | null = null
-    for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-      if (identity.address.toLowerCase() === playerId) {
-        playerPos = Transform.get(entity).position
-        break
-      }
-    }
+    // Orbit anchor. Same reason as the proximity check above: first-match resolved to the
+    // corpse entity under a duplicate, orbiting a frozen point.
+    const playerPos = getPlayerEntityPosition(playerId)
     if (!playerPos) return
 
     // Radius ramps up at start and back down at end
