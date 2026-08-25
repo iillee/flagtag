@@ -1,5 +1,6 @@
-import { engine, PlayerIdentityData } from '@dcl/sdk/ecs'
+import { engine, PlayerIdentityData, AvatarBase } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/players'
+import { resolvePlayerEntity } from '../shared/playerEntities'
 import { PlayerFlagHoldTime, Flag, FlagState, CountdownTimer } from '../shared/components'
 import { room } from '../shared/messages'
 import {
@@ -92,18 +93,26 @@ export function nameResolverSystem(dt: number): void {
     const key = userId.toLowerCase()
     presentPlayers.add(key)
 
-    // Name resolution: try to resolve unknown names
+    // Name resolution: try to resolve unknown names.
+    //
+    // Reads AvatarBase off the entity the shared resolver picks, rather than calling
+    // getPlayer({ userId }). That helper's internal address lookup takes the FIRST matching
+    // entity by iteration order, which under a duplicate is deterministically the corpse — and
+    // a corpse's AvatarBase has been purged, so `name` came back empty and this branch retried
+    // forever. The player's name then never appeared on the scoreboard for the whole session,
+    // despite the retry loop looking like it would recover. See shared/playerEntities.ts.
     if (!knownPlayerNames.has(key)) {
-      const data = getPlayer({ userId })
-      if (data && isRealName(data.name)) {
-        knownPlayerNames.set(key, data.name)
+      const resolved = resolvePlayerEntity(userId)
+      const name = resolved === null ? '' : AvatarBase.getOrNull(resolved)?.name ?? ''
+      if (isRealName(name)) {
+        knownPlayerNames.set(key, name)
 
         if (playersInScene.has(key)) {
-          playersInScene.set(key, data.name)
+          playersInScene.set(key, name)
         }
 
         if (key === localUserId) {
-          room.send('registerName', { name: data.name })
+          room.send('registerName', { name })
         }
       }
     }

@@ -47,63 +47,12 @@ export function describeEntityId(eid: number): string {
 }
 
 /**
- * Resolve duplicate avatar entities down to one per address: highest entity id wins, matching
- * `getPlayerPosition`'s rule.
- *
- * ## The rule is UNSOUND, and is kept deliberately anyway. Read this before "fixing" it.
- *
- * "Highest id == newest" is false. An id packs the version into the high 16 bits, so ordering
- * by raw id sorts by version first and entity number second — but the version counts how many
- * times that SLOT has been recycled, which says nothing about when its current occupant was
- * assigned. The runtime hands a reconnecting player whichever slot happens to be free, so a
- * player can move from a heavily-recycled slot to a fresh one and see their raw id go DOWN.
- * Measured on a 3 h production log: **37 of 103 consecutive reallocations moved an address to a
- * lower raw id**, e.g. `#35 v21` (1376291) -> `#37 v8` (524325). In each of those, this function
- * returns the corpse. `test/identitySweep.spec.ts` pins that case as a known limitation.
- *
- * Recency is not derivable from the id at all — it has to be observed — so any real fix needs
- * per-entity state (when it was first seen, or when its Transform last changed) maintained on
- * both the server and every client.
- *
- * Kept regardless, for three reasons that a replacement has to beat:
- *
- * 1. **It is wrong SYMMETRICALLY.** The result is a pure function of the entity set, so the
- *    server and every client agree. A per-VM recency signal can make them disagree — the
- *    client's would measure avatar STREAMING order, which is proximity-driven on mobile — and
- *    the beacon pointing somewhere hit detection does not is harder to diagnose than both being
- *    wrong together. An attempted first-sighting fix was rejected for exactly this.
- * 2. **The trigger is vanishingly rare.** A duplicate needs a lost DELETE_ENTITY tombstone,
- *    which the runtime bounds at 4096+ departures during a single VM stall and explicitly
- *    accepts as cosmetic. The `👥 duplicate PlayerIdentityData` tripwire fired ZERO times in
- *    that 3 h log.
- * 3. **Ties would fall back here anyway.** Any recency scheme has no information about a
- *    duplicate that predates the observer — the common case, since a client discovers one on
- *    load — and would degrade to precisely this rule while adding state and divergence.
- *
- * So: if the duplicate tripwire starts firing in the field, fix it with an observed-liveness
- * signal applied at EVERY address lookup (there are ~12, nine of which still take first-match
- * by iteration order) — not by changing this comparison alone.
- *
- * Every consequential read of a player's position MUST go through this same resolution.
- * `recordPlayerPositions` previously sampled per ENTITY into a per-ADDRESS history, so with a
- * duplicate present the corpse entity's positions were interleaved with the live player's under
- * one key — and `wasWithinRadius` accepts if ANY sample matches, so a frozen corpse could
- * authorize projectile hits and client action positions for the live player indefinitely. That
- * is the phantom-combat symptom this whole area exists to chase, produced by the scene's own
- * bookkeeping rather than the platform.
- *
- * Generic over the id so callers can pass branded `Entity` values and get them back unchanged.
+ * Re-exported so this module's own consumers and `test/identitySweep.spec.ts` keep their import
+ * path. The rule, and the long argument about why it is unsound and what a real fix requires,
+ * now live in `src/shared/playerEntityResolution.ts` — it had to move somewhere both runtimes
+ * can import, because the client had grown its own divergent copies of the same lookup.
  */
-export function selectNewestPerAddress<T extends number>(
-  entries: Iterable<{ addr: string; id: T }>
-): Map<string, T> {
-  const newest = new Map<string, T>()
-  for (const { addr, id } of entries) {
-    const prev = newest.get(addr)
-    if (prev === undefined || id > prev) newest.set(addr, id)
-  }
-  return newest
-}
+export { selectNewestPerAddress } from '../shared/playerEntityResolution'
 
 /** One avatar entity's address and world position, for the aliasing scan below. */
 export interface IdentityPosition { addr: string; x: number; y: number; z: number }

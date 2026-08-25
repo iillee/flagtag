@@ -4,7 +4,7 @@
  */
 import {
   engine, Transform, GltfContainer, Raycast, RaycastResult, RaycastQueryType,
-  PlayerIdentityData, type Entity
+  PlayerIdentityData
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { getPlayer as getPlayerData } from '@dcl/sdk/players'
@@ -12,6 +12,7 @@ import {
   PROJECTILE_SPEED, PROJECTILE_LIFETIME_SEC, PROJECTILE_MAX_RANGE, PROJECTILE_HIT_RADIUS
 } from '../../shared/components'
 import { room } from '../../shared/messages'
+import { getPlayerEntityPosition } from '../../shared/playerEntities'
 import {
   localProjectiles, msgProjectileVisuals, pendingWallRays, localThrow,
   PROJECTILE_SCALE, PROJECTILE_SPIN_SPEED, PROJECTILE_CHEST_OFFSET,
@@ -191,14 +192,15 @@ export function updateLocalProjectiles(dt: number): void {
 
 // ── Message-driven visuals (online mode) ──
 
-/** Look up a remote player's position by wallet address (case-insensitive). */
+/**
+ * Look up a remote player's position by wallet address (case-insensitive).
+ *
+ * Was a first-match scan, which under a duplicate avatar entity resolved to the corpse every
+ * time (see shared/playerEntityResolution.ts) — so projectile visuals flew to a frozen position
+ * while the server's hit detection tracked the live one.
+ */
 function getRemotePlayerPosition(userId: string): Vector3 | null {
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === userId) {
-      return Transform.get(entity).position
-    }
-  }
-  return null
+  return getPlayerEntityPosition(userId)
 }
 
 export function createMsgProjectileVisual(x: number, y: number, z: number, dirX: number, dirZ: number, color?: string, firedBy?: string, chargeSpeed?: number, chargeRange?: number, chargeScale?: number, shellId?: number): void {

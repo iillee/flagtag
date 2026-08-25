@@ -8,10 +8,11 @@
  */
 import {
   engine, Transform, Entity, MeshRenderer, Material, MaterialTransparencyMode,
-  Tween, EasingFunction, PlayerIdentityData
+  Tween, EasingFunction
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/players'
+import { getPlayerEntityPosition } from '../shared/playerEntities'
 import { isSpeedBoosted, getBoostTier } from './speedBoostSystem'
 import { room } from '../shared/messages'
 
@@ -145,14 +146,14 @@ export function setupBoostTrailMessages(): void {
   })
 }
 
-/** Find a remote player's world position via PlayerIdentityData */
+/**
+ * Find a remote player's world position.
+ *
+ * Was a first-match scan, which resolved to the corpse entity under a duplicate — trails puffed
+ * out at a frozen position. See shared/playerEntityResolution.ts.
+ */
 function getRemotePlayerPos(playerId: string): Vector3 | null {
-  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData, Transform)) {
-    if (identity.address.toLowerCase() === playerId) {
-      return Transform.get(entity).position
-    }
-  }
-  return null
+  return getPlayerEntityPosition(playerId)
 }
 
 /** Per-frame system */
