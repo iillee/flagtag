@@ -1,6 +1,8 @@
 import {
   pickNewestId,
   selectNewestPerAddress,
+  selectLivePerAddress,
+  LIVENESS_WINDOW_MS,
 } from '../src/shared/playerEntityResolution'
 
 // Real ids from the 2026-08-15 production log, packed as (number & 0xffff) | (version << 16).
@@ -128,6 +130,155 @@ describe('resolving duplicate avatar entities per address', () => {
         { addr: '0xaaa', id: 200 },
       ])
       expect(resolved.size).toBe(2)
+    })
+  })
+})
+
+describe('resolving duplicate avatar entities by observed liveness', () => {
+  const NOW = 1_000_000
+  const FRESH = NOW - 100 // well inside LIVENESS_WINDOW_MS
+  const STALE = NOW - 5_000 // long past it
+  const NEVER = 0 // never observed to advance
+
+  describe('when no candidate has ever been observed to advance', () => {
+    // The load-bearing degradation: with no liveness signal at all, this must return exactly
+    // what the old max-id rule returned, so an unsampled index cannot change behaviour.
+    it('should fall back to the highest raw id', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: NEVER },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: NEVER },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(pickNewestId([SLOT_35_V21, SLOT_37_V8]))
+    })
+  })
+
+  describe('when one candidate is still streaming and the other is frozen', () => {
+    it('should pick the streaming one even though it has the lower raw id', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: STALE },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: FRESH },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+    })
+
+    // This is the case max-id already got right; liveness must not regress it.
+    it('should pick the streaming one when it has the higher raw id too', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V22, lastAdvancedMs: FRESH },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: STALE },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_35_V22)
+    })
+
+    it('should not depend on iteration order', () => {
+      const forwards = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: STALE },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: FRESH },
+      ], NOW)
+      const backwards = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: FRESH },
+        { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: STALE },
+      ], NOW)
+      expect(forwards.get('0xaaa')).toBe(backwards.get('0xaaa'))
+    })
+
+    it('should prefer a never-observed entity over none, but a streaming one over it', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V22, lastAdvancedMs: NEVER },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: FRESH },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+    })
+  })
+
+  describe('when both candidates are streaming', () => {
+    it('should pick the more recently advanced one', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V22, lastAdvancedMs: NOW - 300 },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: NOW - 50 },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+    })
+
+    describe('and they advanced on the very same sample', () => {
+      it('should break the tie on the highest raw id', () => {
+        const resolved = selectLivePerAddress([
+          { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: FRESH },
+          { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: FRESH },
+        ], NOW)
+        expect(resolved.get('0xaaa')).toBe(SLOT_35_V21)
+      })
+    })
+  })
+
+  describe('when both candidates are stale but at different times', () => {
+    // Neither is "live", so neither wins on freshness — but the less-ancient one is still the
+    // better guess, and this must stay order-independent.
+    it('should prefer the less ancient one', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V22, lastAdvancedMs: NOW - 90_000 },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: NOW - 4_000 },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+    })
+  })
+
+  describe('when the sole candidate is frozen', () => {
+    // A player standing perfectly still must not be resolved to null — there is no better
+    // candidate, and dropping them would break every proximity read for them.
+    it('should still resolve to it', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: STALE },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_35_V21)
+    })
+  })
+
+  describe('when a liveness stamp is corrupt', () => {
+    // Fail CLOSED: garbage must not manufacture liveness and outrank a genuinely live entity.
+    it('should not treat a future-dated stamp as live', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: NOW + 60_000 },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: FRESH },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+    })
+
+    it('should not treat a non-finite stamp as live', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: Number.NaN },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: FRESH },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+    })
+  })
+
+  describe('when the window is crossed exactly', () => {
+    it('should count an entity at the window boundary as live', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: NOW - LIVENESS_WINDOW_MS },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+    })
+
+    it('should rank an entity one ms past the window below a live one', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V22, lastAdvancedMs: NOW - LIVENESS_WINDOW_MS - 1 },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: NOW - LIVENESS_WINDOW_MS },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+    })
+  })
+
+  describe('when several addresses are present', () => {
+    it('should resolve each independently', () => {
+      const resolved = selectLivePerAddress([
+        { addr: '0xaaa', id: SLOT_35_V21, lastAdvancedMs: STALE },
+        { addr: '0xaaa', id: SLOT_37_V8, lastAdvancedMs: FRESH },
+        { addr: '0xbbb', id: 900, lastAdvancedMs: NEVER },
+      ], NOW)
+      expect(resolved.get('0xaaa')).toBe(SLOT_37_V8)
+      expect(resolved.get('0xbbb')).toBe(900)
     })
   })
 })

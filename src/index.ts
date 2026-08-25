@@ -10,6 +10,7 @@ import './shared/components'
 import './shared/coins'
 import './shared/upgrades'
 import { room } from './shared/messages'
+import { sampleAvatarLiveness } from './shared/playerEntities'
 import { registerSystem, registerThrottled, initSystemManager } from './systems/systemManager'
 
 export async function main() {
@@ -197,6 +198,15 @@ export async function main() {
   setupUpdraftSystem()
 
   // ── Register all systems through the system manager ──
+
+  // Resolve every address -> avatar entity ONCE per frame, before anything reads a player
+  // position. Registered first because registerSystem preserves call order, and every consumer
+  // below (combat prediction, beacon, lightning, trails, spectator) resolves against the index
+  // this builds. It degrades safely if it were ever to run late: resolvePlayerEntity falls back
+  // to a live scan when the index has no entry.
+  registerSystem(() => {
+    sampleAvatarLiveness(Date.now())
+  })
 
   // Per-frame visual/animation (only systems that need 60fps)
   registerSystem((dt) => {

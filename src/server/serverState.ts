@@ -16,7 +16,7 @@ import {
   describeEntityId, diffIdentitySweep, trackAliasedPositions,
   ALIAS_LAG_EPSILON, ALIAS_MOVE_THRESHOLD, ALIAS_Y_TOLERANCE, ALIAS_LOCKSTEP_TOLERANCE
 } from './identitySweep'
-import { getPlayerEntityPosition, resolveNewestPerAddress } from '../shared/playerEntities'
+import { getPlayerEntityPosition, resolveNewestPerAddress, sampleAvatarLiveness } from '../shared/playerEntities'
 
 // ── Entity references (set during setupServer) ──
 
@@ -295,6 +295,10 @@ const positionHistory = new Map<string, PosSample[]>()
 export function recordPlayerPositions(): void {
   const now = Date.now()
   const cutoff = now - POS_HISTORY_MAX_MS
+  // Refresh avatar liveness + the address->entity index FIRST, sharing this tick's clock
+  // reading. Registered before the combat systems (see registerSystems), so every proximity
+  // read in this tick resolves against an index sampled this tick.
+  sampleAvatarLiveness(now)
   // Resolve duplicates to ONE entity per address before sampling, through the same resolver as
   // getPlayerPosition. Sampling per entity instead put a stale corpse entity's positions into
   // the live player's history, and wasWithinRadius accepts if ANY sample matches — so the
