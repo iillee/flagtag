@@ -76,6 +76,7 @@ import { ChestPopup } from './ui/screens/ChestPopup'
 // Layouts
 import { DesktopLayout } from './ui/layouts/DesktopLayout'
 import { MobileLayout } from './ui/layouts/MobileLayout'
+import { USE_NEW_UI, setupUi2 } from './ui2'
 
 
 // ═══════════════════════════════════════════════════════════
@@ -122,7 +123,11 @@ export function setupUi() {
     console.log('[UI] TouchScreenControls.hide failed:', err)
   }
 
-  ReactEcsRenderer.setUiRenderer(PlayerListUi)
+  if (USE_NEW_UI) {
+    setupUi2()
+  } else {
+    ReactEcsRenderer.setUiRenderer(PlayerListUi)
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -166,7 +171,17 @@ function ScareBar() {
 // ROOT RENDERER
 // ═══════════════════════════════════════════════════════════
 
-function PlayerListUi() {
+// Section-scoped render. When `sections` is provided, only the named sections
+// paint (used by UI2 to slice PlayerListUi into individual DUCK layers).
+// When omitted, everything renders (legacy behaviour).
+export type PlayerListUiSection =
+  | 'layout' | 'hitFlash' | 'underwater' | 'cinematicFade'
+  | 'blessing' | 'blessingCompleted' | 'serverDown'
+  | 'mailbox' | 'gravestone' | 'chest' | 'drownBar' | 'scareBar'
+  | 'uiScaleToast' | 'lightningWarning' | 'deathOverlays'
+  | 'spectator' | 'titleSplash'
+export function PlayerListUi({ sections }: { sections?: PlayerListUiSection[] } = {}) {
+  const show = (name: PlayerListUiSection) => !sections || sections.includes(name)
   const mobile = isMobile()
   const underwaterVisible = getIsUnderwater()
   const cinematicFadeOpacity = cinematicState.fadeOpacity
@@ -180,11 +195,11 @@ function PlayerListUi() {
 
   return (
     <UiEntity uiTransform={{ width: '100%', height: '100%', positionType: 'relative', pointerFilter: 'none' }}>
-      {mobile ? <MobileLayout /> : <DesktopLayout />}
+      {show('layout') && (mobile ? <MobileLayout /> : <DesktopLayout />)}
 
       {/* Hit flash overlay — oversized + negative offset so it bleeds past the
          platform's safe-area border and covers the whole physical screen. */}
-      {getHitFlashAlpha() > 0 && (
+      {show('hitFlash') && getHitFlashAlpha() > 0 && (
         <UiEntity
           uiTransform={{ positionType: 'absolute', position: { top: '-10%', left: '-10%' }, width: '120%', height: '120%', pointerFilter: 'none' }}
           uiBackground={{ color: Color4.create(0.8, 0, 0, getHitFlashAlpha()) }}
@@ -192,7 +207,7 @@ function PlayerListUi() {
       )}
 
       {/* Underwater overlay */}
-      {underwaterVisible && (
+      {show('underwater') && underwaterVisible && (
         <UiEntity
           uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%' }}
           uiBackground={{ color: Color4.create(0.15, 0.35, 0.55, 0.45) }}
@@ -200,7 +215,7 @@ function PlayerListUi() {
       )}
 
       {/* Cinematic fade overlay — oversized + negative offset (same reason as hit flash). */}
-      {cinematicFadeOpacity > 0 && (
+      {show('cinematicFade') && cinematicFadeOpacity > 0 && (
         <UiEntity
           uiTransform={{ positionType: 'absolute', position: { top: '-10%', left: '-10%' }, width: '120%', height: '120%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
           uiBackground={{ color: Color4.create(0, 0, 0, cinematicFadeOpacity) }}
@@ -222,7 +237,7 @@ function PlayerListUi() {
       )}
 
       {/* Blessing overlay (no background — see through to emoting player) */}
-      {(blessingState.active || blessingState.fadeOut > 0) && (() => {
+      {show('blessing') && (blessingState.active || blessingState.fadeOut > 0) && (() => {
         const opacity = blessingState.active ? 1 : blessingState.fadeOut
         const goldFaded = Color4.create(GOLD.r, GOLD.g, GOLD.b, opacity)
         const greyFaded = Color4.create(LIGHT_GREY.r, LIGHT_GREY.g, LIGHT_GREY.b, opacity)
@@ -244,7 +259,7 @@ function PlayerListUi() {
       })()}
 
       {/* Blessing completed notification */}
-      {blessingState.completed && (() => {
+      {show('blessingCompleted') && blessingState.completed && (() => {
         const coinProgress = blessingState.coinProgress
         return (
           <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
@@ -293,7 +308,7 @@ function PlayerListUi() {
       })()}
 
       {/* Server-down overlay */}
-      {serverDownState.visible && (
+      {show('serverDown') && serverDownState.visible && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}
           onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }}
         >
@@ -319,7 +334,7 @@ function PlayerListUi() {
       )}
 
       {/* Mailbox popup */}
-      {popupState.mailbox && (() => {
+      {show('mailbox') && popupState.mailbox && (() => {
         // Match chest UI mobile scale.
         const MB = 1.5 // 2 -> 1.5 to match chest (25% reduction, mobile pass 2026-07-30)
         const mb = (v: number) => Math.round(v * MB)
@@ -361,7 +376,7 @@ function PlayerListUi() {
       })()}
 
       {/* Gravestone popup */}
-      {popupState.gravestone && (
+      {show('gravestone') && popupState.gravestone && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}
           >
           <UiEntity uiTransform={{ width: mobile ? 480 : S(340), flexDirection: 'column', alignItems: 'center', padding: mobile ? { top: 36, bottom: 36, left: 28, right: 28 } : { top: S(24), bottom: S(24), left: S(24), right: S(24) }, borderRadius: mobile ? 20 : S(20) }}
@@ -375,17 +390,17 @@ function PlayerListUi() {
       )}
 
       {/* Chest / Store popup */}
-      {popupState.chest && <ChestPopup />}
+      {show('chest') && popupState.chest && <ChestPopup />}
 
       {/* Boombox / Tape popup */}
 
 
       {/* Progress bars */}
-      {isDrownBarVisible() && <DrownBar />}
-      {isScareBarVisible() && <ScareBar />}
+      {show('drownBar') && isDrownBarVisible() && <DrownBar />}
+      {show('scareBar') && isScareBarVisible() && <ScareBar />}
 
       {/* UI Scale toast */}
-      {getUIScaleFlash() && (
+      {show('uiScaleToast') && getUIScaleFlash() && (
         <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: S(140), left: '50%' }, margin: { left: S(-80) }, width: S(160), height: S(32), flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: S(8), pointerFilter: 'none' }}
           uiBackground={{ color: PANEL_BG }}
         >
@@ -394,7 +409,7 @@ function PlayerListUi() {
       )}
 
       {/* Lightning warning tooltip — visible to flag carrier when sparks start */}
-      {isLightningWarningActive() && (() => {
+      {show('lightningWarning') && isLightningWarningActive() && (() => {
         const localPlayer = getPlayer()
         const carrierId = getCurrentFlagCarrierUserId()
         const isCarrier = localPlayer && carrierId && localPlayer.userId?.toLowerCase() === carrierId.toLowerCase()
@@ -421,15 +436,15 @@ function PlayerListUi() {
       })()}
 
       {/* Death overlays */}
-      <DeathOverlay visible={getRespawnCountdown() > 0} message="You Drowned!" fadeOpacity={getDrownFadeOpacity()} showText={isDrownTextVisible()} respawnCountdown={getRespawnCountdown()} />
-      <DeathOverlay visible={isLightningRespawning()} message="You were struck by lightning!" fadeOpacity={getLightningFadeOpacity()} showText={isLightningTextVisible()} respawnCountdown={getLightningRespawnCountdown()} />
-      <DeathOverlay visible={isGhostDeathRespawning()} message="You were scared to death!" fadeOpacity={getGhostDeathFadeOpacity()} showText={isGhostDeathTextVisible()} respawnCountdown={getGhostDeathRespawnCountdown()} />
+      {show('deathOverlays') && <DeathOverlay visible={getRespawnCountdown() > 0} message="You Drowned!" fadeOpacity={getDrownFadeOpacity()} showText={isDrownTextVisible()} respawnCountdown={getRespawnCountdown()} />}
+      {show('deathOverlays') && <DeathOverlay visible={isLightningRespawning()} message="You were struck by lightning!" fadeOpacity={getLightningFadeOpacity()} showText={isLightningTextVisible()} respawnCountdown={getLightningRespawnCountdown()} />}
+      {show('deathOverlays') && <DeathOverlay visible={isGhostDeathRespawning()} message="You were scared to death!" fadeOpacity={getGhostDeathFadeOpacity()} showText={isGhostDeathTextVisible()} respawnCountdown={getGhostDeathRespawnCountdown()} />}
 
       {/* Spectator mode */}
-      {spectatorState.active && <SpectatorHUD mobile={mobile} />}
+      {show('spectator') && spectatorState.active && <SpectatorHUD mobile={mobile} />}
 
       {/* Title Splash */}
-      {cinematicState.titleSplashVisible && (() => {
+      {show('titleSplash') && cinematicState.titleSplashVisible && (() => {
         const mobile = isMobile()
         const M = 1.5 * MOBILE_POPUP_SCALE // mobile scale (baseline 1.5, scaled by MOBILE_POPUP_SCALE)
         const s = mobile ? (v: number) => Math.round(v * M) : S
@@ -611,7 +626,7 @@ function SpectatorHUD({ mobile }: { mobile: boolean }) {
 
 import type { RoundEarnings } from './gameState/roundEarnings'
 
-function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgress, creditsCountdown, mobile }: {
+export function CreditsScreen({ activeRoundEarnings, earnedUiPhase, earnedCoinsFlyProgress, creditsCountdown, mobile }: {
   activeRoundEarnings: RoundEarnings | null; earnedUiPhase: EarnedUiPhase; earnedCoinsFlyProgress: number; creditsCountdown: number; mobile: boolean
 }) {
   return (
