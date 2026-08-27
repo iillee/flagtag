@@ -58,7 +58,15 @@ export const Messages = {
   // start conditions once; every client runs identical analytic gravity
   // (src/shared/flagFall.ts) locally at 60fps — zero CRDT writes during the
   // fall. See docs/CRDT_SATURATION_REDUCTION.md.
-  flagFallStart: Schemas.Map({ startX: Schemas.Float, startY: Schemas.Float, startZ: Schemas.Float, targetY: Schemas.Float, dropTimeMs: Schemas.Float }),
+  // dropTimeMs MUST be Schemas.Double (Float64). Do NOT use Schemas.Number —
+  // that's aliased to Float32 in this SDK build (Schemas.Number = Float32 in
+  // @dcl/ecs/dist/schemas/index.js). Float32 has ~7 significant digits, so
+  // quantization at Date.now() magnitude (~1.79e12) is ±262 seconds; two drops
+  // less than ~4min apart collapse to the same value on the wire, breaking the
+  // client's dropTimeMs idempotency guard. Symptom: 'local fall started at Y=X
+  // dropTimeMs=SAMEVALUE (fast-forwarded 10.0s)' on every drop after the first.
+  // (2026-08-27, second attempt — first attempt used Schemas.Number by mistake.)
+  flagFallStart: Schemas.Map({ startX: Schemas.Float, startY: Schemas.Float, startZ: Schemas.Float, targetY: Schemas.Float, dropTimeMs: Schemas.Double }),
   flagLanded: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   waterLeverPulled: Schemas.Map({ t: Schemas.Int }),
   playerShieldActive: Schemas.Map({ playerId: Schemas.String, active: Schemas.Int }),

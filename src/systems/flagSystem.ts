@@ -570,6 +570,7 @@ room.onMessage('flagFallStart', (data) => {
     rayRetriesLeft: 2
   }
   console.log('[Flag] 🚩⬇️ local fall started at Y=', data.startY.toFixed(1),
+    'dropTimeMs=', data.dropTimeMs,
     elapsedSec > 0.5 ? `(fast-forwarded ${elapsedSec.toFixed(1)}s)` : '')
 })
 

@@ -354,6 +354,67 @@ function endFall(landX: number, landY: number, landZ: number): void {
 }
 
 /**
+ * Lower the fall's target Y (or the at-rest anchor Y if no fall is active)
+ * WITHOUT broadcasting a fresh flagFallStart. The client visual runs its own
+ * local raycast + Euler gravity from the initial flagFallStart (see the client
+ * 'flagFallStart' handler — it ignores data.targetY entirely); a new
+ * flagFallStart with a new dropTimeMs blows away that in-flight sim and snaps
+ * the visual back up to the retarget's startY with velocity=0, which is the
+ * client-visible teleport symptom of bug #3.
+ *
+ * This helper is the ONE place server-side target changes should go through
+ * (reportGroundY correction, water-sink retarget). It handles three cases:
+ *   - active fall AND currentAnchorY <= newTarget: snap to newTarget + endFall
+ *   - active fall AND currentAnchorY  > newTarget: retarget flagFallInfo in place
+ *     (dropTimeMs + startY unchanged so computeFallY stays continuous;
+ *     recompute landTimeMs so the server tick lands on time)
+ *   - no active fall: silently correct dropAnchorY + Transform to newTarget
+ *
+ * Returns true if a change was applied (or the fall was ended). Caller can
+ * inspect flagFallInfo.active if it cares whether a fall is still in progress.
+ */
+function lowerFallTarget(newTarget: number, tag: string): void {
+  const flag = Flag.getOrNull(flagEntity)
+  if (!flag) return
+  const nowMs = Date.now()
+  const currentAnchorY = flagFallInfo.active
+    ? computeFallY(flagFallInfo.startY, flagFallInfo.targetY, flagFallInfo.dropTimeMs, nowMs, FLAG_GRAVITY)
+    : flag.dropAnchorY
+  if (currentAnchorY <= newTarget) {
+    if (flagFallInfo.active) {
+      endFall(flag.dropAnchorX, newTarget, flag.dropAnchorZ)
+    } else {
+      const fm = Flag.getMutable(flagEntity)
+      fm.dropAnchorY = newTarget
+    }
+    flagFalling = false
+    flagFallVelocity = 0
+  } else if (flagFallInfo.active) {
+    flagFalling = true
+    flagFallVelocity = 0
+    flagFallInfo.targetY = newTarget
+    flagFallInfo.landTimeMs = flagFallInfo.dropTimeMs +
+      computeLandTimeMs(flagFallInfo.startY, newTarget, FLAG_GRAVITY)
+    console.log('[Server] 🚩🔀 fall retargeted in-place newTargetY=', newTarget.toFixed(1),
+      'currentAnchorY=', currentAnchorY.toFixed(1),
+      '(' + tag + ', no client rebroadcast)')
+  } else {
+    // Stub fall already endFall-ed. Silently correct the at-rest anchor to the
+    // new target; the client visual either finished at its own raycast target
+    // (fine, position irrelevant to gameplay) or is still descending under its
+    // own local Euler (also fine — no server broadcast disturbs it).
+    const fm = Flag.getMutable(flagEntity)
+    fm.dropAnchorY = newTarget
+    const t = Transform.getMutable(flagEntity)
+    t.position = Vector3.create(flag.dropAnchorX, newTarget, flag.dropAnchorZ)
+    flagFalling = false
+    flagFallVelocity = 0
+    console.log('[Server] 🚩🔧 post-land anchor corrected to Y=', newTarget.toFixed(1),
+      '(' + tag + ', no client rebroadcast)')
+  }
+}
+
+/**
  * Watchdog: if the engine has recycled the flag's entity slot and dropped its Flag
  * component (observed for hold-time entities on long-running servers — see
  * getOrCreateHoldTimeEntity), every flag path silently no-ops and the flag appears
@@ -764,13 +825,14 @@ export function flagServerSystem(dt: number): void {
   if (flag.state === FlagState.Dropped && currentAnchorY <= WATER_RESPAWN_Y && !waterRespawnActive) {
     waterRespawnActive = true
     waterRespawnTimer = WATER_RESPAWN_DELAY
-    // Let the flag sink to the invisible collider floor during the delay.
-    // Re-arm a fresh analytic fall from CURRENT analytic Y (not from the last
-    // CRDT dropAnchorY, which we deliberately froze at the drop start) so
-    // clients pick up the sink from where the visual actually is.
+    // Lower the target to the invisible collider floor so the fall (or at-rest
+    // anchor) tracks down through the water. lowerFallTarget does the right
+    // thing whether a fall is still active (in-place retarget — same dropTimeMs
+    // so client visual keeps its uninterrupted local fall) or the stub already
+    // endFall-ed (silent anchor correction). Never broadcasts a fresh
+    // flagFallStart, so the client cannot visually snap-back to startY.
     flagGravityTargetY = SCENE_FLOOR_Y
-    flagFalling = true
-    beginFall(flag.dropAnchorX, currentAnchorY, flag.dropAnchorZ, SCENE_FLOOR_Y)
+    lowerFallTarget(SCENE_FLOOR_Y, 'water-sink')
     console.log('[Server] 🌊 Flag hit water (Y=' + currentAnchorY.toFixed(2) + ') — sinking to Y=0, respawning in ' + WATER_RESPAWN_DELAY + 's')
     room.send('flagSinking', { t: 0 })
   }
@@ -981,66 +1043,8 @@ export function registerFlagHandlers(): void {
         groundLowerReportsLeft--
       }
       flagGravityTargetY = newTarget
-
-      // Read the current analytic Y if a fall is in progress — dropAnchorY is
-      // frozen at the fall's startY under the message-driven model.
-      const nowMs = Date.now()
-      const currentAnchorY = flagFallInfo.active
-        ? computeFallY(flagFallInfo.startY, flagFallInfo.targetY, flagFallInfo.dropTimeMs, nowMs, FLAG_GRAVITY)
-        : flag.dropAnchorY
-      if (currentAnchorY <= newTarget) {
-        // Already at/below the new target — snap to it and end any active fall.
-        if (flagFallInfo.active) {
-          endFall(flag.dropAnchorX, newTarget, flag.dropAnchorZ)
-        } else {
-          const flagMutable = Flag.getMutable(flagEntity)
-          flagMutable.dropAnchorY = newTarget
-        }
-        flagFalling = false
-        flagFallVelocity = 0
-      } else if (flagFallInfo.active) {
-        // Retarget the ACTIVE fall in place — do NOT broadcast a second
-        // flagFallStart. The client visual is running its OWN local raycast +
-        // Euler gravity from the initial flagFallStart (it ignores data.targetY
-        // entirely — see the client 'flagFallStart' handler), and a fresh
-        // flagFallStart with a new dropTimeMs would blow away that in-flight
-        // sim, snap the visual back up to the retarget's startY with velocity=0
-        // and re-arm a new raycast — a client-visible teleport / snap-back.
-        //
-        // Server-side we still need the corrected target for pickup validation
-        // (authoritativeFlagPos → computeFallY) and landing detection
-        // (flagServerSystem's landTimeMs check). Update those in place: keep
-        // dropTimeMs + startY so computeFallY on the same t returns exactly the
-        // same Y as before for any moment already passed, then recompute
-        // landTimeMs against the new lower target so endFall fires when the
-        // analytic actually reaches the new ground.
-        flagFalling = true
-        flagFallVelocity = 0
-        flagFallInfo.targetY = newTarget
-        flagFallInfo.landTimeMs = flagFallInfo.dropTimeMs +
-          computeLandTimeMs(flagFallInfo.startY, newTarget, FLAG_GRAVITY)
-        console.log('[Server] 🚩🔀 fall retargeted in-place newTargetY=', newTarget.toFixed(1),
-          'currentAnchorY=', currentAnchorY.toFixed(1),
-          '(no client rebroadcast)')
-      } else {
-        // No active fall (the initial stub fall already endFall-ed before the
-        // ground report arrived — the common case for mid-air drops, where the
-        // stub `dropY - 0.5` fall lands in ~258ms). Silently correct the
-        // authoritative anchor to the new target so pickup validation reads
-        // the right Y. Do NOT beginFall — the client's local visual has been
-        // falling to its own raycast result since the initial flagFallStart
-        // and is already headed to (or resting at) the correct ground. A fresh
-        // beginFall here would restart the client's visual from the stub
-        // landing height with velocity=0 — the visual teleport symptom of #3.
-        const flagMutable = Flag.getMutable(flagEntity)
-        flagMutable.dropAnchorY = newTarget
-        const t = Transform.getMutable(flagEntity)
-        t.position = Vector3.create(flag.dropAnchorX, newTarget, flag.dropAnchorZ)
-        flagFalling = false
-        flagFallVelocity = 0
-        console.log('[Server] 🚩🔧 post-land anchor corrected to Y=', newTarget.toFixed(1),
-          '(no client rebroadcast)')
-      }
+      lowerFallTarget(newTarget, 'reportGroundY')
     } catch (err) { console.error('[Server] ❌ reportGroundY handler error:', err) }
   })
 }
+
