@@ -114,7 +114,7 @@ export const BOMB_STAGGER_MS = 3000
  * exploded on landing (reported as "bombs firing immediately with no fuse"). 6m means
  * only deliberate high drops (updraft/ledge dives) impact-explode.
  */
-export const BOMB_IMPACT_HEIGHT = 6
+export const BOMB_IMPACT_HEIGHT = 3
 
 // ── Ghost ──
 
