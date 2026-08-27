@@ -58,7 +58,13 @@ export const Messages = {
   // start conditions once; every client runs identical analytic gravity
   // (src/shared/flagFall.ts) locally at 60fps — zero CRDT writes during the
   // fall. See docs/CRDT_SATURATION_REDUCTION.md.
-  flagFallStart: Schemas.Map({ startX: Schemas.Float, startY: Schemas.Float, startZ: Schemas.Float, targetY: Schemas.Float, dropTimeMs: Schemas.Float }),
+  // dropTimeMs MUST be Schemas.Number (Float64). Float32 has only ~7 sig digits
+  // — quantization at Date.now() magnitude (~1.79e12) is ±262 seconds, so two drops
+  // less than ~4min apart collapse to the same value and the client's dropTimeMs
+  // idempotency guard misfires. Symptom: repeated drops appear as "rebroadcast of
+  // the first fall", client silently drops the message, visual snaps from stale
+  // CRDT anchor. (2026-08-27)
+  flagFallStart: Schemas.Map({ startX: Schemas.Float, startY: Schemas.Float, startZ: Schemas.Float, targetY: Schemas.Float, dropTimeMs: Schemas.Number }),
   flagLanded: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   waterLeverPulled: Schemas.Map({ t: Schemas.Int }),
   playerShieldActive: Schemas.Map({ playerId: Schemas.String, active: Schemas.Int }),
