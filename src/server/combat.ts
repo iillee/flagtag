@@ -350,6 +350,16 @@ export interface ActiveProjectile {
   returnZ: number
   chargeSpeed: number
   chargeScale: number
+  /**
+   * Addresses this shell has already hit at least once, to prevent a single shell from
+   * registering multiple hits on the same victim across consecutive server ticks. Without
+   * this, an outbound hit sets `returning=true` but does not remove the projectile; the very
+   * next tick can re-scan and find the same staggered victim still within hitRadius, sending
+   * a second `shellTriggered` — causing 'double hit VFX' on the shooter's screen. (Yellow's
+   * double-shot mechanic is separate: it fires TWO shells, each with its own hitVictims set,
+   * which is why yellow's 2 VFX is WAI while red's is a bug.) 2026-08-27.
+   */
+  hitVictims: Set<string>
 }
 export const activeProjectiles: ActiveProjectile[] = []
 
@@ -850,6 +860,7 @@ function handleProjectileFire(playerId: string, dirX: number, dirZ: number, colo
     returnZ: spawnPos.z,
     chargeSpeed,
     chargeScale,
+    hitVictims: new Set<string>(),
   })
   lastProjectileFireTime.set(playerId, now)
 
@@ -966,6 +977,8 @@ export function shellServerSystem(dt: number): void {
     for (const addr of getActivePlayerAddresses()) {
       if (addr === projectile.firedBy) continue
       if (isFlagImmune(addr)) continue
+      // Per-shell dedup: same shell + same victim across ticks is the 'double hit VFX' bug.
+      if (projectile.hitVictims.has(addr)) continue
       const playerPos = getPlayerPosition(addr)
       if (!playerPos) continue
       currentCandidates.push({ addr, dist: Vector3.distance(playerPos, projectilePos) })
@@ -979,6 +992,7 @@ export function shellServerSystem(dt: number): void {
       for (const addr of getActivePlayerAddresses()) {
         if (addr === projectile.firedBy) continue
         if (isFlagImmune(addr)) continue
+        if (projectile.hitVictims.has(addr)) continue
         lookbackCandidates.push({ addr, dist: distanceWithinLookback(addr, projectilePos, LOOKBACK_MS) })
       }
       hitAddr = selectClosestCandidate(lookbackCandidates, hitRadius, projectile.firedBy).closestId
@@ -986,6 +1000,7 @@ export function shellServerSystem(dt: number): void {
     }
     if (hitAddr) {
       const addr = hitAddr
+      projectile.hitVictims.add(addr)
       {
         console.log('[Server] 🎯 Projectile hit player', addr.slice(0, 8), projectile.returning ? '(return)' : '(outbound)', hitMode === 'lookback' ? '(lookback)' : '')
 
