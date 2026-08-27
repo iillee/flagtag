@@ -998,13 +998,48 @@ export function registerFlagHandlers(): void {
         }
         flagFalling = false
         flagFallVelocity = 0
-      } else {
-        // Need to (re)start a fall from the current visual position to the new
-        // lower target. If a fall is already in progress, this replaces it —
-        // clients receive a fresh flagFallStart and reset their local sim.
+      } else if (flagFallInfo.active) {
+        // Retarget the ACTIVE fall in place — do NOT broadcast a second
+        // flagFallStart. The client visual is running its OWN local raycast +
+        // Euler gravity from the initial flagFallStart (it ignores data.targetY
+        // entirely — see the client 'flagFallStart' handler), and a fresh
+        // flagFallStart with a new dropTimeMs would blow away that in-flight
+        // sim, snap the visual back up to the retarget's startY with velocity=0
+        // and re-arm a new raycast — a client-visible teleport / snap-back.
+        //
+        // Server-side we still need the corrected target for pickup validation
+        // (authoritativeFlagPos → computeFallY) and landing detection
+        // (flagServerSystem's landTimeMs check). Update those in place: keep
+        // dropTimeMs + startY so computeFallY on the same t returns exactly the
+        // same Y as before for any moment already passed, then recompute
+        // landTimeMs against the new lower target so endFall fires when the
+        // analytic actually reaches the new ground.
         flagFalling = true
         flagFallVelocity = 0
-        beginFall(flag.dropAnchorX, currentAnchorY, flag.dropAnchorZ, newTarget)
+        flagFallInfo.targetY = newTarget
+        flagFallInfo.landTimeMs = flagFallInfo.dropTimeMs +
+          computeLandTimeMs(flagFallInfo.startY, newTarget, FLAG_GRAVITY)
+        console.log('[Server] 🚩🔀 fall retargeted in-place newTargetY=', newTarget.toFixed(1),
+          'currentAnchorY=', currentAnchorY.toFixed(1),
+          '(no client rebroadcast)')
+      } else {
+        // No active fall (the initial stub fall already endFall-ed before the
+        // ground report arrived — the common case for mid-air drops, where the
+        // stub `dropY - 0.5` fall lands in ~258ms). Silently correct the
+        // authoritative anchor to the new target so pickup validation reads
+        // the right Y. Do NOT beginFall — the client's local visual has been
+        // falling to its own raycast result since the initial flagFallStart
+        // and is already headed to (or resting at) the correct ground. A fresh
+        // beginFall here would restart the client's visual from the stub
+        // landing height with velocity=0 — the visual teleport symptom of #3.
+        const flagMutable = Flag.getMutable(flagEntity)
+        flagMutable.dropAnchorY = newTarget
+        const t = Transform.getMutable(flagEntity)
+        t.position = Vector3.create(flag.dropAnchorX, newTarget, flag.dropAnchorZ)
+        flagFalling = false
+        flagFallVelocity = 0
+        console.log('[Server] 🚩🔧 post-land anchor corrected to Y=', newTarget.toFixed(1),
+          '(no client rebroadcast)')
       }
     } catch (err) { console.error('[Server] ❌ reportGroundY handler error:', err) }
   })
