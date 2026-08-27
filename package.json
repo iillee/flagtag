@@ -48,6 +48,7 @@
   },
   "dependencies": {
     "@dcl/js-runtime": "7.26.1-32860802198.commit-dae48fb",
+    "@stom66/dcl-ui-component-kit": "^0.2.0",
     "sharp": "^0.34.5"
   }
 }
