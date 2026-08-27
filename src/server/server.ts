@@ -41,8 +41,9 @@ import {
 import {
   patchAllLeaderboardNames, checkLeaderboardDailyReset, updatePlayerName,
   markDailyLeaderboardLoaded, isDailyLeaderboardLoaded, recoverDailyLeaderboard,
+  syncAllTimeLeaderboard,
 } from './leaderboard'
-import { isValidLeaderboardJson } from './leaderboardData'
+import { isValidLeaderboardJson, parseLeaderboardJsonSafe } from './leaderboardData'
 import { resetDailyLeaderboardAfterRecovery } from './leaderboardLifecycle'
 import { FEEDBACK_COOLDOWN_MS, NAME_CHANGE_COOLDOWN_MS, isRateLimited } from './cooldownValidation'
 import { formatRejections, clearRejections, recordRejection } from './rejectionStats'
@@ -211,17 +212,14 @@ async function initLeaderboards() {
     console.error('[Server] ⚠️ All-time leaderboard has an invalid shape — displaying empty and refusing to overwrite Storage')
   }
   const atJsonFull = patchAllLeaderboardNames(at.ok && isValidLeaderboardJson(at.json) ? (at.json || '[]') : '[]', 'all-time leaderboard')
-  let atJsonSync = '[]'
-  try {
-    const atEntries: { userId: string; name: string; roundsWon: number }[] = JSON.parse(atJsonFull)
-    atEntries.sort((a, b) => b.roundsWon - a.roundsWon)
-    const compact = atEntries.slice(0, 500).map(e => ({ n: e.name, w: e.roundsWon }))
-    atJsonSync = JSON.stringify(compact)
-    console.log('[Server] All-time leaderboard:', atEntries.length, 'entries,', atJsonFull.length, 'bytes full,', atJsonSync.length, 'bytes compact')
-  } catch { console.log('[Server] All-time leaderboard parse failed, using empty') }
   setAllTimeLeaderboardEntity(engine.addEntity())
-  AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: atJsonSync })
+  // Seed with empty, then hand off to the shared sync helper so boot and round-end
+  // paths agree on cap + wire format (tuple [name, wins], top 250) and stay under
+  // the ~12KB CRDT per-message limit.
+  AllTimeLeaderboardState.create(allTimeLeaderboardEntity, { json: '[]' })
   syncEntity(allTimeLeaderboardEntity, [AllTimeLeaderboardState.componentId], SyncIds.ALLTIME_LEADERBOARD)
+  const atEntries = parseLeaderboardJsonSafe(atJsonFull)
+  syncAllTimeLeaderboard(atEntries)
 
 }
 

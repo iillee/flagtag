@@ -47,7 +47,7 @@
     "protobufjs": "7.6.5"
   },
   "dependencies": {
-    "@dcl/js-runtime": "7.26.1-32160793830.commit-0b97733",
+    "@dcl/js-runtime": "7.26.1-32860802198.commit-dae48fb",
     "sharp": "^0.34.5"
   }
 }
