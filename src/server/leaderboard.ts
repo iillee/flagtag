@@ -67,12 +67,18 @@ export function parseLeaderboardJson(json: string | undefined | null): Leaderboa
 // could erase a win that had already landed.
 const allTimeMutationQueue = new AsyncSerialQueue()
 
-function syncAllTimeLeaderboard(entries: LeaderboardEntry[]): void {
+// Compact wire format: array of [name, wins] tuples. Saves ~35% vs {n,w} objects
+// and keeps the synced CRDT payload comfortably under the ~13KB per-message limit.
+// Capped to top 250 — deeper ranks are not shown in-world (paginated UI stops there).
+const ALLTIME_SYNC_CAP = 250
+export function syncAllTimeLeaderboard(entries: LeaderboardEntry[]): void {
   const compact = [...entries]
     .sort((a, b) => b.roundsWon - a.roundsWon)
-    .slice(0, 500)
-    .map(e => ({ n: e.name, w: e.roundsWon }))
-  AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = JSON.stringify(compact)
+    .slice(0, ALLTIME_SYNC_CAP)
+    .map(e => [e.name, e.roundsWon] as [string, number])
+  const json = JSON.stringify(compact)
+  console.log('[Server] All-time leaderboard sync:', entries.length, 'total,', compact.length, 'synced,', json.length, 'bytes')
+  AllTimeLeaderboardState.getMutable(allTimeLeaderboardEntity).json = json
 }
 
 function mutateAllTimeLeaderboard(mutate: (entries: LeaderboardEntry[]) => boolean): Promise<void> {

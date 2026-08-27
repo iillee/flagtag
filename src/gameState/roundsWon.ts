@@ -58,13 +58,16 @@ export function getAllTimeLeaderboardEntries(): LeaderboardEntry[] {
     if (!lb.json) { _allTimeCache.json = lb.json; _allTimeCache.result = []; return [] }
     try {
       const raw: any[] = JSON.parse(lb.json)
-      // Support both compact {n,w} and full {userId,name,roundsWon} formats
+      // Support tuple [name,wins] (current), compact {n,w}, and full {userId,name,roundsWon}
       const entries: LeaderboardEntry[] = raw
-        .map(e => ({
-          userId: e.userId || e.u || '',
-          name: e.name || e.n || '',
-          roundsWon: e.roundsWon ?? e.w ?? 0,
-        }))
+        .map(e => {
+          if (Array.isArray(e)) return { userId: '', name: e[0] || '', roundsWon: e[1] ?? 0 }
+          return {
+            userId: e.userId || e.u || '',
+            name: e.name || e.n || '',
+            roundsWon: e.roundsWon ?? e.w ?? 0,
+          }
+        })
         .filter(e => !HIDDEN_NAMES.has(e.name))
       entries.sort((a, b) => b.roundsWon - a.roundsWon)
       _allTimeCache.json = lb.json
