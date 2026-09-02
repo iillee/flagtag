@@ -16,7 +16,6 @@ import {
 import { getPlayersWithHoldTimes, getCurrentFlagCarrierUserId, getCinematicSnapshot } from '../../gameState/flagHoldTime'
 import { getCoinBalance, isCoinBalanceLoaded } from '../../systems/coinPickupSystem'
 import { getLocalLifetimeWins, isWinsLoaded } from '../../gameState/playerUpgradeState'
-import { isNightTime } from '../../shared/dayNight'
 
 // MARK: HudTopRightLayer
 // Row of [icon buttons | stats square | scoreboard] anchored top-right.
@@ -145,7 +144,6 @@ export class HudTopRightLayer extends Layer {
       >
         <UiEntity uiTransform={{ height: S(_ROW_HEIGHT), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Label value="Scoreboard" fontSize={S(20)} color={MUTED} font="sans-serif" />
-          <Label value={isNightTime() ? '☾' : '☀️'} fontSize={S(16)} font="sans-serif" />
         </UiEntity>
         {players.length === 0 ? (
           <UiEntity uiTransform={{ height: S(_ROW_HEIGHT) * 2, justifyContent: 'center', alignItems: 'center' }}>

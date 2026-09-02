@@ -2,7 +2,6 @@ import { InputAction } from '@dcl/sdk/ecs'
 import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/players'
-import { isNightTime } from '../../shared/dayNight'
 
 import {
   WHITE, BRIGHT_WHITE, BRIGHT_GOLD, MUTED, LIGHT_GREY, GREY, CLOSE_GREY, GOLD,

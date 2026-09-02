@@ -19,7 +19,6 @@ import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { exitSpectatorMode } from './spectatorSystem'
 import { initPools as initCombatPools } from './combatSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
-import { isNightTime } from '../shared/dayNight'
 
 // ── Visual constants ──
 const GHOST_MODEL_SRC = 'assets/models/ghost.glb'
