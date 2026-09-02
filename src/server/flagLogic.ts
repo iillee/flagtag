@@ -26,7 +26,7 @@ import {
   holdTimeEntities, knownPlayers, playerNames,
   currentScoreRoundId,
   lastStealTime, lightningStruckAt, deathPenaltyCooldowns, rejectionCounts,
-  PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
+  PICKUP_RADIUS, PROXIMITY_STEAL_RADIUS, PROXIMITY_STEAL_VERTICAL_MAX, STEAL_IMMUNITY_MS, HOLD_TIME_SYNC_INTERVAL,
   FLAG_GRAVITY, FLAG_MIN_Y, FLAG_MAX_Y, SCENE_FLOOR_Y, CARRIER_Y_WINDOW_SEC, CARRIER_NO_POSITION_TIMEOUT_MS,
   getPlayerPosition, getActivePlayerAddresses
 } from './serverState'
@@ -696,7 +696,16 @@ export function checkProximitySteal(): void {
     if (isRateLimited(deathPenaltyCooldowns.get(addr), now, DEATH_STEAL_EXCLUSION_MS)) continue
     const pos = getPlayerPosition(addr)
     if (!pos) continue
-    candidates.push({ addr, dist: Vector3.distance(carrierPos, pos) })
+    // XZ-only distance, plus a vertical cap. A stealer mid-jump is 1–2 m above the carrier
+    // in Y even when standing on top of them in the floor plan; 3D distance turned that
+    // Y offset into range budget the stealer had to "pay for" and made air-steals fail
+    // when the player felt they should succeed. Vertical cap keeps the check from admitting
+    // a stealer on an upper deck / rooftop above the carrier who cannot physically touch them.
+    const dy = Math.abs(carrierPos.y - pos.y)
+    if (dy > PROXIMITY_STEAL_VERTICAL_MAX) continue
+    const dx = carrierPos.x - pos.x
+    const dz = carrierPos.z - pos.z
+    candidates.push({ addr, dist: Math.sqrt(dx * dx + dz * dz) })
   }
 
   const { closestId, closestDist } = selectClosestCandidate(candidates, PROXIMITY_STEAL_RADIUS, carrierId)
