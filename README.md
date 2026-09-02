@@ -135,9 +135,6 @@ This builds `bin/index.js` and publishes to `flagtag.dcl.eth`. Only the wallet c
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Code layout, client/server split, message flow |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How to publish, secrets, rollback |
 | [docs/STORAGE.md](docs/STORAGE.md) | Server-side storage schema and migrations |
-| [docs/KNOWN_BUGS.md](docs/KNOWN_BUGS.md) | Live bug tracker |
-| [docs/PITCH.md](docs/PITCH.md) | Product pitch / vision |
-| [docs/history/](docs/history/) | Retired bug postmortems and old pitches |
 
 ---
 
