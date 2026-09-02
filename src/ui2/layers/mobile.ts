@@ -1,4 +1,11 @@
 import { Layer } from '@stom66/dcl-ui-component-kit'
+import { mobileLayoutLayer } from './MobileLayoutLayer'
+import { compassLayer } from './CompassLayer'
 
-// Mobile-only layer list. Populated in Phase 4 (after desktop is stable).
-export const mobileLayers: Layer[] = []
+// Mobile layer stack. Currently a single wrapper around the legacy
+// MobileLayout React tree — mirrors what desktop had before its per-layer
+// DUCK rebuild. Individual mobile layers can be split out later.
+export const mobileLayers: Layer[] = [
+  mobileLayoutLayer,
+  compassLayer,
+]

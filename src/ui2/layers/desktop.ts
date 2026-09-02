@@ -20,10 +20,12 @@ import { mailboxLayer } from './MailboxLayer'
 import { blessingLayer } from './BlessingLayer'
 import { blessingCompletedLayer } from './BlessingCompletedLayer'
 import { spectatorLayer } from './SpectatorLayer'
+import { compassLayer } from './CompassLayer'
 
 // Desktop layer stack. Order matters: later layers paint on top of earlier ones.
 export const desktopLayers: Layer[] = [
   // Persistent HUD
+  compassLayer,
   hudTopLayer,
   hudTopRightLayer,
   hudBottomLayer,
