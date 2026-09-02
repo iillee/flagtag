@@ -284,10 +284,19 @@ export function registerUiSystems() {
         } else {
           serverDownState.timer += dt
           if (serverDownState.timer >= SERVER_DOWN_CONFIRM_SEC) {
-            if (serverDownState.dismissedAt === 0) {
+            // Only act on the *transition* into visible — previously this
+            // branch fired every frame while `visible` stayed true, which
+            // slammed every overlay closed on the next frame after the user
+            // opened one. Guard with `!serverDownState.visible` so the flip
+            // happens once per outage.
+            if (serverDownState.dismissedAt === 0 && !serverDownState.visible) {
               serverDownState.visible = true
               closeNonEssentialOverlays()
-            } else if (Date.now() - serverDownState.dismissedAt >= SERVER_DOWN_RESHOW_SEC * 1000) {
+            } else if (
+              serverDownState.dismissedAt !== 0 &&
+              !serverDownState.visible &&
+              Date.now() - serverDownState.dismissedAt >= SERVER_DOWN_RESHOW_SEC * 1000
+            ) {
               serverDownState.visible = true
               serverDownState.dismissedAt = 0
               closeNonEssentialOverlays()

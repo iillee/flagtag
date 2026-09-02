@@ -84,7 +84,7 @@ export const roundParticipants = new Set<string>()
 // ── Constants ──
 
 export const PICKUP_RADIUS = 4.5
-export { PROXIMITY_STEAL_RADIUS, STEAL_IMMUNITY_MS } from '../shared/constants'
+export { PROXIMITY_STEAL_RADIUS, PROXIMITY_STEAL_VERTICAL_MAX, STEAL_IMMUNITY_MS } from '../shared/constants'
 export const HOLD_TIME_SYNC_INTERVAL = 2.0 // seconds between CRDT hold-time writes (was 0.5)
 export const SPLASH_DURATION_MS = 3000
 // Re-export so existing server code that imports from serverState keeps

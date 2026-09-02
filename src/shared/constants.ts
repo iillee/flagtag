@@ -29,8 +29,17 @@ export const ROUND_LENGTH_MINUTES = 5
 
 // ── Proximity Steal ──
 
-/** Radius for proximity steal (meters). */
+/** Horizontal (XZ) radius for proximity steal (meters). */
 export const PROXIMITY_STEAL_RADIUS = 1.8
+/**
+ * Vertical tolerance for proximity steal (meters). The steal check uses XZ distance rather
+ * than 3D distance so a stealer mid-jump isn't pushed outside the radius by their own Y
+ * offset (see `checkProximitySteal`). This cap keeps a player on a rooftop or upper deck
+ * from stealing off someone directly below them who they cannot physically touch.
+ * 2.5 m clears an avatar-height jump plus mushroom-boost apex without admitting cross-floor
+ * steals — the next platform tier on this map is >3 m up.
+ */
+export const PROXIMITY_STEAL_VERTICAL_MAX = 2.5
 /** Immunity duration after stealing/picking up flag (ms). */
 export const STEAL_IMMUNITY_MS = 3000
 /**
