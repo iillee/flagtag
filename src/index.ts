@@ -54,7 +54,6 @@ export async function main() {
   const { chestSystem } = await import('./systems/chestSystem')
   const { boomboxSystem } = await import('./systems/boomboxSystem')
   const { upgradeStateSystem, initUpgradeListeners } = await import('./gameState/playerUpgradeState')
-  const { updateWorldTime } = await import('./shared/dayNight')
   const { setupUpdraftSystem, updraftSystem, setSmokeMobileFlag } = await import('./systems/updraftSystem')
   const { waterBobSystem } = await import('./systems/waterBobSystem')
   const { coinBobSpinSystem } = await import('./systems/coinBobSpinSystem')
@@ -225,7 +224,6 @@ export async function main() {
     coinBobSpinSystem(dt)
     beaconClientSystem(dt)
     updraftSystem(dt)
-    updateWorldTime(dt)
   })
 
   // Per-frame gameplay — time-sliced systems (alternating frames, 30fps each)

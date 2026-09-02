@@ -1,6 +1,5 @@
 import { engine, Transform, LightSource } from '@dcl/sdk/ecs'
 import { Vector3, Color3 } from '@dcl/sdk/math'
-import { isNightTime } from '../shared/dayNight'
 
 // ── Raw light positions (Blender world coords: x=right, y=forward, z=up) ──
 // Transform: DCL_x = bx*5 + 74.75,  DCL_y = bz*5 - 2,  DCL_z = -by*5 + 119.5
@@ -48,9 +47,16 @@ const RAW_POSITIONS: [number, number, number][] = [
   [8.0383,-9.0093,3.2213],[9.0614,-8.7795,3.2213]
 ]
 
-// Convert Blender coords to DCL world coordinates
+// Convert Blender coords to DCL world coordinates.
+// Calibrated 2026-09-02 against the highest terminal (x=392.7, y=100.5,
+// z=403.2). The highest raw light (bz=11.199) now lands at (392.7, 103, 403.5)
+// which sits right on top of that terminal, confirming alignment.
+//
+// Y stacks: +1 from the 32x32 resize (eb5c643) and +48 from the scene lift
+// (920eeca). X/Z were overshifted by previous stacked offsets (+176+170 and
+// +136+142); trimming 49/48 back to match the current composite.
 const LIGHT_POSITIONS: Vector3[] = RAW_POSITIONS.map(([bx, by, bz]) =>
-  Vector3.create(-bx * 5 + 74.75 + 176, bz * 5 - 2 + 1, -by * 5 + 119.5 + 136)
+  Vector3.create(-bx * 5 + 372.75, bz * 5 + 47, -by * 5 + 349.5)
 )
 
 const MAX_ACTIVE = 8
@@ -94,17 +100,6 @@ export function proximityLightSystem(dt: number) {
 
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position
-
-  // If daytime, turn all lights off
-  if (!isNightTime()) {
-    for (let i = 0; i < lights.length; i++) {
-      if (lights[i].active) {
-        lights[i].active = false
-        LightSource.getMutable(lights[i].entity).active = false
-      }
-    }
-    return
-  }
 
   // Find the MAX_ACTIVE closest lights in a single pass (no allocation, no sort).
   for (let k = 0; k < MAX_ACTIVE; k++) { topIdx[k] = -1; topDist[k] = Infinity }

@@ -15,7 +15,6 @@ import {
   PROJECTILE_HIT_RADIUS,
 } from '../shared/components'
 import { room } from '../shared/messages'
-import { isNightTime, updateWorldTime, getCurrentSkyTime } from '../shared/dayNight'
 import {
   shouldSendGhostTouching,
   GHOST_TOUCHING_SEND_INTERVAL_MS,
@@ -32,14 +31,6 @@ const GHOST_SPAWN_POS = Vector3.create(347, 49.25, 381) // Black cube location
 let ghostSpawnTimer = 10 // first spawn after 10s
 const GHOST_STAGGER_COOLDOWN_MS = 3000 // can only stagger same player every 3s
 const GHOST_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
-// DIAG (day-night-spawn-unreliable bug): characterize whether the server's
-// getWorldTime() clock actually advances on the headless realm. If this logs a
-// stuck value across playtests, isNightTime() is the root cause of "ghost
-// rarely spawns" and we file a separate fix; if it advances normally, the
-// complaint is a UX issue with the 24-minute cycle length. Throttled to 30s.
-const DAYNIGHT_DIAG_INTERVAL_MS = 30_000
-let lastDayNightDiagMs = 0
-
 // ── ghostTouching throttle state ──
 // Per-victim last-sent timestamp. Server ticks at ~30 Hz; without throttling
 // this fires every tick to ALL clients while a ghost is in contact. Throttled
@@ -158,34 +149,18 @@ export function ghostServerSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   const now = Date.now()
 
-  // Keep world time cache fresh for the diagnostic below. Note: on the
-  // headless server getWorldTime() resolves with seconds=0 (see playtest
-  // 2026-07-30 logs), so isNightTime() is effectively always-true here.
-  // Client callers still get correct time because the platform advances the
-  // skybox clock in-browser.
-  updateWorldTime(clampedDt, false)
-
-  // ── Ghost is active 24/7 by design ──
-  // Design decision (2026-07-30): keep-away flag gameplay wants the ghost
-  // as a constant environmental threat, not a nightly one. We intentionally
-  // skip the night-gate here on the server so gameplay doesn't hinge on the
-  // getWorldTime() sandbox quirk documented above — if Foundation ever fixes
-  // the headless clock, ghost stays 24/7 instead of silently going dark for
-  // half the day. Client-side visuals (proximity lights, moon/sun icon) still
-  // use isNightTime() and remain correct on real clients.
+  // Ghost is active 24/7 by design (no day/night gating).
 
   // ── Spawn timer (single ghost, 30s respawn cooldown after death) ──
   if (ghostRespawnCooldown > 0) {
     setGhostRespawnCooldown(ghostRespawnCooldown - clampedDt)
   }
-  // TEMP KILL-SWITCH (2026-08-13): ghost disabled while hammurabi "Blocked
-  // scene CRDT op on reserved entity" (type=1 Transform on recycled avatar
-  // slots) is unresolved. Symptoms: getMutable(Transform) throws on the ghost
-  // when its entity id collides with a blocked reserved slot, spamming
-  // ghostServerSystem error every tick; separately, a ghost spawned near a
-  // frozen-position player kills-on-sight every joiner assigned that recycled
-  // slot (see logs 2026-08-13 20:54–20:57). Re-enable once platform ships fix.
-  const GHOST_DISABLED = true
+  // Re-enabled 2026-09-02 on branch `ghost` after the reserved-entity /
+  // frozen-position server bug that caused kill-on-sight on recycled avatar
+  // slots was fixed. Prior kill-switch context kept in git history
+  // (commit disabling it around 2026-08-13). If the "Blocked scene CRDT op on
+  // reserved entity" symptom returns, flip GHOST_DISABLED back to true.
+  const GHOST_DISABLED = false
   if (!GHOST_DISABLED && activeGhosts.length === 0 && ghostRespawnCooldown <= 0) {
     ghostSpawnTimer -= clampedDt
     if (ghostSpawnTimer <= 0) {
@@ -298,14 +273,6 @@ export function ghostServerSystem(dt: number): void {
     for (const [addr, ts] of lastGhostTouchingSentMs) {
       if (now - ts > 10_000) lastGhostTouchingSentMs.delete(addr)
     }
-  }
-
-  // ── Day/night clock diagnostic (see DAYNIGHT_DIAG_INTERVAL_MS) ──
-  if (now - lastDayNightDiagMs >= DAYNIGHT_DIAG_INTERVAL_MS) {
-    lastDayNightDiagMs = now
-    console.log('[Server] 🌓 day/night diag: worldSeconds=', getCurrentSkyTime().toFixed(0),
-      '| isNight=', isNightTime(),
-      '| activeGhosts=', activeGhosts.length)
   }
 
   // ── Check projectile-ghost collisions ──
