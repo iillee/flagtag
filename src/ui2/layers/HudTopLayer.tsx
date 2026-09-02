@@ -36,7 +36,8 @@ export class HudTopLayer extends Layer {
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: { top: S(10), bottom: S(10), left: S(20), right: S(20) },
+          padding: { top: S(8), bottom: S(8), left: S(24), right: S(24) },
+          margin: { top: S(32) },
           borderRadius: S(_BORDER_RADIUS),
           borderWidth: 0,
         }}
@@ -44,7 +45,7 @@ export class HudTopLayer extends Layer {
       >
         <Label
           value={formatCountdown(seconds)}
-          fontSize={S(42)}
+          fontSize={S(34)}
           color={color}
           font="sans-serif"
           textAlign="middle-center"
