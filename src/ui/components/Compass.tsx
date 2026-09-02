@@ -9,7 +9,8 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4, Vector3 } from '@dcl/sdk/math'
 import { engine, Transform } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
-import { PANEL_BG } from '../uiConstants'
+import { PANEL_BG, GOLD } from '../uiConstants'
+import { getFlagAuthoritativeWorldPos } from '../../systems/flagSystem'
 
 const CARDINALS: { label: string; deg: number; color: Color4 }[] = [
   { label: 'N', deg: 0,   color: Color4.White() },
@@ -32,7 +33,7 @@ function getCameraYawDeg(): number {
 export function Compass() {
   const mobile = isMobile()
   const width = mobile ? 640 : 520
-  const height = mobile ? 34 : 26
+  const height = mobile ? 28 : 26
   const yaw = getCameraYawDeg()
 
   // Show markers within +/- 90 degrees of the current heading.
@@ -40,6 +41,39 @@ export function Compass() {
   const pxPerDeg = (width / 2) / halfSpan
 
   const markers: any[] = []
+
+  // Flag bearing marker (gold dot).
+  const playerT = Transform.getOrNull(engine.PlayerEntity)
+  const flagPos = getFlagAuthoritativeWorldPos()
+  if (playerT && flagPos) {
+    const dx = flagPos.x - playerT.position.x
+    const dz = flagPos.z - playerT.position.z
+    if (dx * dx + dz * dz > 0.01) {
+      let bearing = Math.atan2(dx, dz) * (180 / Math.PI)
+      if (bearing < 0) bearing += 360
+      let delta = bearing - yaw
+      while (delta > 180) delta -= 360
+      while (delta < -180) delta += 360
+      // Clamp to edges so the flag dot is always visible (even behind the player).
+      const clamped = Math.max(-halfSpan, Math.min(halfSpan, delta))
+      const dotSize = mobile ? 14 : 10
+      const centerX = width / 2 + clamped * pxPerDeg
+      markers.push(
+        <UiEntity
+          key="flag-dot"
+          uiTransform={{
+            positionType: 'absolute',
+            position: { top: (height - dotSize) / 2, left: centerX - dotSize / 2 },
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+          }}
+          uiBackground={{ color: GOLD }}
+        />
+      )
+    }
+  }
+
   for (const c of CARDINALS) {
     // Signed angular delta in range (-180, 180].
     let delta = c.deg - yaw
@@ -53,7 +87,7 @@ export function Compass() {
       <Label
         key={c.label}
         value={c.label}
-        fontSize={mobile ? 22 : 16}
+        fontSize={mobile ? 18 : 16}
         color={c.color}
         font="sans-serif"
         textAlign="middle-center"

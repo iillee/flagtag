@@ -71,7 +71,7 @@ export function MobileLayout() {
         const scoreColor = isLeader ? GOLD : WHITE
         const T = 1.2 * MOBILE_UI_SCALE // top HUD scale (baseline 1.2, scaled by MOBILE_UI_SCALE)
         return (
-          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 8 * T }, width: '100%', height: 68 * T, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
+          <UiEntity uiTransform={{ positionType: 'absolute', position: { top: 45 * T }, width: '100%', height: 68 * T, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', pointerFilter: 'none' }}>
             <UiEntity uiTransform={{ flexDirection: 'row', alignItems: 'center' }}>
               <UiEntity uiTransform={{ height: 68 * T, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: { left: 28 * T, right: 28 * T }, borderRadius: 34 * T, margin: { right: 10 * T }, borderWidth: 3 * T, borderColor: Color4.create(1, 1, 1, 1) }}
                 uiBackground={{ color: Color4.create(0, 0, 0, 1) }}
@@ -121,7 +121,7 @@ export function MobileLayout() {
         return (
           <UiEntity uiTransform={{ positionType: 'absolute', position: { left: 0, top: 0 }, width: '100%', height: '100%', pointerFilter: 'none' }}>
             {/* Trap (banana/bomb) — original position, top of stack */}
-            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 150, right: 0 }, width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 195, right: 110 }, width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY_ABILITY }}
               uiInputBinding={{ actions: [InputAction.IA_SECONDARY] }}
               onMouseDown={() => { playClickSound() }}
@@ -133,7 +133,7 @@ export function MobileLayout() {
               {isServerConnected() && isTrapOnCooldown() && <Label value={`${getTrapCooldownRemaining()}`} fontSize={78} color={WHITE} font="sans-serif" uiTransform={{ positionType: 'absolute' }} />}
             </UiEntity>
             {/* Boomerang — moved to left of native jump button */}
-            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 3, right: 155 }, width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+            <UiEntity uiTransform={{ positionType: 'absolute', position: { bottom: 50, right: 250 }, width: AB_SIZE, height: AB_SIZE, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
               uiBackground={{ textureMode: 'stretch', texture: { src: M_CIRCLE_TEXTURE }, color: M_CIRCLE_OPACITY_ABILITY }}
               uiInputBinding={{ actions: [InputAction.IA_PRIMARY] }}
               onMouseDown={() => { playClickSound() }}
