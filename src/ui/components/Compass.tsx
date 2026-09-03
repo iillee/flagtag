@@ -9,8 +9,10 @@ import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4, Vector3 } from '@dcl/sdk/math'
 import { engine, Transform } from '@dcl/sdk/ecs'
 import { isMobile } from '@dcl/sdk/platform'
-import { PANEL_BG, GOLD } from '../uiConstants'
+import { getPlayer } from '@dcl/sdk/players'
+import { PANEL_BG, GOLD, S } from '../uiConstants'
 import { getFlagAuthoritativeWorldPos } from '../../systems/flagSystem'
+import { getCurrentFlagCarrierUserId } from '../../gameState/flagHoldTime'
 
 const CARDINALS: { label: string; deg: number; color: Color4 }[] = [
   { label: 'N', deg: 0,   color: Color4.White() },
@@ -32,8 +34,9 @@ function getCameraYawDeg(): number {
 
 export function Compass() {
   const mobile = isMobile()
-  const width = mobile ? 640 : 520
-  const height = mobile ? 28 : 26
+  // Desktop scales with the UI scale toggle (press 1). Mobile keeps a fixed size.
+  const width = mobile ? 640 : S(520)
+  const height = mobile ? 28 : S(26)
   const yaw = getCameraYawDeg()
 
   // Show markers within +/- 90 degrees of the current heading.
@@ -44,7 +47,15 @@ export function Compass() {
 
   // Flag bearing marker (gold dot).
   const playerT = Transform.getOrNull(engine.PlayerEntity)
-  const flagPos = getFlagAuthoritativeWorldPos()
+  // Flag position: dropped/base → authoritative world pos. Carried → carrier's avatar pos.
+  let flagPos: Vector3 | null = getFlagAuthoritativeWorldPos()
+  if (!flagPos) {
+    const carrierId = getCurrentFlagCarrierUserId()
+    if (carrierId) {
+      const carrier = getPlayer({ userId: carrierId })
+      if (carrier?.position) flagPos = Vector3.create(carrier.position.x, carrier.position.y, carrier.position.z)
+    }
+  }
   if (playerT && flagPos) {
     const dx = flagPos.x - playerT.position.x
     const dz = flagPos.z - playerT.position.z
@@ -56,7 +67,7 @@ export function Compass() {
       while (delta < -180) delta += 360
       // Clamp to edges so the flag dot is always visible (even behind the player).
       const clamped = Math.max(-halfSpan, Math.min(halfSpan, delta))
-      const dotSize = mobile ? 14 : 10
+      const dotSize = mobile ? 14 : S(10)
       const centerX = width / 2 + clamped * pxPerDeg
       markers.push(
         <UiEntity
@@ -82,12 +93,12 @@ export function Compass() {
     if (Math.abs(delta) > halfSpan) continue
 
     const centerX = width / 2 + delta * pxPerDeg
-    const labelWidth = mobile ? 40 : 30
+    const labelWidth = mobile ? 40 : S(30)
     markers.push(
       <Label
         key={c.label}
         value={c.label}
-        fontSize={mobile ? 18 : 16}
+        fontSize={mobile ? 18 : S(16)}
         color={c.color}
         font="sans-serif"
         textAlign="middle-center"
@@ -107,7 +118,7 @@ export function Compass() {
         width,
         height,
         positionType: 'relative',
-        borderRadius: 8,
+        borderRadius: mobile ? 8 : S(8),
         margin: { bottom: 2 },
       }}
       uiBackground={{ color: PANEL_BG }}
@@ -118,9 +129,9 @@ export function Compass() {
         <UiEntity
           uiTransform={{
             positionType: 'absolute',
-            position: { top: -4, left: width / 2 - 1 },
+            position: { top: mobile ? -4 : S(-4), left: width / 2 - 1 },
             width: 2,
-            height: height + 8,
+            height: height + (mobile ? 8 : S(8)),
           }}
           uiBackground={{ color: Color4.White() }}
         />

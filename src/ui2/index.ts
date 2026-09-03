@@ -40,7 +40,16 @@ export function setupUi2() {
   // Layer visibility driver — cheap per-frame checks that toggle layers on/off
   // based on game state. Layer body() renders content each frame automatically.
   engine.addSystem(() => {
-    if (isMobile()) return
+    if (isMobile()) {
+      // Mobile: MobileLayout renders the HUD + built-in overlays. Only drive
+      // the click-triggered popup layers that are registered in mobileLayers.
+      updateChestPopupLayerVisibility()
+      updateMailboxLayerVisibility()
+      updateBlessingLayerVisibility()
+      updateBlessingCompletedLayerVisibility()
+      updateGravestoneLayerVisibility()
+      return
+    }
     updateHudTopLayerVisibility()
     updateHudBottomLayerVisibility()
     updateLeaderboardLayerVisibility()
