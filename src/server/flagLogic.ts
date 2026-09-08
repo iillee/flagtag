@@ -121,8 +121,17 @@ export function computeGravityTarget(dropX: number, dropY: number, dropZ: number
   // If the drop is genuinely mid-air (jump, updraft, edge), the client's
   // reportGroundY raycast (below) will lower the target to real ground after
   // ~230ms — retargeting the analytic in-flight without a visible restart.
+  //
+  // Stub target: SCENE_FLOOR_Y (clamped to FLAG_MIN_Y) — deliberately far
+  // below the drop so the fall stays active for seconds, not ~258ms. This
+  // guarantees the reportGroundY raycast always hits the mid-fall
+  // 'retarget in place' branch of lowerFallTarget() instead of the
+  // 'post-land correction' branch, which is fundamentally a silent teleport
+  // (visible as the flag snapping ~5m to ground after appearing to land on
+  // thin air). Previous stub of dropY-0.5 raced client raycast latency and
+  // lost whenever the ground report arrived >258ms after beginFall.
   carrierYSamples.length = 0
-  flagGravityTargetY = Math.max(FLAG_MIN_Y, dropY - 0.5)
+  flagGravityTargetY = Math.max(FLAG_MIN_Y, SCENE_FLOOR_Y)
 
   if (dropY > flagGravityTargetY + 0.1) {
     flagFalling = true
