@@ -1,5 +1,6 @@
 import ReactEcs, { UiEntity, Label } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 import { Layer, ZoneType } from '@stom66/dcl-ui-component-kit'
 
 import { cinematicState, creditsState, earnedState } from '../../ui/uiState'
@@ -25,10 +26,16 @@ export class CinematicFadeLayer extends Layer {
     const opacity = cinematicState.fadeOpacity
     if (opacity <= 0) return null
 
-    const showRoundOver = cinematicState.roundOverVisible
     const showCredits =
       creditsState.noScorersVisible ||
       (creditsState.nextRoundVisible && !cinematicState.showing)
+    // Suppress the redundant 'Round Over' headline whenever the credits
+    // screen is showing — the credits screen already communicates end-of-round
+    // (either 'No Coins Earned' for scoreless rounds, or the earnings summary
+    // for the next-round countdown). Without this suppression the no-scorers
+    // flow briefly shows 'Round Over' text, then transitions to a second
+    // screen that also says 'Round Over — No Coins Earned'.
+    const showRoundOver = cinematicState.roundOverVisible && !showCredits
 
     const children: any[] = []
     if (showRoundOver) {
@@ -49,7 +56,7 @@ export class CinematicFadeLayer extends Layer {
           earnedUiPhase={earnedState.phase}
           earnedCoinsFlyProgress={earnedState.coinsFlyProgress}
           creditsCountdown={creditsState.countdown}
-          mobile={false}
+          mobile={isMobile()}
         /></UiEntity>,
       )
     }
