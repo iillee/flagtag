@@ -1,5 +1,6 @@
 import { engine, Transform, LightSource } from '@dcl/sdk/ecs'
 import { Vector3, Color3 } from '@dcl/sdk/math'
+import { isMobile } from '@dcl/sdk/platform'
 
 // ── Raw light positions (Blender world coords: x=right, y=forward, z=up) ──
 // Transform: DCL_x = bx*5 + 74.75,  DCL_y = bz*5 - 2,  DCL_z = -by*5 + 119.5
@@ -61,7 +62,18 @@ const LIGHT_POSITIONS: Vector3[] = RAW_POSITIONS.map(([bx, by, bz]) =>
 
 const MAX_ACTIVE = 8
 const LIGHT_COLOR = Color3.create(1.0, 0.85, 0.6) // Warm torch
-const LIGHT_INTENSITY = 1200
+// STATUS 2026-09-08: mobile client (Godot Explorer) does NOT render
+// LightSource yet — verified against the PR's own QA scene at 148,49
+// (emissive materials show, LightSource does not). The mobile branch below
+// is a no-op on current builds but forward-compatible: when the runtime
+// support from godot-explorer PR #2007 ships to release, the mobile client
+// will normalise intensity as candela/16000 = Godot energy, so 16000
+// yields the ~1.0 energy the SDK proto defaults to. Desktop uses a
+// different formula historically and looks correct at 1200; leave it
+// alone. Revisit both branches only if desktop switches formulas.
+const LIGHT_INTENSITY_DESKTOP = 1200
+const LIGHT_INTENSITY_MOBILE  = 16000
+const LIGHT_INTENSITY = isMobile() ? LIGHT_INTENSITY_MOBILE : LIGHT_INTENSITY_DESKTOP
 const LIGHT_RANGE = 35
 const CHECK_INTERVAL = 0.25 // seconds between proximity checks
 

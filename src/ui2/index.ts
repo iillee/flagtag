@@ -39,17 +39,20 @@ export function setupUi2() {
 
   // Layer visibility driver — cheap per-frame checks that toggle layers on/off
   // based on game state. Layer body() renders content each frame automatically.
+  //
+  // Every updater below is called on BOTH platforms. Layers not registered in
+  // mobileLayers / desktopLayers simply never appear in the layer stack, so
+  // calling their show()/hide() is a no-op. Keeping one shared list here means
+  // we only need to add or remove a layer in one place (its platform-specific
+  // layer array in ./layers/{desktop,mobile}.ts) — no risk of forgetting to
+  // wire the updater and shipping an invisible layer.
+  //
+  // (Historical note: this used to early-return on mobile after 5 updaters,
+  // which meant every fade-based layer we added to mobileLayers stayed hidden
+  // forever because startHidden:true was never flipped by show(0). Death
+  // overlay, cinematic fade, hit flash, lightning warning, etc. were all
+  // silently broken on mobile until we removed the early return.)
   engine.addSystem(() => {
-    if (isMobile()) {
-      // Mobile: MobileLayout renders the HUD + built-in overlays. Only drive
-      // the click-triggered popup layers that are registered in mobileLayers.
-      updateChestPopupLayerVisibility()
-      updateMailboxLayerVisibility()
-      updateBlessingLayerVisibility()
-      updateBlessingCompletedLayerVisibility()
-      updateGravestoneLayerVisibility()
-      return
-    }
     updateHudTopLayerVisibility()
     updateHudBottomLayerVisibility()
     updateLeaderboardLayerVisibility()
