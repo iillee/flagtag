@@ -144,8 +144,15 @@ export async function main() {
   })
 
   // Background music
+  // Desktop starts muted, mobile starts playing. Clearing the equipped tape
+  // (lastTapeId stays 'w') keeps boombox, HUD icon and chest in sync; the first
+  // unmute via toggleMusic() plays 'w' from the start.
   const { setupMusic } = await import('./systems/musicSetup')
-  setupMusic()
+  // Default tape follows day/night (day 'w', night 'b'), see boomboxState.
+  const { initPhaseMusic, musicPhaseSystem } = await import('./ui/screens/boomboxState')
+  const musicStartsMuted = !isMobile()
+  setupMusic(musicStartsMuted, initPhaseMusic(musicStartsMuted))
+  registerThrottled(() => { musicPhaseSystem() }, 0.25)
 
   // Disable passport UI scene-wide
   const { setupAvatarModifier } = await import('./systems/avatarModifierSetup')

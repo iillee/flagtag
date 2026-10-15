@@ -11,7 +11,7 @@ import { room } from '../shared/messages'
 import { setBoomerangColor, type BoomerangColor } from './boomerangColor'
 
 // ── Local cache ──
-let localUpgrades: UpgradeData = { boomerangs: ['r'], equipped: 'r', tapes: ['w'], equippedTape: 'w', traps: ['banana'], equippedTrap: 'banana' }
+let localUpgrades: UpgradeData = { boomerangs: ['r'], equipped: 'r', tapes: ['w', 'b'], equippedTape: 'w', traps: ['banana'], equippedTrap: 'banana' }
 let localLifetimeWins = 0
 let localLifetimeHoldTime = 0
 let winsReceived = false

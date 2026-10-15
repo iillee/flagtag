@@ -16,10 +16,15 @@ import { engine, AudioSource } from '@dcl/sdk/ecs'
  */
 export const musicEntity = engine.PlayerEntity
 
-export function setupMusic() {
+/**
+ * @param startMuted When true the AudioSource is created with playing=false, so
+ *   the track never starts before the mute applies (desktop default). The
+ *   caller must also clear the equipped tape (boomboxState) to keep the UI in sync.
+ */
+export function setupMusic(startMuted = false, clipUrl = 'assets/sounds/SpriteSprint_Loop.mp3') {
   AudioSource.createOrReplace(musicEntity, {
-    audioClipUrl: 'assets/sounds/SpriteSprint_Loop.mp3',
-    playing: true,
+    audioClipUrl: clipUrl,
+    playing: !startMuted,
     loop: true,
     volume: 0.6,
     global: true

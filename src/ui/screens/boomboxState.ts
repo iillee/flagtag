@@ -9,6 +9,7 @@ import { AudioSource } from '@dcl/sdk/ecs'
 import { MUSIC_STORE, type MusicStoreItem } from '../../shared/upgrades'
 import { getLocalUpgrades } from '../../gameState/playerUpgradeState'
 import { musicEntity } from '../../systems/musicSetup'
+import { isNightAt, defaultMusicTapeIdAt } from '../../shared/dayNight'
 
 export type { MusicStoreItem as TapeItem }
 
@@ -100,4 +101,69 @@ export function toggleMusic(): void {
       } catch (e) { console.error('[Music] Failed to resume:', e) }
     }
   }
+}
+
+// -- Day/night default tracks --
+// Day rounds default to 'w' (Sprite Sprint), night rounds to 'b' (Blips Piano).
+// A tape picked in the chest wins for the rest of the current phase; at the
+// next day/night boundary the phase default takes over again. While muted only
+// the "ready" tape (lastTapeId + loaded clip) changes, so unmuting plays the
+// right track. Clean switch, no fade.
+let manualTapeThisPhase = false
+let lastPhaseNight: boolean | null = null
+
+/** Chest equip calls this so the player's choice sticks until the next phase. */
+export function markManualTapeChoice(): void {
+  manualTapeThisPhase = true
+}
+
+/** Load a tape into the music entity; keeps playing/muted state as-is. */
+function applyPhaseTape(id: string): void {
+  const tape = MUSIC_STORE.find(t => t.id === id)
+  if (!tape) return
+  const playing = equippedTapeId !== null
+  setEquippedTape(playing ? id : null)
+  lastTapeId = id
+  resetMusicPosition()
+  try {
+    const audio = AudioSource.getMutable(musicEntity) as {
+      audioClipUrl: string; playing: boolean; loop: boolean; currentTime?: number
+    }
+    audio.audioClipUrl = tape.audioSrc
+    audio.loop = true
+    audio.currentTime = 0
+    audio.playing = playing
+  } catch (e) { console.error('[Music] Failed to switch phase tape:', e) }
+}
+
+/**
+ * Call once before setupMusic(). Picks the phase default tape, sets the
+ * muted/playing state, and returns the clip URL to create the AudioSource with.
+ */
+export function initPhaseMusic(startMuted: boolean): string {
+  const now = Date.now()
+  lastPhaseNight = isNightAt(now)
+  const id = defaultMusicTapeIdAt(now)
+  setEquippedTape(id)
+  if (startMuted) setEquippedTape(null)
+  resetMusicPosition()
+  return (MUSIC_STORE.find(t => t.id === id) ?? MUSIC_STORE[0]).audioSrc
+}
+
+/** Throttled client system: switch to the phase default at each day/night boundary. */
+export function musicPhaseSystem(): void {
+  const night = isNightAt(Date.now())
+  if (lastPhaseNight === null) { lastPhaseNight = night; return }
+  if (night === lastPhaseNight) return
+  lastPhaseNight = night
+  manualTapeThisPhase = false
+  const target = defaultMusicTapeIdAt(Date.now())
+  if (lastTapeId !== target) {
+    applyPhaseTape(target)
+    console.log('[Music] Phase change - default tape ' + target)
+  }
+}
+
+export function isManualTapeThisPhase(): boolean {
+  return manualTapeThisPhase
 }

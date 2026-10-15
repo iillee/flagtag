@@ -40,7 +40,7 @@ export const MUSIC_STORE: MusicStoreItem[] = [
   { id: 'w', category: 'music', label: 'Sprite Sprint', author: 'Dylan Taylor', coinCost: 0,   flagsRequired: 0, description: 'Default track',       icon: 'assets/images/tape.w.png', audioSrc: 'assets/sounds/SpriteSprint_Loop.mp3' },
   { id: 'o', category: 'music', label: 'Digital Water',  author: 'AuthrAudio',   coinCost: 150, flagsRequired: 3, description: '115 BPM electronic',  icon: 'assets/images/tape.o.png', audioSrc: 'assets/sounds/DigitalWater-AuthrAudio-115Bpm.mp3' },
   { id: 'p', category: 'music', label: 'Home Again',    author: 'Dylan Taylor', coinCost: 150, flagsRequired: 3, description: 'Chill loop',          icon: 'assets/images/tape.p.png', audioSrc: 'assets/sounds/HomeAgain_Loop.mp3' },
-  { id: 'b', category: 'music', label: 'Blips Piano',   author: 'AuthrAudio',   coinCost: 150, flagsRequired: 3, description: 'Piano blips',         icon: 'assets/images/tape.b.png', audioSrc: 'assets/sounds/blipspiano153 - AuthrAudio.mp3' },
+  { id: 'b', category: 'music', label: 'Blips Piano',   author: 'AuthrAudio',   coinCost: 0,   flagsRequired: 0, description: 'Night track',         icon: 'assets/images/tape.b.png', audioSrc: 'assets/sounds/blipspiano153 - AuthrAudio.mp3' },
 ]
 
 // Placeholder stores for future categories
@@ -94,7 +94,10 @@ export interface UpgradeData {
   equippedTrap: string         // currently selected trap
 }
 
-const DEFAULT_UPGRADES: UpgradeData = { boomerangs: ['r'], equipped: 'r', tapes: ['w'], equippedTape: 'w', traps: ['banana'], equippedTrap: 'banana' }
+/** Free tapes every player owns ('w' day default, 'b' night default). */
+export const DEFAULT_TAPES: string[] = ['w', 'b']
+
+const DEFAULT_UPGRADES: UpgradeData = { boomerangs: ['r'], equipped: 'r', tapes: [...DEFAULT_TAPES], equippedTape: 'w', traps: ['banana'], equippedTrap: 'banana' }
 
 export function parseUpgrades(json: string): UpgradeData {
   try {
@@ -102,7 +105,8 @@ export function parseUpgrades(json: string): UpgradeData {
     return {
       boomerangs: Array.isArray(data.boomerangs) ? data.boomerangs : ['r'],
       equipped: data.equipped || 'r',
-      tapes: Array.isArray(data.tapes) ? data.tapes : ['w'],
+      // Saved docs predate free 'b': always merge the default tapes in (deduped).
+      tapes: Array.isArray(data.tapes) ? Array.from(new Set([...DEFAULT_TAPES, ...data.tapes])) : [...DEFAULT_TAPES],
       equippedTape: data.equippedTape !== undefined ? data.equippedTape : 'w',
       traps: Array.isArray(data.traps) ? data.traps : ['banana'],
       equippedTrap: data.equippedTrap || 'banana',

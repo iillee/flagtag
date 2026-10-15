@@ -1,1 +1,1 @@
-export const GAME_VERSION = '2026.10.15-1143-700277e'
+export const GAME_VERSION = '2026.10.15-1215-2e0b303'

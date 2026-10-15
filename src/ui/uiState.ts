@@ -185,6 +185,7 @@ export const serverDownState = {
 // ═══════════════════════════════════════════════════════════
 export const hover = {
   squareIcon: false,
+  muteIcon: false,
   questionIcon: false,
 
   closeWinCondition: false,

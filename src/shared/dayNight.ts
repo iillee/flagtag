@@ -89,3 +89,11 @@ export function lightsEnabledAt(utcMs: number): boolean {
   const roundSec = ROUND_MS / 1000
   return elapsedSec < LIGHTS_OFF_SECONDS_AFTER_DAWN || elapsedSec >= roundSec - LIGHTS_ON_SECONDS_BEFORE_NIGHT
 }
+
+/** Default music tape per phase (ids from MUSIC_STORE in shared/upgrades.ts). */
+export const DAY_MUSIC_TAPE_ID = 'w'   // Sprite Sprint - assets/sounds/SpriteSprint_Loop.mp3
+export const NIGHT_MUSIC_TAPE_ID = 'b' // Blips Piano  - assets/sounds/blipspiano153 - AuthrAudio.mp3
+
+export function defaultMusicTapeIdAt(utcMs: number): string {
+  return isNightAt(utcMs) ? NIGHT_MUSIC_TAPE_ID : DAY_MUSIC_TAPE_ID
+}

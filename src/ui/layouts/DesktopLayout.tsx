@@ -37,6 +37,7 @@ import { isServerConnected } from '../../systems/clientUtils'
 import { getBoomerangColor } from '../../gameState/boomerangColor'
 
 import { IconButton } from '../components/IconButton'
+import { getEquippedTape, toggleMusic } from '../screens/boomboxState'
 import { HowToPlayOverlay } from '../screens/HowToPlay'
 import { RoundEndSplash } from '../screens/RoundEndSplash'
 import { StatusPopup } from '../screens/LeaderboardOverlay'
@@ -113,9 +114,10 @@ export function DesktopLayout() {
       <UiEntity uiTransform={{ positionType: 'absolute', position: { right: S(16), top: S(14) }, flexDirection: 'row', alignItems: 'flex-start' }}>
         {/* Icon buttons */}
         <UiEntity uiTransform={{ width: S(46), height: S(2 * _ROW_HEIGHT + 2 * _PADDING), flexDirection: 'column', alignItems: 'center', margin: { right: S(4) } }}>
-          <IconButton hoverKey="squareIcon" label="Status" isActive={leaderboardVisible}
-            iconContent={<UiEntity uiTransform={{ width: S(38), height: S(38), margin: { left: S(6), right: S(-9) } }} uiBackground={{ textureMode: 'stretch', texture: { src: 'assets/images/backpack.png' }, color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE }} />}
-            onClick={() => { const wasOpen = getLeaderboardOverlayVisible(); setWinConditionOverlayVisible(false); hideChestPopup(); setLeaderboardOverlayVisible(!wasOpen); if (wasOpen) notifyOverlayClosed() }}
+          {/* Music mute toggle (replaced the Status button; same toggleMusic() as the boombox, mobile button and key 2) */}
+          <IconButton hoverKey="muteIcon" label="Mute" isActive={getEquippedTape() === null}
+            iconContent={<UiEntity uiTransform={{ width: S(26), height: S(26), margin: { left: S(6), right: S(-3) } }} uiBackground={{ textureMode: 'stretch', texture: { src: getEquippedTape() !== null ? 'assets/images/unmute.png' : 'assets/images/muted.png' }, color: hover.muteIcon ? GOLD : WHITE }} />}
+            onClick={() => { toggleMusic() }}
           />
           <UiEntity uiTransform={{ height: S(4) }} />
           <IconButton hoverKey="questionIcon" label="Help" isActive={winConditionVisible}

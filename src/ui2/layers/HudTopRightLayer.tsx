@@ -8,6 +8,7 @@ import {
   PANEL_BG, _ROW_HEIGHT, _PADDING, _BORDER_RADIUS, _PANEL_WIDTH, _ROW_FONT,
 } from '../../ui/uiConstants'
 import { IconButton } from '../../ui/components/IconButton'
+import { getEquippedTape, toggleMusic } from '../../ui/screens/boomboxState'
 import { hover, hideChestPopup, notifyOverlayClosed, earnedState } from '../../ui/uiState'
 import {
   getWinConditionOverlayVisible, setWinConditionOverlayVisible,
@@ -58,25 +59,20 @@ export class HudTopRightLayer extends Layer {
           alignItems: 'center', margin: { right: S(4) },
         }}
       >
+        {/* Music mute toggle (replaced the Status button; same toggleMusic() as the boombox, mobile button and key 2) */}
         <IconButton
-          hoverKey="squareIcon" label="Status" isActive={leaderboardVisible}
+          hoverKey="muteIcon" label="Mute" isActive={getEquippedTape() === null}
           iconContent={
             <UiEntity
-              uiTransform={{ width: S(38), height: S(38), margin: { left: S(6), right: S(-9) } }}
+              uiTransform={{ width: S(26), height: S(26), margin: { left: S(6), right: S(-3) } }}
               uiBackground={{
                 textureMode: 'stretch',
-                texture: { src: 'assets/images/backpack.png' },
-                color: leaderboardVisible || hover.squareIcon ? GOLD : WHITE,
+                texture: { src: getEquippedTape() !== null ? 'assets/images/unmute.png' : 'assets/images/muted.png' },
+                color: hover.muteIcon ? GOLD : WHITE,
               }}
             />
           }
-          onClick={() => {
-            const wasOpen = getLeaderboardOverlayVisible()
-            setWinConditionOverlayVisible(false)
-            hideChestPopup()
-            setLeaderboardOverlayVisible(!wasOpen)
-            if (wasOpen) notifyOverlayClosed()
-          }}
+          onClick={() => { toggleMusic() }}
         />
         <UiEntity uiTransform={{ height: S(4) }} />
         <IconButton
