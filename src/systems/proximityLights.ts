@@ -1,6 +1,7 @@
 import { engine, Transform, LightSource } from '@dcl/sdk/ecs'
 import { Vector3, Color3 } from '@dcl/sdk/math'
 import { isMobile } from '@dcl/sdk/platform'
+import { lightsEnabledAt } from '../shared/dayNight'
 
 // ── Raw light positions (Blender world coords: x=right, y=forward, z=up) ──
 // Transform: DCL_x = bx*5 + 74.75,  DCL_y = bz*5 - 2,  DCL_z = -by*5 + 119.5
@@ -109,6 +110,19 @@ export function proximityLightSystem(dt: number) {
   checkTimer -= dt
   if (checkTimer > 0) return
   checkTimer = CHECK_INTERVAL
+
+  // Outside the evening/night window (shared/dayNight.ts) every light stays off
+  // and proximity is ignored. LightSource has no fade support here; lights
+  // that were on switch off on the next check after the window closes.
+  if (!lightsEnabledAt(Date.now())) {
+    for (const l of lights) {
+      if (l.active) {
+        l.active = false
+        LightSource.getMutable(l.entity).active = false
+      }
+    }
+    return
+  }
 
   if (!Transform.has(engine.PlayerEntity)) return
   const playerPos = Transform.get(engine.PlayerEntity).position

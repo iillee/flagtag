@@ -45,6 +45,7 @@ export async function main() {
   const { mushroomClientSystem } = await import('./systems/mushroomSystem')
   const { shieldSystem } = await import('./systems/shieldSystem')
   const { setupProximityLights, proximityLightSystem } = await import('./systems/proximityLights')
+  const { sceneLightGateSystem } = await import('./systems/sceneLightGate')
   const { setupWorldLeaderboard } = await import('./systems/worldLeaderboard')
   const { setupSpectator } = await import('./systems/spectatorSystem')
   const { waterSystem } = await import('./systems/waterSystem')
@@ -95,6 +96,10 @@ export async function main() {
   setupBeacon()
   setupLadder()
   setupTerrain()
+
+  // Fixed round-locked day/night sky (5 min day / 5 min night); also locks player time-of-day
+  const { setupSkybox } = await import('./systems/skyboxSystem')
+  setupSkybox()
 
 
 
@@ -262,6 +267,7 @@ export async function main() {
   registerThrottled((elapsed) => {
     upgradeStateSystem(elapsed)
     proximityLightSystem(elapsed)
+    sceneLightGateSystem()
   }, 0.25)
 
   // Rare checks (every 2s)

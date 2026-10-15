@@ -1,3 +1,4 @@
+import { registerGatedLight } from './sceneLightGate'
 import {
   engine,
   Entity,
@@ -275,6 +276,7 @@ export class Portal {
       color: Color3.create(1, 0.4, 0.05),
       intensity: 10000,
     })
+    registerGatedLight(this.portalLight)
 
     this.audioAmb = this.mute ? engine.addEntity() : this.createAudioEntity('assets/sounds/portals/doorAmb.mp3', true)
 

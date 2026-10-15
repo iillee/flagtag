@@ -118,7 +118,7 @@ The server code is split into focused domain modules:
 | `src/shared/messages.ts` | ~116 | Client↔Server message schemas |
 | `src/shared/coins.ts` | ~72 | Coin component definitions, economy constants |
 | `src/shared/upgrades.ts` | ~155 | Upgrade/store definitions (boomerangs, music, traps, wearables) |
-| `src/shared/dayNight.ts` | ~38 | Day/night cycle detection |
+| `src/shared/dayNight.ts` | ~75 | Fixed day/night cycle locked to rounds (even UTC round = day, odd = night) + skybox time |
 | `src/shared/syncIdPool.ts` | ~31 | Reusable sync ID pool factory |
 | `src/shared/clientState.ts` | ~30 | Shared client state (avoids circular imports) |
 | `src/preloadSounds.ts` | ~51 | Silent preload of all audio clips |
@@ -255,8 +255,8 @@ The **Chest** is the universal shop with 4 tabbed categories. Each tab shows 4 i
 
 ### 3.9 Ghost System (Night Only)
 
-- **Schedule:** Ghosts spawn only during nighttime (detected via `getWorldTime()`, checking for hours between sunset 6 PM and sunrise 6 AM in DCL sky time)
-- **Spawning:** Up to 5 ghosts, spawn interval 20 seconds
+- **Schedule:** Ghosts spawn only during night rounds. Rounds are 5-minute UTC-aligned; even round index (`floor(utcMs / 300000) % 2 === 0`) is day, odd is night (`isNightAt()` in `src/shared/dayNight.ts`). First ghost spawns 10 s into the night.
+- **Spawning:** One ghost at a time (30 s respawn cooldown after it dies)
 - **Behavior (Server):**
   - Idles in slow orbit around spawn point when no player within 20m
   - Chases nearest player within 20m detection radius
@@ -266,7 +266,7 @@ The **Chest** is the universal shop with 4 tabbed categories. Each tab shows 4 i
 - **Ghost Death:** "You were scared to death!" overlay → coin penalty → respawn at spawn. Forces flag drop.
 - **Combat:** Ghost has 1 HP; killed by boomerang hit or banana trap. Death VFX + 30s respawn cooldown.
 - **Visual (Client):** `AvatarShape` NPC with ghost-like wearables, rising/sinking animation. Synced via CRDT `Ghost` component + `Transform`.
-- **Dawn Despawn:** All ghosts removed when night ends.
+- **Dawn Despawn:** All ghosts removed on the round boundary where night ends.
 
 ### 3.10 Mushroom / Shield / Speed Boost
 
@@ -307,7 +307,7 @@ The **Chest** is the universal shop with 4 tabbed categories. Each tab shows 4 i
 
 ### 4.2 Lighting
 - **Proximity Lights:** ~60+ point lights at predefined positions; each activates within 45m of the player (created/destroyed dynamically to save performance)
-- **Day/Night Cycle:** Uses Decentraland's default skybox. `getWorldTime()` polled every 2 seconds. Night defined as sunset (64800s) to sunrise (7200s) in DCL day cycle.
+- **Day/Night Cycle:** Fixed, round-locked: 5 min day then 5 min night (10 min cycle), switching exactly on round boundaries. `src/systems/skyboxSystem.ts` writes `SkyboxTime` on the root entity at 10 Hz (day sky 07:30-16:30, night sky 19:30-04:30, with a 10 s dusk/dawn blend in the last seconds of each round). The component also locks the player's own time-of-day setting; there is no manual override.
 
 ### 4.3 Interactive Objects
 - **Ladders:** Climbable ladders (click to teleport to top/bottom)

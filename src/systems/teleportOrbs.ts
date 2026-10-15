@@ -1,4 +1,5 @@
 import { engine, Entity, Transform, AudioSource, GltfContainer, LightSource } from '@dcl/sdk/ecs'
+import { registerGatedLight } from './sceneLightGate'
 import { Vector3, Quaternion, Color3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { isMobile } from '@dcl/sdk/platform'
@@ -58,6 +59,7 @@ function createOrbPair(
       const light = engine.addEntity()
       Transform.create(light, { parent: orb, position: Vector3.Zero() })
       LightSource.create(light, { type: LightSource.Type.Point({}), color, intensity: 150, range: 12 })
+      registerGatedLight(light)
     }
 
     orbEntities.push(orb)

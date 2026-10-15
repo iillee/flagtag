@@ -1,7 +1,8 @@
 /**
  * ghostSystem.ts — Ghost AI, spawning, collisions, and despawning.
  *
- * Handles ghost (ghost) lifecycle: spawn at night, despawn at dawn,
+ * Handles ghost (ghost) lifecycle: spawn at night, despawn at dawn (night = odd
+ * UTC-aligned rounds, see shared/dayNight.ts),
  * chase nearest player, idle orbit, projectile-ghost collisions,
  * and client-reported hit validation.
  */
@@ -25,10 +26,13 @@ import {
 } from './serverState'
 import { type GhostTargetCandidate, findNearestGhostTarget } from './ghostTargeting'
 import { activeProjectiles } from './combat'
+import { isNightAt } from '../shared/dayNight'
 
 // ── Module-local state ──
 const GHOST_SPAWN_POS = Vector3.create(347, 49.25, 381) // Black cube location
-let ghostSpawnTimer = 10 // first spawn after 10s
+const GHOST_NIGHT_FIRST_SPAWN_SEC = 10
+let ghostSpawnTimer = GHOST_NIGHT_FIRST_SPAWN_SEC // first spawn 10s into each night
+let wasNight = false
 const GHOST_STAGGER_COOLDOWN_MS = 3000 // can only stagger same player every 3s
 const GHOST_IDLE_ORBIT_SPEED = 0.5 // rad/s when no target
 // ── ghostTouching throttle state ──
@@ -149,7 +153,24 @@ export function ghostServerSystem(dt: number): void {
   const clampedDt = Math.min(dt, 0.1)
   const now = Date.now()
 
-  // Ghost is active 24/7 by design (no day/night gating).
+  // Night-only: ghosts follow the round-locked cycle in shared/dayNight.ts
+  // (odd UTC rounds are night). At dawn every ghost is removed; the first
+  // ghost of a night spawns GHOST_NIGHT_FIRST_SPAWN_SEC after dusk.
+  const night = isNightAt(now)
+  if (!night) {
+    if (wasNight || activeGhosts.length > 0) {
+      despawnAllGhosts()
+      console.log('[Server] Dawn - ghosts despawned')
+    }
+    wasNight = false
+    ghostSpawnTimer = GHOST_NIGHT_FIRST_SPAWN_SEC
+    return
+  }
+  if (!wasNight) {
+    wasNight = true
+    ghostSpawnTimer = GHOST_NIGHT_FIRST_SPAWN_SEC
+    console.log('[Server] Dusk - ghosts may spawn')
+  }
 
   // ── Spawn timer (single ghost, 30s respawn cooldown after death) ──
   if (ghostRespawnCooldown > 0) {
