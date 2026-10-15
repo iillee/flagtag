@@ -314,7 +314,6 @@ export function PlayerListUi({ sections }: { sections?: PlayerListUiSection[] } 
         >
           <UiEntity uiTransform={{ width: mobile ? 900 : S(460), flexDirection: 'column', alignItems: 'center', borderRadius: mobile ? 40 : S(20), padding: mobile ? { top: 64, bottom: 48, left: 48, right: 48 } : { top: S(36), bottom: S(28), left: S(40), right: S(40) } }}
             uiBackground={{ color: PANEL_BG }}
-            onMouseDown={() => { playClickSound(); serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }}
           >
             {mobile ? (
               <UiEntity uiTransform={{ positionType: 'absolute', position: { top: -12, right: -5 }, width: 88, height: 88, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', pointerFilter: 'block' }}
@@ -455,7 +454,6 @@ export function PlayerListUi({ sections }: { sections?: PlayerListUiSection[] } 
         >
           <UiEntity uiTransform={{ padding: { top: s(24), bottom: s(24), left: s(32), right: s(32) }, borderRadius: radius, flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}
             uiBackground={{ color: PANEL_BG }}
-            onMouseDown={() => { cinematicState.titleSplashVisible = false; setWinConditionOverlayVisible(true) }}
           >
             <Label value="FLAG TAG!" fontSize={s(72)} color={GOLD} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(380), height: s(88), margin: { bottom: s(12) } }} />
             <Label value="A multiplayer keep away game!" fontSize={s(16)} color={MUTED} font="sans-serif" textAlign="middle-center" uiTransform={{ width: s(300), height: s(22), margin: { bottom: s(28) } }} />

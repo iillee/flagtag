@@ -44,7 +44,6 @@ export class TitleSplashLayer extends Layer {
             padding: { top: S(24), bottom: S(24), left: S(32), right: S(32) },
             flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
           }}
-          onMouseDown={dismiss}
         >
           <Background backgroundColor={theme.colors.body} borderRadius={theme.border.radiusLarge} />
           <Label value="FLAG TAG!" fontSize={S(72)} color={GOLD} font="sans-serif" textAlign="middle-center"

@@ -46,7 +46,6 @@ export class ServerDownLayer extends Layer {
             flexDirection: 'column', alignItems: 'center',
             padding: { top: S(36), bottom: S(28), left: S(40), right: S(40) },
           }}
-          onMouseDown={dismiss}
         >
           <Background backgroundColor={theme.colors.body} borderRadius={theme.border.radiusLarge} />
           <CloseButton hoverKey="closeServerDown" onClose={() => { serverDownState.dismissedAt = Date.now(); serverDownState.visible = false }} />

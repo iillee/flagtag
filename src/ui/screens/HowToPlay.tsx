@@ -52,11 +52,6 @@ export function HowToPlayOverlay() {
           width: mobile ? '78%' : S(1000),
           margin: { top: mobile ? 50 : S(40), bottom: mobile ? 14 * M : S(12) },
         }}
-        // Was onMouseDown={() => {}} (empty swallow to block clicks bubbling to
-        // the game world). That's no longer needed — the outer wrapper catches
-        // all clicks now — and was blocking the tap-to-close behavior for taps
-        // that landed on the cards themselves. Matching Title Splash pattern.
-        onMouseDown={() => { playClickSound(); setWinConditionOverlayVisible(false); notifyOverlayClosed() }}
       >
         {/* Flag Card */}
         <UiEntity
@@ -120,7 +115,6 @@ export function HowToPlayOverlay() {
             margin: { left: mobile ? 4 : S(8) },
           }}
           uiBackground={{ color: cardBg }}
-          onMouseDown={() => {}}
         >
           <UiEntity uiTransform={{ width: '100%', flexDirection: 'column', alignItems: 'center' }}>
             <Label value="Win" fontSize={titleFs} color={GOLD} font="sans-serif" uiTransform={{ margin: { bottom: s(12) } }} />
