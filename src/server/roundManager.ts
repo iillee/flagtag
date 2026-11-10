@@ -88,6 +88,11 @@ let updraftActiveIndex2 = pickRandom(updraftActiveIndex1)
 let updraftTimer1 = 0
 let updraftTimer2 = UPDRAFT_STAGGER_SEC // start staggered
 
+// ── Tree fire rotation (Halloween): no broadcasts. One seed + an epoch; clients
+// derive each swap from (seed, elapsed) - see shared/treeFire.ts. ──
+const treeFireSeed = 1 + Math.floor(Math.random() * 999_999)
+const treeFireEpochMs = Date.now()
+
 export function updraftServerSystem(dt: number): void {
   updraftTimer1 += dt
   if (updraftTimer1 >= UPDRAFT_ROTATE_SEC) {
@@ -620,6 +625,12 @@ export function registerRoundHandlers(): void {
       room.send('updraftLocation', { slot: 0, index: updraftActiveIndex1 })
       room.send('updraftLocation', { slot: 1, index: updraftActiveIndex2 })
     } catch (err) { console.error('[Server] ❌ requestUpdraftLocation handler error:', err) }
+  })
+  room.onMessage('requestTreeFireSeed', (_data, context) => {
+    try {
+      const to = context ? { to: [context.from] } : undefined
+      room.send('treeFireSeed', { seed: treeFireSeed, elapsedMs: Math.min(2_000_000_000, Date.now() - treeFireEpochMs) }, to)
+    } catch (err) { console.error('[Server] ❌ requestTreeFireSeed handler error:', err) }
   })
 
 }

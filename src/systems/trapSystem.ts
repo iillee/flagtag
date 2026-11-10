@@ -36,6 +36,9 @@ import { isDrownRespawning } from './waterSystem'
 import { showHitEffect } from './combatSystem'
 import { hasLocalFlagImmunity } from '../gameState/flagImmunityState'
 import { playSpatialSound } from '../utils/spatialAudio'
+import { predictBombDrop, cancelBombPrediction } from './bombSystem'
+import { startHandDrop, isHandDropActive, initHandDrop } from './handDrop'
+import { nextDropNonce, findPrediction, isPredictionExpired, needsServerSnap } from '../shared/dropPrediction'
 
 
 const TRAP_MODEL_SRC = 'assets/models/banana_scaled.glb'
@@ -238,12 +241,23 @@ function processTrapRaycasts(): void {
 // ── Message listeners (registered at module scope for reliable delivery) ──
 room.onMessage('bananaDenied', (data) => {
   console.log('[Trap] ⚠️ Server denied banana drop:', data.reason)
+  // Remove the matching local prediction (banana or bomb).
+  if (!cancelTrapPrediction(data.n)) cancelBombPrediction(data.n)
   // Reset cooldown so the player can retry immediately
   lastLocalTrapDropTime = 0
 })
 
 room.onMessage('bananaDropped', (data) => {
   console.log('[Trap] bananaDropped msg:', JSON.stringify(data))
+  const me = getPlayerData()?.userId?.toLowerCase() || ''
+  const own = data.ownerId === me
+  if (own && adoptTrapPrediction(data.n, data.x, data.y, data.z)) {
+    // Our predicted banana is already showing; just do the owner's ground report.
+    fireTrapGroundRaycast(data.x, data.y, data.z)
+    return
+  }
+  // Predicted a bomb but the server's equipped trap was a banana: swap visuals.
+  if (own) cancelBombPrediction(data.n)
   playTrapDropSound(Vector3.create(data.x, data.y, data.z))
   // Create visual from message bus (instant, no CRDT dependency)
   createMsgTrapVisual(data.x, data.y, data.z, data.ownerId || '')
@@ -447,6 +461,7 @@ export function initTrapPool(): void {
     })
     trapPool.push(e)
   }
+  initHandDrop()
   console.log('[Trap] 🪤 Pre-created trap visual pool of', TRAP_POOL_SIZE)
 }
 
@@ -483,12 +498,14 @@ interface MsgTrapVisual {
   minY: number  // floor clamp: SCENE_FLOOR_Y on main terrain, 0 on the interior level
   groundResolved: boolean
   groundRayEntity: Entity | null
+  /** Pending local prediction nonce; 0 once confirmed by bananaDropped. */
+  nonce: number
 }
 const msgTrapVisuals: MsgTrapVisual[] = []
 
-function createMsgTrapVisual(x: number, y: number, z: number, ownerId: string = ''): void {
+function createMsgTrapVisual(x: number, y: number, z: number, ownerId: string = '', nonce: number = 0): boolean {
   const localEntity = acquireTrapFromPool()
-  if (!localEntity) return
+  if (!localEntity) return false
 
   const t = Transform.getMutable(localEntity)
   t.position = Vector3.create(x, y, z)
@@ -510,8 +527,70 @@ function createMsgTrapVisual(x: number, y: number, z: number, ownerId: string = 
     // Fallback landing just under the drop point (raycast result overrides it)
     falling: true, fallVelocity: 0, currentY: y, targetY: Math.max(minY, y - 2), minY,
     groundResolved: false, groundRayEntity,
+    nonce,
   })
-  console.log('[Trap] 🪤 Created message-driven trap visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1))
+  console.log('[Trap] 🪤 Created message-driven trap visual at:', x.toFixed(1), y.toFixed(1), z.toFixed(1), nonce ? '(predicted)' : '')
+  return true
+}
+
+function removeMsgTrapVisualAt(idx: number): void {
+  const vis = msgTrapVisuals[idx]
+  if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+  releaseTrapToPool(vis.entity)
+  msgTrapVisuals.splice(idx, 1)
+}
+
+function cancelTrapPrediction(nonce: number): boolean {
+  const idx = findPrediction(msgTrapVisuals, nonce)
+  if (idx === -1) return false
+  removeMsgTrapVisualAt(idx)
+  return true
+}
+
+function adoptTrapPrediction(nonce: number, x: number, y: number, z: number): boolean {
+  const idx = findPrediction(msgTrapVisuals, nonce)
+  if (idx === -1) return false
+  const vis = msgTrapVisuals[idx]
+  vis.nonce = 0
+  if (needsServerSnap(vis.x, vis.z, x, z)) {
+    vis.x = x; vis.z = z; vis.currentY = y; vis.falling = true; vis.fallVelocity = 0
+  }
+  return true
+}
+
+/**
+ * Send requestBanana and show the drop locally right away, at the same
+ * position the server will use (our feet, y - 0.2, from the client-reported
+ * position). Matched by nonce when bananaDropped/bombDropped comes back.
+ */
+function placeDrop(): void {
+  const pos = myPositionPayload()
+  const n = nextDropNonce()
+  const hasPos = !(pos.x === 0 && pos.y === 0 && pos.z === 0)
+  if (hasPos) {
+    const me = getPlayerData()?.userId?.toLowerCase() || ''
+    const y = pos.y - 0.2
+    if (getLocalUpgrades().equippedTrap === 'bomb') predictBombDrop(pos.x, y, pos.z, me, n)
+    else if (createMsgTrapVisual(pos.x, y, pos.z, me, n)) playTrapDropSound(Vector3.create(pos.x, y, pos.z))
+  }
+  room.send('requestBanana', { t: 0, ...pos, n })
+}
+
+/**
+ * Drop press (server mode): left-hand wind-up first (handDrop.ts), then
+ * placeDrop() at the end of it, which also hides the hand model that frame.
+ * Aborts (and refunds the local cooldown) if the player starts spectating,
+ * a cinematic starts, they drown, or the server drops.
+ */
+function requestDrop(): void {
+  const kind = getLocalUpgrades().equippedTrap === 'bomb' ? 'bomb' : 'banana'
+  const started = startHandDrop(
+    kind,
+    placeDrop,
+    () => isSpectatorMode() || isCinematicActive() || isDrownRespawning() || !isServerConnected(),
+    () => { lastLocalTrapDropTime = 0 },
+  )
+  if (!started) placeDrop()
 }
 
 function removeMsgTrapVisualNear(x: number, y: number, z: number): void {
@@ -538,6 +617,13 @@ function updateMsgTrapVisuals(dt: number): void {
 
   for (let i = msgTrapVisuals.length - 1; i >= 0; i--) {
     const vis = msgTrapVisuals[i]
+
+    // Unconfirmed prediction (lost/denied reply): remove it.
+    if (vis.nonce !== 0 && isPredictionExpired(vis.createdAtMs, now)) {
+      console.log('[Trap] Prediction timed out, removing')
+      removeMsgTrapVisualAt(i)
+      continue
+    }
 
     // Safety expiry
     if (now - vis.createdAtMs > TRAP_LIFETIME_SEC * 1000) {
@@ -617,6 +703,7 @@ export function triggerTrapFromUI(): void {
   // cinematic or while spectating.
   if (isCinematicActive() || isSpectatorMode()) return
   if (isDrownRespawning()) return
+  if (isHandDropActive()) return // wind-up already running
   // Block trap drops until server has synced and profile is loaded — prevents
   // orphaned local traps during the first few seconds after joining.
   if (!isServerConnected() || !isWinsLoaded()) { playErrorSound(); return }
@@ -632,7 +719,7 @@ export function triggerTrapFromUI(): void {
 
   if (serverUp) {
     console.log('[Trap] 🪤 UI tap — requesting trap drop (server)')
-    room.send('requestBanana', { t: 0, ...myPositionPayload() })
+    requestDrop()
   } else {
     console.log('[Trap] 🪤 UI tap — dropping trap locally (no server)')
     dropTrapLocally()
@@ -684,6 +771,7 @@ export function trapClientSystem(dt: number): void {
   if (inputSystem.isTriggered(trapAction, PointerEventType.PET_DOWN) && !isSpectatorMode() && !isCinematicActive() && !isDrownRespawning() && isServerConnected() && isWinsLoaded()) {
     const userId = getPlayerData()?.userId
     if (!userId) return
+    if (isHandDropActive()) return // wind-up already running
 
     // Client-side cooldown check (prevents spamming server)
     const trapCd = getActiveCooldown()
@@ -700,7 +788,7 @@ export function trapClientSystem(dt: number): void {
     if (serverUp) {
       // Production: send to server
       console.log('[Trap] 🪤 F pressed — requesting trap drop (server)')
-      room.send('requestBanana', { t: 0, ...myPositionPayload() })
+      requestDrop()
     } else {
       // Local test: create trap client-side
       console.log('[Trap] 🪤 F pressed — dropping trap locally (no server)')

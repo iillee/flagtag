@@ -1,6 +1,10 @@
 import {
   ROUND_MS, LIGHTS_ON_SECONDS_BEFORE_NIGHT, LIGHTS_OFF_SECONDS_AFTER_DAWN, lightsEnabledAt, isNightAt
 } from '../src/shared/dayNight'
+import { setHalloweenModeForTests } from '../src/shared/dayNight'
+
+beforeAll(() => setHalloweenModeForTests(false))
+afterAll(() => setHalloweenModeForTests(true))
 
 describe('scene light window', () => {
   const day = 1_000 * ROUND_MS        // even round -> day

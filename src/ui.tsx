@@ -7,6 +7,7 @@
  * All state lives in src/ui/uiState.ts.
  * All ECS systems live in src/ui/uiSystems.ts.
  */
+import { HALLOWEEN_MODE } from './shared/dayNight'
 import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { ReactEcsRenderer, UiEntity, Label, Input } from '@dcl/sdk/react-ecs'
 import { getHitFlashAlpha } from './gameState/hitFlashState'
@@ -66,7 +67,7 @@ import { getIsUnderwater } from './systems/interiorSystem'
 // Reusable components
 import { CloseButton } from './ui/components/CloseButton'
 import { playClickSound } from './ui/uiSounds'
-import { ProgressBar } from './ui/components/ProgressBar'
+import { ProgressBar, HEAT_FILL, HEAT_TRACK } from './ui/components/ProgressBar'
 import { DeathOverlay } from './ui/components/DeathOverlay'
 
 // Screens
@@ -155,6 +156,10 @@ function sendFeedback() {
 function DrownBar() {
   const mobile = isMobile()
   const fraction = getDrownFraction()
+  // Halloween: same air timer inverted - heat fills up while in lava (full = death)
+  if (HALLOWEEN_MODE) {
+    return <ProgressBar fraction={1 - fraction} fillColor={HEAT_FILL} trackColor={HEAT_TRACK} bottomOffset={mobile ? 20 : S(110)} />
+  }
   const fillColor = fraction < 0.25 ? Color4.create(1, 0.3, 0.3, 0.95) : Color4.create(0.2, 0.5, 1.0, 0.95)
   return <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={mobile ? 20 : S(110)} />
 }
@@ -210,7 +215,7 @@ export function PlayerListUi({ sections }: { sections?: PlayerListUiSection[] } 
       {show('underwater') && underwaterVisible && (
         <UiEntity
           uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%' }}
-          uiBackground={{ color: Color4.create(0.15, 0.35, 0.55, 0.45) }}
+          uiBackground={{ color: HALLOWEEN_MODE ? Color4.create(0.75, 0.2, 0.02, 0.5) : Color4.create(0.15, 0.35, 0.55, 0.45) }}
         />
       )}
 
@@ -435,7 +440,7 @@ export function PlayerListUi({ sections }: { sections?: PlayerListUiSection[] } 
       })()}
 
       {/* Death overlays */}
-      {show('deathOverlays') && <DeathOverlay visible={getRespawnCountdown() > 0} message="You Drowned!" fadeOpacity={getDrownFadeOpacity()} showText={isDrownTextVisible()} respawnCountdown={getRespawnCountdown()} />}
+      {show('deathOverlays') && <DeathOverlay visible={getRespawnCountdown() > 0} message={HALLOWEEN_MODE ? 'You fell in the lava!' : 'You Drowned!'} fadeOpacity={getDrownFadeOpacity()} showText={isDrownTextVisible()} respawnCountdown={getRespawnCountdown()} />}
       {show('deathOverlays') && <DeathOverlay visible={isLightningRespawning()} message="You were struck by lightning!" fadeOpacity={getLightningFadeOpacity()} showText={isLightningTextVisible()} respawnCountdown={getLightningRespawnCountdown()} />}
       {show('deathOverlays') && <DeathOverlay visible={isGhostDeathRespawning()} message="You were scared to death!" fadeOpacity={getGhostDeathFadeOpacity()} showText={isGhostDeathTextVisible()} respawnCountdown={getGhostDeathRespawnCountdown()} />}
 

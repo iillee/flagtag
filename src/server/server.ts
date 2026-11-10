@@ -61,6 +61,7 @@ import { isReservedEntity, takeReservedEntityGuardStats } from '../shared/reserv
 import { CoinState, COIN_STATE_SYNC_ID } from '../shared/coins'
 import { registerEconomyHandlers, coinServerSystem } from './economy'
 import { flagServerSystem, holdTimeServerSystem, checkProximitySteal, registerFlagHandlers } from './flagLogic'
+import { ghastServerSystem, registerGhastHandlers } from './ghastServer'
 import { bananaServerSystem, bombServerSystem, shellServerSystem, orbitServerSystem, registerCombatHandlers, activeTraps, activeProjectiles, activeOrbits, activeBombs } from './combat'
 import { registerGhostHandlers, ghostServerSystem } from './ghostSystem'
 import { registerMushroomHandlers, spawnMushrooms } from './mushroomSystem'
@@ -164,6 +165,7 @@ export async function setupServer(): Promise<void> {
   registerFlagHandlers()
   registerEconomyHandlers()
   registerCombatHandlers()
+  registerGhastHandlers()
   registerGhostHandlers()
   registerMushroomHandlers()
   registerRoundHandlers()
@@ -273,6 +275,7 @@ function registerSystems() {
   engine.addSystem(safe('nameResolverServerSystem', nameResolverServerSystem))
   engine.addSystem(safe('bananaServerSystem', bananaServerSystem))
   engine.addSystem(safe('bombServerSystem', bombServerSystem))
+  engine.addSystem(safe('ghastServerSystem', ghastServerSystem))
   engine.addSystem(safe('shellServerSystem', shellServerSystem))
   engine.addSystem(safe('orbitServerSystem', orbitServerSystem))
   // Registered AFTER the combat systems, deliberately. handleFlagSteal re-arms

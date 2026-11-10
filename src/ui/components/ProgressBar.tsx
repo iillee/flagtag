@@ -14,9 +14,15 @@ interface ProgressBarProps {
   fraction: number
   fillColor: Color4
   bottomOffset: number
+  /** Optional track (background) colour; defaults to the semi-transparent panel. */
+  trackColor?: Color4
 }
 
-export function ProgressBar({ fraction, fillColor, bottomOffset }: ProgressBarProps) {
+/** Halloween heat bar: lava-orange fill (#FF6A00) on a dark burnt-orange track. */
+export const HEAT_FILL = Color4.create(1.0, 0.416, 0.0, 0.97)
+export const HEAT_TRACK = Color4.create(0.22, 0.09, 0.02, 0.88)
+
+export function ProgressBar({ fraction, fillColor, bottomOffset, trackColor }: ProgressBarProps) {
   const mobile = isMobile()
   const barW = mobile ? 280 : S(BAR_WIDTH_BASE)
   const barH = mobile ? 18 : S(BAR_HEIGHT_BASE)
@@ -33,7 +39,7 @@ export function ProgressBar({ fraction, fillColor, bottomOffset }: ProgressBarPr
         borderRadius: (barH + border * 2) / 2,
         padding: border,
       }}
-      uiBackground={{ color: PANEL_BG_SEMI }}
+      uiBackground={{ color: trackColor ?? PANEL_BG_SEMI }}
     >
       <UiEntity
         uiTransform={{ width: '100%', height: '100%', borderRadius: barH / 2 }}

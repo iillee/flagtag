@@ -28,6 +28,12 @@ export async function main() {
   
   console.log('[Main] 🎮 CLIENT MODE - Starting client...')
 
+  // Sky first, before any other client import/await, so no default sky shows
+  // (normal: UTC-locked cycle; Halloween: starts at sunset from join). Also
+  // locks the player's own time-of-day setting.
+  const { setupSkybox } = await import('./systems/skyboxSystem')
+  setupSkybox()
+
   // ── Dynamic imports for client-only modules ──
   // These must NOT be static imports because this file also runs on the server.
   // Many client modules import from ~system/RestrictedActions or ~system/Runtime,
@@ -97,9 +103,6 @@ export async function main() {
   setupLadder()
   setupTerrain()
 
-  // Fixed round-locked day/night sky (5 min day / 5 min night); also locks player time-of-day
-  const { setupSkybox } = await import('./systems/skyboxSystem')
-  setupSkybox()
 
 
 
@@ -189,6 +192,9 @@ export async function main() {
   setupCoinMessages()
   setupBoostTrailMessages()
   setupBombMessages()
+  // Halloween ghasts (no-op unless HALLOWEEN_MODE && GHAST_ENABLED)
+  const { setupGhasts } = await import('./systems/ghastSystem')
+  setupGhasts()
   initUpgradeListeners()
   setupDeathPenaltyMessages()
   setupLightning()

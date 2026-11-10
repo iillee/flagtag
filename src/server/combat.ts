@@ -29,6 +29,8 @@ import { handleDrop } from './flagLogic'
 import { consumePendingMushroomBoost } from './mushroomSystem'
 import { canUseBoomerangAbility } from './combatValidation'
 import { isRateLimited } from './cooldownValidation'
+import { hitGhasts } from './ghastHitHook'
+import { GHAST_BOMB_EXTRA_RADIUS_M, GHAST_BANANA_HIT_RADIUS_M } from '../shared/ghast'
 
 // Full combat immunity while the carrier's pickup/steal shield is active.
 // Matches STEAL_IMMUNITY_MS so shield visual = actual protection.
@@ -256,9 +258,33 @@ function removeBomb(bomb: ActiveBomb): void {
 function explodeBomb(bomb: ActiveBomb): void {
   if (bomb.exploded) return
   bomb.exploded = true
+  explodeAtPosition(Transform.get(bomb.entity).position, bomb.bombId, 'Bomb', { ownerId: bomb.droppedBy })
+}
 
-  const bombPos = Transform.get(bomb.entity).position
+/**
+ * Bomb explosion consequences at a point: players in BOMB_EXPLOSION_RADIUS get
+ * the bomb hit (flag drop; clients apply knockback/stun from bombExploded),
+ * flag-immune carriers are skipped, ghosts die, bananas pop. Shared by bombs
+ * and ghast fireballs (negative ids, so no bomb visual matches).
+ */
+export interface ExplodeOptions {
+  /** Blast radius (default BOMB_EXPLOSION_RADIUS). */
+  radius?: number
+  /** Force the carrier to drop the flag (default true, bombs). */
+  dropFlag?: boolean
+  /** Kill ghosts / pop bananas in the radius (default true). */
+  affectsTraps?: boolean
+  /** Kill Halloween ghasts in the radius (default true; ghast fireballs pass false). */
+  killsGhasts?: boolean
+  /** Who caused it (ghast kill attribution). */
+  ownerId?: string
+}
+
+export function explodeAtPosition(bombPos: Vector3, bombId: number, label: string = 'Bomb', opts: ExplodeOptions = {}): void {
   const victims: string[] = []
+  const radius = opts.radius ?? BOMB_EXPLOSION_RADIUS
+  const dropFlag = opts.dropFlag ?? true
+  const affectsTraps = opts.affectsTraps ?? true
 
   // Check all players in explosion radius (by-address roster — see serverState)
   for (const addr of getActivePlayerAddresses()) {
@@ -266,7 +292,7 @@ function explodeBomb(bomb: ActiveBomb): void {
     if (!playerPos) continue
 
     const dist = Vector3.distance(playerPos, bombPos)
-    if (dist < BOMB_EXPLOSION_RADIUS) {
+    if (dist < radius) {
       if (isFlagImmune(addr)) {
         console.log('[Server] 🛡️ Bomb ignored — player has flag immunity')
         continue
@@ -275,7 +301,7 @@ function explodeBomb(bomb: ActiveBomb): void {
 
       // Drop flag if carrying
       const flag = Flag.getOrNull(flagEntity)
-      if (flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
+      if (dropFlag && flag && flag.state === FlagState.Carried && flag.carrierPlayerId === addr) {
         console.log('[Server] 💣 Bomb victim was carrying flag — forcing drop!')
         safeForceDrop(addr)
       }
@@ -283,13 +309,13 @@ function explodeBomb(bomb: ActiveBomb): void {
   }
 
   // Kill ghosts in blast radius
-  for (let gi = activeGhosts.length - 1; gi >= 0; gi--) {
+  for (let gi = affectsTraps ? activeGhosts.length - 1 : -1; gi >= 0; gi--) {
     const z = activeGhosts[gi]
     const dx = z.posX - bombPos.x
     const dy = z.posY - bombPos.y
     const dz = z.posZ - bombPos.z
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-    if (dist < BOMB_EXPLOSION_RADIUS) {
+    if (dist < radius) {
       console.log('[Server] 💣 Bomb killed ghost!')
       room.send('ghostKilled', { x: z.posX, y: z.posY, z: z.posZ })
       engine.removeEntity(z.entity)
@@ -299,12 +325,15 @@ function explodeBomb(bomb: ActiveBomb): void {
     }
   }
 
+  // Kill Halloween ghasts the blast reaches (body sphere, see shared/ghast.ts)
+  if (opts.killsGhasts ?? true) hitGhasts(bombPos, radius + GHAST_BOMB_EXTRA_RADIUS_M, opts.ownerId ?? '', 'bomb', true)
+
   // Destroy nearby banana traps
-  for (let ti = activeTraps.length - 1; ti >= 0; ti--) {
+  for (let ti = affectsTraps ? activeTraps.length - 1 : -1; ti >= 0; ti--) {
     const trap = activeTraps[ti]
     const trapPos = Transform.get(trap.entity).position
     const dist = Vector3.distance(trapPos, bombPos)
-    if (dist < BOMB_EXPLOSION_RADIUS) {
+    if (dist < radius) {
       room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
       removeTrap(trap)
       activeTraps.splice(ti, 1)
@@ -313,11 +342,11 @@ function explodeBomb(bomb: ActiveBomb): void {
 
   room.send('bombExploded', {
     x: bombPos.x, y: bombPos.y, z: bombPos.z,
-    bombId: bomb.bombId,
+    bombId,
     victimsJson: JSON.stringify(victims)
   })
 
-  console.log('[Server] 💣 Bomb exploded at', bombPos.x.toFixed(1), bombPos.y.toFixed(1), bombPos.z.toFixed(1), '— victims:', victims.length)
+  console.log('[Server] 💣', label, 'exploded at', bombPos.x.toFixed(1), bombPos.y.toFixed(1), bombPos.z.toFixed(1), '— victims:', victims.length)
 }
 
 // ── Projectile state ──
@@ -448,7 +477,7 @@ function resolveActionPosition(playerId: string, cx: number | undefined, cy: num
 const trapDropInFlight = new Map<string, number>()
 const TRAP_DROP_IN_FLIGHT_MAX_MS = 10_000
 
-async function handleTrapDrop(playerId: string, cx?: number, cy?: number, cz?: number): Promise<void> {
+async function handleTrapDrop(playerId: string, cx?: number, cy?: number, cz?: number, nonce: number = 0): Promise<void> {
   const now = Date.now()
   const since = trapDropInFlight.get(playerId)
   if (since !== undefined && now - since < TRAP_DROP_IN_FLIGHT_MAX_MS) {
@@ -457,13 +486,13 @@ async function handleTrapDrop(playerId: string, cx?: number, cy?: number, cz?: n
   }
   trapDropInFlight.set(playerId, now)
   try {
-    await handleTrapDropInner(playerId, cx, cy, cz)
+    await handleTrapDropInner(playerId, cx, cy, cz, nonce)
   } finally {
     trapDropInFlight.delete(playerId)
   }
 }
 
-async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, cz?: number): Promise<void> {
+async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, cz?: number, nonce: number = 0): Promise<void> {
   const now = Date.now()
 
   // Check equipped trap type first so we use the right cooldown. Lenient read: on a
@@ -480,14 +509,14 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
   const lastDrop = lastTrapDropTime.get(playerId) ?? 0
   if (now - lastDrop < cooldown * 1000) {
     recordRejection(rejectionCounts, 'requestBanana:cooldown')
-    room.send('bananaDenied', { reason: 'cooldown' }, { to: [playerId] })
+    room.send('bananaDenied', { reason: 'cooldown', n: nonce }, { to: [playerId] })
     return
   }
 
   const playerPos = resolveActionPosition(playerId, cx, cy, cz, ACTION_POS_TOLERANCE_DROP, false)
   if (!playerPos) {
     recordRejection(rejectionCounts, 'requestBanana:no-position')
-    room.send('bananaDenied', { reason: 'no_position' }, { to: [playerId] })
+    room.send('bananaDenied', { reason: 'no_position', n: nonce }, { to: [playerId] })
     return
   }
 
@@ -496,7 +525,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     const playerBombs = activeBombs.filter(b => b.droppedBy === playerId)
     if (playerBombs.length >= TRAP_MAX_ACTIVE) {
       recordRejection(rejectionCounts, 'requestBanana:max-active')
-      room.send('bananaDenied', { reason: 'max_active' }, { to: [playerId] })
+      room.send('bananaDenied', { reason: 'max_active', n: nonce }, { to: [playerId] })
       return
     }
 
@@ -507,7 +536,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     if (!bombEntity) {
       recordRejection(rejectionCounts, 'requestBanana:pool-exhausted')
       console.log('[Server] Bomb denied: pool exhausted')
-      room.send('bananaDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
+      room.send('bananaDenied', { reason: 'pool_exhausted', n: nonce }, { to: [playerId] })
       return
     }
     const bt = Transform.getMutable(bombEntity)
@@ -543,7 +572,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
     lastTrapDropTime.set(playerId, now)
     sessionBananasDropped.set(playerId, (sessionBananasDropped.get(playerId) ?? 0) + 1)
 
-    room.send('bombDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z, ownerId: playerId, bombId })
+    room.send('bombDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z, ownerId: playerId, bombId, n: nonce })
     console.log('[Server] 💣 Bomb dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1))
     return
   }
@@ -552,7 +581,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
   const playerTraps = activeTraps.filter(b => b.droppedBy === playerId)
   if (playerTraps.length >= TRAP_MAX_ACTIVE) {
     recordRejection(rejectionCounts, 'requestBanana:max-active')
-    room.send('bananaDenied', { reason: 'max_active' }, { to: [playerId] })
+    room.send('bananaDenied', { reason: 'max_active', n: nonce }, { to: [playerId] })
     return
   }
 
@@ -562,7 +591,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
   if (!trapEntity) {
     recordRejection(rejectionCounts, 'requestBanana:pool-exhausted')
     console.log('[Server] Trap denied: pool exhausted')
-    room.send('bananaDenied', { reason: 'pool_exhausted' }, { to: [playerId] })
+    room.send('bananaDenied', { reason: 'pool_exhausted', n: nonce }, { to: [playerId] })
     return
   }
   const tt = Transform.getMutable(trapEntity)
@@ -585,7 +614,7 @@ async function handleTrapDropInner(playerId: string, cx?: number, cy?: number, c
   lastTrapDropTime.set(playerId, now)
 
   sessionBananasDropped.set(playerId, (sessionBananasDropped.get(playerId) ?? 0) + 1)
-  room.send('bananaDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z, ownerId: playerId })
+  room.send('bananaDropped', { x: dropPos.x, y: dropPos.y, z: dropPos.z, ownerId: playerId, n: nonce })
   console.log('[Server] 🪤 Trap dropped by', playerId.slice(0, 8), 'at', dropPos.x.toFixed(1), dropPos.y.toFixed(1), dropPos.z.toFixed(1), '— active traps:', activeTraps.length)
 }
 
@@ -655,6 +684,14 @@ export function bananaServerSystem(dt: number): void {
       }
     }
     if (trapConsumed) continue
+
+    // Ghast-trap collision (a banana touching a ghast's body; 1 damage like ghosts)
+    if (hitGhasts(trapPos, GHAST_BANANA_HIT_RADIUS_M, trap.droppedBy, 'banana', false) > 0) {
+      room.send('bananaTriggered', { x: trapPos.x, y: trapPos.y, z: trapPos.z, victimId: '' })
+      removeTrap(trap)
+      activeTraps.splice(i, 1)
+      continue
+    }
 
     // Player-trap collision (by-address roster). Gated behind a short arming delay: the drop
     // was placed at the dropper's FRESH client position while victims are judged on their
@@ -1218,11 +1255,12 @@ export function registerCombatHandlers(): void {
       console.log('[Server] 🪤 requestBanana from', from.slice(0, 8))
       // handleTrapDrop is async — without .catch, a rejection is silently swallowed
       // (no drop, no denial, client cooldown stuck) and never reaches this try/catch.
-      handleTrapDrop(from, data.x, data.y, data.z).catch(err => {
+      const nonce = Number.isFinite(data.n) ? (data.n | 0) : 0
+      handleTrapDrop(from, data.x, data.y, data.z, nonce).catch(err => {
         // Always answer — bananaDenied resets the client's local cooldown so the
         // player can retry instead of staring at a dead hotbar.
         console.error('[Server] ❌ handleTrapDrop failed:', err)
-        room.send('bananaDenied', { reason: 'error' }, { to: [from] })
+        room.send('bananaDenied', { reason: 'error', n: nonce }, { to: [from] })
       })
     } catch (err) { console.error('[Server] ❌ requestBanana handler error:', err) }
   })

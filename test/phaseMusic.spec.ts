@@ -1,4 +1,8 @@
 import { ROUND_MS, DAY_MUSIC_TAPE_ID, NIGHT_MUSIC_TAPE_ID, defaultMusicTapeIdAt } from '../src/shared/dayNight'
+import { setHalloweenModeForTests } from '../src/shared/dayNight'
+
+beforeAll(() => setHalloweenModeForTests(false))
+afterAll(() => setHalloweenModeForTests(true))
 
 describe('day/night default music', () => {
   // ids from MUSIC_STORE (shared/upgrades.ts): 'w' = Sprite Sprint, 'b' = Blips Piano

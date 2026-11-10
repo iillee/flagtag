@@ -2569,5 +2569,6 @@
   },
   "rating": "T",
   "authoritativeMultiplayer": true,
-  "opendcl": true
+  "opendcl": true,
+  "landscapeTerrain": true
 }

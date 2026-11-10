@@ -3,6 +3,7 @@ import { Layer, ZoneType } from '@stom66/dcl-ui-component-kit'
 
 import { DeathOverlay } from '../../ui/components/DeathOverlay'
 import { getRespawnCountdown, getDrownFadeOpacity, isDrownTextVisible } from '../../systems/waterSystem'
+import { HALLOWEEN_MODE } from '../../shared/dayNight'
 import { isLightningRespawning, getLightningFadeOpacity, getLightningRespawnCountdown, isLightningTextVisible } from '../../systems/lightningSystem'
 import { isGhostDeathRespawning, getGhostDeathFadeOpacity, getGhostDeathRespawnCountdown, isGhostDeathTextVisible } from '../../systems/ghostSystem'
 
@@ -32,7 +33,7 @@ export class DeathOverlayLayer extends Layer {
       <UiEntity key="drown" uiTransform={wrap}>
         <DeathOverlay
           visible={getRespawnCountdown() > 0}
-          message="You Drowned!"
+          message={HALLOWEEN_MODE ? 'You fell in the lava!' : 'You Drowned!'}
           fadeOpacity={getDrownFadeOpacity()}
           showText={isDrownTextVisible()}
           respawnCountdown={getRespawnCountdown()}

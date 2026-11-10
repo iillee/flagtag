@@ -3,6 +3,7 @@ import { Color4 } from '@dcl/sdk/math'
 import { Layer, ZoneType } from '@stom66/dcl-ui-component-kit'
 
 import { getIsUnderwater } from '../../systems/interiorSystem'
+import { HALLOWEEN_MODE } from '../../shared/dayNight'
 
 // MARK: UnderwaterLayer
 // Bluish full-screen tint while the local player is submerged.
@@ -23,7 +24,7 @@ export class UnderwaterLayer extends Layer {
       <UiEntity
         key="tint"
         uiTransform={{ positionType: 'absolute', position: { top: 0, left: 0 }, width: '100%', height: '100%', pointerFilter: 'none' }}
-        uiBackground={{ color: Color4.create(0.15, 0.35, 0.55, 0.45) }}
+        uiBackground={{ color: HALLOWEEN_MODE ? Color4.create(0.75, 0.2, 0.02, 0.5) : Color4.create(0.15, 0.35, 0.55, 0.45) }}
       />,
     ]
   }

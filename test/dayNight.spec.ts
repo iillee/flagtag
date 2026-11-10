@@ -1,10 +1,14 @@
 import {
   ROUND_MS, DAY_NIGHT_BLEND_SEC, getDayPhaseAt, isNightAt, getNextPhaseChangeMs, getSkyboxSecondsAt
 } from '../src/shared/dayNight'
+import { setHalloweenModeForTests } from '../src/shared/dayNight'
 import { getNextRoundEndTimeMs } from '../src/shared/dateUtils'
 
 const H = 3600
 const isDarkSky = (s: number) => s >= 19 * H || s < 5 * H
+
+beforeAll(() => setHalloweenModeForTests(false))
+afterAll(() => setHalloweenModeForTests(true))
 
 describe('round-locked day/night cycle', () => {
   const base = 1_000 * ROUND_MS // even round index -> day

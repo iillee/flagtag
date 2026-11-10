@@ -12,7 +12,8 @@ export const Messages = {
   // transform can lag several meters under load, so items spawned/dropped at the server
   // view landed where the player USED to be (hitting bystanders "regardless of aim").
   // The server validates this against its own view before trusting it (resolveActionPosition).
-  requestBanana: Schemas.Map({ t: Schemas.Int, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+  // n: client prediction nonce (0 = none), echoed in bananaDropped/bombDropped/bananaDenied.
+  requestBanana: Schemas.Map({ t: Schemas.Int, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, n: Schemas.Int }),
   reportBananaGroundY: Schemas.Map({ bananaX: Schemas.Float, bananaZ: Schemas.Float, groundY: Schemas.Float }),
   // x/y/z: sender position at fire time — see requestBanana comment.
   requestShell: Schemas.Map({ dirX: Schemas.Float, dirZ: Schemas.Float, color: Schemas.String, chargeSpeed: Schemas.Float, chargeRange: Schemas.Float, chargeScale: Schemas.Float, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
@@ -32,8 +33,8 @@ export const Messages = {
   // immediately instead of leaving it at the stale carrier-parented offset
   // (playtest: "split-second delay between hit and flag drop").
   dropForced: Schemas.Map({ playerId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
-  bananaDenied: Schemas.Map({ reason: Schemas.String }),
-  bananaDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String }),
+  bananaDenied: Schemas.Map({ reason: Schemas.String, n: Schemas.Int }),
+  bananaDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String, n: Schemas.Int }),
   bananaTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String }),
   shellDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, dirX: Schemas.Float, dirZ: Schemas.Float, color: Schemas.String, firedBy: Schemas.String, chargeSpeed: Schemas.Float, chargeRange: Schemas.Float, chargeScale: Schemas.Float, shellId: Schemas.Int }),
   shellTriggered: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, victimId: Schemas.String, peak: Schemas.Optional(Schemas.Boolean), firedBy: Schemas.Optional(Schemas.String), shellId: Schemas.Optional(Schemas.Int) }),
@@ -44,6 +45,18 @@ export const Messages = {
   // Updraft messages
   requestUpdraftLocation: Schemas.Map({ t: Schemas.Int }),
   updraftLocation: Schemas.Map({ index: Schemas.Int, slot: Schemas.Int }),
+  // Halloween tree fires: seed + ms since the server's rotation epoch; clients derive every swap locally.
+  requestTreeFireSeed: Schemas.Map({ t: Schemas.Int }),
+  treeFireSeed: Schemas.Map({ seed: Schemas.Int, elapsedMs: Schemas.Int }),
+  // Halloween ghasts: paths are derived from seed + elapsed (shared/ghast.ts); only events are sent.
+  requestGhastSync: Schemas.Map({ t: Schemas.Int }),
+  // deadJson: [[g, diedAtMs, respawnAtMs, x, y, z], ...] for ghasts dying/dead at reply time.
+  ghastSync: Schemas.Map({ seed: Schemas.Int, elapsedMs: Schemas.Int, enabled: Schemas.Int, deadJson: Schemas.String }),
+  ghastKilled: Schemas.Map({ g: Schemas.Int, killer: Schemas.String, cause: Schemas.String, seed: Schemas.Int, t: Schemas.Int, respawnT: Schemas.Int, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
+  // seed + t (server ms since ghast epoch) on charge/fire let clients re-sync their path clock.
+  ghastCharge: Schemas.Map({ g: Schemas.Int, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, seed: Schemas.Int, t: Schemas.Int }),
+  ghastFire: Schemas.Map({ g: Schemas.Int, id: Schemas.Int, sx: Schemas.Float, sy: Schemas.Float, sz: Schemas.Float, dx: Schemas.Float, dy: Schemas.Float, dz: Schemas.Float, speed: Schemas.Float, dist: Schemas.Float, seed: Schemas.Int, t: Schemas.Int }),
+  ghastFireballEnd: Schemas.Map({ id: Schemas.Int, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
 
   // Mushroom messages
   requestMushroomPositions: Schemas.Map({ t: Schemas.Int }),
@@ -123,7 +136,7 @@ export const Messages = {
   equipTrap: Schemas.Map({ trapId: Schemas.String }),                  // Client → Server: equip an owned trap
 
   // Bomb messages
-  bombDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String, bombId: Schemas.Int }),
+  bombDropped: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, ownerId: Schemas.String, bombId: Schemas.Int, n: Schemas.Int }),
   bombExploded: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float, bombId: Schemas.Int, victimsJson: Schemas.String }),
   reportBombGroundY: Schemas.Map({ bombId: Schemas.Int, groundY: Schemas.Float }),
 

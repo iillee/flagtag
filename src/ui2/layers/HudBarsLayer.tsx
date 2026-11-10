@@ -3,7 +3,8 @@ import { Color4 } from '@dcl/sdk/math'
 import { Layer, ZoneType } from '@stom66/dcl-ui-component-kit'
 
 import { S } from '../../ui/uiConstants'
-import { ProgressBar } from '../../ui/components/ProgressBar'
+import { ProgressBar, HEAT_FILL, HEAT_TRACK } from '../../ui/components/ProgressBar'
+import { HALLOWEEN_MODE } from '../../shared/dayNight'
 import { getDrownFraction, isDrownBarVisible } from '../../systems/waterSystem'
 import { getScareFraction, isScareBarVisible } from '../../systems/ghostSystem'
 
@@ -40,7 +41,9 @@ export class HudBarsLayer extends Layer {
             pointerFilter: 'none',
           }}
         >
-          <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={S(110)} />
+          {HALLOWEEN_MODE
+            ? <ProgressBar fraction={1 - fraction} fillColor={HEAT_FILL} trackColor={HEAT_TRACK} bottomOffset={S(110)} />
+            : <ProgressBar fraction={fraction} fillColor={fillColor} bottomOffset={S(110)} />}
         </UiEntity>,
       )
     }

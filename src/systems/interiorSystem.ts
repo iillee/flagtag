@@ -6,7 +6,7 @@
  * Clicking the exit door fades out and returns them to their original position.
  */
 import {
-  engine, Entity, Transform, MeshRenderer, MeshCollider, Material,
+  engine, Entity, Transform, MeshRenderer, MeshCollider, Material, TextureWrapMode, MaterialTransparencyMode,
   Animator, Tween, TweenSequence, EasingFunction,
   GltfContainer, VirtualCamera, MainCamera, CameraModeArea, CameraType,
   pointerEventsSystem, InputAction, AudioSource, VisibilityComponent,
@@ -18,6 +18,11 @@ import { registerSystem } from './systemManager'
 import { setCinematicFade, cinematicState } from '../ui'
 import { setInteriorBypass, setWaterSurfaceY } from './waterSystem'
 import { room } from '../shared/messages'
+import { HALLOWEEN_MODE } from '../shared/dayNight'
+import { setupLavaAmbience } from './lavaAmbience'
+import { setupTreeFires } from './treeFireSystem'
+import { pickLavaBubblePoint } from '../shared/lavaBubbleSpawn'
+import { isMobile } from '@dcl/sdk/platform'
 import { Flag, FlagState } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
 import { INTERIOR_COIN_LOCATIONS } from '../shared/coinLocations'
@@ -475,6 +480,8 @@ function buildCircularWater(): void {
     }
   }
 
+  if (HALLOWEEN_MODE) { buildLava(); return }
+
   // Flat square as water surface (covers entire scene)
   waterEntity = engine.addEntity()
   Transform.create(waterEntity, {
@@ -504,6 +511,123 @@ function buildCircularWater(): void {
   })
 
   console.log('[Interior] Created circular water surface, diameter:', WATER_DIAMETER, 'm')
+}
+
+// -- Halloween lava (visual only; same Y, lever rise and drown flow as water) --
+// Look copied from the glide scene (src/index.ts LAVA FLOOR): lava1.jpg on a
+// flat plane, orange albedo, red-orange emissive pulsing 1.5 +/- 0.8, roughness
+// 0.7, plus pooled glowing sphere "bubbles". Glide tiles 32 m planes; here one
+// plane with texture tiling gives the same 32 m repeat with a single entity.
+// Glide rewrites every tile's material each frame; here only the one surface
+// material is updated, at LAVA_PULSE_HZ.
+const LAVA_TEXTURE = 'assets/images/lava/lava1.jpg' // 294x294 JPG, 42 KB
+const LAVA_TILE_M = 32
+const LAVA_PULSE_HZ = 5
+// Glide: 25 bubbles, scale 4-12, life 4-8 s, ease-out grow then pop. Count cut on mobile.
+const LAVA_BUBBLE_COUNT = isMobile() ? 20 : 60
+const LAVA_BUBBLE_MIN_R = 4
+const LAVA_BUBBLE_MAX_R = 12
+const LAVA_BUBBLE_MIN_LIFE = 4
+const LAVA_BUBBLE_MAX_LIFE = 8
+// Bubbles spawn on open lava only (terrain mask, never on land or in the castle;
+// see shared/lavaBubbleSpawn.ts), within LAVA_BUBBLE_NEAR_M of the player so
+// density looks right where you are; falls back to anywhere on the lava.
+const LAVA_BUBBLE_NEAR_M = 180
+
+function lavaMaterial(emissiveIntensity: number, tiles: number) {
+  return {
+    texture: Material.Texture.Common({ src: LAVA_TEXTURE, wrapMode: TextureWrapMode.TWM_REPEAT, tiling: { x: tiles, y: tiles } }),
+    albedoColor: Color4.create(0.7, 0.25, 0.05, 1),
+    emissiveColor: Color4.create(0.4, 0.07, 0.0),
+    emissiveIntensity,
+    roughness: 0.7,
+    metallic: 0.0,
+  }
+}
+
+/** Glide bubble curve: ease-out grow to 80 %, then fast shrink ("pop"). */
+function bubbleScale(progress: number, maxScale: number): number {
+  if (progress < 0.8) { const g = progress / 0.8; return maxScale * (1 - Math.pow(1 - g, 2)) }
+  return maxScale * (1 - (progress - 0.8) / 0.2)
+}
+
+type LavaBubble = { entity: Entity; age: number; life: number; maxScale: number }
+const lavaBubbles: LavaBubble[] = []
+
+function placeBubble(b: LavaBubble): void {
+  const player = Transform.getOrNull(engine.PlayerEntity)
+  const pt = pickLavaBubblePoint(player ? player.position.x : 400, player ? player.position.z : 400, LAVA_BUBBLE_NEAR_M)
+  b.age = 0
+  b.life = LAVA_BUBBLE_MIN_LIFE + Math.random() * (LAVA_BUBBLE_MAX_LIFE - LAVA_BUBBLE_MIN_LIFE)
+  b.maxScale = LAVA_BUBBLE_MIN_R + Math.random() * (LAVA_BUBBLE_MAX_R - LAVA_BUBBLE_MIN_R)
+  const t = Transform.getMutable(b.entity)
+  if (pt) t.position = Vector3.create(pt.x, t.position.y, pt.z)
+  t.scale = Vector3.Zero()
+}
+
+function buildLava(): void {
+  const flat = Quaternion.fromEulerDegrees(90, 0, 0)
+  const size = WATER_DIAMETER - 64
+  waterEntity = engine.addEntity()
+  Transform.create(waterEntity, {
+    position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y, WATER_CENTER_Z),
+    rotation: flat,
+    scale: Vector3.create(size, size, 1),
+  })
+  MeshRenderer.setPlane(waterEntity)
+  Material.setPbrMaterial(waterEntity, lavaMaterial(1.5, size / LAVA_TILE_M))
+
+  // Dark crust under the surface (replaces the water floor tint)
+  const floor = engine.addEntity()
+  Transform.create(floor, {
+    position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y - 0.3, WATER_CENTER_Z),
+    rotation: flat,
+    scale: Vector3.create(WATER_DIAMETER, WATER_DIAMETER, 1),
+  })
+  MeshRenderer.setPlane(floor)
+  Material.setPbrMaterial(floor, { albedoColor: Color4.create(0.12, 0.03, 0.01, 1), roughness: 1.0, metallic: 0.0 })
+
+  for (let i = 0; i < LAVA_BUBBLE_COUNT; i++) {
+    const entity = engine.addEntity()
+    Transform.create(entity, { position: Vector3.create(0, WATER_BASE_Y, 0), scale: Vector3.Zero() })
+    MeshRenderer.setSphere(entity)
+    Material.setPbrMaterial(entity, {
+      albedoColor: Color4.create(0.9, 0.15, 0.0, 0.7),
+      emissiveColor: Color4.create(1.0, 0.2, 0.0),
+      emissiveIntensity: 4.0,
+      roughness: 0.3,
+      metallic: 0.0,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND,
+      castShadows: false,
+    })
+    const b: LavaBubble = { entity, age: 0, life: 1, maxScale: 1 }
+    placeBubble(b)
+    b.age = Math.random() * b.life // stagger
+    lavaBubbles.push(b)
+  }
+
+  let clock = 0
+  let pulseClock = 0
+  registerSystem((dt: number) => {
+    clock += dt
+    pulseClock += dt
+    if (waterEntity && pulseClock >= 1 / LAVA_PULSE_HZ) {
+      pulseClock = 0
+      Material.setPbrMaterial(waterEntity, lavaMaterial(1.5 + Math.sin(clock * 0.15 * Math.PI * 2) * 0.8, size / LAVA_TILE_M))
+    }
+    const surfaceY = waterEntity ? Transform.get(waterEntity).position.y : WATER_BASE_Y
+    for (const b of lavaBubbles) {
+      b.age += dt
+      if (b.age >= b.life) { placeBubble(b); continue }
+      const s = bubbleScale(b.age / b.life, b.maxScale) // glide curve
+      const t = Transform.getMutable(b.entity)
+      t.position.y = surfaceY
+      t.scale = Vector3.create(s, s, s)
+    }
+  })
+  setupLavaAmbience()
+  setupTreeFires()
+  console.log('[Interior] Halloween lava surface built (' + LAVA_BUBBLE_COUNT + ' bubbles)')
 }
 
 function tweenWaterTo(targetY: number, durationSec: number): void {

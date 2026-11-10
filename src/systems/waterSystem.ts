@@ -2,7 +2,12 @@ import { engine, Transform, InputModifier, AudioSource } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo, triggerEmote } from '~system/RestrictedActions'
 import { room } from '../shared/messages'
-import { DROWN_RESPAWN_DURATION_SEC } from '../shared/constants'
+import { DROWN_RESPAWN_DURATION_SEC, SCENE_FLOOR_Y } from '../shared/constants'
+import { HALLOWEEN_MODE } from '../shared/dayNight'
+
+/** Wading loop: water normally; in Halloween a sizzle. Swap here. */
+export const SIZZLE_SOUND_SRC = 'assets/sounds/sizzle.mp3'
+const WADE_SOUND_SRC = HALLOWEEN_MODE ? SIZZLE_SOUND_SRC : 'assets/sounds/water.mp3'
 import { sendDeathPenalty, clearDeathPenalty } from './deathPenaltySystem'
 import { isSpectatorMode, exitSpectatorMode } from './spectatorSystem'
 import { isCinematicActive } from '../gameState/cinematicState'
@@ -11,8 +16,8 @@ import { isCinematicActive } from '../gameState/cinematicState'
 let _isInInterior = false
 export function setInteriorBypass(v: boolean) { _isInInterior = v }
 
-// Water surface Y level
-let WATER_SURFACE_Y = 1.58
+// Water surface Y level (scene floor + 1.58; interiorSystem keeps it in sync each frame)
+let WATER_SURFACE_Y = SCENE_FLOOR_Y + 1.58
 
 /** Update the water surface Y for drowning checks (called by interior lever system) */
 export function setWaterSurfaceY(y: number): void {
@@ -30,9 +35,9 @@ const RECHARGE_TIME = 5.0 // seconds to fully recharge on land (2x faster)
 const SPAWN_POSITION = Vector3.create(385, 96, 392)
 // Scene bounds
 const SCENE_MIN_X = 0
-const SCENE_MAX_X = 512
+const SCENE_MAX_X = 800 // 50x50 parcels
 const SCENE_MIN_Z = 0
-const SCENE_MAX_Z = 512
+const SCENE_MAX_Z = 800
 
 function isInWaterZone(px: number, pz: number): boolean {
   return px >= SCENE_MIN_X && px <= SCENE_MAX_X && pz >= SCENE_MIN_Z && pz <= SCENE_MAX_Z
@@ -146,7 +151,7 @@ export function waterSystem(dt: number) {
     outOfWaterTimer = 3.0
     wasInWater = false
     if (waterSoundEntity && AudioSource.has(waterSoundEntity)) {
-      AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
+      AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: WADE_SOUND_SRC, playing: false, loop: true, volume: 0.5, global: true })
     }
     return
   }
@@ -204,7 +209,7 @@ export function waterSystem(dt: number) {
     waterSoundEntity = engine.addEntity()
     Transform.create(waterSoundEntity, { position: Vector3.create(0, 0, 0) })
     AudioSource.create(waterSoundEntity, {
-      audioClipUrl: 'assets/sounds/water.mp3',
+      audioClipUrl: WADE_SOUND_SRC,
       playing: false,
       loop: true,
       volume: 0.5,
@@ -248,7 +253,7 @@ export function waterSystem(dt: number) {
       sendDeathPenalty('drown')
 
       if (waterSoundEntity) {
-        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
+        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: WADE_SOUND_SRC, playing: false, loop: true, volume: 0.5, global: true })
       }
 
       void triggerEmote({ predefinedEmote: 'urn:decentraland:matic:collections-v2:0x7bdc37ff3e8dca2d69f01a3dc34f3ad82e2e1870:0' })
@@ -287,15 +292,15 @@ export function waterSystem(dt: number) {
     const audio = AudioSource.getMutableOrNull(waterSoundEntity)
     if (audio) {
       if (isMoving && !audio.playing) {
-        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: true, loop: true, volume: 0.5, global: true })
+        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: WADE_SOUND_SRC, playing: true, loop: true, volume: 0.5, global: true })
       } else if (!isMoving && audio.playing) {
-        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
+        AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: WADE_SOUND_SRC, playing: false, loop: true, volume: 0.5, global: true })
       }
     }
   } else if (!feetInWater && waterSoundEntity) {
     const audio = AudioSource.getMutableOrNull(waterSoundEntity)
     if (audio && audio.playing) {
-      AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: 'assets/sounds/water.mp3', playing: false, loop: true, volume: 0.5, global: true })
+      AudioSource.createOrReplace(waterSoundEntity, { audioClipUrl: WADE_SOUND_SRC, playing: false, loop: true, volume: 0.5, global: true })
     }
   }
 
