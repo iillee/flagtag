@@ -41,6 +41,7 @@ import { isCinematicActive } from '../gameState/cinematicState'
 import { isDrownRespawning } from './waterSystem'
 import { isSpectatorMode } from './spectatorSystem'
 import { playSpatialSound } from '../utils/spatialAudio'
+import { findPrediction, isPredictionExpired, needsServerSnap } from '../shared/dropPrediction'
 
 const BOMB_MODEL_SRC = 'assets/asset-packs/iron_grenade/Bomb_01/Bomb_01.glb'
 const BOMB_RED_MODEL_SRC = 'assets/asset-packs/iron_grenade/Bomb_01/Bomb_red.glb'
@@ -334,6 +335,8 @@ interface MsgBombVisual {
   groundRayEntity: Entity | null
   lastBlinkMs: number
   blinkOn: boolean
+  /** Pending local prediction nonce; 0 once the server confirmed it (bombId valid). */
+  nonce: number
 }
 const msgBombVisuals: MsgBombVisual[] = []
 
@@ -349,6 +352,9 @@ export function setupBombMessages(): void {
 
 room.onMessage('bombDropped', (data) => {
   console.log('[Bomb] 💣 bombDropped msg:', JSON.stringify(data))
+  // Our own predicted bomb: adopt it instead of spawning a second one late.
+  const me = getPlayerData()?.userId?.toLowerCase() || ''
+  if (data.ownerId === me && adoptBombPrediction(data.n, data.bombId, data.x, data.y, data.z)) return
   playBombFuseSound(Vector3.create(data.x, data.y, data.z))
   createBombVisual(data.x, data.y, data.z, data.ownerId || '', data.bombId)
 })
@@ -422,9 +428,9 @@ room.onMessage('bombExploded', (data) => {
 
 } // end setupBombMessages
 
-function createBombVisual(x: number, y: number, z: number, ownerId: string, bombId: number): void {
+function createBombVisual(x: number, y: number, z: number, ownerId: string, bombId: number, nonce: number = 0): boolean {
   const entity = acquireBombFromPool()
-  if (!entity) return
+  if (!entity) return false
 
   const t = Transform.getMutable(entity)
   t.position = Vector3.create(x, y, z)
@@ -456,18 +462,56 @@ function createBombVisual(x: number, y: number, z: number, ownerId: string, bomb
     falling: true, fallVelocity: 0, currentY: y, targetY: Math.max(minY, y - 2), minY,
     groundResolved: false, groundRayEntity,
     lastBlinkMs: Date.now(), blinkOn: false,
+    nonce,
   })
+  return true
+}
+
+function removeBombVisualAt(idx: number): void {
+  const vis = msgBombVisuals[idx]
+  if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
+  if (vis.flameEntity !== null) releaseFlame(vis.flameEntity)
+  releaseBombToPool(vis.entity)
+  msgBombVisuals.splice(idx, 1)
 }
 
 function removeBombVisualById(bombId: number): void {
-  const idx = msgBombVisuals.findIndex(v => v.bombId === bombId)
-  if (idx !== -1) {
-    const vis = msgBombVisuals[idx]
-    if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
-    if (vis.flameEntity !== null) releaseFlame(vis.flameEntity)
-    releaseBombToPool(vis.entity)
-    msgBombVisuals.splice(idx, 1)
+  // Pending predictions carry bombId -1 and must not match a server id.
+  const idx = msgBombVisuals.findIndex(v => v.nonce === 0 && v.bombId === bombId)
+  if (idx !== -1) removeBombVisualAt(idx)
+}
+
+/**
+ * Local prediction: show our bomb the instant we press drop (the server's
+ * bombDropped arrives a round trip later, after we've run past it). Matched by
+ * nonce on bombDropped; removed on bananaDenied or after the timeout.
+ */
+export function predictBombDrop(x: number, y: number, z: number, ownerId: string, nonce: number): void {
+  if (createBombVisual(x, y, z, ownerId, -1, nonce)) playBombFuseSound(Vector3.create(x, y, z))
+}
+
+/** Drop a pending prediction (server denied it, or it turned out to be a banana). */
+export function cancelBombPrediction(nonce: number): boolean {
+  const idx = findPrediction(msgBombVisuals, nonce)
+  if (idx === -1) return false
+  stopBombFuseSound()
+  removeBombVisualAt(idx)
+  return true
+}
+
+function adoptBombPrediction(nonce: number, bombId: number, x: number, y: number, z: number): boolean {
+  const idx = findPrediction(msgBombVisuals, nonce)
+  if (idx === -1) return false
+  const vis = msgBombVisuals[idx]
+  vis.nonce = 0
+  vis.bombId = bombId
+  if (needsServerSnap(vis.x, vis.z, x, z)) {
+    // Server used its own view (client pos was out of tolerance): move to the truth.
+    vis.x = x; vis.z = z; vis.currentY = y; vis.falling = true; vis.fallVelocity = 0
   }
+  // Ground was resolved while we didn't know the id yet - report it now.
+  if (vis.groundResolved) room.send('reportBombGroundY', { bombId, groundY: vis.targetY })
+  return true
 }
 
 // ── Main client system ──
@@ -491,6 +535,14 @@ export function bombClientSystem(dt: number): void {
   for (let i = msgBombVisuals.length - 1; i >= 0; i--) {
     const vis = msgBombVisuals[i]
 
+    // Unconfirmed prediction (lost/denied reply): remove it.
+    if (vis.nonce !== 0 && isPredictionExpired(vis.createdAtMs, now)) {
+      console.log('[Bomb] Prediction timed out, removing')
+      stopBombFuseSound()
+      removeBombVisualAt(i)
+      continue
+    }
+
     // Safety expiry (fuse + 2s margin)
     if (now - vis.createdAtMs > (BOMB_FUSE_SEC + 2) * 1000) {
       if (vis.groundRayEntity !== null) engine.removeEntity(vis.groundRayEntity)
@@ -510,7 +562,8 @@ export function bombClientSystem(dt: number): void {
         vis.groundRayEntity = null
 
         // Report ground Y to server
-        room.send('reportBombGroundY', { bombId: vis.bombId, groundY: vis.targetY })
+        // Unconfirmed predictions don't know their bombId yet; adoption reports it.
+        if (vis.nonce === 0) room.send('reportBombGroundY', { bombId: vis.bombId, groundY: vis.targetY })
 
         if (vis.currentY <= vis.targetY) {
           vis.currentY = vis.targetY
