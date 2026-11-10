@@ -46,6 +46,7 @@ import {
 import { isValidLeaderboardJson, parseLeaderboardJsonSafe } from './leaderboardData'
 import { resetDailyLeaderboardAfterRecovery } from './leaderboardLifecycle'
 import { FEEDBACK_COOLDOWN_MS, NAME_CHANGE_COOLDOWN_MS, isRateLimited } from './cooldownValidation'
+import { allowGlobalEvent, mailboxWebhookBody, sanitizeDiscordName, sanitizeDiscordText } from './discordSafe'
 import { formatRejections, clearRejections, recordRejection } from './rejectionStats'
 import { playerNames } from './serverState'
 import { syncEntity } from '@dcl/sdk/network'
@@ -354,6 +355,7 @@ function registerSystems() {
 /** Register the registerName handler (only handler still in server.ts). */
 // Secret comes from the environment only — never hardcode a webhook token (public bundles).
 let mailboxWebhook = ''
+let globalFeedbackTimes: number[] = []
 
 async function loadMailboxWebhook(): Promise<void> {
   mailboxWebhook = (await EnvVar.get('DISCORD_MAILBOX_WEBHOOK')) || ''
@@ -363,29 +365,36 @@ function registerFeedbackHandlers(): void {
   room.onMessage('sendFeedback', async (data, context) => {
     if (!context) return
     const from = context.from.toLowerCase()
-    const msg = (data.message || '').trim()
-    if (!msg || msg.length > 500) {
+    const msg = sanitizeDiscordText(data?.message)
+    if (!msg) {
       room.send('feedbackResult', { success: false, message: 'Message empty or too long (500 char max).' }, { to: [context.from] })
       return
     }
-    // Rate limit: 1 message per 60s per player
     const now = Date.now()
     const last = feedbackCooldowns.get(from) || 0
     if (isRateLimited(last, now, FEEDBACK_COOLDOWN_MS)) {
       room.send('feedbackResult', { success: false, message: 'Please wait before sending another message.' }, { to: [context.from] })
       return
     }
-    feedbackCooldowns.set(from, now)
+    const global = allowGlobalEvent(globalFeedbackTimes, now)
+    if (!global.allowed) {
+      globalFeedbackTimes = global.times
+      room.send('feedbackResult', { success: false, message: 'Too many messages right now. Please try again later.' }, { to: [context.from] })
+      return
+    }
     if (!mailboxWebhook) {
       room.send('feedbackResult', { success: false, message: 'Feedback system not configured.' }, { to: [context.from] })
       return
     }
+    // Record limits only once we are going to attempt a post.
+    globalFeedbackTimes = global.times
+    feedbackCooldowns.set(from, now)
     try {
-      const name = playerNames.get(from) || from.slice(0, 10)
+      const name = sanitizeDiscordName(playerNames.get(from) || from.slice(0, 10))
       const res = await fetch(mailboxWebhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ embeds: [{ description: msg, author: { name: name }, color: 3447003 }] }),
+        body: JSON.stringify(mailboxWebhookBody(msg, name)),
       })
       if (res.ok || res.status === 204) {
         room.send('feedbackResult', { success: true, message: 'Message sent! Thanks for the feedback.' }, { to: [context.from] })
@@ -401,12 +410,6 @@ function registerFeedbackHandlers(): void {
   })
 }
 
-/**
- * Clean a client-supplied display name before it reaches synced JSON, Storage and Discord.
- * Strips control + markdown + mention characters, collapses whitespace, and caps length so a
- * hostile client can't inject markdown or @everyone/@here pings into webhooks, or bloat
- * CRDT/Storage with a megabyte-long name.
- */
 function sanitizePlayerName(raw: string): string {
   return raw
     .replace(/[\u0000-\u001F\u007F]/g, '')
