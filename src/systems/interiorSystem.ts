@@ -17,6 +17,7 @@ import { movePlayerTo } from '~system/RestrictedActions'
 import { registerSystem } from './systemManager'
 import { setCinematicFade, cinematicState } from '../ui'
 import { setInteriorBypass, setWaterSurfaceY } from './waterSystem'
+import { buildCircularWater, WATER_SURFACE } from './waterSurface'
 import { room } from '../shared/messages'
 import { Flag, FlagState } from '../shared/components'
 import { getPlayer } from '@dcl/sdk/players'
@@ -447,7 +448,7 @@ export function setupInteriorSystem(): void {
 // Local-only visual effect (only the player who pulled the lever sees it)
 // ══════════════════════════════════════════════════════════════════════
 
-const WATER_BASE_Y = 49.58
+const WATER_BASE_Y = WATER_SURFACE.baseY
 const WATER_MAX_Y = 56
 const WATER_RISE_DURATION = 120  // seconds to go from base to max
 
@@ -459,52 +460,6 @@ const WATER_PEAK_HOLD = 60  // seconds to hold at peak
 let waterEntity: Entity | null = null
 let _leverEntity: Entity | null = null
 let waterRiseSoundEntity: Entity | null = null
-
-const WATER_CENTER_X = 400
-const WATER_CENTER_Z = 400
-const WATER_DIAMETER = 800  // meters (full scene)
-
-function buildCircularWater(): void {
-  // Hide the composite water GLB
-  for (const [entity] of engine.getEntitiesWith(GltfContainer, Transform)) {
-    const gltf = GltfContainer.get(entity)
-    if (gltf.src.includes('WaterPatchFull')) {
-      VisibilityComponent.createOrReplace(entity, { visible: false })
-      console.log('[Interior] Hid composite water entity')
-      break
-    }
-  }
-
-  // Flat square as water surface (covers entire scene)
-  waterEntity = engine.addEntity()
-  Transform.create(waterEntity, {
-    position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y, WATER_CENTER_Z),
-    scale: Vector3.create(WATER_DIAMETER - 64, 0.02, WATER_DIAMETER - 64),
-  })
-  MeshRenderer.setCylinder(waterEntity, 0.5, 0.5)
-  Material.setPbrMaterial(waterEntity, {
-    albedoColor: Color4.create(0.55, 0.75, 0.78, 1.0),
-    roughness: 1.0,
-    metallic: 0.0,
-    specularIntensity: 0.0,
-  })
-  // Bottom layer — opaque seafloor tint just above ground
-  const waterFloor = engine.addEntity()
-  Transform.create(waterFloor, {
-    position: Vector3.create(WATER_CENTER_X, WATER_BASE_Y - 0.3, WATER_CENTER_Z),
-    scale: Vector3.create(WATER_DIAMETER, 0.02, WATER_DIAMETER),
-  })
-  MeshRenderer.setCylinder(waterFloor, 0.5, 0.5)
-  Material.setPbrMaterial(waterFloor, {
-    albedoColor: Color4.create(0.624, 0.804, 0.765, 1.0),
-    emissiveColor: Color4.create(0.0, 0.0, 0.0),
-    emissiveIntensity: 0.0,
-    roughness: 0.5,
-    metallic: 0.0,
-  })
-
-  console.log('[Interior] Created circular water surface, diameter:', WATER_DIAMETER, 'm')
-}
 
 function tweenWaterTo(targetY: number, durationSec: number): void {
   if (!waterEntity) return
@@ -625,7 +580,7 @@ function setupWaterRise(): void {
     return
   }
 
-  buildCircularWater()
+  waterEntity = buildCircularWater()
   if (!waterEntity) {
     console.log('[Interior] Water entity not created!')
     return

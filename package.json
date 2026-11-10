@@ -14,7 +14,8 @@
     "test:cli": "npm run test:dependencies && npm run build && sdk-commands start --help && sdk-commands deploy --help",
     "upgrade-sdk": "npm install --save-dev @dcl/sdk@auth-server",
     "upgrade-sdk:next": "npm install --save-dev @dcl/sdk@next",
-    "server-logs": "sdk-commands scene-insights tail"
+    "server-logs": "sdk-commands scene-insights tail",
+    "build-water-waves": "npx tsx scripts/build-water-waves.ts"
   },
   "devDependencies": {
     "@dcl/sdk": "^7.32.1-41691874543.commit-3063788",
