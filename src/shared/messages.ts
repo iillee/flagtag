@@ -4,10 +4,11 @@ import { registerMessages } from '@dcl/sdk/network'
 export const Messages = {
   // Client → Server
   registerName: Schemas.Map({ name: Schemas.String }),
-  requestPickup: Schemas.Map({ t: Schemas.Int }),
+  requestPickup: Schemas.Map({ t: Schemas.Int, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   requestDrop: Schemas.Map({ t: Schemas.Int }),
   // No requestSteal: proximity steal is decided server-side (checkProximitySteal).
   reportGroundY: Schemas.Map({ y: Schemas.Float }),
+  reportPlayerPos: Schemas.Map({ x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   // x/y/z: the sender's own position at action time. The server's replicated avatar
   // transform can lag several meters under load, so items spawned/dropped at the server
   // view landed where the player USED to be (hitting bystanders "regardless of aim").
@@ -48,7 +49,7 @@ export const Messages = {
 
   // Mushroom messages
   requestMushroomPositions: Schemas.Map({ t: Schemas.Int }),
-  pickupMushroom: Schemas.Map({ id: Schemas.Int }),
+  pickupMushroom: Schemas.Map({ id: Schemas.Int, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),
   mushroomPositions: Schemas.Map({ mushroomsJson: Schemas.String, fullReset: Schemas.Optional(Schemas.Boolean) }),   // JSON array of {id, candidates: [{x,z}]}
   mushroomPickedUp: Schemas.Map({ id: Schemas.Int, playerId: Schemas.String }),
   mushroomShield: Schemas.Map({ durationMs: Schemas.Int, playerId: Schemas.String }),
@@ -104,7 +105,7 @@ export const Messages = {
   respawnPlayers: Schemas.Map({ t: Schemas.Int, winnersJson: Schemas.String }),
 
   // Coin messages
-  requestCoinPickup: Schemas.Map({ coinId: Schemas.String }),           // Client → Server: player wants to pick up a coin
+  requestCoinPickup: Schemas.Map({ coinId: Schemas.String, x: Schemas.Float, y: Schemas.Float, z: Schemas.Float }),           // Client → Server: player wants to pick up a coin
   coinPickedUp: Schemas.Map({ coinId: Schemas.String, playerId: Schemas.String, newBalance: Schemas.Int }),  // Server → Client: coin was picked up
   coinRespawned: Schemas.Map({ coinId: Schemas.String }),               // Server → Client: coin is back
   requestWalletBalance: Schemas.Map({ t: Schemas.Int }),                // Client → Server: request current balance on join

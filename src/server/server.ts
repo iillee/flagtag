@@ -32,6 +32,8 @@ import {
   recordPlayerPositions, sweepDuplicateIdentities, getPlayerPosition, isRealName,
   nameChangeCooldowns, feedbackCooldowns, rejectionCounts,
 } from './serverState'
+import { logPlayerEntitySnapshot, registerPlayerPositionHandlers, takePlayerPositionStats } from './playerPositionFallback'
+import { setPlayerPositionLogHook } from './reportedPositionStore'
 import { persistPlayerNames, loadPlayerNames, loadVisitorData } from './persistence'
 import {
   loadDiscordWebhookUrl,
@@ -165,6 +167,8 @@ export async function setupServer(): Promise<void> {
   registerFlagHandlers()
   registerEconomyHandlers()
   registerCombatHandlers()
+  registerPlayerPositionHandlers()
+  setPlayerPositionLogHook(logPlayerEntitySnapshot)
   registerGhostHandlers()
   registerMushroomHandlers()
   registerRoundHandlers()
@@ -337,6 +341,8 @@ function registerSystems() {
       // than logging per rejection: the routine ones (every non-dropper's reportGroundY, one per
       // observer per drop) would otherwise bury the tripwires this log exists to surface. Folded
       // into props so PostHog gets it too, and emitted as its own line for greppability.
+      logPlayerEntitySnapshot('diag')
+      Object.assign(props, takePlayerPositionStats())
       const rejections = formatRejections(rejectionCounts)
       if (rejections !== null) props.rejections = rejections
       capture('server', 'server_diag', props)

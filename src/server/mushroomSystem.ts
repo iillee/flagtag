@@ -6,6 +6,7 @@ import {
   getPlayerPosition, rejectionCounts,
 } from './serverState'
 import { recordRejection } from './rejectionStats'
+import { noteClientPosition } from './reportedPositionStore'
 
 const MUSHROOM_COUNT = 1
 const MUSHROOM_PICKUP_COOLDOWN_MS = 2000
@@ -98,6 +99,7 @@ export function registerMushroomHandlers(): void {
       const from = context.from.toLowerCase()
       // Require a replicated server position and rate-limit, so a bot can't claim every
       // mushroom the instant it spawns from anywhere on the map.
+      noteClientPosition(from, (data as { x?: number; y?: number; z?: number }).x, (data as { x?: number; y?: number; z?: number }).y, (data as { x?: number; y?: number; z?: number }).z)
       const playerPos = getPlayerPosition(from)
       if (!playerPos) { recordRejection(rejectionCounts, 'pickupMushroom:no-position'); return }
       const now = Date.now()

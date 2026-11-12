@@ -78,6 +78,7 @@ export async function main() {
   const { setupTeleportOrbs } = await import('./systems/teleportOrbs')
   const { setupCinematicSystem } = await import('./systems/cinematicSystem')
   const { ghostClientSystem } = await import('./systems/ghostSystem')
+  const { playerPosReportSystem } = await import('./systems/playerPosReport')
   const { pedestalSystem } = await import('./systems/pedestalSystem')
   const { Portal } = await import('./systems/portalSystem')
   const { addPlayer, removePlayer, nameResolverSystem, updateHoldTimeInterpolation } = await import('./gameState/flagHoldTime')
@@ -264,6 +265,12 @@ export async function main() {
     boomboxSystem(dt)
     pedestalSystem(dt)
   }, 0.1)
+
+  // 5 Hz position heartbeat so the server has a validated fallback when
+  // avatar Transforms are not replicated (see reportedPosition.ts).
+  registerThrottled(() => {
+    playerPosReportSystem()
+  }, 0.2)
 
   // Throttled checks (every 0.25s)
   registerThrottled((_elapsed) => {

@@ -14,6 +14,7 @@ import {
 } from '../shared/components'
 import { dropFloorY } from '../shared/constants'
 import { loadPlayerUpgrades } from './economy'
+import { noteClientPosition } from './reportedPositionStore'
 import { room } from '../shared/messages'
 import {
   flagEntity, getPlayerPosition, getActivePlayerAddresses, wasWithinRadius, distanceWithinLookback,
@@ -1232,6 +1233,7 @@ export function registerCombatHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
+      noteClientPosition(from, data.x, data.y, data.z)
       // Entry log: during the "traps silently never drop" incident there was no way to
       // tell from logs whether the request even reached the server. Keep this line.
       console.log('[Server] 🪤 requestBanana from', from.slice(0, 8))
@@ -1250,6 +1252,7 @@ export function registerCombatHandlers(): void {
     try {
       if (!context) return
       const from = context.from.toLowerCase()
+      noteClientPosition(from, data.x, data.y, data.z)
       // Authoritative equipped color — never trust data.color, or a client could claim
       // 'y' for 5x fire rate + double shot, or 'b' charge params, without owning either.
       const color = playerBoomerangColors.get(from) || 'r'

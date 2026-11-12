@@ -6,6 +6,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { room } from '../shared/messages'
+import { localPlayerPositionPayload } from '../shared/localPlayerPosition'
 import { Flag } from '../shared/components'
 import { SCENE_FLOOR_Y } from '../shared/constants'
 import { getPlayer } from '@dcl/sdk/players'
@@ -405,7 +406,7 @@ export function mushroomClientSystem(dt: number): void {
     const dist = Math.sqrt(dx * dx + dz * dz)
     if (dist < MUSHROOM_PICKUP_RADIUS && dy >= -0.5 && dy <= 2.0 && !pickedUpIds.has(m.id)) {
       pickedUpIds.add(m.id)
-      room.send('pickupMushroom', { id: m.id })
+      room.send('pickupMushroom', { id: m.id, ...localPlayerPositionPayload() })
     }
   }
 }

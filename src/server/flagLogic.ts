@@ -20,6 +20,7 @@ import { room } from '../shared/messages'
 import { type StealCandidate, selectClosestCandidate } from './stealCandidate'
 import { isRateLimited } from './cooldownValidation'
 import { recordRejection } from './rejectionStats'
+import { noteClientPosition } from './reportedPositionStore'
 import { LIGHTNING_RESPAWN_DURATION_SEC, DROWN_RESPAWN_DURATION_SEC } from '../shared/constants'
 import {
   flagEntity, setFlagEntity, countdownEntity,
@@ -965,10 +966,12 @@ export function holdTimeServerSystem(dt: number): void {
 // ── Message handler registration ──
 
 export function registerFlagHandlers(): void {
-  room.onMessage('requestPickup', (_data, context) => {
+  room.onMessage('requestPickup', (data, context) => {
     try {
       if (!context) return
-      handlePickup(context.from.toLowerCase())
+      const from = context.from.toLowerCase()
+      noteClientPosition(from, data.x, data.y, data.z)
+      handlePickup(from)
     } catch (err) { console.error('[Server] ❌ requestPickup handler error:', err) }
   })
 

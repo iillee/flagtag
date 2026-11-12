@@ -15,6 +15,7 @@ import { getPlayer } from '@dcl/sdk/players'
 import { CoinState, COIN_PICKUP_RADIUS, coinIdFromPosition } from '../shared/coins'
 import { coinBasePositions } from './coinBobSpinSystem'
 import { room } from '../shared/messages'
+import { localPlayerPositionPayload } from '../shared/localPlayerPosition'
 import { setPendingRoundEarnings } from '../gameState/roundEarnings'
 import { registerDeferredBalanceApplier } from '../shared/clientState'
 
@@ -457,7 +458,7 @@ export function coinPickupSystem(dt: number): void {
     if (distSq <= COIN_PICKUP_RADIUS * COIN_PICKUP_RADIUS) {
       // Request pickup from server
       localPickupCooldowns.set(coin.coinId, Date.now())
-      room.send('requestCoinPickup', { coinId: coin.coinId })
+      room.send('requestCoinPickup', { coinId: coin.coinId, ...localPlayerPositionPayload() })
       console.log('[CoinPickup] Requesting pickup:', coin.coinId)
     }
   }

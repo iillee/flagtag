@@ -29,6 +29,7 @@ import { getPlayer as getPlayerData } from '@dcl/sdk/players'
 import { Flag, FlagState, CountdownTimer } from '../shared/components'
 import { SCENE_FLOOR_Y } from '../shared/constants'
 import { room } from '../shared/messages'
+import { localPlayerPositionPayload } from '../shared/localPlayerPosition'
 import { computeFallY, fastForwardElapsedSec, FLAG_GRAVITY } from '../shared/flagFall'
 import { showShieldForPlayer, setShieldAlpha, hideShieldForPlayer, hideAllShields } from './shieldSystem'
 import { isLightningRespawning } from '../gameState/lightningState'
@@ -886,7 +887,7 @@ export function flagClientSystem(dt: number): void {
             pendingPickupUntil = now + PENDING_PICKUP_TIMEOUT_MS
           }
 
-          room.send('requestPickup', { t: 0 })
+          room.send('requestPickup', { t: 0, ...localPlayerPositionPayload() })
           lastAutoPickupRequestMs = now
           break
         }

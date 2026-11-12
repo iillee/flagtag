@@ -13,6 +13,7 @@ import {
   coinStateEntity, flagEntity, getPlayerPosition, rejectionCounts
 } from './serverState'
 import { recordRejection } from './rejectionStats'
+import { noteClientPosition } from './reportedPositionStore'
 import { Flag, FlagState } from '../shared/components'
 import { handleDrop } from './flagLogic'
 import {
@@ -663,6 +664,7 @@ export function registerEconomyHandlers(): void {
     }
 
     // Require a replicated server position — a bot spamming before its avatar syncs is rejected.
+    noteClientPosition(from, data.x, data.y, data.z)
     const playerPos = getPlayerPosition(from)
     if (!playerPos) { recordRejection(rejectionCounts, 'requestCoinPickup:no-position'); return }
 
